@@ -12,10 +12,10 @@ This repo is the product code: the app (iPhone, Android and web from one codebas
 
 ## Sibling repos
 
-Checked out side by side under `~/githubs/ghostaff/`:
+Checked out side by side under `~/githubs/ghostaff-ai/`:
 
 ```bash
-git clone git@github.com:ghostaff-ai/app.git ~/githubs/ghostaff/app
+git clone git@github.com:ghostaff-ai/app.git ~/githubs/ghostaff-ai/app
 ```
 
 - `ordago-app/agents` is today's agent engine (Claude Code on Cloud Run Jobs). It moves into this org once Jaime agrees; until then, read it, don't copy from it blindly.
