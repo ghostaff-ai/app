@@ -1,8 +1,8 @@
 # Build the first version: one engine for several organisations, then the app
 
 **Priority:** high
-**Gate:** decision:Jaime agrees with ghostaff-producto.md
-**Next:** Once Jaime agrees, choose the server for the record (git) and the database, in the EU
+**Gate:** none
+**Next:** Choose the stack (app, backend, record, database, vault, EU hosting) and start phase 1
 
 Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#por-fases). We need them for our own projects whether or not Ghostaff becomes a business.
 

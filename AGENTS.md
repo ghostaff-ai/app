@@ -10,6 +10,8 @@ This repo is the product code: the app (iPhone, Android and web from one codebas
 
 **The product decisions live outside this repo**, in the private Órdago business repo: [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md) (what we build and why) and [`ghostaff.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff.md) (the company). Until Ghostaff is a company of its own, that stays the source of truth for the *why*; this repo holds the *how*. Read it before planning anything here.
 
+**Álvaro decides alone what gets built here and when** (2026-11-12). Jaime is a co-founder, not a gate: never hold work waiting for his review. Only things that are his too (moving `ordago-app/agents`, using his subscription) wait for him.
+
 ## Sibling repos
 
 Checked out side by side under `~/githubs/ghostaff-ai/`:
