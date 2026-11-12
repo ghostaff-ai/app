@@ -1,0 +1,11 @@
+{
+  "round": "Finanzas, round 1: four different ideas, one picture each",
+  "model": "gemini-3-pro-image-preview",
+  "style": "A single 3D character render in the style of a premium designer vinyl toy: glossy, smooth, soft studio lighting, subtle reflections, rich small details. The character is a friendly ghost office worker for an app called Ghostaff: a white sheet ghost with no legs, a rounded silhouette with a wavy hem, two small nub hands made from the sheet, big shiny dark eyes and a small mouth. Full body, three-quarter front view, centred, floating slightly above a soft shadow, on a plain very light warm grey background. No text, no logos, no other characters. Its department colour is a deep fresh green, used only on its outfit and props, never on the body.",
+  "ideas": [
+    { "id": "a-vinyl-accountant", "title": "Vinyl accountant", "prompt": "the finance ghost as a neat modern accountant: round thin-framed glasses, a green tie, holding a small chunky calculator with green display. Calm, precise, kind." },
+    { "id": "b-old-bookkeeper", "title": "Old-school bookkeeper", "prompt": "the finance ghost as a 1920s bookkeeper: a translucent green eyeshade visor, green sleeve garters on its nub arms, a pencil tucked on its side, hugging a thick leather ledger with gold-edged pages and a few receipts sticking out. Taller than wide, a little nerdy and proud." },
+    { "id": "c-vault-keeper", "title": "Vault keeper", "prompt": "the finance ghost as the keeper of the company's money: wider than tall and sturdy, a green waistcoat with a big ring of brass keys hanging from it, sitting on a small stack of gold coins next to a tiny round vault door. Protective and cosy." },
+    { "id": "d-fintech", "title": "Fintech analyst", "prompt": "the finance ghost as a sleek modern fintech analyst: a slim green vest, a tiny wireless earpiece, holding a glowing tablet showing a simple rising green bar chart, small floating receipts orbiting around it like satellites. Sharp, optimistic, a bit futuristic." }
+  ]
+}
