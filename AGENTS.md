@@ -37,7 +37,8 @@ supabase/          migrations, row-level-security tests (pgTAP), local config
 ```
 
 Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm db:start` / `pnpm db:test`
-(Postgres and the policy tests), `pnpm app:start` / `pnpm app:web`. Setup is in the [README](README.md#setup).
+(Postgres and the policy tests), `pnpm app:start` / `pnpm app:web` (Metro on the first free port of 8083, 8093 … 8173, from
+`scripts/metro-port.sh`; never a bare `expo start`). Setup is in the [README](README.md#setup).
 
 ## Rules for the code
 
