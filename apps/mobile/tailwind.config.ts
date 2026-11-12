@@ -5,6 +5,10 @@ import type { Config } from 'tailwindcss';
 export default {
   content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   presets: [require('nativewind/preset')],
+  // 'class', not the default 'media': on web NativeWind sets the colour scheme
+  // itself once its stylesheet loads, and throws under 'media'. The app is
+  // light only (app.config.ts), so nothing ever adds the `dark` class.
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
