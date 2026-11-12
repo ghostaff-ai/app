@@ -46,7 +46,7 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 - [x] Bundle id `ai.ghostaff.app.beta` and App Store Connect app "Ghostaff Beta" (`ascAppId` 6833926912, team 8HWS4483VD, Álvaro's developer account), in `eas.json`.
 - [ ] A beta build to TestFlight.
 - [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com. Billing: Órdago's account (`0140DA-ACC4C8-DF8BAE`, Álvaro 2026-11-12); the Ghostaff Gmail has Billing Account User on it, but linking failed: that account is at its 5-project limit — quota increase requested from Google (2026-11-12), waiting for the answer.
-- [ ] Organisation Ghostaff in the beta project, with its own record. Its first agent is the one that reads its invoices, which today runs from Órdago's `ordago-agents` (provisional).
+- [ ] Organisation Ghostaff in the beta project, with its own record. Its first agent is its own Finanzas, keeping Ghostaff's invoices apart from Órdago's ([decision 15](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#ghostaff-usa-ghostaff)); until it runs, they are booked by hand.
 - [ ] The sync on a schedule, in the engine's Google Cloud project, reading Órdago's record from GitHub and committing write-backs — needs the project's billing.
 
 Decisions taken while building (Álvaro can overturn any):
