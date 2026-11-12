@@ -42,7 +42,7 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 - [x] Expo account `ghostaff.ai`, EAS project pinned in `app.config.ts`.
 - [x] Bundle id `ai.ghostaff.app.beta` and App Store Connect app "Ghostaff Beta" (`ascAppId` 6833926912, team 8HWS4483VD, Álvaro's developer account), in `eas.json`.
 - [ ] A beta build to TestFlight.
-- [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com; no billing yet.
+- [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com. Billing: Órdago's account (`0140DA-ACC4C8-DF8BAE`, Álvaro 2026-11-12); the Ghostaff Gmail has Billing Account User on it, but linking failed: that account is at its 5-project limit — **needs a quota increase or another choice**.
 - [ ] The sync on a schedule, in the engine's Google Cloud project, reading Órdago's record from GitHub and committing write-backs — needs the project's billing.
 
 Decisions taken while building (Álvaro can overturn any):
