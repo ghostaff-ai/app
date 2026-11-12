@@ -14,6 +14,7 @@ import {
 } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
 import { planSync, type RecordFile } from './plan';
+import { projectUrlFromKey } from './projectUrl';
 
 // The record → database job, run by hand until it moves to Cloud Run Jobs.
 //
@@ -26,9 +27,13 @@ import { planSync, type RecordFile } from './plan';
 // from the environment (apps/sync/.env locally, Secret Manager in the engine).
 
 function admin(): SupabaseClient {
-  const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (see apps/sync/.env.example).');
+  const url = process.env.SUPABASE_URL || (key ? projectUrlFromKey(key) : null);
+  if (!url || !key) {
+    throw new Error(
+      'Set SUPABASE_SERVICE_ROLE_KEY (`secret env ghostaff-ai/app` for the hosted project), plus SUPABASE_URL for a local one (see apps/sync/.env.example).',
+    );
+  }
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 

@@ -30,9 +30,21 @@ const bundleIdPerEnv: Record<Env, string> = {
 // app and row-level security is what keeps organisations apart. They still come
 // from the environment (apps/mobile/.env locally, EAS environment variables in
 // builds) so one config serves every env. The service-role key never comes here.
+// A hosted project's anon key is a JWT carrying the project's ref, so the URL
+// follows from the key and only local dev (whose key has no ref) sets it.
 const suffix = env.toUpperCase();
-const supabaseUrl = process.env[`SUPABASE_URL_${suffix}`] ?? '';
 const supabaseAnonKey = process.env[`SUPABASE_ANON_KEY_${suffix}`] ?? '';
+const supabaseUrl = process.env[`SUPABASE_URL_${suffix}`] || projectUrlFromKey(supabaseAnonKey) || '';
+
+function projectUrlFromKey(key: string): string | null {
+  try {
+    const payload = (key.split('.')[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(payload)) as { ref?: unknown };
+    return typeof claims.ref === 'string' && /^[a-z0-9]{20}$/.test(claims.ref) ? `https://${claims.ref}.supabase.co` : null;
+  } catch {
+    return null;
+  }
+}
 
 const config: ExpoConfig = {
   name: namePerEnv[env],
