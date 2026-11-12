@@ -8,6 +8,8 @@ Ghostaff gives a small company or organisation a team of AI agents, grouped into
 
 This repo is the product code: the app (iPhone, Android and web from one codebase) and its backend. The first slice is being built: sign in, pick an organisation, a decision inbox fed by Órdago's `por-decidir/` ([the plan](docs/plans/ongoing/build-first-version.md)).
 
+**Ghostaff uses Ghostaff** (Álvaro, 2026-11-12). Ghostaff is the platform, and also one of the organisations on it, with its own record and agents: its bookkeeping, its mail, and the agents that build it. Every agent working for Ghostaff runs through the platform as organisation Ghostaff, with no back door a customer wouldn't have. When one of them needs something the platform lacks, build it into the platform rather than around it, or write it down as a product gap. That is how we learn, as users, what to build next ([decision 14](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#ghostaff-usa-ghostaff)).
+
 **The product decisions live outside this repo**, in the private Órdago business repo: [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md) (what we build and why) and [`ghostaff.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff.md) (the company). Until Ghostaff is a company of its own, that stays the source of truth for the *why*; this repo holds the *how*. Read it before planning anything here.
 
 **Álvaro decides alone what gets built here and when** (2026-11-12). Jaime is a co-founder, not a gate: never hold work waiting for his review. Only things that are his too (moving `ordago-app/agents`, using his subscription) wait for him.
