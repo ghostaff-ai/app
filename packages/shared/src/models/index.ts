@@ -15,6 +15,40 @@ export interface MyOrganization extends Organization {
   displayName: string;
 }
 
+/** One per person, across organisations. */
+export interface Profile {
+  fullName: string;
+  occupation: string | null;
+  heardFrom: string | null;
+}
+
+/** What a new organisation's creator tells us: the light first step of Incorporación. */
+export interface NewOrganization {
+  name: string;
+  website?: string;
+  about?: string;
+  links?: string[];
+}
+
+/** An invitation as the invited person sees it. */
+export interface MyInvitation {
+  id: string;
+  orgId: string;
+  orgName: string;
+  role: MembershipRole;
+  invitedByName: string;
+  createdAt: string;
+}
+
+/** An organisation's open invitation, as its owners see it. */
+export interface PendingInvitation {
+  id: string;
+  email: string;
+  role: MembershipRole;
+  invitedByName: string;
+  createdAt: string;
+}
+
 export type Answer = 'ok' | 'no';
 
 export interface DecisionAnswer {

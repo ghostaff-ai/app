@@ -175,10 +175,9 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project. Existing users can still sign in.
-# Nobody signs themselves up: a person gets a login when an organisation adds them
-# (`pnpm --filter @ghostaff/sync org add-member`). The app asks for a code with
-# shouldCreateUser: false.
-enable_signup = false
+# Anyone signs up with their email (Álvaro, 2026-11-12); what they can see is
+# decided by memberships and invitations, not by who has a login.
+enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts

@@ -53,7 +53,7 @@ describe('format', () => {
     );
   });
 
-  it('explains a sign-in by someone nobody added', () => {
-    expect(friendlyAuthError(new Error('Signups not allowed for otp'))).toMatch(/no está en ninguna organización/);
+  it('explains a sign-up while sign-ups are closed', () => {
+    expect(friendlyAuthError(new Error('Signups not allowed for otp'))).toMatch(/no se pueden crear cuentas/);
   });
 });

@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Loading, Notice } from '@/components/ui';
 import { AuthProvider, useAuth } from '@/lib/auth/AuthContext';
 import { ActiveOrgProvider } from '@/lib/org/ActiveOrgContext';
+import { ProfileProvider } from '@/lib/profile/ProfileContext';
 import { isConfigured } from '@/lib/supabase';
 
 export default function RootLayout() {
@@ -13,9 +14,11 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       {isConfigured ? (
         <AuthProvider>
-          <ActiveOrgProvider>
-            <Routes />
-          </ActiveOrgProvider>
+          <ProfileProvider>
+            <ActiveOrgProvider>
+              <Routes />
+            </ActiveOrgProvider>
+          </ProfileProvider>
         </AuthProvider>
       ) : (
         <Notice

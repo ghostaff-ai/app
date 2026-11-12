@@ -25,7 +25,12 @@ export default function Organizations() {
           <Text className="mt-1 text-sm text-muted">Firmas como {o.displayName}</Text>
         </Pressable>
       ))}
-      <View className="mt-8">
+      <View className="mt-6 gap-3">
+        {active?.role === 'owner' ? <Button label={`Invitar a ${active.name}`} tone="plain" onPress={() => router.push('/invitar')} /> : null}
+        <Button label="Crear otra empresa" tone="plain" onPress={() => router.push('/crear-empresa')} />
+        <Button label="Unirme a otra empresa" tone="plain" onPress={() => router.push('/unirme')} />
+      </View>
+      <View className="mt-10">
         <Text className="mb-3 text-center text-sm text-muted">{session?.user.email}</Text>
         <Button label="Salir" tone="plain" onPress={() => void signOut()} />
       </View>

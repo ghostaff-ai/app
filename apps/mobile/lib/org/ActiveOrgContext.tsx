@@ -16,6 +16,8 @@ interface ActiveOrgValue {
   loading: boolean;
   error: string | null;
   choose: (orgId: string) => void;
+  /** After creating or joining one: reload the list and open it. */
+  enter: (orgId: string) => Promise<void>;
   reload: () => void;
 }
 
@@ -60,6 +62,12 @@ export function ActiveOrgProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
 
+  const enter = useCallback(async (orgId: string) => {
+    await AsyncStorage.setItem(STORAGE_KEY, orgId).catch(() => {});
+    setActiveId(orgId);
+    setTick((t) => t + 1);
+  }, []);
+
   const value = useMemo<ActiveOrgValue>(
     () => ({
       organizations,
@@ -67,9 +75,10 @@ export function ActiveOrgProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       choose,
+      enter,
       reload,
     }),
-    [organizations, activeId, loading, error, choose, reload],
+    [organizations, activeId, loading, error, choose, enter, reload],
   );
 
   return <ActiveOrgContext.Provider value={value}>{children}</ActiveOrgContext.Provider>;

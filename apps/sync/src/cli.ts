@@ -141,6 +141,9 @@ async function addMember(opts: { org: string; email: string; name: string; role:
     .from('memberships')
     .upsert({ org_id: orgId, user_id: userId, display_name: opts.name, role: opts.role }, { onConflict: 'org_id,user_id' });
   if (error) throw error;
+  // Someone added by hand skips the welcome screen; a profile they already have is kept.
+  const profile = await db.from('profiles').upsert({ user_id: userId, full_name: opts.name }, { onConflict: 'user_id', ignoreDuplicates: true });
+  if (profile.error) throw profile.error;
   console.log(`${email} is ${opts.role} of ${opts.org}, signs as ${opts.name}`);
 }
 

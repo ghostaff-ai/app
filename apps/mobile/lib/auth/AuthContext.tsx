@@ -3,8 +3,9 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { supabase } from '../supabase';
 
 // The auth boundary: the only file that calls `supabase.auth`. Sign-in is a
-// 6-digit code by email. Only people an organisation has added can sign in
-// (`shouldCreateUser: false`); the code is the same on a phone and on the web.
+// 6-digit code by email, the same on a phone and on the web. The first code
+// also creates the account: anyone can sign up, and what they see is decided by
+// the organisations they create or are invited to.
 
 interface AuthValue {
   session: Session | null;
@@ -42,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async sendCode(email) {
         const { error } = await supabase.auth.signInWithOtp({
           email: email.trim().toLowerCase(),
-          options: { shouldCreateUser: false },
+          options: { shouldCreateUser: true },
         });
         if (error) throw error;
       },

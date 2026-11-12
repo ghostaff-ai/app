@@ -34,7 +34,7 @@ export default function SignIn() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-center px-6">
         <Text className="text-3xl font-bold text-ink">Ghostaff</Text>
         <Text className="mt-2 text-base text-muted">
-          {sent ? `Te hemos mandado un código a ${email.trim()}.` : 'Entra con el correo con el que te dio de alta tu organización.'}
+          {sent ? `Te hemos mandado un código a ${email.trim()}.` : 'Entra o crea tu cuenta con tu correo. Te mandamos un código, sin contraseñas.'}
         </Text>
 
         {!sent ? (

@@ -1,5 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Answer, Decision, MembershipRole, MyOrganization } from '../models';
+import type {
+  Answer,
+  Decision,
+  MembershipRole,
+  MyInvitation,
+  MyOrganization,
+  NewOrganization,
+  Organization,
+  PendingInvitation,
+  Profile,
+} from '../models';
 
 // The only place the app talks to the database. Screens, hooks and components
 // call these functions, never `supabase.from(...)` (the same rule as
@@ -127,4 +137,129 @@ export async function answerDecision(client: SupabaseClient, input: AnswerInput)
     .single<DecisionRow>();
   if (error) throw error;
   return decisionFromRow(data);
+}
+
+// The way in: profile, then create an organisation or accept an invitation.
+// All writes go through security definer functions that check the caller.
+
+interface ProfileRow {
+  full_name: string;
+  occupation: string | null;
+  heard_from: string | null;
+}
+
+const profileFromRow = (r: ProfileRow): Profile => ({ fullName: r.full_name, occupation: r.occupation, heardFrom: r.heard_from });
+
+/** The signed-in person's profile, or null before they have said who they are. */
+export async function getMyProfile(client: SupabaseClient, userId: string): Promise<Profile | null> {
+  const { data, error } = await client
+    .from('profiles')
+    .select('full_name, occupation, heard_from')
+    .eq('user_id', userId)
+    .maybeSingle<ProfileRow>();
+  if (error) throw error;
+  return data ? profileFromRow(data) : null;
+}
+
+export async function saveProfile(client: SupabaseClient, p: Profile): Promise<Profile> {
+  const { data, error } = await client
+    .rpc('save_profile', { full_name: p.fullName, occupation: p.occupation, heard_from: p.heardFrom })
+    .single<ProfileRow>();
+  if (error) throw error;
+  return profileFromRow(data);
+}
+
+/** Creates the organisation with the caller as its owner. */
+export async function createOrganization(client: SupabaseClient, o: NewOrganization): Promise<Organization> {
+  const { data, error } = await client
+    .rpc('create_organization', {
+      name: o.name,
+      website: o.website?.trim() || null,
+      about: o.about?.trim() || null,
+      links: (o.links ?? []).map((l) => l.trim()).filter(Boolean),
+    })
+    .single<Organization>();
+  if (error) throw error;
+  return { id: data.id, slug: data.slug, name: data.name };
+}
+
+interface MyInvitationRow {
+  id: string;
+  org_id: string;
+  org_name: string;
+  role: MembershipRole;
+  invited_by_name: string;
+  created_at: string;
+}
+
+/** Open invitations addressed to the signed-in person's email. */
+export async function listMyInvitations(client: SupabaseClient): Promise<MyInvitation[]> {
+  const { data, error } = await client.rpc('my_invitations');
+  if (error) throw error;
+  return ((data ?? []) as MyInvitationRow[]).map((r) => ({
+    id: r.id,
+    orgId: r.org_id,
+    orgName: r.org_name,
+    role: r.role,
+    invitedByName: r.invited_by_name,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function acceptInvitation(client: SupabaseClient, invitationId: string): Promise<Organization> {
+  const { data, error } = await client.rpc('accept_invitation', { invitation_id: invitationId }).single<Organization>();
+  if (error) throw error;
+  return { id: data.id, slug: data.slug, name: data.name };
+}
+
+interface PendingInvitationRow {
+  id: string;
+  email: string;
+  role: MembershipRole;
+  invited_by_name: string;
+  created_at: string;
+}
+
+/** An organisation's open invitations. Only its owners get rows back. */
+export async function listPendingInvitations(client: SupabaseClient, orgId: string): Promise<PendingInvitation[]> {
+  const { data, error } = await client
+    .from('invitations')
+    .select('id, email, role, invited_by_name, created_at')
+    .eq('org_id', orgId)
+    .is('accepted_at', null)
+    .order('created_at', { ascending: false })
+    .returns<PendingInvitationRow[]>();
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    email: r.email,
+    role: r.role,
+    invitedByName: r.invited_by_name,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function inviteMember(client: SupabaseClient, orgId: string, email: string, role: MembershipRole = 'member'): Promise<void> {
+  const { error } = await client.rpc('invite_member', { target_org: orgId, invitee_email: email, invitee_role: role });
+  if (error) throw error;
+}
+
+export async function revokeInvitation(client: SupabaseClient, invitationId: string): Promise<void> {
+  const { error } = await client.rpc('revoke_invitation', { invitation_id: invitationId });
+  if (error) throw error;
+}
+
+/** `ana.example`, `https://ana.example/` → `https://ana.example/`; empty stays empty. */
+export function normalizeLink(raw: string): string {
+  const s = raw.trim();
+  if (!s) return '';
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`;
+}
+
+/** One link per line, or separated by spaces or commas. */
+export function splitLinks(raw: string): string[] {
+  return raw
+    .split(/[\s,]+/)
+    .map(normalizeLink)
+    .filter(Boolean);
 }
