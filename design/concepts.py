@@ -26,7 +26,11 @@ def api_key() -> str:
     if not key and env.exists():
         for line in env.read_text().splitlines():
             if line.startswith("GEMINI_API_KEY="):
-                key = line.split("=", 1)[1].strip().strip('"')
+                key = line.split("=", 1)[1].strip().strip("\"'")
+    # A key stored from `gcloud ... > file` keeps its trailing newline, which may
+    # reach the env file as a literal "\n".
+    if key:
+        key = key.replace("\\n", "").strip()
     if not key:
         raise SystemExit("No GEMINI_API_KEY: run `secret env ghostaff-ai/app` (design/.env).")
     return key
