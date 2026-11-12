@@ -2,7 +2,7 @@
 
 **Priority:** high
 **Gate:** none
-**Next:** Álvaro tries signing in on the beta web app; then the beta build and TestFlight; Google's answer on the billing quota
+**Next:** the beta build and TestFlight; a gcloud configuration for `ghostaff-prod`; then the sync on a schedule
 
 Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#por-fases). We need them for our own projects whether or not Ghostaff becomes a business.
 
@@ -44,8 +44,9 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 - [x] Anon key in EAS's `preview` environment for beta builds.
 - [x] Expo account `ghostaff.ai`, EAS project pinned in `app.config.ts`.
 - [x] Bundle id `ai.ghostaff.app.beta` and App Store Connect app "Ghostaff Beta" (`ascAppId` 6833926912, team 8HWS4483VD, Álvaro's developer account), in `eas.json`.
+- [x] Signed in on the beta, on the web and on a Pixel through Expo Go (Álvaro, 2026-11-12).
 - [ ] A beta build to TestFlight.
-- [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com. Billing: Órdago's account (`0140DA-ACC4C8-DF8BAE`, Álvaro 2026-11-12); the Ghostaff Gmail has Billing Account User on it, but linking failed: that account is at its 5-project limit — quota increase requested from Google (2026-11-12), waiting for the answer.
+- [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com. Billing: Órdago's account (`0140DA-ACC4C8-DF8BAE`, Álvaro 2026-11-12); the Ghostaff Gmail has Billing Account User on it. Google raised the account's project quota (2026-11-12) and the project is linked.
 - [ ] Organisation Ghostaff in the beta project, with its own record. Its first agent is its own Finanzas, keeping Ghostaff's invoices apart from Órdago's ([decision 15](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#ghostaff-usa-ghostaff)); until it runs, they are booked by hand.
 - [ ] The sync on a schedule, in the engine's Google Cloud project, reading Órdago's record from GitHub and committing write-backs — needs the project's billing.
 
