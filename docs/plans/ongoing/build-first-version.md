@@ -2,7 +2,7 @@
 
 **Priority:** high
 **Gate:** none
-**Next:** the keys of `ghostaff-beta` into the local `.env` files and EAS, the schema pushed, Órdago synced; then the beta build and TestFlight
+**Next:** a mail sender for the sign-in codes (custom SMTP), the anon key in EAS; then the beta build and TestFlight
 
 Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#por-fases). We need them for our own projects whether or not Ghostaff becomes a business.
 
@@ -37,7 +37,8 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 - [x] Organisation picker, remembered on the device.
 - [x] Decision inbox and decision screen: OK or no, a note, and a rule signed with its wording.
 - [x] `apps/sync`: reads a record's `por-decidir/` into the database, closes what the agent deleted, and with `--write-back` writes app answers into the file and `agentes/historial-decisiones.csv`, as the Órdago panel does. Checked against Órdago's real `por-decidir/` (read only).
-- [x] Hosted Supabase project `ghostaff-beta` (ref `rggvcvnstbitbdptiwtk`), Central EU (Frankfurt), in organisation Ghostaff under ghostaff.ai@gmail.com. Schema not pushed yet.
+- [x] Hosted Supabase project `ghostaff-beta` (ref `rggvcvnstbitbdptiwtk`), Central EU (Frankfurt), in organisation Ghostaff under ghostaff.ai@gmail.com. Schema applied (recorded in `supabase_migrations`, so `db push` skips it), sign-ups off, 6-digit codes; Órdago created with Álvaro as owner; synced (its `por-decidir/` is empty today). Keys in `secrets/` via `secret`.
+- [ ] Email for sign-in codes on the hosted project: Supabase's own mailer sends links only (templates need custom SMTP) and only to the project's team — **needs Álvaro's pick of a mail sender**.
 - [x] Expo account `ghostaff.ai`, EAS project pinned in `app.config.ts`.
 - [x] Bundle id `ai.ghostaff.app.beta` and App Store Connect app "Ghostaff Beta" (`ascAppId` 6833926912, team 8HWS4483VD, Álvaro's developer account), in `eas.json`.
 - [ ] A beta build to TestFlight.
