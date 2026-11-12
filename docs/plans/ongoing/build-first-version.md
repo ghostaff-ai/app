@@ -2,7 +2,7 @@
 
 **Priority:** high
 **Gate:** none
-**Next:** Resend for the sign-in codes, the anon key in EAS (once Álvaro accepts the `ghostaff.ai` Expo invite); then the beta build and TestFlight
+**Next:** Álvaro tries signing in on the beta web app; then the beta build and TestFlight; Google's answer on the billing quota
 
 Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#por-fases). We need them for our own projects whether or not Ghostaff becomes a business.
 
@@ -38,11 +38,12 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 - [x] Decision inbox and decision screen: OK or no, a note, and a rule signed with its wording.
 - [x] `apps/sync`: reads a record's `por-decidir/` into the database, closes what the agent deleted, and with `--write-back` writes app answers into the file and `agentes/historial-decisiones.csv`, as the Órdago panel does. Checked against Órdago's real `por-decidir/` (read only).
 - [x] Hosted Supabase project `ghostaff-beta` (ref `rggvcvnstbitbdptiwtk`), Central EU (Frankfurt), in organisation Ghostaff under ghostaff.ai@gmail.com. Schema applied (recorded in `supabase_migrations`, so `db push` skips it), sign-ups off, 6-digit codes; Órdago created with Álvaro as owner; synced (its `por-decidir/` is empty today). Keys in `secrets/` via `secret`.
-- [ ] Email for sign-in codes on the hosted project: Supabase's own mailer sends links only (templates need custom SMTP) and only to the project's team — Resend from a ghostaff.ai address (Álvaro, 2026-11-12) — **needs his Resend sign-up**; DNS records at Porkbun.
+- [x] Sign-in codes by email: Resend, domain `ghostaff.ai` verified (Ireland), sender noreply@ghostaff.ai, Supabase custom SMTP and the code template; key in `secrets/`.
+- [x] Anon key in EAS's `preview` environment for beta builds.
 - [x] Expo account `ghostaff.ai`, EAS project pinned in `app.config.ts`.
 - [x] Bundle id `ai.ghostaff.app.beta` and App Store Connect app "Ghostaff Beta" (`ascAppId` 6833926912, team 8HWS4483VD, Álvaro's developer account), in `eas.json`.
 - [ ] A beta build to TestFlight.
-- [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com. Billing: Órdago's account (`0140DA-ACC4C8-DF8BAE`, Álvaro 2026-11-12); the Ghostaff Gmail has Billing Account User on it, but linking failed: that account is at its 5-project limit — **needs a quota increase or another choice**.
+- [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com. Billing: Órdago's account (`0140DA-ACC4C8-DF8BAE`, Álvaro 2026-11-12); the Ghostaff Gmail has Billing Account User on it, but linking failed: that account is at its 5-project limit — quota increase requested from Google (2026-11-12), waiting for the answer.
 - [ ] The sync on a schedule, in the engine's Google Cloud project, reading Órdago's record from GitHub and committing write-backs — needs the project's billing.
 
 Decisions taken while building (Álvaro can overturn any):
