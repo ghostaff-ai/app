@@ -49,5 +49,16 @@ secret env ghostaff-ai/app                                 # writes both .env fi
 Both apps read the project's URL from the key. `APP_ENV=beta pnpm app:web` runs the app
 against it; `pnpm sync:por-decidir` uses it whenever `apps/sync/.env` has no `SUPABASE_URL`.
 
+On a phone, from anywhere on the tailnet, with Expo Go:
+
+```bash
+cd apps/mobile && APP_ENV=beta tailnet-dev npx expo start --go
+```
+
+Then scan the QR code in Expo Go, or type `exp://<the printed address>:8083`. The stores' Expo Go
+lags behind SDK 56 (it says the project is incompatible); install the SDK 56 one from
+[expo.dev/go](https://expo.dev/go) instead. It replaces the old one, so an SDK 54 app (ordago-apps)
+then needs its own dev build.
+
 An answer given in the app is written into the record's file by the next
 `pnpm sync:por-decidir … --write-back`, which edits the checkout and leaves the commit to you.
