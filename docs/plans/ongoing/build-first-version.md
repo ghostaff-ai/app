@@ -2,7 +2,7 @@
 
 **Priority:** high
 **Gate:** none
-**Next:** Álvaro signs up to Supabase with the Ghostaff Gmail and creates the Expo account; then the hosted project, the beta build and TestFlight
+**Next:** the keys of `ghostaff-beta` into the local `.env` files and EAS, the schema pushed, Órdago synced; then the beta build and TestFlight
 
 Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#por-fases). We need them for our own projects whether or not Ghostaff becomes a business.
 
@@ -37,9 +37,10 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 - [x] Organisation picker, remembered on the device.
 - [x] Decision inbox and decision screen: OK or no, a note, and a rule signed with its wording.
 - [x] `apps/sync`: reads a record's `por-decidir/` into the database, closes what the agent deleted, and with `--write-back` writes app answers into the file and `agentes/historial-decisiones.csv`, as the Órdago panel does. Checked against Órdago's real `por-decidir/` (read only).
-- [ ] Hosted Supabase project, EU (Frankfurt) — **needs Álvaro's sign-up**.
-- [ ] Expo account and EAS project for the builds — **needs Álvaro** (not in the list above; same kind of step as Supabase).
-- [ ] App Store Connect app `ai.ghostaff.app.beta`, then a beta build to TestFlight — **needs Álvaro**.
+- [x] Hosted Supabase project `ghostaff-beta` (ref `rggvcvnstbitbdptiwtk`), Central EU (Frankfurt), in organisation Ghostaff under ghostaff.ai@gmail.com. Schema not pushed yet.
+- [x] Expo account `ghostaff.ai`, EAS project pinned in `app.config.ts`.
+- [x] Bundle id `ai.ghostaff.app.beta` and App Store Connect app "Ghostaff Beta" (`ascAppId` 6833926912, team 8HWS4483VD, Álvaro's developer account), in `eas.json`.
+- [ ] A beta build to TestFlight.
 - [ ] The sync on a schedule, in the engine's Google Cloud project, reading Órdago's record from GitHub and committing write-backs — needs the project's billing.
 
 Decisions taken while building (Álvaro can overturn any):
