@@ -37,9 +37,10 @@ const supabaseAnonKey = process.env[`SUPABASE_ANON_KEY_${suffix}`] ?? '';
 const config: ExpoConfig = {
   name: namePerEnv[env],
   slug: 'ghostaff',
-  // `owner` and `extra.eas.projectId` are pinned here, not read from the
-  // environment, once the Expo account exists (cultuvilla/app explains why: a
-  // stray env var would build one repo into another's EAS project).
+  // Pinned, not read from the environment: a stray env var on a machine that
+  // also checks out cultuvilla/app or ordago-apps would build one repo into
+  // another's EAS project. Account ghostaff.ai (ghostaff.ai@gmail.com).
+  owner: 'ghostaff.ai',
   version: '0.1.0',
   orientation: 'portrait',
   scheme: 'ghostaff',
@@ -65,6 +66,7 @@ const config: ExpoConfig = {
   },
   extra: {
     APP_ENV: env,
+    eas: { projectId: '8a688732-55c1-4ef0-9a23-0fbb3f401911' },
     supabaseUrl,
     supabaseAnonKey,
   },
