@@ -46,7 +46,7 @@ Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm db:sta
    cultuvilla/app's service layer.
 2. **Every table with an organisation's data has `org_id`, row-level security on, and a pgTAP test** in
    `supabase/tests/database/` proving another organisation's member cannot see or change it. The app writes
-   only through `security definer` functions that check membership (`answer_decision`), never a table.
+   only through `security definer` functions that check the caller (`answer_decision`, `create_organization`, `accept_invitation`, …), never a table.
 3. **The service-role key never reaches the app.** Only `apps/sync` (and later the engine) uses it, from its
    environment. The app's anon key is public by design.
 4. **The record's file formats are ported, not reinvented.** `packages/shared/src/record/` reads and writes

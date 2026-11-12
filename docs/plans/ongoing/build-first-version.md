@@ -45,6 +45,7 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 - [x] Expo account `ghostaff.ai`, EAS project pinned in `app.config.ts`.
 - [x] Bundle id `ai.ghostaff.app.beta` and App Store Connect app "Ghostaff Beta" (`ascAppId` 6833926912, team 8HWS4483VD, Álvaro's developer account), in `eas.json`.
 - [x] Signed in on the beta, on the web and on a Pixel through Expo Go (Álvaro, 2026-11-12).
+- [x] The way in (Álvaro, 2026-11-12): anyone signs up with their email; a welcome screen asks their name (required), what they do and how they heard of us; then **create a company** (name, plus optionally web, what they do and other links, the light first step of Incorporación) or **join one** that invited their email. Owners invite from Organizaciones. pgTAP proves nobody sees or joins an organisation that did not invite them.
 - [ ] A beta build to TestFlight.
 - [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com. Billing: Órdago's account (`0140DA-ACC4C8-DF8BAE`, Álvaro 2026-11-12); the Ghostaff Gmail has Billing Account User on it. Google raised the account's project quota (2026-11-12) and the project is linked.
 - [ ] Organisation Ghostaff in the beta project, with its own record. Its first agent is its own Finanzas, keeping Ghostaff's invoices apart from Órdago's ([decision 15](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#ghostaff-usa-ghostaff)); until it runs, they are booked by hand.
@@ -52,6 +53,8 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 
 Decisions taken while building (Álvaro can overturn any):
 
+- **Open sign-up, anyone can create a company** (Álvaro, 2026-11-12, against my pick of a beta code). Note for phase 4 of the product plan: from the first outside organisation that creates one, we hold its data, which is the trigger for constituting the SL. A ceiling of 10 organisations per account stops a runaway account.
+- **Joining is by invitation to your email only:** no search, no join codes; the list of organisations is never shown. We send no invitation mail yet: the inviter tells the person, who sees it on signing in.
 - Sign-in by emailed code, not a link or Google: the same on phone and web, no OAuth clients or deep links to set up.
 - An answer in the app is stored in the database first and reaches the file through the sync, never directly: the app reads the database, the agents the files (invariant 4). If the panel answers the same file first, the file wins and the sync reports the conflict.
 - The decision's area is free text per organisation, not Órdago's fixed list of panel tabs.
