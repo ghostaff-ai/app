@@ -1,0 +1,61 @@
+# Build the first version: one engine for several organisations, then the app
+
+**Priority:** high
+**Gate:** none
+**Next:** the beta build and TestFlight; a gcloud configuration for `ghostaff-prod`; then the sync on a schedule
+
+Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#por-fases). We need them for our own projects whether or not Ghostaff becomes a business.
+
+**Ghostaff is one of those organisations** ([decision 14](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#ghostaff-usa-ghostaff), Álvaro 2026-11-12). It joins in phase 1, next to Órdago, and every Ghostaff agent runs through the platform. Whatever we have to work around for it goes on the product spec list (phase 2).
+
+1. **The engine serves several organisations.** Each with its own record, keys and settings. Build the own storage (record, database, file store, vault) and the connector layer here. Órdago's configuration moves out of `agents` (`proyectos/ordago/`) into its record.
+2. **Cultuvilla joins, then Álvaro's mother's company.** For each, write down what was shared and what had to be custom. That list is the product spec.
+3. **The app** on our phones (TestFlight and Google Play internal testing): decision inbox, weekly summary (also as audio), talking to a department, switching organisation. The way in is the Incorporación (onboarding) agent: paste links and documents, watch the record get built.
+
+## Stack (Álvaro, 2026-11-12)
+
+- **App:** Expo + TypeScript, one codebase for iPhone, Android and web. Reuse `cultuvilla/app`'s patterns and store release pipeline.
+- **Database, login, file store:** Supabase, EU region (Frankfurt). Postgres with row-level security so one organisation's rows are never visible to another; metric readings stored with their date and source.
+- **Engine and vault:** a new Google Cloud project under ghostaff.ai@gmail.com, region `europe-west1`, separate from Órdago's. Agents run on Cloud Run Jobs as `ordago-app/agents` does today; keys in Secret Manager.
+- **The record:** Forgejo on a small server in that project, one repo per organisation, with an optional live copy to the organisation's Drive or GitHub.
+
+## First slice
+
+The app on our phones through TestFlight: sign in, pick an organisation, and a decision inbox fed by Órdago's real `por-decidir/` (Órdago is organisation zero). It forces the multi-organisation base from day one.
+
+## What only Álvaro can do (ask when the work reaches it, not before)
+
+- Sign up to Supabase with the Ghostaff Gmail.
+- Turn on billing for the new Google Cloud project.
+- Add the app in App Store Connect under his developer account.
+
+## Progress
+
+**2026-11-12, the first slice runs locally** (branch `feat/first-slice-scaffold`):
+
+- [x] pnpm monorepo on cultuvilla/app's pattern: `apps/mobile` (Expo 56, expo-router, NativeWind), `packages/shared`, per-env bundle ids `ai.ghostaff.app[.dev|.beta]`, `eas.json` profiles, commitlint, CI.
+- [x] Database: organisations, memberships, decisions, with row-level security; the app answers only through `answer_decision()`. pgTAP proves one organisation's member sees and answers nothing of another's.
+- [x] Sign in with a 6-digit email code; only people an organisation added can sign in.
+- [x] Organisation picker, remembered on the device.
+- [x] Decision inbox and decision screen: OK or no, a note, and a rule signed with its wording.
+- [x] `apps/sync`: reads a record's `por-decidir/` into the database, closes what the agent deleted, and with `--write-back` writes app answers into the file and `agentes/historial-decisiones.csv`, as the Órdago panel does. Checked against Órdago's real `por-decidir/` (read only).
+- [x] Hosted Supabase project `ghostaff-beta` (ref `rggvcvnstbitbdptiwtk`), Central EU (Frankfurt), in organisation Ghostaff under ghostaff.ai@gmail.com. Schema applied (recorded in `supabase_migrations`, so `db push` skips it), sign-ups off, 6-digit codes; Órdago created with Álvaro as owner; synced (its `por-decidir/` is empty today). Keys in `secrets/` via `secret`.
+- [x] Sign-in codes by email: Resend, domain `ghostaff.ai` verified (Ireland), sender noreply@ghostaff.ai, Supabase custom SMTP and the code template; key in `secrets/`.
+- [x] Anon key in EAS's `preview` environment for beta builds.
+- [x] Expo account `ghostaff.ai`, EAS project pinned in `app.config.ts`.
+- [x] Bundle id `ai.ghostaff.app.beta` and App Store Connect app "Ghostaff Beta" (`ascAppId` 6833926912, team 8HWS4483VD, Álvaro's developer account), in `eas.json`.
+- [x] Signed in on the beta, on the web and on a Pixel through Expo Go (Álvaro, 2026-11-12).
+- [x] The way in (Álvaro, 2026-11-12): anyone signs up with their email; a welcome screen asks their name (required), what they do and how they heard of us; then **create a company** (name, plus optionally web, what they do and other links, the light first step of Incorporación) or **join one** that invited their email. Owners invite from Organizaciones. pgTAP proves nobody sees or joins an organisation that did not invite them.
+- [ ] A beta build to TestFlight, for Jaime (Álvaro has no iPhone; he tests on his Pixel through Expo Go). Paused 2026-11-13: the first build needs Álvaro's Apple login once (password and code) to create the signing certificate; then add Jaime as a TestFlight tester. An App Store Connect API key (access approved 2026-11-01, no key yet) would let later builds run without him.
+- [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com. Billing: Órdago's account (`0140DA-ACC4C8-DF8BAE`, Álvaro 2026-11-12); the Ghostaff Gmail has Billing Account User on it. Google raised the account's project quota (2026-11-12) and the project is linked.
+- [ ] Organisation Ghostaff in the beta project, with its own record. Its first agent is its own Finanzas, keeping Ghostaff's invoices apart from Órdago's ([decision 15](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#ghostaff-usa-ghostaff)); until it runs, they are booked by hand.
+- [ ] The sync on a schedule, in the engine's Google Cloud project, reading Órdago's record from GitHub and committing write-backs — needs the project's billing.
+
+Decisions taken while building (Álvaro can overturn any):
+
+- **Open sign-up, anyone can create a company** (Álvaro, 2026-11-12, against my pick of a beta code). Note for phase 4 of the product plan: from the first outside organisation that creates one, we hold its data, which is the trigger for constituting the SL. A ceiling of 10 organisations per account stops a runaway account.
+- **Joining is by invitation to your email only:** no search, no join codes; the list of organisations is never shown. We send no invitation mail yet: the inviter tells the person, who sees it on signing in.
+- Sign-in by emailed code, not a link or Google: the same on phone and web, no OAuth clients or deep links to set up.
+- An answer in the app is stored in the database first and reaches the file through the sync, never directly: the app reads the database, the agents the files (invariant 4). If the panel answers the same file first, the file wins and the sync reports the conflict.
+- The decision's area is free text per organisation, not Órdago's fixed list of panel tabs.
+- **The engine (Álvaro, 2026-11-12):** Claude Agent SDK (TypeScript) on Cloud Run in `europe-west1`, models through Vertex AI in the EU; Cloud Run Jobs for scheduled runs plus one always-on service for talking to a department; the work queue in Supabase Postgres (pgmq). Not Managed Agents (the loop runs in the US and Anthropic keeps the sessions), not Cloudflare or Vercel (no confirmed EU-only setup on storage we own).

@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 13.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": { "APP_ENV": "dev" },
+      "ios": { "simulator": true }
+    },
+    "preview-dev": {
+      "distribution": "internal",
+      "env": { "APP_ENV": "dev" },
+      "android": { "buildType": "apk" }
+    },
+    "beta": {
+      "environment": "preview",
+      "env": { "APP_ENV": "beta" },
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle" }
+    },
+    "production": {
+      "environment": "production",
+      "env": { "APP_ENV": "prod" },
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle" }
+    }
+  },
+  "submit": {
+    "beta": {
+      "ios": {
+        "bundleIdentifier": "ai.ghostaff.app.beta",
+        "ascAppId": "6833926912",
+        "appleTeamId": "8HWS4483VD",
+        "language": "es-ES"
+      },
+      "android": {
+        "track": "internal",
+        "applicationId": "ai.ghostaff.app.beta",
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "releaseStatus": "completed"
+      }
+    }
+  }
+}

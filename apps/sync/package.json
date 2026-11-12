@@ -1,0 +1,22 @@
+{
+  "name": "@ghostaff/sync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "por-decidir": "tsx --env-file-if-exists=.env src/cli.ts por-decidir",
+    "org": "tsx --env-file-if-exists=.env src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ghostaff/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.58.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.20.0",
+    "typescript": "~6.0.3",
+    "vitest": "^4.0.15"
+  }
+}

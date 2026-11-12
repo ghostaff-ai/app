@@ -4,6 +4,25 @@ node_modules/
 !.env.example
 .DS_Store
 *.log
+*.tsbuildinfo
+coverage/
 .expo/
 dist/
 build/
+web-build/
+
+# Expo-generated native folders (continuous native generation)
+apps/mobile/ios/
+apps/mobile/android/
+apps/mobile/expo-env.d.ts
+
+# Store credentials, materialized only inside release jobs
+*.p8
+*.p12
+*.jks
+*.mobileprovision
+google-play-service-account.json
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/

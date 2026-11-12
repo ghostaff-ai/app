@@ -1,0 +1,9 @@
+# Who can decrypt secrets/*.enc.yml: one age public key per operator machine.
+# Public keys are safe to commit. Same recipients as Álvaro's homelab store
+# (other PC, powervaro Omarchy). Add a machine: append its key, then
+# `sops updatekeys secrets/secrets.enc.yml`. The vault proper is Secret Manager in
+# the engine's Google Cloud project; this store holds keys until that exists.
+creation_rules:
+  - path_regex: secrets/.*\.enc\.ya?ml$
+    age: >-
+      age183dq6xs9um2ez4pndxyg3cuj8zc74k39yutu52aqdj5fq0qwh43se7j7rp,age17d8g09rmeqvrea9deph5pjnfq3she3aqrcemkxrhjqj4yu296fgsvfrmm8
