@@ -1,5 +1,5 @@
 import '../global.css';
-import { Stack } from 'expo-router';
+import { Slot, Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Loading, Notice } from '@/components/ui';
@@ -8,6 +8,15 @@ import { ActiveOrgProvider } from '@/lib/org/ActiveOrgContext';
 import { isConfigured } from '@/lib/supabase';
 
 export default function RootLayout() {
+  // Spike: the 3D ghost needs no server, so it opens even on a build without one.
+  const path = usePathname();
+  if (path === '/fantasma')
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <Slot />
+      </SafeAreaProvider>
+    );
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
