@@ -29,10 +29,23 @@ From a first look on 2026-11-12. To be re-checked when the work starts.
 - **In the app:** live 3D works in Expo on all three platforms (react-three-fiber), at a cost in app size, battery and older Android phones. A cheaper option is short looping videos rendered from the same models.
 - **A cheap first test:** one character for one agent, concept image → 3D → shown in the app, to judge the look before committing.
 
+## The characters' look: decided so far (Álvaro, 2026-11-12)
+
+From the [look board](https://claude.ai/artifact/CaMAdpaWCtiyssvCzivKry) (picks stored in it) after the live-3D spike on branch `spike/ghost-3d`: a code-built ghost at `/fantasma` that floats, waves its hem, blinks, spins with a drag and hops on a tap, on web and in Expo Go.
+
+- **One character per agent,** five of them: Secretaría, Incorporación, Finanzas, Redes, Productor.
+- **Three concepts per agent to choose from** (not three levels or skins).
+- **A ghost worker:** a white sheet ghost with work props, a silhouette of its own per agent, nub hands, big shiny eyes, the department colour on the outfit (not the body), called by its job name.
+- **More complex and detailed** than the first sketches.
+- **Glossy vinyl-toy finish,** on a simple stage, with a calm idle float.
+- **Light and mood change through the day,** following the phone's clock.
+- **The app around them:** character on top with the inbox below, a clean calm interface, neutral colours plus one accent, rounded headings, no game layer yet.
+- **Open:** who makes the models (researched in the [pipeline page](https://claude.ai/artifact/BKjpcGZqYhfpAEjhPPgzpJ): image model → image-to-3D → Blender driven by Claude → GLB, with a Finanzas test first), and whether all agents share one body.
+
 ## Open questions
 
 - What raises a level, so it means something (not just the number of runs)?
 - How goals and milestones are defined, per organisation and per department.
 - Whether the tool "equipment" view is the same screen as connecting a tool.
-- Live 3D, rendered loops, or both.
+- Live 3D, rendered loops, or both. The spike says live 3D works; the look above assumes it.
 - How much of this a business user wants to see, and whether it can be turned off.
