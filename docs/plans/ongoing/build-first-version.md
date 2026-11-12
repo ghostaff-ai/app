@@ -2,7 +2,7 @@
 
 **Priority:** high
 **Gate:** none
-**Next:** Scaffold the Expo + TypeScript monorepo and ask Álvaro for the Supabase account
+**Next:** Álvaro signs up to Supabase with the Ghostaff Gmail and creates the Expo account; then the hosted project, the beta build and TestFlight
 
 Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#por-fases). We need them for our own projects whether or not Ghostaff becomes a business.
 
@@ -26,3 +26,25 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 - Sign up to Supabase with the Ghostaff Gmail.
 - Turn on billing for the new Google Cloud project.
 - Add the app in App Store Connect under his developer account.
+
+## Progress
+
+**2026-11-12, the first slice runs locally** (branch `feat/first-slice-scaffold`):
+
+- [x] pnpm monorepo on cultuvilla/app's pattern: `apps/mobile` (Expo 56, expo-router, NativeWind), `packages/shared`, per-env bundle ids `ai.ghostaff.app[.dev|.beta]`, `eas.json` profiles, commitlint, CI.
+- [x] Database: organisations, memberships, decisions, with row-level security; the app answers only through `answer_decision()`. pgTAP proves one organisation's member sees and answers nothing of another's.
+- [x] Sign in with a 6-digit email code; only people an organisation added can sign in.
+- [x] Organisation picker, remembered on the device.
+- [x] Decision inbox and decision screen: OK or no, a note, and a rule signed with its wording.
+- [x] `apps/sync`: reads a record's `por-decidir/` into the database, closes what the agent deleted, and with `--write-back` writes app answers into the file and `agentes/historial-decisiones.csv`, as the Órdago panel does. Checked against Órdago's real `por-decidir/` (read only).
+- [ ] Hosted Supabase project, EU (Frankfurt) — **needs Álvaro's sign-up**.
+- [ ] Expo account and EAS project for the builds — **needs Álvaro** (not in the list above; same kind of step as Supabase).
+- [ ] App Store Connect app `ai.ghostaff.app.beta`, then a beta build to TestFlight — **needs Álvaro**.
+- [ ] The sync on a schedule, in the engine's Google Cloud project, reading Órdago's record from GitHub and committing write-backs — needs the project's billing.
+
+Decisions taken while building (Álvaro can overturn any):
+
+- Sign-in by emailed code, not a link or Google: the same on phone and web, no OAuth clients or deep links to set up.
+- An answer in the app is stored in the database first and reaches the file through the sync, never directly: the app reads the database, the agents the files (invariant 4). If the panel answers the same file first, the file wins and the sync reports the conflict.
+- The decision's area is free text per organisation, not Órdago's fixed list of panel tabs.
+
