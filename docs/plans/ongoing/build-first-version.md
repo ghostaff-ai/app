@@ -2,7 +2,7 @@
 
 **Priority:** high
 **Gate:** none
-**Next:** the beta build and TestFlight; a gcloud configuration for `ghostaff-prod`; then the sync on a schedule
+**Next:** Jaime on TestFlight; a gcloud configuration for `ghostaff-prod`; then the sync on a schedule
 
 Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#por-fases). We need them for our own projects whether or not Ghostaff becomes a business.
 
@@ -46,7 +46,7 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 - [x] Bundle id `ai.ghostaff.app.beta` and App Store Connect app "Ghostaff Beta" (`ascAppId` 6833926912, team 8HWS4483VD, Álvaro's developer account), in `eas.json`.
 - [x] Signed in on the beta, on the web and on a Pixel through Expo Go (Álvaro, 2026-11-12).
 - [x] The way in (Álvaro, 2026-11-12): anyone signs up with their email; a welcome screen asks their name (required), what they do and how they heard of us; then **create a company** (name, plus optionally web, what they do and other links, the light first step of Incorporación) or **join one** that invited their email. Owners invite from Organizaciones. pgTAP proves nobody sees or joins an organisation that did not invite them.
-- [ ] A beta build to TestFlight, for Jaime (Álvaro has no iPhone; he tests on his Pixel through Expo Go). Paused 2026-11-13: the first build needs Álvaro's Apple login once (password and code) to create the signing certificate; then add Jaime as a TestFlight tester. An App Store Connect API key (access approved 2026-11-01, no key yet) would let later builds run without him.
+- [ ] A beta build to TestFlight, for Jaime (Álvaro has no iPhone; he tests on his Pixel through Expo Go). Build 5 uploaded 2026-11-13 after Álvaro's one Apple login; signing certificate, profile and an App Store Connect API key (`MRSFCG84GJ`, Admin) now live on EAS's servers, so later builds and submits run without him (`eas build -p ios --profile beta --auto-submit`). Left: add Jaime as a TestFlight tester.
 - [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com. Billing: Órdago's account (`0140DA-ACC4C8-DF8BAE`, Álvaro 2026-11-12); the Ghostaff Gmail has Billing Account User on it. Google raised the account's project quota (2026-11-12) and the project is linked.
 - [ ] Organisation Ghostaff in the beta project, with its own record. Its first agent is its own Finanzas, keeping Ghostaff's invoices apart from Órdago's ([decision 15](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#ghostaff-usa-ghostaff)); until it runs, they are booked by hand.
 - [ ] The sync on a schedule, in the engine's Google Cloud project, reading Órdago's record from GitHub and committing write-backs — needs the project's billing.
