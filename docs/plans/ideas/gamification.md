@@ -42,6 +42,15 @@ From the [look board](https://claude.ai/artifact/CaMAdpaWCtiyssvCzivKry) (picks 
 - **The app around them:** character on top with the inbox below, a clean calm interface, neutral colours plus one accent, rounded headings, no game layer yet.
 - **Open:** who makes the models (researched in the [pipeline page](https://claude.ai/artifact/BKjpcGZqYhfpAEjhPPgzpJ): image model → image-to-3D → Blender driven by Claude → GLB, with a Finanzas test first), and whether all agents share one body.
 
+### Update (Álvaro, 2026-11-13): the glowing ghost
+
+After testing pictures he made in Gemini (kept on `spike/ghost-3d` in `design/concepts/external/`), this replaces the white vinyl body above:
+
+- **The body glows:** translucent and iridescent, blue and violet at the top fading to peach and orange at the wavy hem, soft 3D render. It works on a light background as well as on black.
+- **Eyes are hollow dark ovals,** a bit smaller than in the first pictures, no pupils. **Expressions come from the eye shape** (round = neutral, upturned arcs = happy), which in 3D is a swap of the eye shape, not a face rig.
+- **Floating orb hands,** no arms.
+- **Finanzas:** shirt collar and striped tie; props kept few.
+
 ## Open questions
 
 - What raises a level, so it means something (not just the number of runs)?
