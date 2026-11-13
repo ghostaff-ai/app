@@ -4,11 +4,11 @@ import * as THREE from 'three';
 import model from './models/base.json';
 import secretaria from './models/secretaria.json';
 
-// A placeholder ghost built in code (no model file), in the glowing look Álvaro
-// picked (2026-11-13): an iridescent body that fades from cyan and violet at the
-// top to peach at the wavy hem, hollow dark eyes whose shape is the expression,
-// and stubby arms. Props share the body's glow. Spike only, to judge the look
-// live on a phone.
+// The ghost, modelled in Blender by design/blender/ghost.py, in the glowing look
+// Álvaro picked (2026-11-13): an iridescent body, cyan and violet at the top, deep
+// blue in the middle, orange and pink at the dripping hem; hollow dark eyes whose
+// shape is the expression; stubby arms. Spike only, to judge the look live on a
+// phone.
 
 export type SpinState = {
   yaw: number; // radians, the turn the finger gave it
@@ -18,8 +18,8 @@ export type SpinState = {
 };
 
 const STAGE = '#EEEEF2';
-const EYE = '#160B2E';
-const EYE_RIM = '#A8ECFF';
+const EYE = '#0B0B26';
+const EYE_RIM = '#9FE4FF';
 
 // The model's top and the depth where its skirt starts to wave (see
 // design/blender/ghost.py, which builds it).
@@ -39,8 +39,15 @@ function partGeometry(part: Part) {
 // The body at rest (eyes are wrapped onto it) and the arm, shared by every ghost.
 const BODY_REST = partGeometry(model.body);
 const ARM = partGeometry(model.arm);
-const SECRETARIA = partGeometry(secretaria.props);
-const NOTEPAD = partGeometry(secretaria.notepad);
+const SECRETARIA_PARTS = {
+  bun: partGeometry(secretaria.bun),
+  scarf: partGeometry(secretaria.scarf),
+  phone: partGeometry(secretaria.phone),
+  paper: partGeometry(secretaria.paper),
+  spiral: partGeometry(secretaria.spiral),
+  ink: partGeometry(secretaria.ink),
+  pen: partGeometry(secretaria.pen),
+};
 
 // --- The glowing material -------------------------------------------------
 
@@ -55,10 +62,12 @@ const vertexShader = /* glsl */ `
   uniform float uBaseY;
   varying vec3 vNormal;
   varying vec3 vView;
+  varying vec3 vLocal;
   varying float vY;
   void main() {
     // Height in the body's frame, so arms and props pick up the same gradient.
     vY = (modelMatrix * vec4(position, 1.0)).y - uBaseY;
+    vLocal = position;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     vView = -mv.xyz;
     vNormal = normalMatrix * normal;
@@ -66,50 +75,97 @@ const vertexShader = /* glsl */ `
   }
 `;
 
+// The look of the reference pictures: saturated cyan, blue and violet above,
+// orange and pink at the hem, mottled like an oil film, very glossy (a soft studio
+// window reflected on top, sharp highlights), and a bright iridescent rim.
 const fragmentShader = /* glsl */ `
   uniform float uTime;
   uniform float uYBottom;
   uniform float uYTop;
+  uniform float uStripes; // 1 for the silk scarf's print
+  uniform float uSilver;  // 0..1, towards a pale chrome (the phone)
   uniform vec3 uCyan;
+  uniform vec3 uBlue;
   uniform vec3 uViolet;
-  uniform vec3 uMid;
-  uniform vec3 uPeach;
+  uniform vec3 uOrange;
+  uniform vec3 uPink;
   varying vec3 vNormal;
   varying vec3 vView;
+  varying vec3 vLocal;
   varying float vY;
+
+  float hash(vec3 p) {
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+  }
+  float noise(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(
+      mix(mix(hash(i), hash(i + vec3(1.0, 0.0, 0.0)), f.x),
+          mix(hash(i + vec3(0.0, 1.0, 0.0)), hash(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+      mix(mix(hash(i + vec3(0.0, 0.0, 1.0)), hash(i + vec3(1.0, 0.0, 1.0)), f.x),
+          mix(hash(i + vec3(0.0, 1.0, 1.0)), hash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y),
+      f.z);
+  }
+  vec3 film(float t) {
+    return 0.5 + 0.5 * cos(6.2831 * (t + vec3(0.0, 0.33, 0.67)));
+  }
 
   void main() {
     vec3 N = normalize(vNormal);
     if (!gl_FrontFacing) N = -N;
     vec3 V = normalize(vView);
     float h = clamp((vY - uYBottom) / (uYTop - uYBottom), 0.0, 1.0);
+    float n = noise(vLocal * 2.2 + vec3(0.0, uTime * 0.06, 0.0)) * 0.65 + noise(vLocal * 5.0) * 0.35;
 
-    // Top: cyan on the left, violet on the right; then blue-violet; then peach.
-    vec3 top = mix(uCyan, uViolet, smoothstep(-0.6, 0.6, N.x));
-    vec3 base = mix(uPeach, uMid, smoothstep(0.05, 0.45, h));
-    base = mix(base, top, smoothstep(0.45, 0.9, h));
+    // Body colour: cyan on the lit side, violet on the other, deep blue in the
+    // middle, orange to pink at the hem; the noise breaks the bands into patches.
+    float side = smoothstep(-0.75, 0.75, N.x + (n - 0.5) * 0.9);
+    vec3 top = mix(uCyan, uViolet, side);
+    vec3 mid = mix(uBlue, uViolet, smoothstep(0.35, 1.0, side));
+    vec3 low = mix(uOrange, uPink, smoothstep(0.3, 0.8, n + 0.35 * N.x));
+    vec3 base = mix(low, mid, smoothstep(0.1, 0.38, h + (n - 0.5) * 0.14));
+    base = mix(base, top, smoothstep(0.52, 0.85, h + (n - 0.5) * 0.12));
+
+    if (uStripes > 0.5) {
+      // A loose silk print: soft diagonal bands of the body's own colours.
+      float s = sin((vLocal.x * 1.3 + vLocal.y * 1.0 + vLocal.z * 0.6) * 22.0 + n * 7.0);
+      vec3 print = mix(mix(uCyan, uViolet, n), mix(uOrange, uPink, n), smoothstep(-0.3, 0.3, s));
+      base = mix(base, print, 0.55);
+    }
+    base = mix(base, vec3(0.82, 0.85, 0.95), uSilver);
 
     float ndv = clamp(dot(N, V), 0.0, 1.0);
-    float fres = pow(1.0 - ndv, 2.2);
+    float fres = pow(1.0 - ndv, 2.0);
+    vec3 col = mix(base, film(fres * 0.8 + n * 0.5 + h * 0.3 + uTime * 0.03), fres * 0.55 + 0.06);
 
-    // Oil-film shimmer at grazing angles, drifting slowly.
-    vec3 irid = 0.55 + 0.45 * cos(6.2831 * (fres * 0.9 + h * 0.35 + uTime * 0.04 + vec3(0.0, 0.33, 0.67)));
-    vec3 col = mix(base, irid, fres * 0.5);
+    // Soft key light from the upper left, never dark: it glows from within.
+    vec3 L = normalize(vec3(-0.5, 0.7, 0.55));
+    col *= 0.7 + 0.3 * max(dot(N, L), 0.0);
+    col += base * 0.1;
 
-    // Lit from the upper left, with a glow from inside so it never goes dark.
-    vec3 L = normalize(vec3(-0.45, 0.75, 0.5));
-    float diff = 0.78 + 0.22 * dot(N, L);
-    col *= diff;
-    col += base * 0.18 * (1.0 - fres);
-    float spec = pow(max(dot(reflect(-L, N), V), 0.0), 70.0);
-    col += spec * 0.85;
-    col += fres * 0.4 * vec3(1.0, 0.94, 1.0);
+    // Gloss: a studio window reflected on top, and a sharp highlight.
+    vec3 R = reflect(-V, N);
+    // Only the head and shoulders face up enough to catch the window; the flared
+    // skirt would otherwise mirror it as a white blaze.
+    float window = smoothstep(0.7, 0.92, R.y) * smoothstep(-0.6, 0.1, -R.x) * smoothstep(0.35, 0.7, h);
+    col += window * (0.28 + 0.3 * uSilver);
+    // The flared skirt faces up into the key light too: keep its highlight small.
+    col += pow(max(dot(R, L), 0.0), 90.0) * mix(0.15, 0.9, smoothstep(0.3, 0.55, h));
 
-    gl_FragColor = vec4(col, 1.0);
+    // A bright rainbow rim where the surface turns away.
+    col += pow(fres, 2.6) * 0.65 * film(n + 0.55);
+
+    // Roll bright values off softly, so highlights stay coloured, not flat white.
+    col = col / (1.0 + max(col - 0.85, 0.0) * 1.2);
+    gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
   }
 `;
 
-function glowMaterial(yBottom: number, yTop: number) {
+function glowMaterial(yBottom: number, yTop: number, { stripes = false, silver = 0 } = {}) {
   return new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader,
@@ -119,10 +175,13 @@ function glowMaterial(yBottom: number, yTop: number) {
       uBaseY: { value: 0 },
       uYBottom: { value: yBottom },
       uYTop: { value: yTop },
-      uCyan: { value: srgb('#3CCBF2') },
-      uViolet: { value: srgb('#9A6BF7') },
-      uMid: { value: srgb('#6A63F2') },
-      uPeach: { value: srgb('#FFAA6E') },
+      uStripes: { value: stripes ? 1 : 0 },
+      uSilver: { value: silver },
+      uCyan: { value: srgb('#22C8F5') },
+      uBlue: { value: srgb('#2E5FE4') },
+      uViolet: { value: srgb('#A34CF5') },
+      uOrange: { value: srgb('#FF8C3A') },
+      uPink: { value: srgb('#F35BC6') },
     },
   });
 }
@@ -135,10 +194,10 @@ export const EXPRESSIONS = ['neutral', 'happy', 'surprised', 'focused', 'sleepy'
 type Shape = (typeof EXPRESSIONS)[number] | 'closed';
 const SHAPES: Shape[] = [...EXPRESSIONS, 'closed'];
 
-const EYE_RX = 0.095;
-const EYE_RY = 0.14;
-const EYE_X = 0.22;
-const EYE_Y = 0.38;
+const EYE_RX = 0.105;
+const EYE_RY = 0.16;
+const EYE_X = 0.2;
+const EYE_Y = 0.46;
 
 function arc(cx: number, cy: number, rx: number, ry: number, from: number, to: number, n = 24) {
   const pts: THREE.Vector2[] = [];
@@ -203,7 +262,7 @@ function buildEyes(): EyeSet {
   for (const kind of SHAPES) {
     set[kind] = {
       hole: [eyeGeometry(kind, -1, 1, 0.022), eyeGeometry(kind, 1, 1, 0.022)],
-      rim: [eyeGeometry(kind, -1, 1.14, 0.014), eyeGeometry(kind, 1, 1.14, 0.014)],
+      rim: [eyeGeometry(kind, -1, 1.09, 0.014), eyeGeometry(kind, 1, 1.09, 0.014)],
     };
   }
   return set;
@@ -224,12 +283,14 @@ const POSES: Record<Agent, [ArmPose, ArmPose]> = {
     { angle: 0.95, forward: 0.2, swing: 0.1 },
     { angle: 0.95, forward: 0.2, swing: 0.1 },
   ],
+  // Kept in step with posed_arm() in design/blender/ghost.py, whose props sit at
+  // these hands.
   secretaria: [
-    { angle: 0.75, forward: 0.9, swing: 0.05 }, // left: holds the notepad in front
-    { angle: 2.3, forward: 0.45, swing: 0.03 }, // right: phone to the ear
+    { angle: 2.3, forward: -0.45, swing: 0.03 }, // her right, the viewer's left: phone to the ear
+    { angle: 0.4, forward: 0.35, swing: 0.05 }, // by the notepad
   ],
 };
-const SHOULDER_X = 0.62;
+const SHOULDER_X = 0.56;
 const SHOULDER_Y = -0.02;
 
 export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<SpinState>; agent?: Agent }) {
@@ -244,6 +305,9 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
   const position = geometry.getAttribute('position') as THREE.BufferAttribute;
   const base = useMemo(() => Float32Array.from(position.array), [position]);
   const bodyMaterial = useMemo(() => glowMaterial(-SKIRT - 0.1, DOME_HEIGHT), []);
+  const scarfMaterial = useMemo(() => glowMaterial(-SKIRT - 0.1, DOME_HEIGHT, { stripes: true }), []);
+  const phoneMaterial = useMemo(() => glowMaterial(-SKIRT - 0.1, DOME_HEIGHT, { silver: 0.45 }), []);
+  const glows = [bodyMaterial, scarfMaterial, phoneMaterial];
   const eyeSet = useMemo(buildEyes, []);
 
   const nextBlink = useRef(2);
@@ -254,7 +318,7 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
     const t = state.clock.elapsedTime;
     const s = spin.current;
     if (!s || !root.current || !body.current || !shadow.current) return;
-    bodyMaterial.uniforms.uTime!.value = t;
+    for (const m of glows) m.uniforms.uTime!.value = t;
 
     // Hem: a wave travels round the lobes the model already has, growing to the edge.
     const pos = position;
@@ -305,7 +369,7 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
     body.current.rotation.z = Math.sin(t * 1.1) * 0.04;
     body.current.rotation.x = Math.sin(t * 0.8) * 0.03;
 
-    bodyMaterial.uniforms.uBaseY!.value = body.current.position.y;
+    for (const m of glows) m.uniforms.uBaseY!.value = body.current.position.y;
 
     // Arms sway a beat behind the body and fling up a little on a hop.
     arms.current.forEach((arm, i) => {
@@ -345,16 +409,18 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
   return (
     <>
       <color attach="background" args={[STAGE]} />
+      {/* Only the paper, the spiral and the pen use scene lights; the glow lights itself. */}
+      <hemisphereLight args={['#FFFFFF', '#C9C2E8', 1.8]} />
+      <directionalLight position={[-2.5, 4, 3]} intensity={1.6} />
 
-      <mesh ref={shadow} rotation-x={-Math.PI / 2} position-y={-1.02}>
-        <circleGeometry args={[0.75, 48]} />
+      <mesh ref={shadow} rotation-x={-Math.PI / 2} position-y={-1.04}>
+        <circleGeometry args={[0.95, 48]} />
         <meshBasicMaterial color="#5B4A9A" transparent opacity={0.14} depthWrite={false} />
       </mesh>
 
       <group ref={root}>
         <group ref={body}>
-          {/* The lathe's seam starts facing the camera; turn it to the back. */}
-          <mesh geometry={geometry} material={bodyMaterial} rotation-y={Math.PI} />
+          <mesh geometry={geometry} material={bodyMaterial} />
 
           <group>
             {[0, 1].map((i) => (
@@ -376,11 +442,28 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
               position={[(i === 0 ? -1 : 1) * SHOULDER_X, SHOULDER_Y, 0.08]}
             >
               <mesh geometry={ARM} material={bodyMaterial} />
-              {agent === 'secretaria' && i === 0 && <mesh geometry={NOTEPAD} material={bodyMaterial} />}
             </group>
           ))}
 
-          {agent === 'secretaria' && <mesh geometry={SECRETARIA} material={bodyMaterial} />}
+          {agent === 'secretaria' && (
+            <>
+              <mesh geometry={SECRETARIA_PARTS.bun} material={bodyMaterial} />
+              <mesh geometry={SECRETARIA_PARTS.scarf} material={scarfMaterial} />
+              <mesh geometry={SECRETARIA_PARTS.phone} material={phoneMaterial} />
+              <mesh geometry={SECRETARIA_PARTS.paper}>
+                <meshStandardMaterial color="#FBFAFF" roughness={0.55} />
+              </mesh>
+              <mesh geometry={SECRETARIA_PARTS.spiral}>
+                <meshStandardMaterial color="#E9B7A6" metalness={0.8} roughness={0.25} />
+              </mesh>
+              <mesh geometry={SECRETARIA_PARTS.ink}>
+                <meshBasicMaterial color="#3B3E9E" />
+              </mesh>
+              <mesh geometry={SECRETARIA_PARTS.pen}>
+                <meshStandardMaterial color="#3A3F9C" metalness={0.4} roughness={0.3} />
+              </mesh>
+            </>
+          )}
         </group>
       </group>
     </>

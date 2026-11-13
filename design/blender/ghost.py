@@ -1,18 +1,20 @@
-"""Build the base ghost in Blender, headless, and export it for the app.
+"""Build the ghosts in Blender, headless, and export them for the app.
 
     blender -b -P design/blender/ghost.py -- [--render]
 
 Writes, next to this script:
-  ghost.blend   the model, to open and edit by hand in Blender
+  ghost.blend   the models, to open and edit by hand in Blender
   ghost.glb     the same, in the standard format other 3D tools read
-and, for the app, apps/mobile/components/ghost/models/base.json: each part's
-smoothed mesh as plain arrays (positions, normals, triangle indices), in the
-app's axes (y up, z towards the viewer). With --render it also saves preview
-pictures to design/blender/renders/.
+and, for the app, apps/mobile/components/ghost/models/:
+  base.json        the body and the arm
+  secretaria.json  the Secretaría's props, one mesh per material
+each as plain arrays (positions, normals, triangle indices) in the app's axes
+(y up, z towards the viewer). With --render it also saves preview pictures to
+design/blender/renders/.
 
-The ghost is lathed from 2D profiles (a curve spun around an axis), then
-smoothed by a subdivision modifier. Its colour is not in the model: the glow is
-the app's own shader, so the model is shape only.
+The shapes follow Álvaro's Gemini pictures (design/concepts/gemini-round1/):
+base-b.jpg for the body, secretaria-front.jpg for the Secretaría. Colours are
+not in the model: they are the app's shaders, chosen per part.
 """
 from __future__ import annotations
 
@@ -23,84 +25,107 @@ from pathlib import Path
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-APP_MODEL = REPO / "apps/mobile/components/ghost/models/base.json"
+MODELS = REPO / "apps/mobile/components/ghost/models"
 
-SEGMENTS = 48  # around the axis
+SEGMENTS = 64  # around the axis
 
-# --- Profiles: (radius, height) from the top pole down to the bottom pole -----
+# --- Axes ---------------------------------------------------------------------------
+# Everything below is written in the app's axes (y up, z towards the viewer) and
+# converted, so the numbers read the same as in the app's code.
 
-R = 0.70  # body radius at the waist
-H = 1.00  # dome height above the waist
-P = 2.4  # superellipse power: above 2 the dome is squarer than a circle
+
+def at(x: float, y: float, z: float) -> Vector:
+    return Vector((x, -z, y))
+
+
+def to_app(v) -> list[float]:
+    return [round(v.x, 4), round(v.z, 4), round(-v.y, 4)]
+
+
+# --- The body ---------------------------------------------------------------------
+# A narrow rounded head that flares into a wide skirt, ending in deep drip lobes.
+
+DOME_Y = 0.25  # where the head's dome meets the skirt
+DOME_R = 0.60
+TOP = 1.0
+P = 2.2  # superellipse power: above 2 the dome is a little squarer than a circle
+HEM_Y = -0.62
+HEM_R = 0.94
+LOBES = 8
+
+
+def dome_radius(y: float) -> float:
+    k = max(0.0, 1 - ((y - DOME_Y) / (TOP - DOME_Y)) ** P)
+    return DOME_R * k ** (1 / P)
+
+
+def skirt_radius(y: float) -> float:
+    f = (DOME_Y - y) / (DOME_Y - HEM_Y)
+    return DOME_R + (HEM_R - DOME_R) * f**1.7
+
+
+def body_radius(y: float) -> float:
+    """The body's radius at height y, before smoothing and lobes (for placing props)."""
+    return dome_radius(y) if y >= DOME_Y else skirt_radius(y)
 
 
 def body_profile() -> list[tuple[float, float]]:
-    pts: list[tuple[float, float]] = [(0.0, H)]
-    for k in range(1, 9):  # the dome, finer near the top
-        t = math.pi / 2 * (1 - k / 8)
-        pts.append((R * math.cos(t) ** (2 / P), H * math.sin(t) ** (2 / P)))
-    for j in range(1, 6):  # the skirt, flaring a little
-        f = j / 5
-        pts.append((R + 0.14 * f**2, -0.62 * f))
+    pts: list[tuple[float, float]] = [(0.0, TOP)]
+    for k in range(1, 11):  # the dome, finer near the top
+        t = math.pi / 2 * (1 - k / 10)
+        pts.append((DOME_R * math.cos(t) ** (2 / P), DOME_Y + (TOP - DOME_Y) * math.sin(t) ** (2 / P)))
+    for j in range(1, 9):
+        y = DOME_Y + (HEM_Y - DOME_Y) * j / 8
+        pts.append((skirt_radius(y), y))
     pts += [  # a thick rounded lip, then the hollow underside
-        (R + 0.19, -0.70),
-        (R + 0.16, -0.79),
-        (R + 0.06, -0.83),
-        (R - 0.12, -0.80),
-        (0.42, -0.75),
-        (0.20, -0.72),
+        (HEM_R + 0.05, -0.70),
+        (HEM_R + 0.02, -0.78),
+        (HEM_R - 0.08, -0.82),
+        (HEM_R - 0.22, -0.80),
+        (0.45, -0.75),
+        (0.2, -0.72),
         (0.0, -0.71),
     ]
     return pts
 
 
-ARM_TOP = 0.10  # the shoulder end is buried inside the body
+def hem_lobes(theta: float, r: float, y: float) -> tuple[float, float]:
+    """Deep rounded drips round the hem; the gaps between them ride up."""
+    if y > -0.15:
+        return r, y
+    w = min(1.25, ((-0.15 - y) / 0.6) ** 1.4)
+    c = math.cos(LOBES * theta)
+    return r * (1 + 0.06 * c * w), y - 0.15 * (0.5 + 0.5 * c) * w
+
+
+# --- The arm: thick where it grows out of the body, ending in a round mitten ------
+
+ARM_TOP = 0.14  # the root is buried inside the body
 
 
 def arm_profile() -> list[tuple[float, float]]:
     return [
         (0.0, ARM_TOP),
-        (0.09, 0.07),
-        (0.115, 0.0),
-        (0.11, -0.10),
-        (0.10, -0.22),
-        (0.09, -0.32),
-        (0.06, -0.38),
-        (0.0, -0.40),
+        (0.12, 0.1),
+        (0.15, 0.02),
+        (0.14, -0.08),
+        (0.125, -0.18),
+        (0.12, -0.27),
+        (0.11, -0.34),
+        (0.075, -0.40),
+        (0.0, -0.42),
     ]
 
 
-# --- Building ------------------------------------------------------------------
+# --- Building blocks ---------------------------------------------------------------
 
 
-def lathe(name: str, profile: list[tuple[float, float]], shape=None) -> bpy.types.Object:
-    """Spin a profile around the Z axis. Both ends must sit on the axis (r=0).
-
-    `shape(theta, r, z)` may move each vertex; theta 0 faces the viewer (-Y).
-    """
-    bm = bmesh.new()
-    top = bm.verts.new((0, 0, profile[0][1]))
-    bottom = bm.verts.new((0, 0, profile[-1][1]))
-    rings = []
-    for r, z in profile[1:-1]:
-        ring = []
-        for s in range(SEGMENTS):
-            theta = 2 * math.pi * s / SEGMENTS
-            rr, zz = shape(theta, r, z) if shape else (r, z)
-            ring.append(bm.verts.new((rr * math.sin(theta), -rr * math.cos(theta), zz)))
-        rings.append(ring)
-    for s in range(SEGMENTS):
-        n = (s + 1) % SEGMENTS
-        bm.faces.new((top, rings[0][n], rings[0][s]))
-        for a, b in zip(rings, rings[1:]):
-            bm.faces.new((a[s], a[n], b[n], b[s]))
-        bm.faces.new((rings[-1][s], rings[-1][n], bottom))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)  # outward, so the app's culling and lighting agree
-    bm.normal_update()
+def link(name: str, bm: bmesh.types.BMesh) -> bpy.types.Object:
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)  # outward, so culling and lighting agree
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
@@ -108,160 +133,260 @@ def lathe(name: str, profile: list[tuple[float, float]], shape=None) -> bpy.type
         poly.use_smooth = True
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
-    sub = obj.modifiers.new("smooth", "SUBSURF")
-    sub.levels = 1
-    sub.render_levels = 2
     return obj
 
 
-def hem_lobes(theta: float, r: float, z: float) -> tuple[float, float]:
-    """Six soft lobes round the hem, one facing the viewer, hanging a bit lower."""
-    if z > -0.25:
-        return r, z
-    w = min(1.2, ((-0.25 - z) / 0.57) ** 1.5)
-    c = math.cos(6 * theta)
-    return r * (1 + 0.1 * c * w), z - 0.09 * (0.5 + 0.5 * c) * w
-
-
-# --- The Secretaría's props ------------------------------------------------------
-# Placed in the app's axes (y up, z towards the viewer) and converted, so the
-# numbers read the same as in the app's code.
-
-
-def at(x: float, y: float, z: float) -> tuple[float, float, float]:
-    return (x, -z, y)
-
-
-def smooth(obj: bpy.types.Object, levels: int = 2) -> bpy.types.Object:
-    for poly in obj.data.polygons:
-        poly.use_smooth = True
+def subdivide(obj: bpy.types.Object, levels: int = 1) -> bpy.types.Object:
     sub = obj.modifiers.new("smooth", "SUBSURF")
     sub.levels = levels
     sub.render_levels = levels
     return obj
 
 
-def sphere(name, center, radius, scale=(1, 1, 1)) -> bpy.types.Object:
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=radius, location=at(*center))
-    obj = bpy.context.active_object
-    obj.name = name
-    obj.scale = (scale[0], scale[2], scale[1])
-    for poly in obj.data.polygons:
-        poly.use_smooth = True
-    return obj
+def lathe(name: str, profile, shape=None, segments: int = SEGMENTS) -> bpy.types.Object:
+    """Spin a (radius, height) profile round the vertical axis; both ends on the axis.
 
-
-def ring(name, y: float, radius: float, tube_out: float, tube_up: float, segments: int = 64) -> bpy.types.Object:
-    """A band round the body at height y: a torus with an oval cross-section."""
+    `shape(theta, r, y)` may move each vertex; theta 0 faces the viewer.
+    """
     bm = bmesh.new()
-    sides = 12
+    top = bm.verts.new(at(0, profile[0][1], 0))
+    bottom = bm.verts.new(at(0, profile[-1][1], 0))
+    rings = []
+    for r, y in profile[1:-1]:
+        row = []
+        for s in range(segments):
+            theta = 2 * math.pi * s / segments
+            rr, yy = shape(theta, r, y) if shape else (r, y)
+            row.append(bm.verts.new(at(rr * math.sin(theta), yy, rr * math.cos(theta))))
+        rings.append(row)
+    for s in range(segments):
+        n = (s + 1) % segments
+        bm.faces.new((top, rings[0][n], rings[0][s]))
+        for a, b in zip(rings, rings[1:]):
+            bm.faces.new((a[s], a[n], b[n], b[s]))
+        bm.faces.new((rings[-1][s], rings[-1][n], bottom))
+    return link(name, bm)
+
+
+def tube(name, path, radii, sides: int = 16) -> bpy.types.Object:
+    """A tube along a list of points (app axes), with a radius per point, capped round."""
+    bm = bmesh.new()
+    pts = [Vector(p) for p in path]
     rows = []
-    for s_ in range(segments):
-        theta = 2 * math.pi * s_ / segments
+    for i, p in enumerate(pts):
+        t = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        side = t.cross(Vector((0, 0, 1)))
+        if side.length < 1e-3:
+            side = t.cross(Vector((1, 0, 0)))
+        side.normalize()
+        up = side.cross(t)
         row = []
         for k in range(sides):
-            phi = 2 * math.pi * k / sides
-            r = radius + tube_out * math.cos(phi)
-            yy = y + tube_up * math.sin(phi)
-            row.append(bm.verts.new(at(r * math.sin(theta), yy, r * math.cos(theta))))
+            a = 2 * math.pi * k / sides
+            q = p + radii[i] * (math.cos(a) * side + math.sin(a) * up)
+            row.append(bm.verts.new(at(*q)))
         rows.append(row)
-    for s_ in range(segments):
-        a_, b_ = rows[s_], rows[(s_ + 1) % segments]
+    for a_, b_ in zip(rows, rows[1:]):
         for k in range(sides):
             n = (k + 1) % sides
             bm.faces.new((a_[k], a_[n], b_[n], b_[k]))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    mesh = bpy.data.meshes.new(name)
-    bm.to_mesh(mesh)
-    bm.free()
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-    return smooth(obj, 1)
+    for row, p in [(rows[0], pts[0]), (rows[-1], pts[-1])]:
+        c = bm.verts.new(at(*p))
+        for k in range(sides):
+            bm.faces.new((row[k], row[(k + 1) % sides], c))
+    return link(name, bm)
 
 
-def handset(name) -> bpy.types.Object:
-    """An old phone handset: a curved handle with a cup at each end."""
-    curve = bpy.data.curves.new(name, "CURVE")
-    curve.dimensions = "3D"
-    curve.bevel_depth = 0.07
-    curve.bevel_resolution = 4
-    spline = curve.splines.new("BEZIER")
-    spline.bezier_points.add(1)
-    ear, mouth = Vector(at(0.74, 0.56, 0.16)), Vector(at(0.86, 0.16, 0.2))
-    bulge = Vector(at(0.14, 0, 0.06))
-    for p_, co, handle in [(spline.bezier_points[0], ear, ear + bulge), (spline.bezier_points[1], mouth, mouth + bulge)]:
-        p_.co = co
-        p_.handle_left = co - (handle - co)
-        p_.handle_right = handle
-    obj = bpy.data.objects.new(name, curve)
-    bpy.context.scene.collection.objects.link(obj)
-    parts = [obj]
-    for i, (c, toward) in enumerate([(ear, (-1, 0.1)), (mouth, (-1, -0.2))]):
-        cup = sphere(f"{name}_cup{i}", (0, 0, 0), 0.14, (0.75, 1, 1))
-        cup.location = c + Vector(at(-0.04, 0, 0))
-        parts.append(cup)
-    return join(name, parts)
+def ellipsoid(name, center, radii, rotate=(0, 0, 0)) -> bpy.types.Object:
+    """A smooth ellipsoid in app axes; `rotate` is (x, y, z) radians in app axes."""
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=28, v_segments=14, radius=1.0)
+    rot = (
+        Matrix.Rotation(rotate[2], 4, "Z")
+        @ Matrix.Rotation(rotate[1], 4, "Y")
+        @ Matrix.Rotation(rotate[0], 4, "X")
+    )
+    for v in bm.verts:
+        p = Vector((v.co.x * radii[0], v.co.z * radii[1], -v.co.y * radii[2]))  # app axes
+        p = rot @ p
+        v.co = at(*(Vector(center) + p))
+    return link(name, bm)
+
+
+def band(name, y: float, radius_at, thick: float, height: float, segments: int = 96, sag=None) -> bpy.types.Object:
+    """A flat fabric band round the body at height y: an oval cross-section, wide and thin."""
+    bm = bmesh.new()
+    sides = 14
+    rows = []
+    for s in range(segments):
+        theta = 2 * math.pi * s / segments
+        dy = sag(theta) if sag else 0.0
+        r0 = radius_at(y + dy)
+        row = []
+        for k in range(sides):
+            phi = 2 * math.pi * k / sides
+            r = r0 + thick * (0.5 + 0.5 * math.cos(phi))
+            yy = y + dy + height * math.sin(phi)
+            row.append(bm.verts.new(at(r * math.sin(theta), yy, r * math.cos(theta))))
+        rows.append(row)
+    for s in range(segments):
+        a_, b_ = rows[s], rows[(s + 1) % segments]
+        for k in range(sides):
+            n = (k + 1) % sides
+            bm.faces.new((a_[k], a_[n], b_[n], b_[k]))
+    return link(name, bm)
+
+
+def sheet(name, outline, thickness: float, bend=None) -> bpy.types.Object:
+    """A thin flat shape (a scarf tail): a 2D outline in app x/y, given thickness.
+
+    `bend(x, y)` returns the (x, y, z) where each outline point goes.
+    """
+    bm = bmesh.new()
+    front, back = [], []
+    for x, y in outline:
+        p = Vector(bend(x, y))
+        front.append(bm.verts.new(at(*(p + Vector((0, 0, thickness / 2))))))
+        back.append(bm.verts.new(at(*(p - Vector((0, 0, thickness / 2))))))
+    bm.faces.new(front)
+    bm.faces.new(list(reversed(back)))
+    n = len(outline)
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new((front[i], back[i], back[j], front[j]))
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    return link(name, bm)
 
 
 def join(name, objs) -> bpy.types.Object:
-    bpy.ops.object.select_all(action="DESELECT")
+    """Apply each part's modifiers, then merge them into one object."""
+    deps = bpy.context.evaluated_depsgraph_get()
+    bm = bmesh.new()
     for o in objs:
-        o.select_set(True)
-        bpy.context.view_layer.objects.active = o
-        if o.type == "CURVE":
-            bpy.ops.object.convert(target="MESH")
+        ev = o.evaluated_get(deps)
+        me = ev.to_mesh()
+        me.transform(o.matrix_world)
+        bm.from_mesh(me)
+        ev.to_mesh_clear()
     for o in objs:
-        o.select_set(True)
-    bpy.context.view_layer.objects.active = objs[0]
-    bpy.ops.object.join()
-    obj = bpy.context.active_object
-    obj.name = name
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        bpy.data.objects.remove(o)
+    obj = link(name, bm)
     return obj
 
 
-def secretaria() -> tuple[bpy.types.Object, bpy.types.Object]:
-    neck = 0.12
-    neck_r = 0.705
-    parts = [
-        # A bun of three twisted lobes, held by a band.
-        sphere("bun1", (0.0, H + 0.17, -0.06), 0.22),
-        sphere("bun2", (-0.12, H + 0.08, -0.02), 0.16),
-        sphere("bun3", (0.12, H + 0.09, -0.1), 0.16),
-        ring("bun_band", H + 0.0, 0.2, 0.045, 0.045, 32),
-        # The scarf: a soft band round the neck, a knot to one side, two tails.
-        ring("scarf", neck, neck_r, 0.07, 0.11),
-        sphere("knot", (0.22, neck - 0.02, 0.76), 0.13, (1.1, 0.85, 0.7)),
-        sphere("tail1", (0.12, neck - 0.24, 0.76), 0.11, (0.7, 1.7, 0.4)),
-        sphere("tail2", (0.32, neck - 0.21, 0.73), 0.1, (0.7, 1.6, 0.4)),
-        handset("phone"),
-    ]
-    props = join("secretaria", parts)  # shaded smooth; dense enough without subdividing
-    # The notepad, in the left arm's own frame (hanging from the shoulder).
-    bpy.ops.mesh.primitive_cube_add(size=1, location=at(0.02, -0.42, 0.08))
-    pad = bpy.context.active_object
-    pad.name = "notepad"
-    pad.scale = (0.22, 0.035, 0.28)
-    pad.rotation_euler = (-1.1, 0, 0.5)
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-    bevel = pad.modifiers.new("round", "BEVEL")
-    bevel.width = 0.015
-    bevel.segments = 3
-    return props, pad
+# --- The Secretaría -------------------------------------------------------------------
+# From secretaria-front.jpg: a twisted bun on the back of the head, a patterned silk
+# scarf tied in a knot with two pointed tails, an old phone handset at her right ear
+# (the viewer's left), and a spiral notepad with a pen held against her front.
 
 
-# --- Export for the app ----------------------------------------------------------
+def secretaria() -> dict[str, bpy.types.Object]:
+    parts: dict[str, bpy.types.Object] = {}
+
+    # The bun: a twisted knot of three rolls round a core, back and to the side.
+    bun_c = Vector((0.3, 0.9, -0.12))
+    # A core, then three thick coils wound round it at different tilts, like hair
+    # twisted into a knot.
+    rolls = [ellipsoid("bun_core", bun_c + Vector((0, 0.14, 0)), (0.19, 0.18, 0.19))]
+    for i, (tilt, lift, r) in enumerate([(0.0, 0.06, 0.2), (0.5, 0.15, 0.16), (-0.6, 0.24, 0.11)]):
+        loop = []
+        for k in range(29):
+            a = 2 * math.pi * k / 28 * 0.93
+            p = Vector((r * math.cos(a), 0.035 * math.sin(a), r * math.sin(a)))
+            p = Matrix.Rotation(tilt, 3, "X") @ p
+            loop.append(bun_c + Vector((0, lift, 0)) + p)
+        thick = [0.075 * (0.55 + 0.45 * math.sin(math.pi * k / 28)) + 0.02 for k in range(29)]
+        rolls.append(tube(f"bun_coil{i}", loop, thick, 12))
+    parts["bun"] = join("bun", rolls)
+
+    # The scarf: a band at the neck dipping a little at the front, a knot, two tails.
+    neck = 0.22
+
+    def sag(theta: float) -> float:
+        return -0.06 * (0.5 + 0.5 * math.cos(theta))  # lower at the front
+
+    scarf_bits = [band("scarf_band", neck, body_radius, 0.045, 0.1, sag=sag)]
+    kx, ky = -0.05, neck - 0.08
+    kz = math.sqrt(max(0.0, body_radius(ky) ** 2 - kx**2)) + 0.07
+    scarf_bits.append(ellipsoid("scarf_knot", (kx, ky, kz), (0.12, 0.1, 0.085), (0, 0, 0.3)))
+    for side, tilt in [(-1, 0.55), (1, -0.5)]:
+        # A pointed tail: wide at the knot, tapering to a point, curling outward.
+        outline = [(-0.11, 0.0), (0.11, 0.0), (0.09, -0.26), (0.02, -0.46), (-0.08, -0.3)]
+
+        def bend(x, y, side=side, tilt=tilt):
+            ca, sa = math.cos(tilt), math.sin(tilt)
+            px, py = x * ca - y * sa, x * sa + y * ca
+            gx, gy = kx + side * 0.08 + px, ky - 0.06 + py
+            gz = math.sqrt(max(0.0, body_radius(gy) ** 2 - gx**2)) + 0.06 + 0.12 * (-y) ** 1.5
+            return (gx, gy, gz)
+
+        scarf_bits.append(sheet(f"scarf_tail{side}", outline, 0.025, bend))
+    parts["scarf"] = join("scarf", [subdivide(o, 1) if o.name.startswith("scarf_tail") else o for o in scarf_bits])
+
+    # The phone: a curved handle with a round cup at each end, facing her head.
+    ear = Vector((-0.58, 0.55, 0.12))
+    mouth = Vector((-0.74, 0.12, 0.22))
+    handle = []
+    for i in range(13):
+        t = i / 12
+        p = ear.lerp(mouth, t) + Vector((-0.12 * math.sin(math.pi * t), 0, 0.03 * math.sin(math.pi * t)))
+        handle.append(p)
+    pieces = [tube("phone_handle", handle, [0.06] * len(handle))]
+    for name, c in [("phone_ear", ear), ("phone_mouth", mouth)]:
+        pieces.append(ellipsoid(name, c + Vector((0.02, 0, 0)), (0.07, 0.13, 0.13)))
+        pieces.append(ellipsoid(name + "_face", c + Vector((0.08, 0, 0)), (0.02, 0.105, 0.105)))
+    parts["phone"] = join("phone", pieces)
+
+    # The notepad, against her front on the viewer's right, tilted to the body.
+    pad_c = Vector((0.36, -0.12, 0.0))
+    pad_c.z = math.sqrt(max(0.0, (body_radius(pad_c.y) - 0.02) ** 2 - pad_c.x**2)) + 0.06
+    turn = math.atan2(pad_c.x, pad_c.z)
+    lean = -0.15
+    frame = (
+        Matrix.Translation(pad_c)
+        @ Matrix.Rotation(turn, 4, "Y")
+        @ Matrix.Rotation(lean, 4, "Z")
+        @ Matrix.Rotation(-0.12, 4, "X")
+    )
+
+    def on_pad(x, y, z):
+        return frame @ Vector((x, y, z))
+
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    for v in bm.verts:
+        v.co = at(*on_pad(v.co.x * 0.36, v.co.y * 0.46, v.co.z * 0.05))
+    paper = link("notepad_paper", bm)
+    bevel = paper.modifiers.new("round", "BEVEL")
+    bevel.width = 0.012
+    bevel.segments = 2
+    lines = []
+    for i, w in enumerate([0.2, 0.24, 0.16, 0.22, 0.12]):
+        y = 0.11 - i * 0.07
+        lines.append(tube(f"line{i}", [on_pad(-0.13, y, 0.027), on_pad(-0.13 + w, y, 0.027)], [0.008, 0.008], 6))
+    parts["paper"] = join("paper", [paper])
+    rings = []
+    for i in range(6):
+        x = -0.14 + i * 0.056
+        loop = [on_pad(x, 0.23 + 0.045 * math.sin(a), 0.045 * math.cos(a)) for a in [math.pi * k / 8 for k in range(-6, 7)]]
+        rings.append(tube(f"ring{i}", loop, [0.011] * len(loop), 6))
+    parts["spiral"] = join("spiral", rings)
+    parts["ink"] = join("ink", lines)
+    pen = [on_pad(0.04, -0.24, 0.06), on_pad(0.24, 0.26, 0.12)]
+    body_pen = tube("pen_body", [pen[0].lerp(pen[1], 0.12), pen[1]], [0.03, 0.03], 12)
+    tip = tube("pen_tip", [pen[0], pen[0].lerp(pen[1], 0.12)], [0.003, 0.028], 12)
+    parts["pen"] = join("pen", [body_pen, tip])
+    return parts
 
 
-def to_app(v) -> list[float]:
-    """Blender is Z up with the viewer at -Y; the app is Y up with the viewer at +Z."""
-    return [round(v.x, 4), round(v.z, 4), round(-v.y, 4)]
+# --- Export for the app ----------------------------------------------------------------
 
 
 def mesh_arrays(obj: bpy.types.Object) -> dict:
     deps = bpy.context.evaluated_depsgraph_get()
     ev = obj.evaluated_get(deps)
     mesh = ev.to_mesh()
+    mesh.transform(obj.matrix_world)
     mesh.calc_loop_triangles()
     position = [c for v in mesh.vertices for c in to_app(v.co)]
     normal = [c for v in mesh.vertices for c in to_app(v.normal)]
@@ -270,10 +395,15 @@ def mesh_arrays(obj: bpy.types.Object) -> dict:
     return {"position": position, "normal": normal, "index": index}
 
 
-# --- Preview renders ---------------------------------------------------------------
+def write(name: str, data: dict) -> None:
+    data = {"note": "Generated by design/blender/ghost.py; do not edit by hand.", **data}
+    (MODELS / name).write_text(json.dumps(data, separators=(",", ":")))
 
 
-def render_previews(objs: list[bpy.types.Object]) -> None:
+# --- Preview renders -----------------------------------------------------------------------
+
+
+def render_previews() -> None:
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_WORKBENCH"
     scene.display.shading.light = "STUDIO"
@@ -282,7 +412,6 @@ def render_previews(objs: list[bpy.types.Object]) -> None:
     scene.display.shading.show_cavity = False
     scene.render.resolution_x = 480  # small enough to keep in the repo
     scene.render.resolution_y = 480
-    scene.render.film_transparent = False
     world = bpy.data.worlds.new("w")
     world.color = (0.93, 0.93, 0.95)
     scene.world = world
@@ -294,59 +423,54 @@ def render_previews(objs: list[bpy.types.Object]) -> None:
     out.mkdir(exist_ok=True)
     for label, angle in [("front", 0), ("three-quarter", 35), ("side", 90), ("back", 180)]:
         a = math.radians(angle)
-        dist = 7.0
-        cam.location = (dist * math.sin(a), -dist * math.cos(a), 0.25)
-        direction = Vector((0, 0, 0.1)) - cam.location
+        cam.location = (7.0 * math.sin(a), -7.0 * math.cos(a), 0.3)
+        direction = Vector((0, 0, 0.15)) - cam.location
         cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
         scene.render.filepath = str(out / f"secretaria-{label}.png")
         bpy.ops.render.render(write_still=True)
 
 
-# --- Main ----------------------------------------------------------------------------
+# --- Main -------------------------------------------------------------------------------------
+
+# The Secretaría's arms, as the app poses them (kept in step with POSES in
+# GhostScene.tsx): the right one raised to the phone, the left one at the notepad.
+SHOULDER = (0.56, -0.02, 0.08)
+
+
+def posed_arm(side: int, angle: float, forward: float) -> bpy.types.Object:
+    arm = lathe("arm", arm_profile(), segments=32)
+    subdivide(arm)
+    m = (
+        Matrix.Translation(at(side * SHOULDER[0], SHOULDER[1], SHOULDER[2]))
+        @ Matrix.Rotation(-forward, 4, "X")  # app rotation.x = -forward; Blender X is the same axis
+        @ Matrix.Rotation(-side * angle, 4, "Y")  # app rotation.z (towards the viewer) is about Blender -Y
+    )
+    arm.matrix_world = m
+    return arm
 
 
 def main() -> None:
     args = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    MODELS.mkdir(parents=True, exist_ok=True)
 
-    body = lathe("body", body_profile(), hem_lobes)
-    arms = []
-    for side, label in [(-1, "arm_left"), (1, "arm_right")]:
-        arm = lathe(label, arm_profile())
-        # Shoulder in Blender axes; posed out from the side, a little forward.
-        arm.location = (side * 0.62, -0.08, -0.02)
-        arm.rotation_euler = (math.radians(-11), side * -0.8, 0)
-        arms.append(arm)
+    body = subdivide(lathe("body", body_profile(), hem_lobes))
+    arm = subdivide(lathe("arm_rest", arm_profile(), segments=32))
+    write("base.json", {"body": mesh_arrays(body), "arm": mesh_arrays(arm)})
+    arm.hide_render = True
 
-    APP_MODEL.parent.mkdir(parents=True, exist_ok=True)
-    data = {
-        "note": "Generated by design/blender/ghost.py; do not edit by hand.",
-        "body": mesh_arrays(body),
-    }
-    # The arm goes to the app unposed, hanging from its shoulder at the origin;
-    # the app places and swings it.
-    rest = lathe("arm_rest", arm_profile())
-    data["arm"] = mesh_arrays(rest)
-    bpy.data.objects.remove(rest)
-    APP_MODEL.write_text(json.dumps(data, separators=(",", ":")))
-
-    props, pad = secretaria()
-    sec = {
-        "note": "Generated by design/blender/ghost.py; do not edit by hand.",
-        "props": mesh_arrays(props),  # in the body's frame
-        "notepad": mesh_arrays(pad),  # in the left arm's frame
-    }
-    (APP_MODEL.parent / "secretaria.json").write_text(json.dumps(sec, separators=(",", ":")))
-    pad.hide_render = True  # it belongs to the arm; the previews show the body only
+    parts = secretaria()
+    write("secretaria.json", {name: mesh_arrays(obj) for name, obj in parts.items()})
+    posed_arm(-1, 2.3, -0.45)
+    posed_arm(1, 0.4, 0.35)
 
     bpy.ops.wm.save_as_mainfile(filepath=str(HERE / "ghost.blend"), check_existing=False)
     (HERE / "ghost.blend1").unlink(missing_ok=True)
     bpy.ops.export_scene.gltf(filepath=str(HERE / "ghost.glb"), export_apply=True)
-
     if "--render" in args:
-        render_previews([body, *arms])
-
-    print("verts body", len(data["body"]["position"]) // 3, "arm", len(data["arm"]["position"]) // 3)
+        render_previews()
+    counts = {k: len(v.data.vertices) for k, v in parts.items()}
+    print("parts", counts)
 
 
 main()
