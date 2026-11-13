@@ -19,7 +19,7 @@ export default function Fantasma() {
       <View className="flex-1">
         <GhostViewer active={focused} />
       </View>
-      <Text className="pb-6 text-center text-base text-muted">Arrástralo para girarlo. Tócalo para que salte.</Text>
+      <Text className="pb-6 text-center text-base text-muted">Arrástralo para girarlo. Tócalo para cambiar su cara.</Text>
     </SafeAreaView>
   );
 }

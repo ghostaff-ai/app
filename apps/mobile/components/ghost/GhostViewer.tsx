@@ -44,7 +44,7 @@ export function GhostViewer({ active = true }: { active?: boolean }) {
     <View style={{ flex: 1 }}>
       <GhostCanvas
         frameloop={active ? 'always' : 'never'}
-        camera={{ position: [0, 0.3, 5.4], fov: 40 }}
+        camera={{ position: [0, 0.15, 6.2], fov: 40 }}
       >
         <GhostScene spin={spin} />
       </GhostCanvas>
