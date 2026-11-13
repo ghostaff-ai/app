@@ -5,7 +5,8 @@ import * as THREE from 'three';
 // A placeholder ghost built in code (no model file), in the glowing look Álvaro
 // picked (2026-11-13): an iridescent body that fades from cyan and violet at the
 // top to peach at the wavy hem, hollow dark eyes whose shape is the expression,
-// and two floating orb hands. Spike only, to judge the look live on a phone.
+// and stubby arms. Props share the body's glow. Spike only, to judge the look
+// live on a phone.
 
 export type SpinState = {
   yaw: number; // radians, the turn the finger gave it
@@ -55,11 +56,13 @@ function srgb(hex: string) {
 }
 
 const vertexShader = /* glsl */ `
+  uniform float uBaseY;
   varying vec3 vNormal;
   varying vec3 vView;
   varying float vY;
   void main() {
-    vY = position.y;
+    // Height in the body's frame, so arms and props pick up the same gradient.
+    vY = (modelMatrix * vec4(position, 1.0)).y - uBaseY;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     vView = -mv.xyz;
     vNormal = normalMatrix * normal;
@@ -117,6 +120,7 @@ function glowMaterial(yBottom: number, yTop: number) {
     side: THREE.DoubleSide,
     uniforms: {
       uTime: { value: 0 },
+      uBaseY: { value: 0 },
       uYBottom: { value: yBottom },
       uYTop: { value: yTop },
       uCyan: { value: srgb('#3CCBF2') },
@@ -205,19 +209,38 @@ function buildEyes(): EyeSet {
 const SWAP_TIME = 0.16; // seconds the eyes stay shut between two expressions
 const BLINK_TIME = 0.12;
 
-export function GhostScene({ spin }: { spin: React.RefObject<SpinState> }) {
+export type Agent = 'base' | 'secretaria';
+
+// Each arm hangs from a shoulder inside the body: `angle` swings it out from the
+// side (radians, 0 = straight down), `forward` brings it towards the camera.
+type ArmPose = { angle: number; forward: number; swing: number };
+const POSES: Record<Agent, [ArmPose, ArmPose]> = {
+  base: [
+    { angle: 0.95, forward: 0.2, swing: 0.1 },
+    { angle: 0.95, forward: 0.2, swing: 0.1 },
+  ],
+  secretaria: [
+    { angle: 0.75, forward: 0.9, swing: 0.05 }, // left: holds the notepad in front
+    { angle: 2.3, forward: 0.45, swing: 0.03 }, // right: phone to the ear
+  ],
+};
+const SHOULDER_X = 0.62;
+const SHOULDER_Y = -0.02;
+const ARM_RADIUS = 0.1;
+const ARM_LENGTH = 0.24;
+
+export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<SpinState>; agent?: Agent }) {
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const holes = useRef<(THREE.Mesh | null)[]>([]);
   const rims = useRef<(THREE.Mesh | null)[]>([]);
-  const hands = useRef<(THREE.Mesh | null)[]>([]);
+  const arms = useRef<(THREE.Group | null)[]>([]);
   const shadow = useRef<THREE.Mesh>(null);
 
   const geometry = useMemo(() => new THREE.LatheGeometry(bodyProfile(), 96), []);
   const position = geometry.getAttribute('position') as THREE.BufferAttribute;
   const base = useMemo(() => Float32Array.from(position.array), [position]);
   const bodyMaterial = useMemo(() => glowMaterial(-SKIRT - 0.1, DOME_HEIGHT), []);
-  const handMaterial = useMemo(() => glowMaterial(-0.45, 0.45), []);
   const eyeSet = useMemo(buildEyes, []);
 
   const nextBlink = useRef(2);
@@ -229,7 +252,6 @@ export function GhostScene({ spin }: { spin: React.RefObject<SpinState> }) {
     const s = spin.current;
     if (!s || !root.current || !body.current || !shadow.current) return;
     bodyMaterial.uniforms.uTime!.value = t;
-    handMaterial.uniforms.uTime!.value = t;
 
     // Hem: six soft lobes, with a travelling wave on top, growing to the edge.
     const pos = position;
@@ -281,11 +303,16 @@ export function GhostScene({ spin }: { spin: React.RefObject<SpinState> }) {
     body.current.rotation.z = Math.sin(t * 1.1) * 0.04;
     body.current.rotation.x = Math.sin(t * 0.8) * 0.03;
 
-    // Orb hands bob on their own rhythm, a beat behind the body.
-    hands.current.forEach((hand, i) => {
-      if (!hand) return;
+    bodyMaterial.uniforms.uBaseY!.value = body.current.position.y;
+
+    // Arms sway a beat behind the body and fling up a little on a hop.
+    arms.current.forEach((arm, i) => {
+      if (!arm) return;
       const side = i === 0 ? -1 : 1;
-      hand.position.set(side * 0.9, -0.1 + Math.sin(t * 1.6 - 0.9 + i * 0.7) * 0.06 - hop * 0.3, 0.18);
+      const pose = POSES[agent][i]!;
+      const sway = Math.sin(t * 1.6 - 0.9 + i * 1.3) * pose.swing;
+      arm.rotation.z = side * (pose.angle + sway + hop * 0.8);
+      arm.rotation.x = -pose.forward;
     });
 
     const lift = float + hop;
@@ -341,11 +368,64 @@ export function GhostScene({ spin }: { spin: React.RefObject<SpinState> }) {
           </group>
 
           {[0, 1].map((i) => (
-            <mesh key={i} ref={(m) => void (hands.current[i] = m)} material={handMaterial}>
-              <sphereGeometry args={[0.14, 32, 32]} />
-            </mesh>
+            <group
+              key={i}
+              ref={(g) => void (arms.current[i] = g)}
+              position={[(i === 0 ? -1 : 1) * SHOULDER_X, SHOULDER_Y, 0.08]}
+            >
+              <mesh material={bodyMaterial} position-y={-ARM_LENGTH / 2 - 0.08}>
+                <capsuleGeometry args={[ARM_RADIUS, ARM_LENGTH, 8, 20]} />
+              </mesh>
+              {agent === 'secretaria' && i === 0 && (
+                <mesh material={bodyMaterial} position={[0.02, -0.42, 0.08]} rotation={[1.1, 0, 0.5]}>
+                  <boxGeometry args={[0.22, 0.28, 0.035]} />
+                </mesh>
+              )}
+            </group>
           ))}
+
+          {agent === 'secretaria' && <SecretariaProps material={bodyMaterial} />}
         </group>
+      </group>
+    </>
+  );
+}
+
+// The Secretaría: a bun on top, a scarf with a knot, and an old phone handset
+// at the right side of the head. All in the body's own glow.
+function SecretariaProps({ material }: { material: THREE.Material }) {
+  const neckY = 0.12;
+  const neckR = bodyRadiusAt(neckY) + 0.02;
+  return (
+    <>
+      <mesh material={material} position={[0, DOME_HEIGHT + 0.1, -0.06]}>
+        <sphereGeometry args={[0.22, 32, 24]} />
+      </mesh>
+      <mesh material={material} position={[0, DOME_HEIGHT - 0.02, -0.05]} rotation-x={Math.PI / 2 - 0.25}>
+        <torusGeometry args={[0.16, 0.045, 12, 32]} />
+      </mesh>
+
+      <mesh material={material} position-y={neckY} rotation-x={Math.PI / 2}>
+        <torusGeometry args={[neckR, 0.08, 16, 72]} />
+      </mesh>
+      <mesh material={material} position={[0.18, neckY - 0.02, neckR * 0.95 + 0.04]} scale={[1, 0.8, 0.7]}>
+        <sphereGeometry args={[0.11, 20, 16]} />
+      </mesh>
+      {[-0.35, 0.3].map((tilt) => (
+        <mesh key={tilt} material={material} position={[0.19 + tilt * 0.2, neckY - 0.2, neckR + 0.05]} rotation-z={tilt}>
+          <capsuleGeometry args={[0.055, 0.2, 6, 12]} />
+        </mesh>
+      ))}
+
+      <group position={[0.66, 0.46, 0.34]} rotation={[0, -0.5, 0.2]}>
+        <mesh material={material}>
+          <capsuleGeometry args={[0.07, 0.3, 6, 16]} />
+        </mesh>
+        {[0.2, -0.2].map((y) => (
+          <mesh key={y} material={material} position={[-0.05, y, 0]} scale={[0.8, 0.6, 1]}>
+            <sphereGeometry args={[0.12, 20, 16]} />
+          </mesh>
+        ))}
       </group>
     </>
   );
