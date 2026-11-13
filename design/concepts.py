@@ -4,7 +4,8 @@
     python3 design/concepts.py design/concepts/finanzas-round1.json
 
 Reads GEMINI_API_KEY from design/.env (written by `secret env`), sends each prompt in
-the JSON file, and saves the pictures next to it as <round>/<id>.png. A picture that
+the JSON file, and saves the pictures next to it as <round>/<id>.png. An optional "reference"
+(a picture path relative to the JSON) is sent first, to keep its style. A picture that
 already exists is skipped, so a re-run only draws what is new or deleted.
 """
 from __future__ import annotations
@@ -36,9 +37,14 @@ def api_key() -> str:
     return key
 
 
-def draw(model: str, prompt: str, key: str) -> bytes:
+def draw(model: str, prompt: str, key: str, reference: Path | None = None) -> bytes:
+    parts: list[dict] = []
+    if reference:
+        # A reference picture fixes the style; the prompt says what to change.
+        parts.append({"inlineData": {"mimeType": "image/png", "data": base64.b64encode(reference.read_bytes()).decode()}})
+    parts.append({"text": prompt})
     body = {
-        "contents": [{"parts": [{"text": prompt}]}],
+        "contents": [{"parts": parts}],
         "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": "1:1"}},
     }
     req = urllib.request.Request(
@@ -71,7 +77,9 @@ def main() -> None:
             print(f"skip {target}")
             continue
         prompt = f"{spec['style']}\n\nCharacter: {idea['prompt']}"
-        target.write_bytes(draw(spec["model"], prompt, key))
+        ref = spec.get("reference")
+        reference = (spec_path.parent / ref) if ref else None
+        target.write_bytes(draw(spec["model"], prompt, key, reference))
         print(f"drew {target}")
 
 

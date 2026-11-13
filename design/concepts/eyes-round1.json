@@ -1,0 +1,11 @@
+{
+  "model": "gemini-3-pro-image-preview",
+  "reference": "external/ghost-2.png",
+  "style": "Keep exactly the style of the reference picture: the same glowing, translucent, iridescent ghost body (blue and violet on top fading to peach and orange at the wavy hem), the same soft 3D render, the same pure black background, the same shirt collar and striped tie, and the two small floating orb hands. Remove the calculator, the clipboard and the shirt pocket: the hands are empty and relaxed. Front three-quarter view, centred, whole body visible. No text anywhere. Change only the eyes, as described below.",
+  "ideas": [
+    {"id": "a-pupils", "prompt": "Eyes: the same tall oval eye shapes, but filled with soft white, each with a large dark glossy pupil and two small white highlight reflections, looking slightly to the side. Friendly and alive."},
+    {"id": "b-glow", "prompt": "Eyes: two tall oval eyes made of bright glowing light (pale cyan, emissive, softly blooming), no pupils, like lamps shining from inside the translucent body."},
+    {"id": "c-beads", "prompt": "Eyes: two small solid black bead eyes, round and shiny with a single white highlight, set a bit wider apart, plus small rosy blush marks on the cheeks. Minimal, cute, toy-like."},
+    {"id": "d-lids", "prompt": "Eyes: oval eyes with dark pupils and soft translucent upper eyelids half lowered, a calm, focused, slightly sleepy-confident expression, one eyebrow-like glow line above each eye."}
+  ]
+}
