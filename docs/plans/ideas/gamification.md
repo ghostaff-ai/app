@@ -50,6 +50,8 @@ After testing pictures he made in Gemini (kept on `spike/ghost-3d` in `design/co
 - **Eyes are hollow dark ovals,** a bit smaller than in the first pictures, no pupils. **Expressions come from the eye shape** (round = neutral, upturned arcs = happy), which in 3D is a swap of the eye shape, not a face rig.
 - **Floating orb hands,** no arms.
 - **Finanzas:** shirt collar and striped tie; props kept few.
+- **Props and clothes share the glow:** same iridescent material as the body, no colours of their own. Agents tell apart by silhouette and props, not colour (replaces "department colour on the outfit").
+- **One family, not one body** (decision 19, proposed): shared material, eyes, rig and moves; each agent has its own shape, accessories, hand poses and a signature animation.
 
 ## Open questions
 
