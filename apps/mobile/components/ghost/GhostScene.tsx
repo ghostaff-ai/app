@@ -1,6 +1,8 @@
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import model from './models/base.json';
+import secretaria from './models/secretaria.json';
 
 // A placeholder ghost built in code (no model file), in the glowing look Álvaro
 // picked (2026-11-13): an iridescent body that fades from cyan and violet at the
@@ -19,32 +21,26 @@ const STAGE = '#EEEEF2';
 const EYE = '#160B2E';
 const EYE_RIM = '#A8ECFF';
 
+// The model's top and the depth where its skirt starts to wave (see
+// design/blender/ghost.py, which builds it).
 const DOME_HEIGHT = 1.0;
-const RADIUS = 0.7;
 const SKIRT = 0.72;
-const HEM_FLARE = 0.16;
 
-// A squarer-than-round dome, like the pictures' tall rounded body.
-const DOME_POWER = 2.4;
-function bodyRadiusAt(y: number) {
-  if (y <= 0) return RADIUS;
-  const k = Math.max(0, 1 - (y / DOME_HEIGHT) ** DOME_POWER);
-  return RADIUS * k ** (1 / DOME_POWER);
+type Part = { position: number[]; normal: number[]; index: number[] };
+
+function partGeometry(part: Part) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(part.position, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(part.normal, 3));
+  g.setIndex(part.index);
+  return g;
 }
 
-function bodyProfile() {
-  const points: THREE.Vector2[] = [];
-  for (let i = 0; i <= 16; i++) {
-    const y = -SKIRT + (SKIRT * i) / 16;
-    const flare = HEM_FLARE * (1 - i / 16) ** 2.2;
-    points.push(new THREE.Vector2(RADIUS + flare, y));
-  }
-  for (let i = 1; i <= 32; i++) {
-    const y = DOME_HEIGHT * (i / 32);
-    points.push(new THREE.Vector2(Math.max(0.0001, bodyRadiusAt(y)), y));
-  }
-  return points;
-}
+// The body at rest (eyes are wrapped onto it) and the arm, shared by every ghost.
+const BODY_REST = partGeometry(model.body);
+const ARM = partGeometry(model.arm);
+const SECRETARIA = partGeometry(secretaria.props);
+const NOTEPAD = partGeometry(secretaria.notepad);
 
 // --- The glowing material -------------------------------------------------
 
@@ -177,15 +173,24 @@ function eyeOutline(kind: Shape, grow: number): THREE.Vector2[] {
   }
 }
 
-// A flat eye shape wrapped onto the dome, so it sits on the curved surface.
+// Where the body's front surface is, found by a ray from in front of it.
+const surface = new THREE.Mesh(BODY_REST, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+const ray = new THREE.Raycaster();
+const AHEAD = new THREE.Vector3();
+const BACK = new THREE.Vector3(0, 0, -1);
+function surfaceZ(x: number, y: number) {
+  ray.set(AHEAD.set(x, y, 5), BACK);
+  return ray.intersectObject(surface, false)[0]?.point.z ?? 0;
+}
+
+// A flat eye shape wrapped onto the body, so it sits on the curved surface.
 function eyeGeometry(kind: Shape, side: -1 | 1, grow: number, lift: number) {
   const geo = new THREE.ShapeGeometry(new THREE.Shape(eyeOutline(kind, grow)), 1);
   const pos = geo.getAttribute('position') as THREE.BufferAttribute;
   for (let i = 0; i < pos.count; i++) {
     const x = side * EYE_X + pos.getX(i);
     const y = EYE_Y + pos.getY(i);
-    const r = bodyRadiusAt(y);
-    pos.setXYZ(i, x, y, Math.sqrt(Math.max(0, r * r - x * x)) + lift);
+    pos.setXYZ(i, x, y, surfaceZ(x, y) + lift);
   }
   pos.needsUpdate = true;
   return geo;
@@ -226,8 +231,6 @@ const POSES: Record<Agent, [ArmPose, ArmPose]> = {
 };
 const SHOULDER_X = 0.62;
 const SHOULDER_Y = -0.02;
-const ARM_RADIUS = 0.1;
-const ARM_LENGTH = 0.24;
 
 export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<SpinState>; agent?: Agent }) {
   const root = useRef<THREE.Group>(null);
@@ -237,7 +240,7 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
   const arms = useRef<(THREE.Group | null)[]>([]);
   const shadow = useRef<THREE.Mesh>(null);
 
-  const geometry = useMemo(() => new THREE.LatheGeometry(bodyProfile(), 96), []);
+  const geometry = useMemo(() => BODY_REST.clone(), []);
   const position = geometry.getAttribute('position') as THREE.BufferAttribute;
   const base = useMemo(() => Float32Array.from(position.array), [position]);
   const bodyMaterial = useMemo(() => glowMaterial(-SKIRT - 0.1, DOME_HEIGHT), []);
@@ -253,7 +256,7 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
     if (!s || !root.current || !body.current || !shadow.current) return;
     bodyMaterial.uniforms.uTime!.value = t;
 
-    // Hem: six soft lobes, with a travelling wave on top, growing to the edge.
+    // Hem: a wave travels round the lobes the model already has, growing to the edge.
     const pos = position;
     for (let i = 0; i < pos.count; i++) {
       const x = base[i * 3]!;
@@ -262,10 +265,9 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
       if (y > 0) continue;
       const w = (-y / SKIRT) ** 2.2;
       const angle = Math.atan2(z, x);
-      const lobe = Math.cos(angle * 6);
       const wave = Math.sin(angle * 6 + t * 2.4);
-      pos.setY(i, y + (-0.07 * (0.5 + 0.5 * lobe) + 0.04 * wave) * w);
-      const push = 1 + (0.06 * lobe + 0.03 * Math.sin(angle * 6 + t * 2.4 + 1.2)) * w;
+      pos.setY(i, y + 0.035 * wave * w);
+      const push = 1 + 0.025 * Math.sin(angle * 6 + t * 2.4 + 1.2) * w;
       pos.setX(i, x * push);
       pos.setZ(i, z * push);
     }
@@ -373,60 +375,15 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
               ref={(g) => void (arms.current[i] = g)}
               position={[(i === 0 ? -1 : 1) * SHOULDER_X, SHOULDER_Y, 0.08]}
             >
-              <mesh material={bodyMaterial} position-y={-ARM_LENGTH / 2 - 0.08}>
-                <capsuleGeometry args={[ARM_RADIUS, ARM_LENGTH, 8, 20]} />
-              </mesh>
-              {agent === 'secretaria' && i === 0 && (
-                <mesh material={bodyMaterial} position={[0.02, -0.42, 0.08]} rotation={[1.1, 0, 0.5]}>
-                  <boxGeometry args={[0.22, 0.28, 0.035]} />
-                </mesh>
-              )}
+              <mesh geometry={ARM} material={bodyMaterial} />
+              {agent === 'secretaria' && i === 0 && <mesh geometry={NOTEPAD} material={bodyMaterial} />}
             </group>
           ))}
 
-          {agent === 'secretaria' && <SecretariaProps material={bodyMaterial} />}
+          {agent === 'secretaria' && <mesh geometry={SECRETARIA} material={bodyMaterial} />}
         </group>
       </group>
     </>
   );
 }
 
-// The Secretaría: a bun on top, a scarf with a knot, and an old phone handset
-// at the right side of the head. All in the body's own glow.
-function SecretariaProps({ material }: { material: THREE.Material }) {
-  const neckY = 0.12;
-  const neckR = bodyRadiusAt(neckY) + 0.02;
-  return (
-    <>
-      <mesh material={material} position={[0, DOME_HEIGHT + 0.1, -0.06]}>
-        <sphereGeometry args={[0.22, 32, 24]} />
-      </mesh>
-      <mesh material={material} position={[0, DOME_HEIGHT - 0.02, -0.05]} rotation-x={Math.PI / 2 - 0.25}>
-        <torusGeometry args={[0.16, 0.045, 12, 32]} />
-      </mesh>
-
-      <mesh material={material} position-y={neckY} rotation-x={Math.PI / 2}>
-        <torusGeometry args={[neckR, 0.08, 16, 72]} />
-      </mesh>
-      <mesh material={material} position={[0.18, neckY - 0.02, neckR * 0.95 + 0.04]} scale={[1, 0.8, 0.7]}>
-        <sphereGeometry args={[0.11, 20, 16]} />
-      </mesh>
-      {[-0.35, 0.3].map((tilt) => (
-        <mesh key={tilt} material={material} position={[0.19 + tilt * 0.2, neckY - 0.2, neckR + 0.05]} rotation-z={tilt}>
-          <capsuleGeometry args={[0.055, 0.2, 6, 12]} />
-        </mesh>
-      ))}
-
-      <group position={[0.66, 0.46, 0.34]} rotation={[0, -0.5, 0.2]}>
-        <mesh material={material}>
-          <capsuleGeometry args={[0.07, 0.3, 6, 16]} />
-        </mesh>
-        {[0.2, -0.2].map((y) => (
-          <mesh key={y} material={material} position={[-0.05, y, 0]} scale={[0.8, 0.6, 1]}>
-            <sphereGeometry args={[0.12, 20, 16]} />
-          </mesh>
-        ))}
-      </group>
-    </>
-  );
-}
