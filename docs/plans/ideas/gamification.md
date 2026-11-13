@@ -53,6 +53,8 @@ After testing pictures he made in Gemini (kept on `spike/ghost-3d` in `design/co
 - **Props and clothes share the glow:** same iridescent material as the body, no colours of their own. Agents tell apart by silhouette and props, not colour (replaces "department colour on the outfit").
 - **One family, not one body** (decision 19, proposed): shared material, eyes, rig and moves; each agent has its own shape, accessories, hand poses and a signature animation.
 
+**Hunyuan3D is ruled out** (2026-11-13): Tencent's licence for Hunyuan3D 2 does not apply in the European Union and forbids using its output there, so nothing it makes can ship in Ghostaff. Image-to-3D has to come from a tool whose licence allows commercial use in Spain: Meshy or Tripo on a paid plan, or an openly licensed model such as Microsoft's TRELLIS (MIT).
+
 ## Open questions
 
 - What raises a level, so it means something (not just the number of runs)?
