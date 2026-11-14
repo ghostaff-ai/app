@@ -10,6 +10,7 @@ import { GhostViewer } from '@/components/ghost/GhostViewer';
 const AGENTS: { id: Agent; label: string }[] = [
   { id: 'base', label: 'Base' },
   { id: 'secretaria', label: 'Secretaría' },
+  { id: 'redes', label: 'Redes' },
 ];
 
 // Look options to compare on the phone; the URL can preset them
@@ -60,7 +61,7 @@ function Chips<T>({
 export default function Fantasma() {
   const [focused, setFocused] = useState(true);
   const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string; hem?: string }>();
-  const [agent, setAgent] = useState<Agent>(params.agent === 'secretaria' ? 'secretaria' : 'base');
+  const [agent, setAgent] = useState<Agent>(params.agent === 'secretaria' || params.agent === 'redes' ? params.agent : 'base');
   const [look, setLook] = useState<Look>({
     surface: SURFACES.find((o) => o.id === params.surface)?.id ?? 'now',
     eyes: EYES.find((o) => o.id === params.eyes)?.id ?? 'now',

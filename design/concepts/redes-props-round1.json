@@ -1,0 +1,8 @@
+{
+  "model": "gemini-3-pro-image-preview",
+  "style": "From the reference picture, draw only the one object named below, alone and whole, so it can be turned into a 3D model. Keep its exact shape, colours and glossy iridescent style. Nothing else: no ghost, no head, no body, no hands, no shadow, no text. Three-quarter view from slightly above, centred, filling most of the frame, on a plain pure white background.",
+  "ideas": [
+    {"id": "beret", "label": "Object", "reference": "gemini-round1/redes-front.jpg", "prompt": "the deep navy blue beret: a soft flat round felt cap with a rolled band round its rim and the small stalk on top. Seen whole, slightly from above, with its open underside just visible."},
+    {"id": "phone", "label": "Object", "reference": "gemini-round1/redes-front.jpg", "prompt": "the smartphone: a modern phone with rounded edges in pale iridescent metal, seen from the back at three-quarter so the square camera bump with three lenses shows, and a little of the side buttons."}
+  ]
+}
