@@ -2,7 +2,7 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { Agent, Eyes, Look, Surface } from '@/components/ghost/GhostScene';
+import { type Agent, DEFAULT_LOOK, type Eyes, type Look, type Surface } from '@/components/ghost/GhostScene';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
 
 // Spike: a live 3D ghost, open without signing in at /fantasma.
@@ -63,9 +63,9 @@ export default function Fantasma() {
   const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string; hem?: string }>();
   const [agent, setAgent] = useState<Agent>(params.agent === 'secretaria' || params.agent === 'redes' ? params.agent : 'base');
   const [look, setLook] = useState<Look>({
-    surface: SURFACES.find((o) => o.id === params.surface)?.id ?? 'now',
-    eyes: EYES.find((o) => o.id === params.eyes)?.id ?? 'now',
-    hem: HEMS.find((o) => String(o.id) === params.hem)?.id ?? 1,
+    surface: SURFACES.find((o) => o.id === params.surface)?.id ?? DEFAULT_LOOK.surface,
+    eyes: EYES.find((o) => o.id === params.eyes)?.id ?? DEFAULT_LOOK.eyes,
+    hem: HEMS.find((o) => String(o.id) === params.hem)?.id ?? DEFAULT_LOOK.hem,
   });
   useFocusEffect(
     useCallback(() => {

@@ -121,6 +121,25 @@ def arm_profile() -> list[tuple[float, float]]:
     ]
 
 
+def bent_arm(name: str, side: int) -> bpy.types.Object:
+    """An arm bent at the elbow, in the hanging arm's own frame (root up, hand at
+    the same tip as the straight arm, so props held there still fit). The elbow
+    bulges out and down from the body once the arm is raised.
+    """
+    root, hand = Vector((0.0, 0.1, 0.0)), Vector((0.0, -0.38, 0.0))
+    ctrl = Vector((-side * 0.4, -0.12, 0.02))
+    path, radii = [], []
+    for k in range(17):
+        t = k / 16
+        path.append(root * (1 - t) ** 2 + ctrl * 2 * t * (1 - t) + hand * t * t)
+        radii.append(0.15 - 0.045 * t)
+    return join(name, [
+        tube(name + "_tube", path, radii, 20),
+        ellipsoid(name + "_root", root, (0.15, 0.15, 0.15)),
+        ellipsoid(name + "_hand", hand, (0.108, 0.11, 0.108)),
+    ])
+
+
 # --- Building blocks ---------------------------------------------------------------
 
 
@@ -355,17 +374,17 @@ def secretaria() -> dict[str, bpy.types.Object]:
     kx, ky = -0.04, neck - 0.075
     kz = math.sqrt(max(0.0, body_radius(ky) ** 2 - kx**2)) + 0.045
     knot = Vector((kx, ky, kz))
-    scarf_bits.append(ellipsoid("scarf_knot", knot, (0.11, 0.1, 0.085), (0, 0, 0.2)))
+    scarf_bits.append(ellipsoid("scarf_knot", knot, (0.13, 0.085, 0.085), (0, 0, 0.12)))
     # The wrap round the knot's middle, as in the picture: a ring round its
     # left-right axis.
-    wrap = [knot + Vector((0, 0.1 * math.cos(a), 0.085 * math.sin(a))) for a in [2 * math.pi * k / 24 for k in range(25)]]
+    wrap = [knot + Vector((0, 0.09 * math.cos(a), 0.088 * math.sin(a))) for a in [2 * math.pi * k / 24 for k in range(25)]]
     scarf_bits.append(tube("scarf_wrap", wrap, [0.038] * len(wrap), 10))
-    for side, spread, length in [(-1, 0.42, 0.44), (1, 0.3, 0.48)]:
+    for side, spread, length in [(-1, 0.62, 0.44), (1, 0.5, 0.47)]:
         # A tail leaves the knot, flares to its widest past halfway, then narrows
         # to a point; it hangs off the body and flips a little outward.
         def centre(v, side=side, spread=spread, length=length):
             ang = -math.pi / 2 + side * spread * (0.6 + 0.4 * v)  # straight down is -pi/2
-            x = kx + side * 0.03 + length * v * math.cos(ang) * 0.9
+            x = kx + side * 0.06 + length * v * math.cos(ang) * 0.9
             y = ky - 0.03 + length * v * math.sin(ang)
             z = math.sqrt(max(0.0, body_radius(y) ** 2 - x**2)) + 0.05 + 0.1 * v**1.5
             down = Vector((math.cos(ang), math.sin(ang), 0))
@@ -676,9 +695,12 @@ def main() -> None:
 
     before = set(bpy.data.objects)
     redes_parts = redes()
+    # Bent arms, exported unposed like the fingers: the app turns them like any arm.
+    redes_parts["arm_l"] = bent_arm("arm_l", -1)
+    redes_parts["arm_r"] = bent_arm("arm_r", 1)
     write("redes.json", {name: mesh_arrays(obj) for name, obj in redes_parts.items()})
-    for side, angle, forward in REDES_ARMS:
-        posed_arm(side, angle, forward)
+    redes_parts["arm_l"].matrix_world = arm_matrix(*REDES_ARMS[0])
+    redes_parts["arm_r"].matrix_world = arm_matrix(*REDES_ARMS[1])
     peace = redes_parts["peace"]
     peace.matrix_world = arm_matrix(*REDES_ARMS[1])  # previews only; exported unposed above
     redes_objs = set(bpy.data.objects) - before

@@ -57,6 +57,8 @@ const REDES_PARTS = {
   lenses: partGeometry(redes.lenses),
   screen: partGeometry(redes.screen),
   peace: partGeometry(redes.peace), // in the arm's own frame: drawn inside the arm
+  armL: partGeometry(redes.arm_l), // bent at the elbow, also in the arm's frame
+  armR: partGeometry(redes.arm_r),
 };
 
 // --- The glowing material -------------------------------------------------
@@ -205,7 +207,8 @@ function glowMaterial(yBottom: number, yTop: number, { stripes = false, silver =
 export type Surface = 'now' | 'glass' | 'deep';
 export type Eyes = 'now' | 'hollow' | 'deep';
 export type Look = { surface: Surface; eyes: Eyes; hem: number };
-export const DEFAULT_LOOK: Look = { surface: 'now', eyes: 'now', hem: 1 };
+// Álvaro's picks, 2026-11-14: the deep glass surface, hollow eyes, a medium skirt.
+export const DEFAULT_LOOK: Look = { surface: 'deep', eyes: 'hollow', hem: 0.88 };
 
 // The colour pattern of fragmentShader, as a function other shaders can call.
 const patternChunk = /* glsl */ `
@@ -688,7 +691,7 @@ export function GhostScene({
               ref={(g) => void (arms.current[i] = g)}
               position={[(i === 0 ? -1 : 1) * SHOULDER_X * shoulderScale, SHOULDER_Y, 0.08]}
             >
-              <mesh geometry={ARM} material={bodyMaterial} />
+              <mesh geometry={agent === 'redes' ? (i === 0 ? REDES_PARTS.armL : REDES_PARTS.armR) : ARM} material={bodyMaterial} />
               {agent === 'redes' && i === 1 && <mesh geometry={REDES_PARTS.peace} material={bodyMaterial} />}
             </group>
           ))}
