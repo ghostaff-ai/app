@@ -26,3 +26,13 @@ model has no colours: the glow is the app's own shader. Each prop follows a pict
 of it drawn alone (`design/concepts/props-round1/`), which shows its shape far more
 clearly than the full character does. Hunyuan3D is not an option for
 this: its licence excludes the EU (`docs/plans/ideas/gamification.md`).
+
+**Nothing passes through anything else** (Álvaro, 2026-11-14): a prop held against
+the head sits a small gap off it, a hand closes on what it holds without it coming
+out the other side, and props never cross one another. Props held in a hand are
+built in that arm's frame so they move with it, and an arm holding something to
+the body does not fling up on a hop. After changing a model or a pose, check it:
+
+```bash
+blender -b -P design/blender/clash.py -- secretaria,redes
+```
