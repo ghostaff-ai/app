@@ -76,8 +76,8 @@ def main() -> None:
         if target.exists():
             print(f"skip {target}")
             continue
-        prompt = f"{spec['style']}\n\nCharacter: {idea['prompt']}"
-        ref = spec.get("reference")
+        prompt = f"{spec['style']}\n\n{idea.get('label', 'Character')}: {idea['prompt']}"
+        ref = idea.get("reference", spec.get("reference"))
         reference = (spec_path.parent / ref) if ref else None
         target.write_bytes(draw(spec["model"], prompt, key, reference))
         print(f"drew {target}")
