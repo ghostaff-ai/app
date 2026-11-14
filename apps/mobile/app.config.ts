@@ -37,8 +37,15 @@ const supabaseAnonKey = process.env[`SUPABASE_ANON_KEY_${suffix}`] ?? '';
 const supabaseUrl = process.env[`SUPABASE_URL_${suffix}`] || projectUrlFromKey(supabaseAnonKey) || '';
 
 // The engine (apps/engine) takes an organisation's keys to the vault. Its URL is
-// public too; what guards it is the person's sign-in token.
-const engineUrl = process.env[`ENGINE_URL_${suffix}`] ?? '';
+// public too; what guards it is the person's sign-in token, so it is pinned
+// here (scripts/deploy-engine.sh prints it). It serves ghostaff-beta; prod gets
+// its own once prod has its own Supabase project. Local dev sets ENGINE_URL_DEV.
+const engineUrlPerEnv: Record<Env, string> = {
+  dev: '',
+  beta: 'https://engine-664656500315.europe-west1.run.app',
+  prod: '',
+};
+const engineUrl = process.env[`ENGINE_URL_${suffix}`] || engineUrlPerEnv[env];
 
 function projectUrlFromKey(key: string): string | null {
   try {

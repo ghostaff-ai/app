@@ -2,7 +2,7 @@
 
 **Priority:** high — Álvaro (2026-11-14): connectors are a crucial part of the app, and AI accounts come first
 **Gate:** none for API keys; OpenAI's acceptance for ChatGPT plans
-**Next:** Álvaro runs `bash scripts/deploy-engine.sh` once (the agent's classifier blocks Google Cloud logins), the connections migration goes to `ghostaff-beta`, and `ENGINE_URL_BETA` into EAS's preview environment
+**Next:** the connections migration on `ghostaff-beta` (needs a Supabase login), then a beta build and a real key
 
 ## Goal
 
@@ -54,9 +54,10 @@ Decisions (Álvaro, 2026-11-14: "pick the best option long term"):
 - [x] `public.connections` with row-level security and its pgTAP test.
 - [x] `apps/engine`: `POST /connections/ai`, `DELETE /connections/ai/:provider`, `GET /identity`; unit tests; image builds; checked end to end against the local stack (owner, member, stranger, a key the real Anthropic and OpenAI reject).
 - [x] The Conexiones screen.
-- [ ] Deployed: `bash scripts/deploy-engine.sh` (APIs, service account, registry, the service-role key into Secret Manager, build, deploy).
+- [x] Deployed 2026-11-14 by Álvaro running `bash scripts/deploy-engine.sh` (the agent's classifier blocks Google Cloud tokens, so he runs it): https://engine-664656500315.europe-west1.run.app, service account `engine@ghostaff-prod.iam.gserviceaccount.com`. Refuses unsigned calls (checked).
 - [ ] The migration on `ghostaff-beta`.
-- [ ] `ENGINE_URL_BETA` in EAS's preview environment, then a beta build.
+- [x] The beta's engine URL pinned in `app.config.ts` (public, like the EAS project id), so no EAS variable.
+- [ ] A beta build.
 - [ ] Tried with a real key on the beta.
 - [ ] The engine reads the organisation's connection when it runs an agent (once the engine runs agents).
 - [ ] Then: OpenRouter's one-click connect; ChatGPT plans once OpenAI accepts us; Claude subscriptions.

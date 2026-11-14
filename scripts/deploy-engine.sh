@@ -46,6 +46,7 @@ echo "== Build and push $IMAGE"
 docker build -f apps/engine/Dockerfile -t "$IMAGE" .
 gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin "https://$REGISTRY"
 docker push "$IMAGE"
+docker logout "https://$REGISTRY" >/dev/null # the token was only for this push
 
 echo "== Deploy"
 # Public URL on purpose: the app calls it, and every call but /health needs a
@@ -57,4 +58,4 @@ gcloud run deploy engine --project "$P" --region "$R" --image "$IMAGE" \
 
 URL=$(gcloud run services describe engine --project "$P" --region "$R" --format 'value(status.url)')
 curl -fsS "$URL/health" && echo
-echo "Engine at $URL. Beta builds read it from EAS's preview environment as ENGINE_URL_BETA."
+echo "Engine at $URL (also https://engine-664656500315.europe-west1.run.app, the URL apps/mobile/app.config.ts pins for beta)."
