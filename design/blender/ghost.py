@@ -258,6 +258,92 @@ def sheet(name, outline, thickness: float, bend=None) -> bpy.types.Object:
     return link(name, bm)
 
 
+def ribbon(name, shape, along: int, thickness: float) -> bpy.types.Object:
+    """A thin strip of cloth, `along` steps long.
+
+    For v in 0..1 down its length, `shape(v)` gives (centre, half-width vector,
+    normal); the strip spans centre ± half-width. Each cross-section bows a little
+    outward, like folded silk.
+    """
+    bm = bmesh.new()
+    cols = 7
+    front, back = [], []
+    for i in range(along + 1):
+        v = i / along
+        c, half, normal = shape(v)
+        f_row, b_row = [], []
+        for k in range(cols):
+            u = -1 + 2 * k / (cols - 1)
+            p = c + half * u + normal * (0.025 * (1 - u * u))  # the fold bows outward
+            f_row.append(bm.verts.new(at(*(p + normal * thickness / 2))))
+            b_row.append(bm.verts.new(at(*(p - normal * thickness / 2))))
+        front.append(f_row)
+        back.append(b_row)
+    for a_, b_ in zip(range(along), range(1, along + 1)):
+        for k in range(cols - 1):
+            bm.faces.new((front[a_][k], front[a_][k + 1], front[b_][k + 1], front[b_][k]))
+            bm.faces.new((back[a_][k], back[b_][k], back[b_][k + 1], back[a_][k + 1]))
+        for k in (0, cols - 1):
+            bm.faces.new((front[a_][k], front[b_][k], back[b_][k], back[a_][k]))
+    for row in (0, along):
+        for k in range(cols - 1):
+            bm.faces.new((front[row][k], back[row][k], back[row][k + 1], front[row][k + 1]))
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)  # the pointed tip closes up
+    return link(name, bm)
+
+
+# --- Borrowed shapes ------------------------------------------------------------------
+# Some props start from free models (design/blender/sources/, credits in CREDITS.md):
+# the shape is theirs, rescaled and placed here; the colour is still the app's.
+
+SOURCES = HERE / "sources"
+
+
+def borrowed(file: str, objects=None, materials=None) -> list[list[Vector]]:
+    """Import a model and return its triangles in app axes, keeping only some parts.
+
+    `objects` keeps meshes by name; `materials` keeps faces by material name. The
+    source is removed from the scene afterwards.
+    """
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=str(SOURCES / file))
+    new = [o for o in bpy.data.objects if o not in before]
+    tris = []
+    for o in new:
+        if o.type != "MESH" or (objects and o.name not in objects):
+            continue
+        me = o.data
+        me.calc_loop_triangles()
+        for t in me.loop_triangles:
+            mat = me.materials[t.material_index].name.split(".")[0] if me.materials else ""  # a re-import adds ".001"
+            if materials and mat not in materials:
+                continue
+            tris.append([Vector(to_app(o.matrix_world @ me.vertices[i].co)) for i in t.vertices])
+    for o in new:
+        bpy.data.objects.remove(o)
+    return tris
+
+
+def from_tris(name: str, tris, place) -> bpy.types.Object:
+    """Build a mesh from app-axes triangles, moving each point through `place`."""
+    bm = bmesh.new()
+    for tri in tris:
+        bm.faces.new([bm.verts.new(at(*place(p))) for p in tri])
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+    return link(name, bm)
+
+
+def axes_of(points) -> tuple[Vector, list[Vector], list[float]]:
+    """Centre, principal axes (longest first) and spreads of a cloud of points."""
+    import numpy as np
+
+    arr = np.array([tuple(p) for p in points])
+    centre = arr.mean(axis=0)
+    vals, vecs = np.linalg.eigh(np.cov((arr - centre).T))
+    order = vals.argsort()[::-1]
+    return Vector(centre), [Vector(vecs[:, i]) for i in order], [float(vals[i]) for i in order]
+
+
 def join(name, objs) -> bpy.types.Object:
     """Apply each part's modifiers, then merge them into one object."""
     deps = bpy.context.evaluated_depsgraph_get()
@@ -283,59 +369,83 @@ def join(name, objs) -> bpy.types.Object:
 def secretaria() -> dict[str, bpy.types.Object]:
     parts: dict[str, bpy.types.Object] = {}
 
-    # The bun: a twisted knot of three rolls round a core, back and to the side.
-    bun_c = Vector((0.3, 0.9, -0.12))
-    # A core, then three thick coils wound round it at different tilts, like hair
-    # twisted into a knot.
-    rolls = [ellipsoid("bun_core", bun_c + Vector((0, 0.14, 0)), (0.19, 0.18, 0.19))]
-    for i, (tilt, lift, r) in enumerate([(0.0, 0.06, 0.2), (0.5, 0.15, 0.16), (-0.6, 0.24, 0.11)]):
-        loop = []
-        for k in range(29):
-            a = 2 * math.pi * k / 28 * 0.93
-            p = Vector((r * math.cos(a), 0.035 * math.sin(a), r * math.sin(a)))
-            p = Matrix.Rotation(tilt, 3, "X") @ p
-            loop.append(bun_c + Vector((0, lift, 0)) + p)
-        thick = [0.075 * (0.55 + 0.45 * math.sin(math.pi * k / 28)) + 0.02 for k in range(29)]
-        rolls.append(tube(f"bun_coil{i}", loop, thick, 12))
-    parts["bun"] = join("bun", rolls)
+    # The bun, from secretaria-back.jpg: a round bun of eight puffed ribs, like a
+    # small pumpkin, twisted a little so it reads as wound hair, with a smaller
+    # twisted knot on top. It sits on the crown, towards the back and her left.
+    bun_c = Vector((0.26, 0.98, -0.16))
+    tilt = Matrix.Rotation(-0.45, 3, "X") @ Matrix.Rotation(-0.35, 3, "Z")  # leans back and out
 
-    # The scarf: a band at the neck dipping a little at the front, a knot, two tails.
+    def ribbed(name, centre, radius, height, ribs, twist):
+        bm = bmesh.new()
+        bmesh.ops.create_uvsphere(bm, u_segments=64, v_segments=32, radius=1.0)
+        for v in bm.verts:
+            x, y, z = v.co.x, v.co.z, -v.co.y  # app axes, y along the bun's axis
+            theta = math.atan2(z, x) + twist * y
+            crease = abs(math.cos(ribs / 2 * theta))  # 1 on a rib, 0 in a crease
+            r = radius * (0.88 + 0.12 * crease) * (1 - 0.1 * y * y)
+            p = tilt @ Vector((x * r, y * height, z * r))
+            v.co = at(*(centre + p))
+        return link(name, bm)
+
+    bun = [
+        ribbed("bun_main", bun_c, 0.25, 0.19, 8, 0.5),
+        ribbed("bun_knot", bun_c + tilt @ Vector((0, 0.19, 0)), 0.12, 0.09, 6, -1.2),
+    ]
+    parts["bun"] = join("bun", bun)
+
+    # The scarf: a rolled silk band round the neck (round in section, as in the
+    # back picture), dipping at the front into a knot with two pointed tails.
     neck = 0.22
 
     def sag(theta: float) -> float:
-        return -0.06 * (0.5 + 0.5 * math.cos(theta))  # lower at the front
+        return -0.07 * (0.5 + 0.5 * math.cos(theta)) ** 2  # lower at the front
 
-    scarf_bits = [band("scarf_band", neck, body_radius, 0.045, 0.1, sag=sag)]
-    kx, ky = -0.05, neck - 0.08
-    kz = math.sqrt(max(0.0, body_radius(ky) ** 2 - kx**2)) + 0.07
-    scarf_bits.append(ellipsoid("scarf_knot", (kx, ky, kz), (0.12, 0.1, 0.085), (0, 0, 0.3)))
-    for side, tilt in [(-1, 0.55), (1, -0.5)]:
-        # A pointed tail: wide at the knot, tapering to a point, curling outward.
-        outline = [(-0.11, 0.0), (0.11, 0.0), (0.09, -0.26), (0.02, -0.46), (-0.08, -0.3)]
+    scarf_bits = [band("scarf_band", neck, body_radius, 0.075, 0.065, sag=sag)]
+    kx, ky = -0.04, neck - 0.075
+    kz = math.sqrt(max(0.0, body_radius(ky) ** 2 - kx**2)) + 0.045
+    scarf_bits.append(ellipsoid("scarf_knot", (kx, ky, kz), (0.1, 0.085, 0.075), (0, 0, 0.25)))
+    for side, spread, length in [(-1, 0.7, 0.44), (1, 0.5, 0.5)]:
+        # A tail leaves the knot, flares to its widest a third of the way down,
+        # then narrows to a point; it hangs off the body and flips outward.
+        def centre(v, side=side, spread=spread, length=length):
+            ang = -math.pi / 2 + side * spread * (0.6 + 0.4 * v)  # straight down is -pi/2
+            x = kx + side * 0.03 + length * v * math.cos(ang) * 0.9
+            y = ky - 0.03 + length * v * math.sin(ang)
+            z = math.sqrt(max(0.0, body_radius(y) ** 2 - x**2)) + 0.05 + 0.1 * v**1.5
+            down = Vector((math.cos(ang), math.sin(ang), 0))
+            normal = Vector((x * 0.3, 0.2, 1)).normalized()  # mostly facing the viewer
+            width = 0.045 + 0.1 * math.sin(math.pi * min(1.0, v * 1.4) * 0.75) * (1 - v) ** 0.6
+            across = down.cross(normal).normalized() * width
+            return Vector((x, y, z)), across, normal
 
-        def bend(x, y, side=side, tilt=tilt):
-            ca, sa = math.cos(tilt), math.sin(tilt)
-            px, py = x * ca - y * sa, x * sa + y * ca
-            gx, gy = kx + side * 0.08 + px, ky - 0.06 + py
-            gz = math.sqrt(max(0.0, body_radius(gy) ** 2 - gx**2)) + 0.06 + 0.12 * (-y) ** 1.5
-            return (gx, gy, gz)
+        scarf_bits.append(ribbon(f"scarf_tail{side}", centre, 16, 0.012))
+    parts["scarf"] = join("scarf", scarf_bits)
 
-        scarf_bits.append(sheet(f"scarf_tail{side}", outline, 0.025, bend))
-    parts["scarf"] = join("scarf", [subdivide(o, 1) if o.name.startswith("scarf_tail") else o for o in scarf_bits])
-
-    # The phone: a curved handle with a round cup at each end, facing her head.
+    # The phone: a real handset's shape (Office Phone, by dook), scaled and turned
+    # so its cups face her head, from the ear down to the mouth.
     ear = Vector((-0.58, 0.55, 0.12))
     mouth = Vector((-0.74, 0.12, 0.22))
-    handle = []
-    for i in range(13):
-        t = i / 12
-        p = ear.lerp(mouth, t) + Vector((-0.12 * math.sin(math.pi * t), 0, 0.03 * math.sin(math.pi * t)))
-        handle.append(p)
-    pieces = [tube("phone_handle", handle, [0.06] * len(handle))]
-    for name, c in [("phone_ear", ear), ("phone_mouth", mouth)]:
-        pieces.append(ellipsoid(name, c + Vector((0.02, 0, 0)), (0.07, 0.13, 0.13)))
-        pieces.append(ellipsoid(name + "_face", c + Vector((0.08, 0, 0)), (0.02, 0.105, 0.105)))
-    parts["phone"] = join("phone", pieces)
+    tris = borrowed("office-phone.glb", objects={"Handle"})
+    pts = [p for t in tris for p in t]
+    c, (u, _, _), _ = axes_of(pts)
+    span = max((p - c).dot(u) for p in pts) - min((p - c).dot(u) for p in pts)
+    mid_pts = [p - c - u * (p - c).dot(u) for p in pts if abs((p - c).dot(u)) < 0.12 * span]
+    end_pts = [p - c - u * (p - c).dot(u) for p in pts if abs((p - c).dot(u)) > 0.38 * span]
+    face = (sum(end_pts, Vector()) / len(end_pts) - sum(mid_pts, Vector()) / len(mid_pts)).normalized()
+    w = u.cross(face)
+    reach = max((p - c).dot(face) for p in pts)
+    axis = (ear - mouth).normalized()
+    toward = (Vector((1, 0, 0.4)) - axis * Vector((1, 0, 0.4)).dot(axis)).normalized()  # cups to her head, turned a little to the viewer
+    side_ = axis.cross(toward)
+    scale = 0.72 / span
+    anchor = (ear + mouth) / 2 + toward * 0.13
+
+    def place_phone(p):
+        d = p - c
+        # 1.5x thicker side to side: the pictures' handset is a chunky toy.
+        return anchor + (axis * d.dot(u) + toward * (d.dot(face) - reach) + side_ * d.dot(w) * 1.5) * scale
+
+    parts["phone"] = from_tris("phone", tris, place_phone)
 
     # The notepad, against her front on the viewer's right, tilted to the body.
     pad_c = Vector((0.36, -0.12, 0.0))
@@ -352,30 +462,38 @@ def secretaria() -> dict[str, bpy.types.Object]:
     def on_pad(x, y, z):
         return frame @ Vector((x, y, z))
 
-    bm = bmesh.new()
-    bmesh.ops.create_cube(bm, size=1.0)
-    for v in bm.verts:
-        v.co = at(*on_pad(v.co.x * 0.36, v.co.y * 0.46, v.co.z * 0.05))
-    paper = link("notepad_paper", bm)
-    bevel = paper.modifiers.new("round", "BEVEL")
-    bevel.width = 0.012
-    bevel.segments = 2
+    # The pad itself is a real spiral notebook's shape (Green Notebook, by Ryan
+    # Donaldson): its pages and covers become the white paper, its wire the spiral.
+    # The source's spiral runs down a long side; turned so it runs along the top,
+    # and narrowed so the pad stands taller than wide, as in the picture.
+    def place_pad(p):
+        # Source (app axes): pages span x 0..0.34, the spiral at x near 0, along z.
+        return on_pad(-p.z * 0.74, (0.165 - p.x) * 0.95, p.y * 0.95)
+
+    pad_paper = borrowed("green-notebook.glb", materials={"mat21", "mat10"})
+    pad_wire = borrowed("green-notebook.glb", materials={"mat22"})
+    parts["paper"] = from_tris("paper", pad_paper, place_pad)
+    parts["spiral"] = from_tris("spiral", pad_wire, place_pad)
+    pad_face = max(p.y for t in pad_paper for p in t) * 0.95 + 0.004
+
     lines = []
     for i, w in enumerate([0.2, 0.24, 0.16, 0.22, 0.12]):
-        y = 0.11 - i * 0.07
-        lines.append(tube(f"line{i}", [on_pad(-0.13, y, 0.027), on_pad(-0.13 + w, y, 0.027)], [0.008, 0.008], 6))
-    parts["paper"] = join("paper", [paper])
-    rings = []
-    for i in range(6):
-        x = -0.14 + i * 0.056
-        loop = [on_pad(x, 0.23 + 0.045 * math.sin(a), 0.045 * math.cos(a)) for a in [math.pi * k / 8 for k in range(-6, 7)]]
-        rings.append(tube(f"ring{i}", loop, [0.011] * len(loop), 6))
-    parts["spiral"] = join("spiral", rings)
+        y = 0.09 - i * 0.065
+        lines.append(tube(f"line{i}", [on_pad(-0.12, y, pad_face), on_pad(-0.12 + w, y, pad_face)], [0.007, 0.007], 6))
     parts["ink"] = join("ink", lines)
-    pen = [on_pad(0.04, -0.24, 0.06), on_pad(0.24, 0.26, 0.12)]
-    body_pen = tube("pen_body", [pen[0].lerp(pen[1], 0.12), pen[1]], [0.03, 0.03], 12)
-    tip = tube("pen_tip", [pen[0], pen[0].lerp(pen[1], 0.12)], [0.003, 0.028], 12)
-    parts["pen"] = join("pen", [body_pen, tip])
+
+    # A ballpoint: a slim body, a cone to the tip, a clip and a rounded end.
+    a, b = on_pad(0.05, -0.2, pad_face + 0.03), on_pad(0.22, 0.24, pad_face + 0.09)
+    along = (b - a).normalized()
+    pen = [
+        tube("pen_tip", [a, a.lerp(b, 0.14)], [0.004, 0.026], 12),
+        tube("pen_grip", [a.lerp(b, 0.14), a.lerp(b, 0.36)], [0.028, 0.03], 14),
+        tube("pen_body", [a.lerp(b, 0.36), b], [0.03, 0.027], 14),
+        ellipsoid("pen_end", b, (0.027, 0.027, 0.027)),
+    ]
+    clip_out = along.cross(Vector((0, 0, 1))).cross(along).normalized() * -0.04
+    pen.append(tube("pen_clip", [a.lerp(b, 0.62) + clip_out, a.lerp(b, 0.95) + clip_out * 0.8], [0.009, 0.01], 8))
+    parts["pen"] = join("pen", pen)
     return parts
 
 

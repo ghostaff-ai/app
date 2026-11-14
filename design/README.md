@@ -22,5 +22,6 @@ blender -b -P design/blender/ghost.py -- --render
 ```
 
 Blender 5.2 comes from the workstation setup (homelab `personal/workstation.yml`). The
-model has no colours: the glow is the app's own shader. Hunyuan3D is not an option for
+model has no colours: the glow is the app's own shader. Some props start from free
+models in `design/blender/sources/` (credits and licences in its `CREDITS.md`). Hunyuan3D is not an option for
 this: its licence excludes the EU (`docs/plans/ideas/gamification.md`).
