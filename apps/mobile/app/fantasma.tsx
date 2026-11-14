@@ -14,7 +14,7 @@ const AGENTS: { id: Agent; label: string }[] = [
 ];
 
 // Look options to compare on the phone; the URL can preset them
-// (?surface=glass&eyes=hollow&hem=0.88).
+// (?surface=glass&eyes=hollow).
 const SURFACES: { id: Surface; label: string }[] = [
   { id: 'now', label: 'A' },
   { id: 'glass', label: 'B' },
@@ -24,11 +24,6 @@ const EYES: { id: Eyes; label: string }[] = [
   { id: 'now', label: '1' },
   { id: 'hollow', label: '2' },
   { id: 'deep', label: '3' },
-];
-const HEMS: { id: number; label: string }[] = [
-  { id: 1, label: 'X' },
-  { id: 0.88, label: 'Y' },
-  { id: 0.78, label: 'Z' },
 ];
 
 function Chips<T>({
@@ -60,12 +55,11 @@ function Chips<T>({
 
 export default function Fantasma() {
   const [focused, setFocused] = useState(true);
-  const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string; hem?: string }>();
+  const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string }>();
   const [agent, setAgent] = useState<Agent>(params.agent === 'secretaria' || params.agent === 'redes' ? params.agent : 'base');
   const [look, setLook] = useState<Look>({
     surface: SURFACES.find((o) => o.id === params.surface)?.id ?? DEFAULT_LOOK.surface,
     eyes: EYES.find((o) => o.id === params.eyes)?.id ?? DEFAULT_LOOK.eyes,
-    hem: HEMS.find((o) => String(o.id) === params.hem)?.id ?? DEFAULT_LOOK.hem,
   });
   useFocusEffect(
     useCallback(() => {
@@ -92,7 +86,6 @@ export default function Fantasma() {
       <View className="gap-2 pb-3">
         <Chips title="Superficie" options={SURFACES} value={look.surface} onChange={(surface) => setLook({ ...look, surface })} />
         <Chips title="Ojos" options={EYES} value={look.eyes} onChange={(eyes) => setLook({ ...look, eyes })} />
-        <Chips title="Falda" options={HEMS} value={look.hem} onChange={(hem) => setLook({ ...look, hem })} />
       </View>
       <Text className="pb-6 text-center text-base text-muted">Arrástralo para girarlo. Tócalo para cambiar su cara.</Text>
     </SafeAreaView>

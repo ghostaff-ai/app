@@ -44,7 +44,11 @@ const ARM = partGeometry(model.arm);
 const SECRETARIA_PARTS = {
   bun: partGeometry(secretaria.bun),
   scarf: partGeometry(secretaria.scarf),
+  // The phone and its arm, long enough to reach it, in that arm's own frame:
+  // drawn inside the arm, so the phone moves with the hand.
+  armPhone: partGeometry(secretaria.arm_phone),
   phone: partGeometry(secretaria.phone),
+  phoneHoles: partGeometry(secretaria.phone_holes),
   paper: partGeometry(secretaria.paper),
   cover: partGeometry(secretaria.cover),
   spiral: partGeometry(secretaria.spiral),
@@ -53,7 +57,7 @@ const SECRETARIA_PARTS = {
 };
 const REDES_PARTS = {
   beret: partGeometry(redes.beret),
-  handset: partGeometry(redes.handset),
+  handset: partGeometry(redes.handset), // the selfie phone, in the left arm's frame
   lenses: partGeometry(redes.lenses),
   screen: partGeometry(redes.screen),
   peace: partGeometry(redes.peace), // in the arm's own frame: drawn inside the arm
@@ -206,9 +210,10 @@ function glowMaterial(yBottom: number, yTop: number, { stripes = false, silver =
 
 export type Surface = 'now' | 'glass' | 'deep';
 export type Eyes = 'now' | 'hollow' | 'deep';
-export type Look = { surface: Surface; eyes: Eyes; hem: number };
-// Álvaro's picks, 2026-11-14 (changed the same day): the deep glass surface, deep eyes, the narrow skirt.
-export const DEFAULT_LOOK: Look = { surface: 'deep', eyes: 'deep', hem: 0.78 };
+export type Look = { surface: Surface; eyes: Eyes };
+// Álvaro's picks, 2026-11-14 (changed the same day): the deep glass surface and
+// deep eyes. His narrow skirt (Z) is now built into the model.
+export const DEFAULT_LOOK: Look = { surface: 'deep', eyes: 'deep' };
 
 // The colour pattern of fragmentShader, as a function other shaders can call.
 const patternChunk = /* glsl */ `
@@ -469,33 +474,32 @@ const BLINK_TIME = 0.12;
 export type Agent = 'base' | 'secretaria' | 'redes';
 
 // Each arm hangs from a shoulder inside the body: `angle` swings it out from the
-// side (radians, 0 = straight down), `forward` brings it towards the camera.
-type ArmPose = { angle: number; forward: number; swing: number };
+// side (radians, 0 = straight down), `forward` brings it towards the camera,
+// `swing` is how far it sways and `fling` how much it flies up on a hop. An arm
+// holding something against the body neither sways nor flings much, or the
+// thing would pass through the body. The agents' angles come with their models,
+// which design/blender/ghost.py builds around them.
+type ArmPose = { angle: number; forward: number; swing: number; fling: number };
+const posed = (arms: number[][], motion: [number, number][]) =>
+  motion.map(([swing, fling], i) => ({ angle: arms[i]![0]!, forward: arms[i]![1]!, swing, fling })) as [ArmPose, ArmPose];
 const POSES: Record<Agent, [ArmPose, ArmPose]> = {
   base: [
-    { angle: 0.95, forward: 0.2, swing: 0.1 },
-    { angle: 0.95, forward: 0.2, swing: 0.1 },
+    { angle: 0.95, forward: 0.2, swing: 0.1, fling: 1 },
+    { angle: 0.95, forward: 0.2, swing: 0.1, fling: 1 },
   ],
-  // Kept in step with posed_arm() in design/blender/ghost.py, whose props sit at
-  // these hands.
-  secretaria: [
-    { angle: 2.3, forward: -0.45, swing: 0.03 }, // her right, the viewer's left: phone to the ear
-    { angle: 0.4, forward: 0.35, swing: 0.05 }, // by the notepad
-  ],
-  // Kept in step with REDES_ARMS in design/blender/ghost.py.
-  redes: [
-    { angle: 2.35, forward: -0.25, swing: 0.03 }, // her right, the viewer's left: the phone up for a selfie
-    { angle: 2.45, forward: 0.2, swing: 0.06 }, // the peace sign
-  ],
+  // Her right (the viewer's left) holds the phone to her head; the left is at the notepad.
+  secretaria: posed(secretaria.arms, [
+    [0.01, 0],
+    [0.05, 1],
+  ]),
+  // The selfie phone up in her right, the peace sign in her left.
+  redes: posed(redes.arms, [
+    [0.03, 0.4],
+    [0.06, 0.4],
+  ]),
 };
 const SHOULDER_X = 0.56;
 const SHOULDER_Y = -0.02;
-
-// How much the skirt narrows at height y, for a hem width `hem` (1 = as modelled).
-function narrow(y: number, hem: number) {
-  const t = Math.min(1, Math.max(0, (0.25 - y) / 0.95));
-  return 1 - (1 - hem) * t * t * (3 - 2 * t);
-}
 
 export function GhostScene({
   spin,
@@ -515,20 +519,7 @@ export function GhostScene({
 
   const geometry = useMemo(() => BODY_REST.clone(), []);
   const position = geometry.getAttribute('position') as THREE.BufferAttribute;
-  const rest = BODY_REST.getAttribute('position') as THREE.BufferAttribute;
-  // The body's rest shape, with the skirt narrowed to the chosen hem width.
-  const base = useMemo(() => {
-    const out = Float32Array.from(rest.array as Float32Array);
-    for (let i = 0; i < rest.count; i++) {
-      const k = narrow(out[i * 3 + 1]!, look.hem);
-      out[i * 3] = out[i * 3]! * k;
-      out[i * 3 + 2] = out[i * 3 + 2]! * k;
-    }
-    position.copyArray(out);
-    position.needsUpdate = true;
-    geometry.computeVertexNormals();
-    return out;
-  }, [rest, position, geometry, look.hem]);
+  const base = (BODY_REST.getAttribute('position') as THREE.BufferAttribute).array as Float32Array;
   const bodyMaterial = useMemo(() => makeGlow(look.surface, -SKIRT - 0.1, DOME_HEIGHT), [look.surface]);
   const scarfMaterial = useMemo(() => makeGlow(look.surface, -SKIRT - 0.1, DOME_HEIGHT, { stripes: true }), [look.surface]);
   const phoneMaterial = useMemo(() => makeGlow(look.surface, -SKIRT - 0.1, DOME_HEIGHT, { silver: 0.45 }), [look.surface]);
@@ -537,8 +528,6 @@ export function GhostScene({
     () => (look.eyes === 'now' ? null : [hollowEyeMaterial(-1, look.eyes === 'hollow'), hollowEyeMaterial(1, look.eyes === 'hollow')]),
     [look.eyes],
   );
-  const padScale = narrow(-0.12, look.hem);
-  const shoulderScale = narrow(SHOULDER_Y, look.hem);
   const eyeSet = useMemo(buildEyes, []);
 
   const nextBlink = useRef(2);
@@ -608,7 +597,7 @@ export function GhostScene({
       const side = i === 0 ? -1 : 1;
       const pose = POSES[agent][i]!;
       const sway = Math.sin(t * 1.6 - 0.9 + i * 1.3) * pose.swing;
-      arm.rotation.z = side * (pose.angle + sway + hop * 0.8);
+      arm.rotation.z = side * (pose.angle + sway + hop * 0.8 * pose.fling);
       arm.rotation.x = -pose.forward;
     });
 
@@ -689,9 +678,39 @@ export function GhostScene({
             <group
               key={i}
               ref={(g) => void (arms.current[i] = g)}
-              position={[(i === 0 ? -1 : 1) * SHOULDER_X * shoulderScale, SHOULDER_Y, 0.08]}
+              position={[(i === 0 ? -1 : 1) * SHOULDER_X, SHOULDER_Y, 0.08]}
             >
-              <mesh geometry={agent === 'redes' ? (i === 0 ? REDES_PARTS.armL : REDES_PARTS.armR) : ARM} material={bodyMaterial} />
+              <mesh
+                geometry={
+                  agent === 'redes'
+                    ? i === 0
+                      ? REDES_PARTS.armL
+                      : REDES_PARTS.armR
+                    : agent === 'secretaria' && i === 0
+                      ? SECRETARIA_PARTS.armPhone
+                      : ARM
+                }
+                material={bodyMaterial}
+              />
+              {agent === 'secretaria' && i === 0 && (
+                <>
+                  <mesh geometry={SECRETARIA_PARTS.phone} material={phoneMaterial} />
+                  <mesh geometry={SECRETARIA_PARTS.phoneHoles}>
+                    <meshBasicMaterial color="#3B3E9E" />
+                  </mesh>
+                </>
+              )}
+              {agent === 'redes' && i === 0 && (
+                <>
+                  <mesh geometry={REDES_PARTS.handset} material={phoneMaterial} />
+                  <mesh geometry={REDES_PARTS.lenses}>
+                    <meshStandardMaterial color="#15152E" metalness={0.6} roughness={0.15} />
+                  </mesh>
+                  <mesh geometry={REDES_PARTS.screen}>
+                    <meshBasicMaterial color="#CFE0FF" />
+                  </mesh>
+                </>
+              )}
               {agent === 'redes' && i === 1 && <mesh geometry={REDES_PARTS.peace} material={bodyMaterial} />}
             </group>
           ))}
@@ -700,9 +719,7 @@ export function GhostScene({
             <>
               <mesh geometry={SECRETARIA_PARTS.bun} material={bodyMaterial} />
               <mesh geometry={SECRETARIA_PARTS.scarf} material={scarfMaterial} />
-              <mesh geometry={SECRETARIA_PARTS.phone} material={phoneMaterial} />
-              {/* The notepad moves in with the skirt when the hem is narrowed. */}
-              <group scale={[padScale, 1, padScale]}>
+              <group>
                 <mesh geometry={SECRETARIA_PARTS.paper}>
                   <meshStandardMaterial color="#FBFAFF" roughness={0.55} />
                 </mesh>
@@ -724,13 +741,6 @@ export function GhostScene({
             <>
               <mesh geometry={REDES_PARTS.beret}>
                 <meshStandardMaterial color="#2B2F95" roughness={0.55} />
-              </mesh>
-              <mesh geometry={REDES_PARTS.handset} material={phoneMaterial} />
-              <mesh geometry={REDES_PARTS.lenses}>
-                <meshStandardMaterial color="#15152E" metalness={0.6} roughness={0.15} />
-              </mesh>
-              <mesh geometry={REDES_PARTS.screen}>
-                <meshBasicMaterial color="#CFE0FF" />
               </mesh>
             </>
           )}

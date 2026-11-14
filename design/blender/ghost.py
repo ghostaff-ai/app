@@ -54,7 +54,9 @@ DOME_R = 0.60
 TOP = 1.0
 P = 2.2  # superellipse power: above 2 the dome is a little squarer than a circle
 HEM_Y = -0.62
-HEM_R = 0.94
+HEM_R = 0.74  # Álvaro's narrow skirt (Z), 2026-11-14
+WAIST = 0.06  # how far the body pulls in under the head, as in the pictures
+WAIST_Y = 0.07
 LOBES = 8
 
 
@@ -64,8 +66,12 @@ def dome_radius(y: float) -> float:
 
 
 def skirt_radius(y: float) -> float:
+    """Below the head the body pulls in a little at the neck, so the head reads
+    wider than the hips, then flares out to the hem."""
     f = (DOME_Y - y) / (DOME_Y - HEM_Y)
-    return DOME_R + (HEM_R - DOME_R) * f**1.7
+    flare = DOME_R + (HEM_R - DOME_R) * f**1.7
+    w = (DOME_Y - y) / (2 * (DOME_Y - WAIST_Y))  # 0 at the head, 0.5 at the waist, 1 below it
+    return flare - WAIST * math.sin(math.pi * min(1.0, w)) ** 2
 
 
 def body_radius(y: float) -> float:
@@ -78,8 +84,8 @@ def body_profile() -> list[tuple[float, float]]:
     for k in range(1, 11):  # the dome, finer near the top
         t = math.pi / 2 * (1 - k / 10)
         pts.append((DOME_R * math.cos(t) ** (2 / P), DOME_Y + (TOP - DOME_Y) * math.sin(t) ** (2 / P)))
-    for j in range(1, 9):
-        y = DOME_Y + (HEM_Y - DOME_Y) * j / 8
+    for j in range(1, 17):
+        y = DOME_Y + (HEM_Y - DOME_Y) * j / 16
         pts.append((skirt_radius(y), y))
     pts += [  # a thick rounded lip, then the hollow underside
         (HEM_R + 0.05, -0.70),
@@ -121,13 +127,14 @@ def arm_profile() -> list[tuple[float, float]]:
     ]
 
 
-def bent_arm(name: str, side: int) -> bpy.types.Object:
+def bent_arm(name: str, side: int, reach: float = 0.38, bend: Vector | None = None) -> bpy.types.Object:
     """An arm bent at the elbow, in the hanging arm's own frame (root up, hand at
     the same tip as the straight arm, so props held there still fit). The elbow
     bulges out and down from the body once the arm is raised.
     """
-    root, hand = Vector((0.0, 0.1, 0.0)), Vector((0.0, -0.38, 0.0))
-    ctrl = Vector((-side * 0.4, -0.12, 0.02))
+    root, hand = Vector((0.0, 0.1, 0.0)), Vector((0.0, -reach, 0.0))
+    ctrl = Vector((-side * 0.4, 0.0, 0.02)) if bend is None else bend.copy()
+    ctrl.y = -0.12 * reach / 0.38
     path, radii = [], []
     for k in range(17):
         t = k / 16
@@ -333,6 +340,45 @@ def join(name, objs) -> bpy.types.Object:
 # (the viewer's left), and a spiral notepad with a pen held against her front.
 
 
+HAND_R = 0.115  # the mitten's radius round its centre, (0, -0.32, 0) in the arm's frame
+
+
+def surface_at(p: Vector) -> tuple[Vector, Vector]:
+    """The body's surface point level with and nearest to p, and its outward normal
+    (the body is round, so straight out from the axis, tipped by the slope)."""
+    rho = math.hypot(p.x, p.z)
+    out = Vector((p.x / rho, 0.0, p.z / rho))
+    e = 0.005
+    slope = (body_radius(p.y + e) - body_radius(p.y - e)) / (2 * e)
+    return out * body_radius(p.y) + Vector((0, p.y, 0)), (out - Vector((0, slope, 0))).normalized()
+
+
+def clearance(p: Vector) -> float:
+    """Roughly how far p is outside the body (negative: inside it)."""
+    return math.hypot(p.x, p.z) - body_radius(p.y)
+
+
+def reach_for(side: int, hand: Vector) -> tuple:
+    """The arm pose (side, angle, forward) and length that put the hand's centre
+    at `hand`: the inverse of arm_matrix for the point (0, -reach, 0)."""
+    d = hand - Vector((side * SHOULDER[0], SHOULDER[1], SHOULDER[2]))
+    reach = d.length
+    d.normalize()
+    phi = math.atan2(d.z, d.y) if d.y > 0 else math.atan2(-d.z, -d.y)
+    c = -math.copysign(math.hypot(d.y, d.z), d.y)  # cos of the swing; negative once raised
+    theta = math.atan2(d.x, c)
+    return (side, round(side * theta, 4), round(-phi, 4), round(reach, 4))
+
+
+def into_arm(obj: bpy.types.Object, side: int, angle: float, forward: float, *_) -> bpy.types.Object:
+    """Re-express a part built in the body's frame in the arm's own frame, so the
+    app can carry it in that arm and it moves with the hand."""
+    inv = arm_matrix(side, angle, forward).inverted()
+    for v in obj.data.vertices:
+        v.co = inv @ v.co
+    return obj
+
+
 def secretaria() -> dict[str, bpy.types.Object]:
     parts: dict[str, bpy.types.Object] = {}
 
@@ -396,49 +442,84 @@ def secretaria() -> dict[str, bpy.types.Object]:
         scarf_bits.append(ribbon(f"scarf_tail{side}", centre, 16, 0.012))
     parts["scarf"] = join("scarf", scarf_bits)
 
-    # The phone, from props-round1/phone.png: a chunky C-shaped handle with a round
-    # cup at each end, each cup's face sunk inside a rim and dotted with speaker
-    # holes. The cups face her head, turned a little to the viewer.
-    ear = Vector((-0.58, 0.55, 0.12))
-    mouth = Vector((-0.74, 0.12, 0.22))
-    axis = (ear - mouth).normalized()
-    toward = (Vector((1, 0, 0.5)) - axis * Vector((1, 0, 0.5)).dot(axis)).normalized()
-    side_ = axis.cross(toward)
+    # The phone, from props-round1/phone.png and secretaria-front.jpg: a chunky
+    # C-shaped handle with a round cup at each end, each cup's face sunk inside a
+    # rim and dotted with speaker holes, held up along the side of her head: the
+    # ear cup level with her eyes, the mouth cup down by the scarf and forward.
+    # Nothing passes through anything else. The cups sit a small gap off the head;
+    # the handle bows out, and her hand closes on it from outside, below the
+    # middle, clear of both cups. The arm is then posed (and made long enough) to
+    # put the hand exactly there.
+    gap = 0.012
 
-    def in_frame(obj, centre):
-        """Move a part built round the vertical axis so that axis points `toward`."""
-        for v in obj.data.vertices:
-            x, y, z = to_app(v.co)
-            v.co = at(*(centre + side_ * x + toward * y + axis * z))
-        return obj
+    def on_head(y, az):
+        """The head's surface point at height y, `az` radians round from her right
+        side towards the front, and the outward normal there."""
+        return surface_at(Vector((-math.cos(az), y, math.sin(az))))
 
     cup_profile = [(0.0, 0.035), (0.085, 0.035), (0.098, 0.05), (0.117, 0.045), (0.125, 0.022),
                    (0.122, -0.02), (0.102, -0.05), (0.055, -0.066), (0.0, -0.069)]
-    pieces, holes = [], []
-    for name, point in [("ear", ear), ("mouth", mouth)]:
-        centre = point + toward * 0.07
-        pieces.append(in_frame(subdivide(lathe(f"phone_{name}", cup_profile, segments=40)), centre))
+    ends = {"ear": on_head(0.5, 0.3), "mouth": on_head(-0.08, 0.6)}  # the mouth cup clears the scarf
+    axis = (ends["ear"][0] - ends["mouth"][0]).normalized()  # mouth to ear
+    pieces, holes, backs, centres = [], [], [], []
+    for name, (surf, n_) in ends.items():
+        toward = -n_ + Vector((0, 0, 0.35))  # faces her head, turned a little to the viewer
+        toward = (toward - axis * toward.dot(axis)).normalized()
+        across = axis.cross(toward)
+        centre = surf + n_ * (gap + 0.035)
+
+        def place(local, toward=toward, across=across):
+            x, y, z = local
+            return across * x + toward * y + axis * z
+
+        cup = subdivide(lathe(f"phone_{name}", cup_profile, segments=40))
+        local = [place(Vector(to_app(v.co))) for v in cup.data.vertices]
+        while min(clearance(centre + q) for q in local) < gap:  # push it out until it clears
+            centre += n_ * 0.003
+        for v, q in zip(cup.data.vertices, local):
+            v.co = at(*(centre + q))
+        pieces.append(cup)
+        centres.append(centre)
         dots = [(0.0, 0.0)] + [(0.03, 2 * math.pi * k / 6) for k in range(6)] + [(0.058, 2 * math.pi * (k + 0.5) / 10) for k in range(10)]
         for r, a in dots:
             dot = bmesh.new()
             bmesh.ops.create_icosphere(dot, subdivisions=1, radius=0.008)
-            c = centre + toward * 0.036 + side_ * r * math.cos(a) + axis * r * math.sin(a)
+            c = centre + place((r * math.cos(a), 0.036, r * math.sin(a)))
             bmesh.ops.translate(dot, verts=dot.verts, vec=at(*c))
             holes.append(link(f"hole_{name}", dot))
-    handle = []
-    for k in range(15):
-        t = k / 14
-        bulge = math.sin(math.pi * t)
-        handle.append(ear.lerp(mouth, t) + toward * (0.04 - 0.1 * bulge))
-    pieces.append(tube("phone_handle", handle, [0.05 + 0.01 * math.sin(math.pi * k / 14) for k in range(15)], 16))
-    parts["phone"] = join("phone", pieces)
+        backs.append(centre - toward * 0.045)
+    ear_back, mouth_back = backs
+    mid = (ear_back + mouth_back) / 2
+    out = surface_at(mid)[1]
+    ctrl = mid + out * 0.1  # the handle bows away from her head
+
+    def handle_at(t):
+        return ear_back * (1 - t) ** 2 + ctrl * 2 * t * (1 - t) + mouth_back * t * t
+
+    handle_r = [0.05 + 0.01 * math.sin(math.pi * k / 14) for k in range(15)]
+    pieces.append(tube("phone_handle", [handle_at(k / 14) for k in range(15)], handle_r, 16))
+    # The hand: outside the handle, a little below its middle, closed on it: the
+    # handle sinks halfway into the mitten's palm and never comes out its back.
+    g = handle_at(0.56)
+    hand = g + surface_at(g)[1] * HAND_R
+    pose = reach_for(-1, hand)
+    SEC_ARMS[0] = pose
+    nearest_cup = min((c - hand).length for c in centres)
+    print(f"phone hand at {tuple(round(x, 3) for x in hand)}, arm pose {pose}, hand to nearest cup centre {nearest_cup:.3f}")
+    # The elbow points out and down, away from her body.
+    elbow = arm_matrix(*pose[:3]).to_3x3().inverted() @ at(-1.0, -0.7, -0.2)
+    elbow = Vector(to_app(elbow))
+    elbow.y = 0.0
+    parts["arm_phone"] = bent_arm("arm_phone", -1, pose[3], elbow.normalized() * 0.4)
+    parts["phone"] = into_arm(join("phone", pieces), *pose[:3])
+    parts["phone_holes"] = into_arm(join("phone_holes", holes), *pose[:3])
 
     # The notepad, from props-round1/notepad.png, against her front on the viewer's
     # right, tilted to the body: a thick block of white pages on an iridescent back
     # cover, six big copper rings looping over the top, ruled blue lines, and a
     # slim rose-gold pen lying across it.
-    pad_c = Vector((0.36, -0.12, 0.0))
-    pad_c.z = math.sqrt(max(0.0, (body_radius(pad_c.y) - 0.02) ** 2 - pad_c.x**2)) + 0.06
+    pad_c = Vector((0.4, -0.18, 0.0))  # clear of the scarf tails
+    pad_c.z = math.sqrt(max(0.0, (body_radius(pad_c.y) - 0.02) ** 2 - pad_c.x**2)) + 0.085
     turn = math.atan2(pad_c.x, pad_c.z)
     frame = (
         Matrix.Translation(pad_c)
@@ -476,7 +557,7 @@ def secretaria() -> dict[str, bpy.types.Object]:
         y = 0.13 - k * 0.045
         path = [on_pad(-0.13 + 0.26 * q / 6, y + 0.005 * math.sin(q * 1.7 + k), face_z) for q in range(7)]
         lines.append(tube(f"line{k}", path, [0.0045] * len(path), 6))
-    parts["ink"] = join("ink", lines + holes)
+    parts["ink"] = join("ink", lines)
 
     # The pen lies on the pages, from the lower left up to the upper right.
     a, b = on_pad(-0.11, -0.17, face_z + 0.02), on_pad(0.16, 0.15, face_z + 0.02)
@@ -499,7 +580,11 @@ def secretaria() -> dict[str, bpy.types.Object]:
 # a smartphone held up for a selfie in her right hand (the viewer's left), and a
 # peace sign with the other.
 
-# Kept in step with POSES.redes in GhostScene.tsx.
+# Kept in step with POSES in GhostScene.tsx. The Secretaría's right arm (the
+# viewer's left) is raised to the phone at her head, the left one at the notepad.
+# The phone arm's pose and length are worked out from where its hand must be
+# (see the phone in secretaria()); both poses go to the app in secretaria.json.
+SEC_ARMS = [(-1, 2.1, -0.3, 0.38), (1, 0.4, 0.35)]  # (side, angle, forward[, reach])
 REDES_ARMS = [(-1, 2.35, -0.25), (1, 2.45, 0.2)]  # (side, angle, forward)
 
 
@@ -591,6 +676,8 @@ def redes() -> dict[str, bpy.types.Object]:
     flash = ellipsoid("flash", phone_c + basis @ (bump_c + Vector((0.027, 0.032, 0.008))), (0.008, 0.008, 0.004))
     parts["lenses"] = join("lenses", lenses + [flash])
     parts["screen"] = rounded_box("screen", phone_c + basis @ Vector((0, 0, -d / 2 - 0.001)), basis, (w - 0.02, h - 0.02, 0.003), 0.025, 3)
+    for name in ("handset", "lenses", "screen"):  # carried in the hand, so it moves with it
+        parts[name] = into_arm(parts[name], *REDES_ARMS[0])
 
     # The peace sign: two fat fingers in a V from the other hand, and the curled
     # fingers as a bump below them. Built in the arm's own frame (hanging down, tip
@@ -688,9 +775,10 @@ def main() -> None:
 
     before = set(bpy.data.objects)
     parts = secretaria()
-    write("secretaria.json", {name: mesh_arrays(obj) for name, obj in parts.items()})
-    posed_arm(-1, 2.3, -0.45)
-    posed_arm(1, 0.4, 0.35)
+    write("secretaria.json", {"arms": [list(p[1:3]) for p in SEC_ARMS], **{name: mesh_arrays(obj) for name, obj in parts.items()}})
+    posed_arm(*SEC_ARMS[1])
+    for name in ("arm_phone", "phone", "phone_holes"):  # previews only; exported in the arm's frame
+        parts[name].matrix_world = arm_matrix(*SEC_ARMS[0][:3])
     secretaria_objs = set(bpy.data.objects) - before
 
     before = set(bpy.data.objects)
@@ -698,11 +786,13 @@ def main() -> None:
     # Bent arms, exported unposed like the fingers: the app turns them like any arm.
     redes_parts["arm_l"] = bent_arm("arm_l", -1)
     redes_parts["arm_r"] = bent_arm("arm_r", 1)
-    write("redes.json", {name: mesh_arrays(obj) for name, obj in redes_parts.items()})
+    write("redes.json", {"arms": [list(p[1:3]) for p in REDES_ARMS], **{name: mesh_arrays(obj) for name, obj in redes_parts.items()}})
     redes_parts["arm_l"].matrix_world = arm_matrix(*REDES_ARMS[0])
     redes_parts["arm_r"].matrix_world = arm_matrix(*REDES_ARMS[1])
     peace = redes_parts["peace"]
     peace.matrix_world = arm_matrix(*REDES_ARMS[1])  # previews only; exported unposed above
+    for name in ("handset", "lenses", "screen"):
+        redes_parts[name].matrix_world = arm_matrix(*REDES_ARMS[0])
     redes_objs = set(bpy.data.objects) - before
 
     bpy.ops.wm.save_as_mainfile(filepath=str(HERE / "ghost.blend"), check_existing=False)
