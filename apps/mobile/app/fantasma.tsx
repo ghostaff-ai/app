@@ -10,12 +10,13 @@ import { GhostViewer } from '@/components/ghost/GhostViewer';
 const AGENTS: { id: Agent; label: string }[] = [
   { id: 'base', label: 'Base' },
   { id: 'secretaria', label: 'Secretaría' },
+  { id: 'redes', label: 'Redes' },
 ];
 
 export default function Fantasma() {
   const [focused, setFocused] = useState(true);
   const params = useLocalSearchParams<{ agent?: string }>();
-  const [agent, setAgent] = useState<Agent>(params.agent === 'secretaria' ? 'secretaria' : 'base');
+  const [agent, setAgent] = useState<Agent>(params.agent === 'secretaria' || params.agent === 'redes' ? params.agent : 'base');
   useFocusEffect(
     useCallback(() => {
       setFocused(true);

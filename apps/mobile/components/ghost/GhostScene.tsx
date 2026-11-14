@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import model from './models/base.json';
+import redes from './models/redes.json';
 import secretaria from './models/secretaria.json';
 
 // The ghost, modelled in Blender by design/blender/ghost.py, in the glowing look
@@ -47,6 +48,13 @@ const SECRETARIA_PARTS = {
   spiral: partGeometry(secretaria.spiral),
   ink: partGeometry(secretaria.ink),
   pen: partGeometry(secretaria.pen),
+};
+const REDES_PARTS = {
+  beret: partGeometry(redes.beret),
+  handset: partGeometry(redes.handset),
+  lenses: partGeometry(redes.lenses),
+  screen: partGeometry(redes.screen),
+  peace: partGeometry(redes.peace), // in the arm's own frame: drawn inside the arm
 };
 
 // --- The glowing material -------------------------------------------------
@@ -273,7 +281,7 @@ function buildEyes(): EyeSet {
 const SWAP_TIME = 0.16; // seconds the eyes stay shut between two expressions
 const BLINK_TIME = 0.12;
 
-export type Agent = 'base' | 'secretaria';
+export type Agent = 'base' | 'secretaria' | 'redes';
 
 // Each arm hangs from a shoulder inside the body: `angle` swings it out from the
 // side (radians, 0 = straight down), `forward` brings it towards the camera.
@@ -288,6 +296,11 @@ const POSES: Record<Agent, [ArmPose, ArmPose]> = {
   secretaria: [
     { angle: 2.3, forward: -0.45, swing: 0.03 }, // her right, the viewer's left: phone to the ear
     { angle: 0.4, forward: 0.35, swing: 0.05 }, // by the notepad
+  ],
+  // Kept in step with REDES_ARMS in design/blender/ghost.py.
+  redes: [
+    { angle: 2.35, forward: -0.25, swing: 0.03 }, // her right, the viewer's left: the phone up for a selfie
+    { angle: 2.45, forward: 0.2, swing: 0.06 }, // the peace sign
   ],
 };
 const SHOULDER_X = 0.56;
@@ -442,6 +455,7 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
               position={[(i === 0 ? -1 : 1) * SHOULDER_X, SHOULDER_Y, 0.08]}
             >
               <mesh geometry={ARM} material={bodyMaterial} />
+              {agent === 'redes' && i === 1 && <mesh geometry={REDES_PARTS.peace} material={bodyMaterial} />}
             </group>
           ))}
 
@@ -461,6 +475,21 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
               </mesh>
               <mesh geometry={SECRETARIA_PARTS.pen}>
                 <meshStandardMaterial color="#3A3F9C" metalness={0.4} roughness={0.3} />
+              </mesh>
+            </>
+          )}
+
+          {agent === 'redes' && (
+            <>
+              <mesh geometry={REDES_PARTS.beret}>
+                <meshStandardMaterial color="#2B2F95" roughness={0.55} />
+              </mesh>
+              <mesh geometry={REDES_PARTS.handset} material={phoneMaterial} />
+              <mesh geometry={REDES_PARTS.lenses}>
+                <meshStandardMaterial color="#15152E" metalness={0.6} roughness={0.15} />
+              </mesh>
+              <mesh geometry={REDES_PARTS.screen}>
+                <meshBasicMaterial color="#CFE0FF" />
               </mesh>
             </>
           )}

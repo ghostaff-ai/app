@@ -505,6 +505,119 @@ def secretaria() -> dict[str, bpy.types.Object]:
     return parts
 
 
+# --- Redes ------------------------------------------------------------------------------
+# From redes-front.jpg and redes-back.jpg, with each prop drawn alone in
+# design/concepts/redes-props-round1/: a deep navy felt beret tilted on the head,
+# a smartphone held up for a selfie in her right hand (the viewer's left), and a
+# peace sign with the other.
+
+# Kept in step with POSES.redes in GhostScene.tsx.
+REDES_ARMS = [(-1, 2.35, -0.25), (1, 2.45, 0.2)]  # (side, angle, forward)
+
+
+def arm_matrix(side: int, angle: float, forward: float) -> Matrix:
+    return (
+        Matrix.Translation(at(side * SHOULDER[0], SHOULDER[1], SHOULDER[2]))
+        @ Matrix.Rotation(-forward, 4, "X")
+        @ Matrix.Rotation(-side * angle, 4, "Y")
+    )
+
+
+def arm_point(side: int, angle: float, forward: float, x: float, y: float, z: float) -> Vector:
+    """A point given in the arm's own (hanging, app-axes) frame, in the body's app axes."""
+    return Vector(to_app(arm_matrix(side, angle, forward) @ at(x, y, z)))
+
+
+def rounded_box(name, centre, basis: Matrix, size, round_: float, segments: int = 4) -> bpy.types.Object:
+    """A box of `size` (app axes, before turning), corners rounded, turned by `basis`."""
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    for v in bm.verts:
+        v.co = Vector((v.co.x * size[0], v.co.y * size[1], v.co.z * size[2]))
+    obj = link(name, bm)
+    bev = obj.modifiers.new("round", "BEVEL")
+    bev.width = round_
+    bev.segments = segments
+    bev.limit_method = "NONE"
+    obj = join(name, [obj])  # apply the bevel while still in local axes
+    for v in obj.data.vertices:
+        local = Vector((v.co.x, v.co.y, v.co.z))  # local box axes, used as app axes
+        v.co = at(*(centre + basis @ local))
+    return obj
+
+
+def redes() -> dict[str, bpy.types.Object]:
+    parts: dict[str, bpy.types.Object] = {}
+
+    # The beret: a soft flat felt cap, wider than the head, tilted down towards
+    # the viewer's right, with a rolled band hugging the head and a little stalk.
+    band_y = 0.86
+    band_r = body_radius(band_y) + 0.015
+    profile = [  # (radius, height) from the top centre round to the underside
+        (0.0, 0.21), (0.14, 0.208), (0.28, 0.194), (0.39, 0.168), (0.48, 0.125),
+        (0.54, 0.075), (0.56, 0.02), (0.54, -0.025), (0.48, -0.05),
+        (band_r + 0.04, -0.05), (band_r - 0.02, -0.02), (band_r * 0.6, 0.04), (0.0, 0.06),
+    ]
+    tilt = Matrix.Rotation(-0.3, 3, "Z") @ Matrix.Rotation(0.12, 3, "X")  # lowers the viewer's right
+    hat_c = Vector((0.07, band_y + 0.0, 0.0))
+    cap = lathe("beret_cap", profile, segments=64)
+    for v in cap.data.vertices:
+        v.co = at(*(hat_c + tilt @ Vector(to_app(v.co))))
+    rim = [tilt @ Vector((band_r * math.sin(a), -0.05, band_r * math.cos(a))) + hat_c
+           for a in [2 * math.pi * k / 48 for k in range(49)]]
+    stalk = [hat_c + tilt @ Vector(p) for p in [(0.0, 0.19, 0.0), (0.01, 0.24, 0.0), (0.035, 0.28, 0.0), (0.06, 0.295, 0.0)]]
+    parts["beret"] = join("beret", [
+        subdivide(cap),
+        tube("beret_band", rim, [0.04] * len(rim), 12),
+        tube("beret_stalk", stalk, [0.028, 0.026, 0.023, 0.02], 10),
+    ])
+
+    # The smartphone, held up in the raised hand for a selfie: its back, with the
+    # camera bump, faces the viewer; its screen faces her.
+    side, angle, forward = REDES_ARMS[0]
+    grip = arm_point(side, angle, forward, 0.0, -0.4, 0.0)
+    back = Vector((-0.45, 0.0, 0.9)).normalized()  # towards the viewer, a little to the left
+    up = Vector((0.08, 1.0, 0.0))
+    up = (up - back * up.dot(back)).normalized()
+    across = up.cross(back)
+    basis = Matrix((across, up, back)).transposed()  # local x, y, z -> world
+    phone_c = grip + up * 0.15 + back * 0.03
+    w, h, d = 0.24, 0.48, 0.038
+    parts["handset"] = rounded_box("handset", phone_c, basis, (w, h, d), 0.03)
+    # The camera bump at the top corner, its three lenses, a flash and the side buttons.
+    bump_c = Vector((-w / 2 + 0.065, h / 2 - 0.065, d / 2 + 0.006))
+    bump = rounded_box("bump", phone_c + basis @ bump_c, basis, (0.11, 0.11, 0.014), 0.025)
+    buttons = [
+        rounded_box(f"button{i}", phone_c + basis @ Vector((w / 2 + 0.004, y, 0)), basis, (0.012, l, 0.012), 0.005, 2)
+        for i, (y, l) in enumerate([(0.1, 0.06), (0.02, 0.05), (-0.04, 0.05)])
+    ]
+    parts["handset"] = join("handset", [parts["handset"], bump, *buttons])
+    lenses = []
+    for i, (lx, ly) in enumerate([(-0.025, 0.025), (-0.025, -0.025), (0.025, 0.0)]):
+        c = phone_c + basis @ (bump_c + Vector((lx, ly, 0.008)))
+        bm = bmesh.new()
+        bmesh.ops.create_cone(bm, cap_ends=True, segments=24, radius1=0.021, radius2=0.017, depth=0.012)
+        for v in bm.verts:
+            v.co = at(*(c + basis @ Vector((v.co.x, v.co.y, v.co.z))))
+        lenses.append(link(f"lens{i}", bm))
+    flash = ellipsoid("flash", phone_c + basis @ (bump_c + Vector((0.027, 0.032, 0.008))), (0.008, 0.008, 0.004))
+    parts["lenses"] = join("lenses", lenses + [flash])
+    parts["screen"] = rounded_box("screen", phone_c + basis @ Vector((0, 0, -d / 2 - 0.001)), basis, (w - 0.02, h - 0.02, 0.003), 0.025, 3)
+
+    # The peace sign: two fat fingers in a V from the other hand, and the curled
+    # fingers as a bump below them. Built in the arm's own frame (hanging down, tip
+    # at y -0.42); the app renders it inside that arm, so it follows the arm.
+    fingers = []
+    for sx in (-1, 1):
+        a = Vector((sx * 0.045, -0.34, 0.02))
+        b = Vector((sx * 0.12 + 0.2, -0.55, 0.0))  # leaning in, so they point up once the arm is raised
+        fingers.append(tube(f"finger{sx}", [a, a.lerp(b, 0.5), b], [0.08, 0.075, 0.07], 16))
+        fingers.append(ellipsoid(f"fingertip{sx}", b, (0.07, 0.07, 0.07)))
+    fingers.append(ellipsoid("curl", Vector((0.0, -0.36, 0.09)), (0.1, 0.085, 0.07)))
+    parts["peace"] = join("peace", fingers)
+    return parts
+
+
 # --- Export for the app ----------------------------------------------------------------
 
 
@@ -529,7 +642,7 @@ def write(name: str, data: dict) -> None:
 # --- Preview renders -----------------------------------------------------------------------
 
 
-def render_previews() -> None:
+def render_previews(agent: str = "secretaria") -> None:
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_WORKBENCH"
     scene.display.shading.light = "STUDIO"
@@ -552,7 +665,7 @@ def render_previews() -> None:
         cam.location = (7.0 * math.sin(a), -7.0 * math.cos(a), 0.3)
         direction = Vector((0, 0, 0.15)) - cam.location
         cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
-        scene.render.filepath = str(out / f"secretaria-{label}.png")
+        scene.render.filepath = str(out / f"{agent}-{label}.png")
         bpy.ops.render.render(write_still=True)
 
 
@@ -585,17 +698,33 @@ def main() -> None:
     write("base.json", {"body": mesh_arrays(body), "arm": mesh_arrays(arm)})
     arm.hide_render = True
 
+    before = set(bpy.data.objects)
     parts = secretaria()
     write("secretaria.json", {name: mesh_arrays(obj) for name, obj in parts.items()})
     posed_arm(-1, 2.3, -0.45)
     posed_arm(1, 0.4, 0.35)
+    secretaria_objs = set(bpy.data.objects) - before
+
+    before = set(bpy.data.objects)
+    redes_parts = redes()
+    write("redes.json", {name: mesh_arrays(obj) for name, obj in redes_parts.items()})
+    for side, angle, forward in REDES_ARMS:
+        posed_arm(side, angle, forward)
+    peace = redes_parts["peace"]
+    peace.matrix_world = arm_matrix(*REDES_ARMS[1])  # previews only; exported unposed above
+    redes_objs = set(bpy.data.objects) - before
 
     bpy.ops.wm.save_as_mainfile(filepath=str(HERE / "ghost.blend"), check_existing=False)
     (HERE / "ghost.blend1").unlink(missing_ok=True)
     bpy.ops.export_scene.gltf(filepath=str(HERE / "ghost.glb"), export_apply=True)
     if "--render" in args:
-        render_previews()
-    counts = {k: len(v.data.vertices) for k, v in parts.items()}
+        for agent, show, hide in [("secretaria", secretaria_objs, redes_objs), ("redes", redes_objs, secretaria_objs)]:
+            for o in show:
+                o.hide_render = False
+            for o in hide:
+                o.hide_render = True
+            render_previews(agent)
+    counts = {k: len(v.data.vertices) for k, v in {**parts, **redes_parts}.items()}
     print("parts", counts)
 
 
