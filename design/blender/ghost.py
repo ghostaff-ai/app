@@ -292,58 +292,6 @@ def ribbon(name, shape, along: int, thickness: float) -> bpy.types.Object:
     return link(name, bm)
 
 
-# --- Borrowed shapes ------------------------------------------------------------------
-# Some props start from free models (design/blender/sources/, credits in CREDITS.md):
-# the shape is theirs, rescaled and placed here; the colour is still the app's.
-
-SOURCES = HERE / "sources"
-
-
-def borrowed(file: str, objects=None, materials=None) -> list[list[Vector]]:
-    """Import a model and return its triangles in app axes, keeping only some parts.
-
-    `objects` keeps meshes by name; `materials` keeps faces by material name. The
-    source is removed from the scene afterwards.
-    """
-    before = set(bpy.data.objects)
-    bpy.ops.import_scene.gltf(filepath=str(SOURCES / file))
-    new = [o for o in bpy.data.objects if o not in before]
-    tris = []
-    for o in new:
-        if o.type != "MESH" or (objects and o.name not in objects):
-            continue
-        me = o.data
-        me.calc_loop_triangles()
-        for t in me.loop_triangles:
-            mat = me.materials[t.material_index].name.split(".")[0] if me.materials else ""  # a re-import adds ".001"
-            if materials and mat not in materials:
-                continue
-            tris.append([Vector(to_app(o.matrix_world @ me.vertices[i].co)) for i in t.vertices])
-    for o in new:
-        bpy.data.objects.remove(o)
-    return tris
-
-
-def from_tris(name: str, tris, place) -> bpy.types.Object:
-    """Build a mesh from app-axes triangles, moving each point through `place`."""
-    bm = bmesh.new()
-    for tri in tris:
-        bm.faces.new([bm.verts.new(at(*place(p))) for p in tri])
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
-    return link(name, bm)
-
-
-def axes_of(points) -> tuple[Vector, list[Vector], list[float]]:
-    """Centre, principal axes (longest first) and spreads of a cloud of points."""
-    import numpy as np
-
-    arr = np.array([tuple(p) for p in points])
-    centre = arr.mean(axis=0)
-    vals, vecs = np.linalg.eigh(np.cov((arr - centre).T))
-    order = vals.argsort()[::-1]
-    return Vector(centre), [Vector(vecs[:, i]) for i in order], [float(vals[i]) for i in order]
-
-
 def join(name, objs) -> bpy.types.Object:
     """Apply each part's modifiers, then merge them into one object."""
     deps = bpy.context.evaluated_depsgraph_get()
@@ -378,7 +326,7 @@ def secretaria() -> dict[str, bpy.types.Object]:
 
     def ribbed(name, centre, radius, height, ribs, twist):
         bm = bmesh.new()
-        bmesh.ops.create_uvsphere(bm, u_segments=120, v_segments=36, radius=1.0)
+        bmesh.ops.create_uvsphere(bm, u_segments=90, v_segments=28, radius=1.0)
         for v in bm.verts:
             x, y, z = v.co.x, v.co.z, -v.co.y  # app axes, y along the bun's axis
             theta = math.atan2(z, x) + twist * y
@@ -429,78 +377,99 @@ def secretaria() -> dict[str, bpy.types.Object]:
         scarf_bits.append(ribbon(f"scarf_tail{side}", centre, 16, 0.012))
     parts["scarf"] = join("scarf", scarf_bits)
 
-    # The phone: a real handset's shape (Office Phone, by dook), scaled and turned
-    # so its cups face her head, from the ear down to the mouth.
+    # The phone, from props-round1/phone.png: a chunky C-shaped handle with a round
+    # cup at each end, each cup's face sunk inside a rim and dotted with speaker
+    # holes. The cups face her head, turned a little to the viewer.
     ear = Vector((-0.58, 0.55, 0.12))
     mouth = Vector((-0.74, 0.12, 0.22))
-    tris = borrowed("office-phone.glb", objects={"Handle"})
-    pts = [p for t in tris for p in t]
-    c, (u, _, _), _ = axes_of(pts)
-    span = max((p - c).dot(u) for p in pts) - min((p - c).dot(u) for p in pts)
-    mid_pts = [p - c - u * (p - c).dot(u) for p in pts if abs((p - c).dot(u)) < 0.12 * span]
-    end_pts = [p - c - u * (p - c).dot(u) for p in pts if abs((p - c).dot(u)) > 0.38 * span]
-    face = (sum(end_pts, Vector()) / len(end_pts) - sum(mid_pts, Vector()) / len(mid_pts)).normalized()
-    w = u.cross(face)
-    reach = max((p - c).dot(face) for p in pts)
     axis = (ear - mouth).normalized()
-    toward = (Vector((1, 0, 0.4)) - axis * Vector((1, 0, 0.4)).dot(axis)).normalized()  # cups to her head, turned a little to the viewer
+    toward = (Vector((1, 0, 0.5)) - axis * Vector((1, 0, 0.5)).dot(axis)).normalized()
     side_ = axis.cross(toward)
-    scale = 0.72 / span
-    anchor = (ear + mouth) / 2 + toward * 0.13
 
-    def place_phone(p):
-        d = p - c
-        # 1.5x thicker side to side: the pictures' handset is a chunky toy.
-        return anchor + (axis * d.dot(u) + toward * (d.dot(face) - reach) + side_ * d.dot(w) * 1.5) * scale
+    def in_frame(obj, centre):
+        """Move a part built round the vertical axis so that axis points `toward`."""
+        for v in obj.data.vertices:
+            x, y, z = to_app(v.co)
+            v.co = at(*(centre + side_ * x + toward * y + axis * z))
+        return obj
 
-    parts["phone"] = from_tris("phone", tris, place_phone)
+    cup_profile = [(0.0, 0.035), (0.085, 0.035), (0.098, 0.05), (0.117, 0.045), (0.125, 0.022),
+                   (0.122, -0.02), (0.102, -0.05), (0.055, -0.066), (0.0, -0.069)]
+    pieces, holes = [], []
+    for name, point in [("ear", ear), ("mouth", mouth)]:
+        centre = point + toward * 0.07
+        pieces.append(in_frame(subdivide(lathe(f"phone_{name}", cup_profile, segments=40)), centre))
+        dots = [(0.0, 0.0)] + [(0.03, 2 * math.pi * k / 6) for k in range(6)] + [(0.058, 2 * math.pi * (k + 0.5) / 10) for k in range(10)]
+        for r, a in dots:
+            dot = bmesh.new()
+            bmesh.ops.create_icosphere(dot, subdivisions=1, radius=0.008)
+            c = centre + toward * 0.036 + side_ * r * math.cos(a) + axis * r * math.sin(a)
+            bmesh.ops.translate(dot, verts=dot.verts, vec=at(*c))
+            holes.append(link(f"hole_{name}", dot))
+    handle = []
+    for k in range(15):
+        t = k / 14
+        bulge = math.sin(math.pi * t)
+        handle.append(ear.lerp(mouth, t) + toward * (0.04 - 0.1 * bulge))
+    pieces.append(tube("phone_handle", handle, [0.05 + 0.01 * math.sin(math.pi * k / 14) for k in range(15)], 16))
+    parts["phone"] = join("phone", pieces)
 
-    # The notepad, against her front on the viewer's right, tilted to the body.
+    # The notepad, from props-round1/notepad.png, against her front on the viewer's
+    # right, tilted to the body: a thick block of white pages on an iridescent back
+    # cover, six big copper rings looping over the top, ruled blue lines, and a
+    # slim rose-gold pen lying across it.
     pad_c = Vector((0.36, -0.12, 0.0))
     pad_c.z = math.sqrt(max(0.0, (body_radius(pad_c.y) - 0.02) ** 2 - pad_c.x**2)) + 0.06
     turn = math.atan2(pad_c.x, pad_c.z)
-    lean = -0.15
     frame = (
         Matrix.Translation(pad_c)
         @ Matrix.Rotation(turn, 4, "Y")
-        @ Matrix.Rotation(lean, 4, "Z")
+        @ Matrix.Rotation(-0.15, 4, "Z")
         @ Matrix.Rotation(-0.12, 4, "X")
     )
 
     def on_pad(x, y, z):
         return frame @ Vector((x, y, z))
 
-    # The pad itself is a real spiral notebook's shape (Green Notebook, by Ryan
-    # Donaldson): its pages and covers become the white paper, its wire the spiral.
-    # The source's spiral runs down a long side; turned so it runs along the top,
-    # and narrowed so the pad stands taller than wide, as in the picture.
-    def place_pad(p):
-        # Source (app axes): pages span x 0..0.34, the spiral at x near 0, along z.
-        return on_pad(-p.z * 0.74, (0.165 - p.x) * 0.95, p.y * 0.95)
+    def block(name, w, h, d, z, bevel):
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=1.0)
+        for v in bm.verts:
+            v.co = at(*on_pad(v.co.x * w, v.co.y * h, z + v.co.z * d))
+        obj = link(name, bm)
+        mod = obj.modifiers.new("round", "BEVEL")
+        mod.width = bevel
+        mod.segments = 3
+        return obj
 
-    pad_paper = borrowed("green-notebook.glb", materials={"mat21", "mat10"})
-    pad_wire = borrowed("green-notebook.glb", materials={"mat22"})
-    parts["paper"] = from_tris("paper", pad_paper, place_pad)
-    parts["spiral"] = from_tris("spiral", pad_wire, place_pad)
-    pad_face = max(p.y for t in pad_paper for p in t) * 0.95 + 0.004
+    parts["paper"] = join("paper", [block("pages", 0.34, 0.42, 0.05, 0.0, 0.008)])
+    parts["cover"] = join("cover", [block("cover", 0.36, 0.44, 0.018, -0.033, 0.008)])
+    rings = []
+    for k in range(6):
+        x = -0.125 + k * 0.05
+        loop = [on_pad(x, 0.205 + 0.042 * math.sin(a), 0.042 * math.cos(a)) for a in [2 * math.pi * (0.04 + 0.92 * q / 20) for q in range(21)]]
+        rings.append(tube(f"ring{k}", loop, [0.011] * len(loop), 8))
+    parts["spiral"] = join("spiral", rings)
 
+    face_z = 0.027
     lines = []
-    for i, w in enumerate([0.2, 0.24, 0.16, 0.22, 0.12]):
-        y = 0.09 - i * 0.065
-        lines.append(tube(f"line{i}", [on_pad(-0.12, y, pad_face), on_pad(-0.12 + w, y, pad_face)], [0.007, 0.007], 6))
-    parts["ink"] = join("ink", lines)
+    for k in range(7):
+        y = 0.13 - k * 0.045
+        path = [on_pad(-0.13 + 0.26 * q / 6, y + 0.005 * math.sin(q * 1.7 + k), face_z) for q in range(7)]
+        lines.append(tube(f"line{k}", path, [0.0045] * len(path), 6))
+    parts["ink"] = join("ink", lines + holes)
 
-    # A ballpoint: a slim body, a cone to the tip, a clip and a rounded end.
-    a, b = on_pad(0.05, -0.2, pad_face + 0.03), on_pad(0.22, 0.24, pad_face + 0.09)
+    # The pen lies on the pages, from the lower left up to the upper right.
+    a, b = on_pad(-0.11, -0.17, face_z + 0.02), on_pad(0.16, 0.15, face_z + 0.02)
     along = (b - a).normalized()
     pen = [
-        tube("pen_tip", [a, a.lerp(b, 0.14)], [0.004, 0.026], 12),
-        tube("pen_grip", [a.lerp(b, 0.14), a.lerp(b, 0.36)], [0.028, 0.03], 14),
-        tube("pen_body", [a.lerp(b, 0.36), b], [0.03, 0.027], 14),
-        ellipsoid("pen_end", b, (0.027, 0.027, 0.027)),
+        tube("pen_tip", [a, a.lerp(b, 0.12)], [0.003, 0.017], 12),
+        tube("pen_body", [a.lerp(b, 0.12), b], [0.018, 0.017], 14),
+        tube("pen_band", [a.lerp(b, 0.7), a.lerp(b, 0.74)], [0.0195, 0.0195], 14),
+        ellipsoid("pen_end", b, (0.017, 0.017, 0.017)),
     ]
-    clip_out = along.cross(Vector((0, 0, 1))).cross(along).normalized() * -0.04
-    pen.append(tube("pen_clip", [a.lerp(b, 0.62) + clip_out, a.lerp(b, 0.95) + clip_out * 0.8], [0.009, 0.01], 8))
+    up = (frame.to_3x3() @ Vector((0, 0, 1))).normalized()
+    pen.append(tube("pen_clip", [a.lerp(b, 0.72) + up * 0.022, a.lerp(b, 0.97) + up * 0.02], [0.006, 0.007], 8))
     parts["pen"] = join("pen", pen)
     return parts
 

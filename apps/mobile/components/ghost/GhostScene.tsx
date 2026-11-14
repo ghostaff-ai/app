@@ -1,6 +1,7 @@
-import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import model from './models/base.json';
 import secretaria from './models/secretaria.json';
 
@@ -44,6 +45,7 @@ const SECRETARIA_PARTS = {
   scarf: partGeometry(secretaria.scarf),
   phone: partGeometry(secretaria.phone),
   paper: partGeometry(secretaria.paper),
+  cover: partGeometry(secretaria.cover),
   spiral: partGeometry(secretaria.spiral),
   ink: partGeometry(secretaria.ink),
   pen: partGeometry(secretaria.pen),
@@ -186,6 +188,186 @@ function glowMaterial(yBottom: number, yTop: number, { stripes = false, silver =
   });
 }
 
+// --- Look options, to compare on the phone --------------------------------------
+// 'now' is the hand-written glow above. 'glass' and 'deep' use three.js's physical
+// material (a clear glossy coat and a thin-film shimmer) lit by a studio room, with
+// the same colour pattern painted in; 'deep' glows less from within and reflects
+// more, like the darker tones of the pictures.
+
+export type Surface = 'now' | 'glass' | 'deep';
+export type Eyes = 'now' | 'hollow' | 'deep';
+export type Look = { surface: Surface; eyes: Eyes; hem: number };
+export const DEFAULT_LOOK: Look = { surface: 'now', eyes: 'now', hem: 1 };
+
+// The colour pattern of fragmentShader, as a function other shaders can call.
+const patternChunk = /* glsl */ `
+  uniform float uTime;
+  uniform float uYBottom;
+  uniform float uYTop;
+  uniform float uStripes;
+  uniform float uSilver;
+  uniform float uGlow;
+  uniform float uDeep;
+  uniform vec3 uCyan;
+  uniform vec3 uBlue;
+  uniform vec3 uViolet;
+  uniform vec3 uOrange;
+  uniform vec3 uPink;
+  varying vec3 vLocalP;
+  varying float vYP;
+  float hashP(vec3 p) {
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+  }
+  float noiseP(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(
+      mix(mix(hashP(i), hashP(i + vec3(1.0, 0.0, 0.0)), f.x),
+          mix(hashP(i + vec3(0.0, 1.0, 0.0)), hashP(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+      mix(mix(hashP(i + vec3(0.0, 0.0, 1.0)), hashP(i + vec3(1.0, 0.0, 1.0)), f.x),
+          mix(hashP(i + vec3(0.0, 1.0, 1.0)), hashP(i + vec3(1.0, 1.0, 1.0)), f.x), f.y),
+      f.z);
+  }
+  vec3 patternColour(vec3 N) {
+    float h = clamp((vYP - uYBottom) / (uYTop - uYBottom), 0.0, 1.0);
+    float n = noiseP(vLocalP * 2.2 + vec3(0.0, uTime * 0.06, 0.0)) * 0.65 + noiseP(vLocalP * 5.0) * 0.35;
+    float side = smoothstep(-0.75, 0.75, N.x + (n - 0.5) * 0.9);
+    vec3 top = mix(uCyan, uViolet, side);
+    vec3 mid = mix(uBlue, uViolet, smoothstep(0.35, 1.0, side));
+    vec3 low = mix(uOrange, uPink, smoothstep(0.3, 0.8, n + 0.35 * N.x));
+    vec3 base = mix(low, mid, smoothstep(0.1, 0.38, h + (n - 0.5) * 0.14));
+    base = mix(base, top, smoothstep(0.52, 0.85, h + (n - 0.5) * 0.12));
+    if (uStripes > 0.5) {
+      float s = sin((vLocalP.x * 1.3 + vLocalP.y * 1.0 + vLocalP.z * 0.6) * 22.0 + n * 7.0);
+      vec3 print = mix(mix(uCyan, uViolet, n), mix(uOrange, uPink, n), smoothstep(-0.3, 0.3, s));
+      base = mix(base, print, 0.55);
+    }
+    return mix(base, vec3(0.82, 0.85, 0.95), uSilver);
+  }
+`;
+
+function physicalGlow(
+  yBottom: number,
+  yTop: number,
+  { stripes = false, silver = 0, deep = false } = {},
+) {
+  const m = new THREE.MeshPhysicalMaterial({
+    roughness: deep ? 0.12 : 0.22,
+    metalness: 0,
+    clearcoat: 1,
+    clearcoatRoughness: deep ? 0.04 : 0.08,
+    iridescence: deep ? 0.6 : 0.35,
+    iridescenceIOR: 1.35,
+    iridescenceThicknessRange: [180, 820],
+    envMapIntensity: deep ? 0.45 : 0.3,
+    side: THREE.DoubleSide,
+    // The renderer's film-like tone curve greys out saturated colours; the
+    // pictures are vivid, so skip it (the hand-written glow skips it too).
+    toneMapped: false,
+  });
+  const uniforms = {
+    uTime: { value: 0 },
+    uBaseY: { value: 0 },
+    uYBottom: { value: yBottom },
+    uYTop: { value: yTop },
+    uStripes: { value: stripes ? 1 : 0 },
+    uSilver: { value: silver },
+    uGlow: { value: deep ? 0.75 : 0.2 },
+    uDeep: { value: deep ? 1 : 0 },
+    uCyan: { value: srgb('#22C8F5') },
+    uBlue: { value: srgb('#2E5FE4') },
+    uViolet: { value: srgb('#A34CF5') },
+    uOrange: { value: srgb('#FF8C3A') },
+    uPink: { value: srgb('#F35BC6') },
+  };
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uBaseY;\nvarying vec3 vLocalP;\nvarying float vYP;')
+      .replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nvLocalP = position;\nvYP = (modelMatrix * vec4(position, 1.0)).y - uBaseY;',
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + patternChunk)
+      .replace(
+        'vec4 diffuseColor = vec4( diffuse, opacity );',
+        // The pattern's colours are sRGB; lighting works in linear.
+        // 'deep' lights itself from within (emissive) over a dark glassy body, so
+        // the studio's white can't wash its colours out.
+        'vec3 gBase = pow(patternColour(normalize(vNormal)), vec3(2.2 + 0.4 * uDeep));\nvec4 diffuseColor = vec4(gBase * (1.0 - 0.75 * uDeep), opacity);',
+      )
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gBase * uGlow;');
+  };
+  // Same handles as glowMaterial, so the frame loop can update either kind.
+  (m as unknown as { uniforms: typeof uniforms }).uniforms = uniforms;
+  return m;
+}
+
+type Glow = THREE.Material & { uniforms: { uTime: { value: number }; uBaseY: { value: number } } };
+
+function makeGlow(surface: Surface, yBottom: number, yTop: number, opts: { stripes?: boolean; silver?: number } = {}): Glow {
+  if (surface === 'now') return glowMaterial(yBottom, yTop, opts) as unknown as Glow;
+  return physicalGlow(yBottom, yTop, { ...opts, deep: surface === 'deep' }) as unknown as Glow;
+}
+
+// A studio room for the physical materials to reflect, built in code (no file to
+// load, so it works the same on phones).
+function StudioLight() {
+  const { gl, scene } = useThree();
+  useEffect(() => {
+    try {
+      const pmrem = new THREE.PMREMGenerator(gl);
+      const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      scene.environment = env;
+      pmrem.dispose();
+      return () => {
+        scene.environment = null;
+        env.dispose();
+      };
+    } catch {
+      return undefined; // no reflections on a phone that can't build them
+    }
+  }, [gl, scene]);
+  return null;
+}
+
+// Hollow eyes: dark in the middle, a little lighter towards the edge, and in
+// 'hollow' a thin lip of light along the bottom, where the hole's edge catches it.
+function hollowEyeMaterial(side: -1 | 1, lip: boolean) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uCentre: { value: new THREE.Vector2(side * EYE_X, EYE_Y) },
+      uRadius: { value: new THREE.Vector2(EYE_RX, EYE_RY) },
+      uLip: { value: lip ? 1 : 0 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vP;
+      void main() {
+        vP = position.xy;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec2 uCentre;
+      uniform vec2 uRadius;
+      uniform float uLip;
+      varying vec2 vP;
+      void main() {
+        vec2 q = (vP - uCentre) / uRadius;
+        float d = length(q);
+        vec3 col = mix(vec3(0.02, 0.025, 0.09), vec3(0.11, 0.15, 0.38), smoothstep(0.45, 1.05, d));
+        float lip = smoothstep(0.72, 1.0, d) * smoothstep(-0.1, -0.75, q.y);
+        col += uLip * lip * vec3(0.35, 0.75, 1.0) * 0.8;
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+  });
+}
+
 // --- Eyes: the expression is the shape of the hole --------------------------
 
 export const EXPRESSIONS = ['neutral', 'happy', 'surprised', 'focused', 'sleepy'] as const;
@@ -293,7 +475,21 @@ const POSES: Record<Agent, [ArmPose, ArmPose]> = {
 const SHOULDER_X = 0.56;
 const SHOULDER_Y = -0.02;
 
-export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<SpinState>; agent?: Agent }) {
+// How much the skirt narrows at height y, for a hem width `hem` (1 = as modelled).
+function narrow(y: number, hem: number) {
+  const t = Math.min(1, Math.max(0, (0.25 - y) / 0.95));
+  return 1 - (1 - hem) * t * t * (3 - 2 * t);
+}
+
+export function GhostScene({
+  spin,
+  agent = 'base',
+  look = DEFAULT_LOOK,
+}: {
+  spin: React.RefObject<SpinState>;
+  agent?: Agent;
+  look?: Look;
+}) {
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const holes = useRef<(THREE.Mesh | null)[]>([]);
@@ -303,11 +499,30 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
 
   const geometry = useMemo(() => BODY_REST.clone(), []);
   const position = geometry.getAttribute('position') as THREE.BufferAttribute;
-  const base = useMemo(() => Float32Array.from(position.array), [position]);
-  const bodyMaterial = useMemo(() => glowMaterial(-SKIRT - 0.1, DOME_HEIGHT), []);
-  const scarfMaterial = useMemo(() => glowMaterial(-SKIRT - 0.1, DOME_HEIGHT, { stripes: true }), []);
-  const phoneMaterial = useMemo(() => glowMaterial(-SKIRT - 0.1, DOME_HEIGHT, { silver: 0.45 }), []);
+  const rest = BODY_REST.getAttribute('position') as THREE.BufferAttribute;
+  // The body's rest shape, with the skirt narrowed to the chosen hem width.
+  const base = useMemo(() => {
+    const out = Float32Array.from(rest.array as Float32Array);
+    for (let i = 0; i < rest.count; i++) {
+      const k = narrow(out[i * 3 + 1]!, look.hem);
+      out[i * 3] = out[i * 3]! * k;
+      out[i * 3 + 2] = out[i * 3 + 2]! * k;
+    }
+    position.copyArray(out);
+    position.needsUpdate = true;
+    geometry.computeVertexNormals();
+    return out;
+  }, [rest, position, geometry, look.hem]);
+  const bodyMaterial = useMemo(() => makeGlow(look.surface, -SKIRT - 0.1, DOME_HEIGHT), [look.surface]);
+  const scarfMaterial = useMemo(() => makeGlow(look.surface, -SKIRT - 0.1, DOME_HEIGHT, { stripes: true }), [look.surface]);
+  const phoneMaterial = useMemo(() => makeGlow(look.surface, -SKIRT - 0.1, DOME_HEIGHT, { silver: 0.45 }), [look.surface]);
   const glows = [bodyMaterial, scarfMaterial, phoneMaterial];
+  const eyeMaterials = useMemo(
+    () => (look.eyes === 'now' ? null : [hollowEyeMaterial(-1, look.eyes === 'hollow'), hollowEyeMaterial(1, look.eyes === 'hollow')]),
+    [look.eyes],
+  );
+  const padScale = narrow(-0.12, look.hem);
+  const shoulderScale = narrow(SHOULDER_Y, look.hem);
   const eyeSet = useMemo(buildEyes, []);
 
   const nextBlink = useRef(2);
@@ -409,9 +624,12 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
   return (
     <>
       <color attach="background" args={[STAGE]} />
+      <StudioLight />
       {/* Only the paper, the spiral and the pen use scene lights; the glow lights itself. */}
-      <hemisphereLight args={['#FFFFFF', '#C9C2E8', 1.8]} />
-      <directionalLight position={[-2.5, 4, 3]} intensity={1.6} />
+      {/* The physical surfaces also take these lights, on top of the studio room:
+          keep them low there, or the colours wash out. */}
+      <hemisphereLight args={['#FFFFFF', '#C9C2E8', look.surface === 'now' ? 1.8 : 0.25]} />
+      <directionalLight position={[-2.5, 4, 3]} intensity={look.surface === 'now' ? 1.6 : 0.8} />
 
       <mesh ref={shadow} rotation-x={-Math.PI / 2} position-y={-1.04}>
         <circleGeometry args={[0.95, 48]} />
@@ -425,12 +643,28 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
           <group>
             {[0, 1].map((i) => (
               <group key={i}>
-                <mesh ref={(m) => void (rims.current[i] = m)} geometry={eyeSet.neutral.rim[i]}>
-                  <meshBasicMaterial color={EYE_RIM} transparent opacity={0.7} />
+                <mesh
+                  ref={(m) => void (rims.current[i] = m)}
+                  geometry={eyeSet.neutral.rim[i]}
+                  visible={look.eyes !== 'hollow'}
+                >
+                  {look.eyes === 'deep' ? (
+                    <meshBasicMaterial color="#2A1F66" transparent opacity={0.45} />
+                  ) : (
+                    <meshBasicMaterial color={EYE_RIM} transparent opacity={0.7} />
+                  )}
                 </mesh>
-                <mesh ref={(m) => void (holes.current[i] = m)} geometry={eyeSet.neutral.hole[i]}>
-                  <meshBasicMaterial color={EYE} />
-                </mesh>
+                {eyeMaterials ? (
+                  <mesh
+                    ref={(m) => void (holes.current[i] = m)}
+                    geometry={eyeSet.neutral.hole[i]}
+                    material={eyeMaterials[i]}
+                  />
+                ) : (
+                  <mesh ref={(m) => void (holes.current[i] = m)} geometry={eyeSet.neutral.hole[i]}>
+                    <meshBasicMaterial color={EYE} />
+                  </mesh>
+                )}
               </group>
             ))}
           </group>
@@ -439,7 +673,7 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
             <group
               key={i}
               ref={(g) => void (arms.current[i] = g)}
-              position={[(i === 0 ? -1 : 1) * SHOULDER_X, SHOULDER_Y, 0.08]}
+              position={[(i === 0 ? -1 : 1) * SHOULDER_X * shoulderScale, SHOULDER_Y, 0.08]}
             >
               <mesh geometry={ARM} material={bodyMaterial} />
             </group>
@@ -450,18 +684,22 @@ export function GhostScene({ spin, agent = 'base' }: { spin: React.RefObject<Spi
               <mesh geometry={SECRETARIA_PARTS.bun} material={bodyMaterial} />
               <mesh geometry={SECRETARIA_PARTS.scarf} material={scarfMaterial} />
               <mesh geometry={SECRETARIA_PARTS.phone} material={phoneMaterial} />
-              <mesh geometry={SECRETARIA_PARTS.paper}>
-                <meshStandardMaterial color="#FBFAFF" roughness={0.55} />
-              </mesh>
-              <mesh geometry={SECRETARIA_PARTS.spiral}>
-                <meshStandardMaterial color="#E9B7A6" metalness={0.8} roughness={0.25} />
-              </mesh>
-              <mesh geometry={SECRETARIA_PARTS.ink}>
-                <meshBasicMaterial color="#3B3E9E" />
-              </mesh>
-              <mesh geometry={SECRETARIA_PARTS.pen}>
-                <meshStandardMaterial color="#3A3F9C" metalness={0.4} roughness={0.3} />
-              </mesh>
+              {/* The notepad moves in with the skirt when the hem is narrowed. */}
+              <group scale={[padScale, 1, padScale]}>
+                <mesh geometry={SECRETARIA_PARTS.paper}>
+                  <meshStandardMaterial color="#FBFAFF" roughness={0.55} />
+                </mesh>
+                <mesh geometry={SECRETARIA_PARTS.cover} material={phoneMaterial} />
+                <mesh geometry={SECRETARIA_PARTS.spiral}>
+                  <meshStandardMaterial color="#E7A383" metalness={0.85} roughness={0.25} />
+                </mesh>
+                <mesh geometry={SECRETARIA_PARTS.ink}>
+                  <meshBasicMaterial color="#3B3E9E" />
+                </mesh>
+                <mesh geometry={SECRETARIA_PARTS.pen}>
+                  <meshStandardMaterial color="#E7A383" metalness={0.85} roughness={0.22} />
+                </mesh>
+              </group>
             </>
           )}
         </group>

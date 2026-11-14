@@ -1,14 +1,14 @@
 import { useMemo, useRef } from 'react';
 import { PanResponder, View } from 'react-native';
 import { GhostCanvas } from './GhostCanvas';
-import { type Agent, GhostScene, type SpinState } from './GhostScene';
+import { type Agent, GhostScene, type Look, type SpinState } from './GhostScene';
 
 // The ghost on screen: drag sideways to spin it, tap it to make it hop.
 // `active` pauses drawing (and the battery cost) when the screen is not shown.
 
 const RADIANS_PER_PIXEL = 0.012;
 
-export function GhostViewer({ active = true, agent = 'base' }: { active?: boolean; agent?: Agent }) {
+export function GhostViewer({ active = true, agent = 'base', look }: { active?: boolean; agent?: Agent; look?: Look }) {
   const spin = useRef<SpinState>({ yaw: 0, velocity: 0, dragging: false, hopAt: null });
   const startYaw = useRef(0);
 
@@ -46,7 +46,7 @@ export function GhostViewer({ active = true, agent = 'base' }: { active?: boolea
         frameloop={active ? 'always' : 'never'}
         camera={{ position: [0, 0.15, 6.2], fov: 40 }}
       >
-        <GhostScene spin={spin} agent={agent} />
+        <GhostScene spin={spin} agent={agent} look={look} />
       </GhostCanvas>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} {...responder.panHandlers} />
     </View>
