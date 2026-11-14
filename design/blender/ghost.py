@@ -369,32 +369,35 @@ def join(name, objs) -> bpy.types.Object:
 def secretaria() -> dict[str, bpy.types.Object]:
     parts: dict[str, bpy.types.Object] = {}
 
-    # The bun, from secretaria-back.jpg: a round bun of eight puffed ribs, like a
-    # small pumpkin, twisted a little so it reads as wound hair, with a smaller
-    # twisted knot on top. It sits on the crown, towards the back and her left.
+    # The bun, from props-round1/bun.png (drawn from secretaria-back.jpg): a squat
+    # round bun of ten puffed ribs with narrow creases, like a small pumpkin, flat
+    # underneath, with a smaller twisted knot off-centre on top. It sits on the
+    # crown, towards the back and her left.
     bun_c = Vector((0.26, 0.98, -0.16))
     tilt = Matrix.Rotation(-0.45, 3, "X") @ Matrix.Rotation(-0.35, 3, "Z")  # leans back and out
 
     def ribbed(name, centre, radius, height, ribs, twist):
         bm = bmesh.new()
-        bmesh.ops.create_uvsphere(bm, u_segments=64, v_segments=32, radius=1.0)
+        bmesh.ops.create_uvsphere(bm, u_segments=120, v_segments=36, radius=1.0)
         for v in bm.verts:
             x, y, z = v.co.x, v.co.z, -v.co.y  # app axes, y along the bun's axis
             theta = math.atan2(z, x) + twist * y
-            crease = abs(math.cos(ribs / 2 * theta))  # 1 on a rib, 0 in a crease
-            r = radius * (0.88 + 0.12 * crease) * (1 - 0.1 * y * y)
-            p = tilt @ Vector((x * r, y * height, z * r))
+            crease = abs(math.cos(ribs / 2 * theta)) ** 0.5  # round ribs, narrow creases
+            r = radius * (0.84 + 0.16 * crease) * (1 - 0.1 * y * y)
+            yy = y if y > 0 else y * 0.45  # flatter underneath, where it sits on the head
+            p = tilt @ Vector((x * r, yy * height, z * r))
             v.co = at(*(centre + p))
         return link(name, bm)
 
     bun = [
-        ribbed("bun_main", bun_c, 0.25, 0.19, 8, 0.5),
-        ribbed("bun_knot", bun_c + tilt @ Vector((0, 0.19, 0)), 0.12, 0.09, 6, -1.2),
+        ribbed("bun_main", bun_c, 0.26, 0.2, 10, 0.25),
+        ribbed("bun_knot", bun_c + tilt @ Vector((0.06, 0.18, -0.05)), 0.11, 0.1, 6, -1.5),
     ]
     parts["bun"] = join("bun", bun)
 
-    # The scarf: a rolled silk band round the neck (round in section, as in the
-    # back picture), dipping at the front into a knot with two pointed tails.
+    # The scarf, from props-round1/scarf.png: a rolled silk band round the neck
+    # (round in section), dipping at the front into a wrapped knot with two
+    # leaf-shaped tails that hang down and splay a little.
     neck = 0.22
 
     def sag(theta: float) -> float:
@@ -403,10 +406,15 @@ def secretaria() -> dict[str, bpy.types.Object]:
     scarf_bits = [band("scarf_band", neck, body_radius, 0.075, 0.065, sag=sag)]
     kx, ky = -0.04, neck - 0.075
     kz = math.sqrt(max(0.0, body_radius(ky) ** 2 - kx**2)) + 0.045
-    scarf_bits.append(ellipsoid("scarf_knot", (kx, ky, kz), (0.1, 0.085, 0.075), (0, 0, 0.25)))
-    for side, spread, length in [(-1, 0.7, 0.44), (1, 0.5, 0.5)]:
-        # A tail leaves the knot, flares to its widest a third of the way down,
-        # then narrows to a point; it hangs off the body and flips outward.
+    knot = Vector((kx, ky, kz))
+    scarf_bits.append(ellipsoid("scarf_knot", knot, (0.11, 0.1, 0.085), (0, 0, 0.2)))
+    # The wrap round the knot's middle, as in the picture: a ring round its
+    # left-right axis.
+    wrap = [knot + Vector((0, 0.1 * math.cos(a), 0.085 * math.sin(a))) for a in [2 * math.pi * k / 24 for k in range(25)]]
+    scarf_bits.append(tube("scarf_wrap", wrap, [0.038] * len(wrap), 10))
+    for side, spread, length in [(-1, 0.42, 0.44), (1, 0.3, 0.48)]:
+        # A tail leaves the knot, flares to its widest past halfway, then narrows
+        # to a point; it hangs off the body and flips a little outward.
         def centre(v, side=side, spread=spread, length=length):
             ang = -math.pi / 2 + side * spread * (0.6 + 0.4 * v)  # straight down is -pi/2
             x = kx + side * 0.03 + length * v * math.cos(ang) * 0.9
@@ -414,7 +422,7 @@ def secretaria() -> dict[str, bpy.types.Object]:
             z = math.sqrt(max(0.0, body_radius(y) ** 2 - x**2)) + 0.05 + 0.1 * v**1.5
             down = Vector((math.cos(ang), math.sin(ang), 0))
             normal = Vector((x * 0.3, 0.2, 1)).normalized()  # mostly facing the viewer
-            width = 0.045 + 0.1 * math.sin(math.pi * min(1.0, v * 1.4) * 0.75) * (1 - v) ** 0.6
+            width = 0.025 + 0.11 * math.sin(math.pi * v**1.2)  # leaf: widest past halfway, pointed
             across = down.cross(normal).normalized() * width
             return Vector((x, y, z)), across, normal
 
