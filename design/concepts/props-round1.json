@@ -2,7 +2,29 @@
   "model": "gemini-3-pro-image-preview",
   "style": "From the reference picture, draw only the one object named below, alone and whole, so it can be turned into a 3D model. Keep its exact shape, colours and glossy iridescent style. Nothing else: no ghost, no head, no body, no hands, no shadow, no text. Three-quarter view from slightly above, centred, filling most of the frame, on a plain pure white background.",
   "ideas": [
-    {"id": "bun", "label": "Object", "reference": "gemini-round1/secretaria-back.jpg", "prompt": "the hair bun on top of the head: a round bun of puffed ribbed sections, like a small pumpkin, with a small twisted knot on top. Seen whole, with its flat underside where it sat on the head."},
-    {"id": "scarf", "label": "Object", "reference": "gemini-round1/secretaria-front.jpg", "prompt": "the silk neck scarf: a closed loop of rolled patterned silk, as if still tied round a neck, with the knot and two pointed tails hanging at the front. Same print and colours as in the picture."}
+    {
+      "id": "bun",
+      "label": "Object",
+      "reference": "gemini-round1/secretaria-back.jpg",
+      "prompt": "the hair bun on top of the head: a round bun of puffed ribbed sections, like a small pumpkin, with a small twisted knot on top. Seen whole, with its flat underside where it sat on the head."
+    },
+    {
+      "id": "scarf",
+      "label": "Object",
+      "reference": "gemini-round1/secretaria-front.jpg",
+      "prompt": "the silk neck scarf: a closed loop of rolled patterned silk, as if still tied round a neck, with the knot and two pointed tails hanging at the front. Same print and colours as in the picture."
+    },
+    {
+      "id": "phone",
+      "label": "Object",
+      "reference": "gemini-round1/secretaria-front.jpg",
+      "prompt": "the old telephone handset she holds to her ear: the curved handle with the round earpiece and mouthpiece cups, their speaker holes, same pale iridescent chrome. Seen whole, cups facing the viewer at three-quarter."
+    },
+    {
+      "id": "notepad",
+      "label": "Object",
+      "reference": "gemini-round1/secretaria-front.jpg",
+      "prompt": "the small spiral notepad with the pen lying across it: white pages with a few handwritten blue lines, the copper spiral along the top, the slim pen with its clip. Same proportions as in the picture."
+    }
   ]
 }
