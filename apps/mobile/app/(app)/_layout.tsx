@@ -52,6 +52,7 @@ export default function AppLayout() {
         <Stack.Screen name="decision/[id]" options={{ title: 'Decisión' }} />
         <Stack.Screen name="organizaciones" options={{ title: 'Organizaciones', presentation: 'modal' }} />
         <Stack.Screen name="invitar" options={{ title: 'Invitar', presentation: 'modal' }} />
+        <Stack.Screen name="conexiones" options={{ title: 'Conexiones', presentation: 'modal' }} />
       </Stack.Protected>
       <Stack.Protected guard={!hasProfile}>
         <Stack.Screen name="bienvenida" options={{ headerShown: false }} />

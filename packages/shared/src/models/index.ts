@@ -84,3 +84,34 @@ export interface Decision {
 }
 
 export const RULE_KIND = 'regla';
+
+// Connections: an organisation's links to outside accounts (supabase/migrations/
+// 20261114000000_connections.sql). Never a key: keys stay in the engine's vault.
+
+export type ConnectionKind = 'ai';
+export type AiProvider = 'anthropic' | 'openai' | 'vertex';
+export type ConnectionMethod = 'api_key' | 'cloud_project';
+
+export interface Connection {
+  id: string;
+  orgId: string;
+  kind: ConnectionKind;
+  provider: AiProvider;
+  method: ConnectionMethod;
+  /** What the app shows to recognise it: a key's last 4 characters, or the project. */
+  hint: string;
+  /** A cloud project's project and region; empty for a key. */
+  settings: { project?: string; region?: string };
+  status: 'ok' | 'failing';
+  checkedAt: string;
+  connectedByName: string;
+  updatedAt: string;
+}
+
+/** What the app sends the engine to connect an AI account. */
+export type ConnectAiInput =
+  | { orgId: string; provider: 'anthropic' | 'openai'; apiKey: string }
+  | { orgId: string; provider: 'vertex'; project: string; region: string };
+
+/** EU regions where Vertex AI serves Claude. The first is the default. */
+export const VERTEX_EU_REGIONS = ['europe-west1', 'europe-west4'] as const;

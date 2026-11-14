@@ -2,7 +2,7 @@
 
 **Priority:** high — Álvaro (2026-11-14): connectors are a crucial part of the app, and AI accounts come first
 **Gate:** none for API keys; OpenAI's acceptance for ChatGPT plans
-**Next:** API keys for Anthropic and OpenAI plus Google Cloud credentials, stored per organisation in Secret Manager
+**Next:** Álvaro runs `bash scripts/deploy-engine.sh` once (the agent's classifier blocks Google Cloud logins), the connections migration goes to `ghostaff-beta`, and `ENGINE_URL_BETA` into EAS's preview environment
 
 ## Goal
 
@@ -35,14 +35,31 @@ The authentication section (read 2026-11-14) says, in Anthropic's words:
 1. **First: API keys** for Anthropic and OpenAI, plus Google Cloud credentials for Claude in the EU. OpenRouter's one-click connect comes after.
 2. **Apply to Sign in with ChatGPT now**, as a hosted app, through the interest form.
 3. **Claude subscriptions are built**, as above, and dropped if Anthropic objects.
-4. **Claude only in the engine for now.** The engine is the Claude Agent SDK ([build-first-version](../ongoing/build-first-version.md)), so a connected key replaces Ghostaff's own Claude access. Making the engine run several providers' models is a separate decision, for the product plan.
+4. **Claude only in the engine for now.** The engine is the Claude Agent SDK ([build-first-version](build-first-version.md)), so a connected key replaces Ghostaff's own Claude access. Making the engine run several providers' models is a separate decision, for the product plan.
 
-## How keys are kept
+## How keys are kept (built 2026-11-14)
 
-- Each organisation's keys in Secret Manager, in the engine's Google Cloud project, named by `org_id` (invariant 3). The database only stores that a connection exists: provider, kind, last 4 characters, who connected it and when, and its status.
-- The app sends a key once, to a `security definer` function or an engine endpoint that writes it to the vault. The key is never read back to the app.
-- On entry, a cheap test call (list models) checks the key before it's saved.
-- Removing a connection deletes the secret.
+Decisions (Álvaro, 2026-11-14: "pick the best option long term"):
+
+- **The key travels through the engine, never the database.** The app sends it once to `apps/engine`, a Cloud Run service in `europe-west1` that becomes the engine's always-on service. Not a Supabase function (not pinned to the EU, and our Google credentials would live in Supabase), not Supabase's vault (keys next to the data).
+- **Secret Manager in `ghostaff-prod`**, one secret per organisation and provider (`org-<uuid>-ai-<provider>`), replicated only in `europe-west1`. A reconnect adds a version and destroys the old ones; removing deletes the secret.
+- **The database keeps only that it exists** (`public.connections`): provider, method, last 4 characters, who and when. Members read their own organisation's rows; nobody writes from the app (pgTAP: `connections.test.sql`).
+- **Owners only** connect or remove; the engine checks the membership, and a stranger gets the same refusal as a member.
+- **Checked before saved:** listing models with the key (Anthropic, OpenAI), or asking Google whether our service account holds `aiplatform.endpoints.predict` on the customer's project.
+- **Claude in the EU through the customer's Google Cloud with no file:** they grant our service account (`engine@ghostaff-prod.iam.gserviceaccount.com`) the role Vertex AI User, and type the project and an EU region (`europe-west1` or `europe-west4`).
+- In the app: Organizaciones → «Conexiones de …», section IA, one card per option saying where the data goes.
+
+## Progress
+
+- [x] `public.connections` with row-level security and its pgTAP test.
+- [x] `apps/engine`: `POST /connections/ai`, `DELETE /connections/ai/:provider`, `GET /identity`; unit tests; image builds; checked end to end against the local stack (owner, member, stranger, a key the real Anthropic and OpenAI reject).
+- [x] The Conexiones screen.
+- [ ] Deployed: `bash scripts/deploy-engine.sh` (APIs, service account, registry, the service-role key into Secret Manager, build, deploy).
+- [ ] The migration on `ghostaff-beta`.
+- [ ] `ENGINE_URL_BETA` in EAS's preview environment, then a beta build.
+- [ ] Tried with a real key on the beta.
+- [ ] The engine reads the organisation's connection when it runs an agent (once the engine runs agents).
+- [ ] Then: OpenRouter's one-click connect; ChatGPT plans once OpenAI accepts us; Claude subscriptions.
 
 ## Data in Europe
 

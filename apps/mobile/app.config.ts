@@ -36,6 +36,10 @@ const suffix = env.toUpperCase();
 const supabaseAnonKey = process.env[`SUPABASE_ANON_KEY_${suffix}`] ?? '';
 const supabaseUrl = process.env[`SUPABASE_URL_${suffix}`] || projectUrlFromKey(supabaseAnonKey) || '';
 
+// The engine (apps/engine) takes an organisation's keys to the vault. Its URL is
+// public too; what guards it is the person's sign-in token.
+const engineUrl = process.env[`ENGINE_URL_${suffix}`] ?? '';
+
 function projectUrlFromKey(key: string): string | null {
   try {
     const payload = (key.split('.')[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
@@ -81,6 +85,7 @@ const config: ExpoConfig = {
     eas: { projectId: '8a688732-55c1-4ef0-9a23-0fbb3f401911' },
     supabaseUrl,
     supabaseAnonKey,
+    engineUrl,
   },
 };
 

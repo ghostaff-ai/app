@@ -32,11 +32,12 @@ Start a session in the repo the work belongs to, never in the parent folder.
 ```
 apps/mobile/       the app: Expo + expo-router + NativeWind, iPhone, Android and web
 apps/sync/         record → database job (run by hand today, Cloud Run Jobs later)
+apps/engine/       the engine's HTTP service on Cloud Run: today, an organisation's AI keys into the vault
 packages/shared/   models, the record's file formats (por-decidir/), the data services
 supabase/          migrations, row-level-security tests (pgTAP), local config
 ```
 
-Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm db:start` / `pnpm db:test`
+Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh` (the engine to Cloud Run), `pnpm db:start` / `pnpm db:test`
 (Postgres and the policy tests), `pnpm app:start` / `pnpm app:web` (Metro on the first free port of 8083, 8093 … 8173, from
 `scripts/metro-port.sh`; never a bare `expo start`). Setup is in the [README](README.md#setup).
 
@@ -48,7 +49,7 @@ Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm db:sta
 2. **Every table with an organisation's data has `org_id`, row-level security on, and a pgTAP test** in
    `supabase/tests/database/` proving another organisation's member cannot see or change it. The app writes
    only through `security definer` functions that check the caller (`answer_decision`, `create_organization`, `accept_invitation`, …), never a table.
-3. **The service-role key never reaches the app.** Only `apps/sync` (and later the engine) uses it, from its
+3. **The service-role key never reaches the app.** Only `apps/sync` and `apps/engine` use it, from its
    environment. The app's anon key is public by design.
 4. **The record's file formats are ported, not reinvented.** `packages/shared/src/record/` reads and writes
    Órdago's `por-decidir/` format exactly as the Órdago panel does; a change to the format starts there, in

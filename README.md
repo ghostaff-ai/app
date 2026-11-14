@@ -22,8 +22,10 @@ pnpm db:test                   # row-level-security tests
 ```
 
 Copy `apps/mobile/.env.example` to `apps/mobile/.env` with the URL and the **anon** key, and
-`apps/sync/.env.example` to `apps/sync/.env` with the URL and the **service-role** key.
-Neither `.env` is committed.
+`apps/sync/.env.example` to `apps/sync/.env` with the URL and the **service-role** key; the same
+for `apps/engine/.env` (its vault stays in memory locally). No `.env` is committed. With the engine
+running (`pnpm engine:dev`, port 8787), set `ENGINE_URL_DEV=http://localhost:8787` in `apps/mobile/.env`
+to try Conexiones.
 
 Give yourself a login in Órdago (organisation zero, created by the seed) and load its decisions:
 
