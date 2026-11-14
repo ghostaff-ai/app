@@ -207,8 +207,8 @@ function glowMaterial(yBottom: number, yTop: number, { stripes = false, silver =
 export type Surface = 'now' | 'glass' | 'deep';
 export type Eyes = 'now' | 'hollow' | 'deep';
 export type Look = { surface: Surface; eyes: Eyes; hem: number };
-// Álvaro's picks, 2026-11-14: the deep glass surface, hollow eyes, a medium skirt.
-export const DEFAULT_LOOK: Look = { surface: 'deep', eyes: 'hollow', hem: 0.88 };
+// Álvaro's picks, 2026-11-14 (changed the same day): the deep glass surface, deep eyes, the narrow skirt.
+export const DEFAULT_LOOK: Look = { surface: 'deep', eyes: 'deep', hem: 0.78 };
 
 // The colour pattern of fragmentShader, as a function other shaders can call.
 const patternChunk = /* glsl */ `
