@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
+  AiProvider,
   Answer,
+  ConnectAiInput,
+  Connection,
   Decision,
   MembershipRole,
   MyInvitation,
@@ -262,4 +265,105 @@ export function splitLinks(raw: string): string[] {
     .split(/[\s,]+/)
     .map(normalizeLink)
     .filter(Boolean);
+}
+
+// Connections. Reads come from the database like everything else; connecting
+// and disconnecting go to the engine (apps/engine), because a key must reach
+// the vault without ever touching the database or coming back to the app.
+
+interface ConnectionRow {
+  id: string;
+  org_id: string;
+  kind: Connection['kind'];
+  provider: AiProvider;
+  method: Connection['method'];
+  hint: string;
+  settings: Connection['settings'] | null;
+  status: Connection['status'];
+  checked_at: string;
+  connected_by_name: string;
+  updated_at: string;
+}
+
+export function connectionFromRow(r: ConnectionRow): Connection {
+  return {
+    id: r.id,
+    orgId: r.org_id,
+    kind: r.kind,
+    provider: r.provider,
+    method: r.method,
+    hint: r.hint,
+    settings: r.settings ?? {},
+    status: r.status,
+    checkedAt: r.checked_at,
+    connectedByName: r.connected_by_name,
+    updatedAt: r.updated_at,
+  };
+}
+
+export const CONNECTION_COLUMNS =
+  'id, org_id, kind, provider, method, hint, settings, status, checked_at, connected_by_name, updated_at';
+
+/** The organisation's connections. Every member sees them; only owners change them. */
+export async function listConnections(client: SupabaseClient, orgId: string): Promise<Connection[]> {
+  const { data, error } = await client
+    .from('connections')
+    .select(CONNECTION_COLUMNS)
+    .eq('org_id', orgId)
+    .order('created_at')
+    .returns<ConnectionRow[]>();
+  if (error) throw error;
+  return (data ?? []).map(connectionFromRow);
+}
+
+/** How to reach the engine as the signed-in person. */
+export interface EngineAccess {
+  url: string;
+  /** The person's Supabase access token. */
+  token: string;
+}
+
+/** The engine's refusal, with a code the screen can turn into Spanish. */
+export class EngineError extends Error {
+  constructor(
+    readonly code: string,
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'EngineError';
+  }
+}
+
+async function callEngine<T>(engine: EngineAccess, method: string, path: string, body?: unknown): Promise<T> {
+  if (!engine.url) throw new EngineError('not_configured', 0, 'engine URL not configured');
+  let res: Response;
+  try {
+    res = await fetch(`${engine.url.replace(/\/$/, '')}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${engine.token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    throw new EngineError('unreachable', 0, e instanceof Error ? e.message : String(e));
+  }
+  const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string } & T;
+  if (!res.ok) throw new EngineError(json.error ?? 'failed', res.status, json.message ?? `engine answered ${res.status}`);
+  return json;
+}
+
+/** Checks the key or project with the provider, stores it in the vault and returns the connection. */
+export async function connectAi(engine: EngineAccess, input: ConnectAiInput): Promise<Connection> {
+  const { connection } = await callEngine<{ connection: ConnectionRow }>(engine, 'POST', '/connections/ai', input);
+  return connectionFromRow(connection);
+}
+
+/** Removes the connection and deletes its key from the vault. */
+export async function disconnectAi(engine: EngineAccess, orgId: string, provider: AiProvider): Promise<void> {
+  await callEngine(engine, 'DELETE', `/connections/ai/${provider}?org=${encodeURIComponent(orgId)}`);
+}
+
+/** The service account a customer grants Vertex AI access to on their own project. */
+export async function getEngineIdentity(engine: EngineAccess): Promise<{ serviceAccount: string }> {
+  return callEngine(engine, 'GET', '/identity');
 }

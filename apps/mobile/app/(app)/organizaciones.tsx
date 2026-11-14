@@ -26,6 +26,7 @@ export default function Organizations() {
         </Pressable>
       ))}
       <View className="mt-6 gap-3">
+        {active ? <Button label={`Conexiones de ${active.name}`} tone="plain" onPress={() => router.push('/conexiones')} /> : null}
         {active?.role === 'owner' ? <Button label={`Invitar a ${active.name}`} tone="plain" onPress={() => router.push('/invitar')} /> : null}
         <Button label="Crear otra empresa" tone="plain" onPress={() => router.push('/crear-empresa')} />
         <Button label="Unirme a otra empresa" tone="plain" onPress={() => router.push('/unirme')} />
