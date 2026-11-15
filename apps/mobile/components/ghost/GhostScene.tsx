@@ -332,12 +332,14 @@ function makeGlow(surface: Surface, yBottom: number, yTop: number, opts: { strip
 
 // A studio room for the physical materials to reflect, built in code (no file to
 // load, so it works the same on phones).
-export function StudioLight() {
+// blur: how soft the room's reflections are; the default shows its lights as
+// sharp panels, which on a glossy Tripo head read as a white stripe.
+export function StudioLight({ blur = 0.04 }: { blur?: number }) {
   const { gl, scene } = useThree();
   useEffect(() => {
     try {
       const pmrem = new THREE.PMREMGenerator(gl);
-      const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      const env = pmrem.fromScene(new RoomEnvironment(), blur).texture;
       scene.environment = env;
       pmrem.dispose();
       return () => {
@@ -347,7 +349,7 @@ export function StudioLight() {
     } catch {
       return undefined; // no reflections on a phone that can't build them
     }
-  }, [gl, scene]);
+  }, [gl, scene, blur]);
   return null;
 }
 

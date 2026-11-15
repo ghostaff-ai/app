@@ -9,10 +9,16 @@ textures, 50-70 MB a file. The originals stay in the Ghostaff Drive
 
 For each <name>.glb in that folder it writes design/tripo/<name>.glb: turned to
 face the front (Tripo's face +X), standing on the ground, 1 unit tall, centred,
-cut to about TARGET triangles (60,000 left the collar edges ragged), textures shrunk to TEX px. And a front render in
+cut to about TARGET triangles (60,000 left the collar edges ragged), textures shrunk to TEX px,
+with the fine places left whole (KEEP) and any hand fixes for that model
+(touchup.py) applied. And a front render in
 design/tripo/renders/.
 """
 import bpy, bmesh, sys, os, glob, math
+import json
+import numpy as np
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import touchup
 from mathutils import Vector, Matrix
 
 TARGET = int(os.environ.get('TRIPO_TRIS', 150000))   # triangles
@@ -25,6 +31,30 @@ def bounds(objs):
     lo = Vector([min(p[i] for p in pts) for i in range(3)])
     hi = Vector([max(p[i] for p in pts) for i in range(3)])
     return lo, hi
+
+# Places to leave at full detail, per model: boxes (x0, x1, z0, z1) on the front,
+# in the model's units (1 tall, x across, z up), plus every eye in eyes.json.
+KEEP = {
+    'incorporacion': [(-0.32, 0.32, 0.46, 0.7)],
+    'finanzas': [(-0.32, 0.32, 0.46, 0.7)],
+}
+
+def keep_group(obj, name):
+    """A vertex group of the points the cut must leave alone."""
+    co = np.zeros(len(obj.data.vertices) * 3); obj.data.vertices.foreach_get('co', co); co = co.reshape(-1, 3)
+    boxes = list(KEEP.get(name, []))
+    path = os.path.join(OUT, 'eyes.json')
+    if os.path.exists(path):
+        for e in json.load(open(path)).get(name, []):
+            (cx, cz, _), (rx, rz) = e['center'], e['radius']
+            boxes.append((cx - rx * 1.6, cx + rx * 1.6, cz - rz * 1.6, cz + rz * 1.6))
+    keep = np.zeros(len(co), bool)
+    for x0, x1, z0, z1 in boxes:
+        keep |= (co[:, 0] > x0) & (co[:, 0] < x1) & (co[:, 2] > z0) & (co[:, 2] < z1) & (co[:, 1] < 0)
+    g = obj.vertex_groups.new(name='keep')
+    g.add(np.nonzero(keep)[0].tolist(), 1.0, 'REPLACE')
+    print('kept whole', int(keep.sum()), 'of', len(co), 'points')
+    return g, int(keep.sum())
 
 def render(obj, path):
     sc = bpy.context.scene
@@ -84,12 +114,21 @@ def run(src):
         tris = sum(len(p.vertices) - 2 for p in obj.data.polygons)
         if tris > TARGET:
             m = obj.modifiers.new('cut', 'DECIMATE')
-            m.ratio = TARGET / tris
+            # But leave the fine places whole: cut, a collar's thin top edge became a
+            # fringe of spikes and the eyes' rims went ragged (KEEP, below). The
+            # rest is cut as much as before, so the total grows by what is kept.
+            g, kept = keep_group(obj, name)
+            f = kept / len(obj.data.vertices)
+            m.ratio = TARGET / tris * (1 - f) + f
+            m.vertex_group = g.name
+            m.invert_vertex_group = True
             bpy.ops.object.modifier_apply(modifier='cut')
         for img in bpy.data.images:
             if img.size[0] > TEX:
                 img.scale(TEX, TEX)
                 img.pack()
+        if name in touchup.FIXES:
+            touchup.FIXES[name](obj)
         out = os.path.join(OUT, name + '.glb')
         bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', use_selection=False,
                                   export_image_format='JPEG', export_jpeg_quality=85,

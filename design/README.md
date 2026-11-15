@@ -46,12 +46,21 @@ from one picture, exported as GLB and dropped in the Ghostaff Drive; the origina
 (about 1.2 million vertices, 50-70 MB each) stay there, in `ghosts/tripo/`.
 `design/blender/tripo.py` makes the light copies the app loads, in `design/tripo/`:
 turned to face the front, 1 unit tall standing on the ground, about 150,000
-triangles (60,000 left the collar edges ragged), 2048 px textures, geometry Draco-compressed (Blender's own encoder; the app decodes it with three.js's decoder in `apps/mobile/public/draco/`), about 1 MB each.
+triangles (60,000 left the collar edges ragged), 2048 px textures. Fine places stay
+at full detail (`KEEP` in `tripo.py`: the eyes, and the shirt collars of Finanzas and
+Incorporación), because cutting them turned a collar's thin top edge into a fringe of
+spikes and the eye rims ragged; those models end up at 200,000 to 520,000 triangles.
+Hand fixes for one model are in `touchup.py` (Incorporación's badge: card flattened,
+Tripo's crooked "HELLO / I'M GUSTAV" painted out, real "HOLA / Soy Gus" on it).
+Geometry is Draco-compressed (Blender's own encoder; the app decodes it with three.js's decoder in `apps/mobile/public/draco/`), 0.9 to 1.7 MB a model.
 
 ```bash
 rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/models
 blender -b -P design/blender/tripo.py -- ~/Downloads/tripo/models
 ```
+
+The app lights them with softer reflections than our own ghost (`StudioLight
+blur`): sharp, the studio's light panels showed as a white stripe down every head.
 
 The app's `/fantasma` screen shows them with a Tripo / Nuestro switch
 (`TripoScene.tsx`). A Tripo model is one solid piece, so it comes alive as a whole,

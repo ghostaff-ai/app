@@ -202,7 +202,10 @@ export function TripoScene({
     scene?.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return;
       const m = o.material as THREE.MeshStandardMaterial;
-      m.color.setScalar(TONES[tone].paint);
+      // Darken from the material's own colour (white for Tripo's painted ones,
+      // the ink of a label added in Blender).
+      m.userData.colour ??= m.color.clone();
+      m.color.copy(m.userData.colour).multiplyScalar(TONES[tone].paint);
       m.envMapIntensity = TONES[tone].room;
     });
   }, [scene, tone]);
@@ -265,7 +268,7 @@ export function TripoScene({
   return (
     <>
       <color attach="background" args={[STAGE]} />
-      <StudioLight />
+      <StudioLight blur={0.25} />
       <hemisphereLight args={['#FFFFFF', '#C9C2E8', 0.6 * TONES[tone].lights]} />
       <directionalLight position={[-2.5, 4, 3]} intensity={1.2 * TONES[tone].lights} />
       <mesh ref={shadow} rotation-x={-Math.PI / 2} position-y={FLOOR}>
