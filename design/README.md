@@ -46,7 +46,7 @@ from one picture, exported as GLB and dropped in the Ghostaff Drive; the origina
 (about 1.2 million vertices, 50-70 MB each) stay there, in `ghosts/tripo/`.
 `design/blender/tripo.py` makes the light copies the app loads, in `design/tripo/`:
 turned to face the front, 1 unit tall standing on the ground, about 150,000
-triangles (60,000 left the collar edges ragged), 2048 px textures, about 5 MB each.
+triangles (60,000 left the collar edges ragged), 2048 px textures, geometry Draco-compressed (Blender's own encoder; the app decodes it with three.js's decoder in `apps/mobile/public/draco/`), about 1 MB each.
 
 ```bash
 rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/models

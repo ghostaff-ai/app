@@ -93,7 +93,14 @@ def run(src):
         out = os.path.join(OUT, name + '.glb')
         bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', use_selection=False,
                                   export_image_format='JPEG', export_jpeg_quality=85,
-                                  export_apply=True)
+                                  export_apply=True,
+                                  # Draco shrinks the geometry about five times; the app
+                                  # decodes it with three.js's decoder (apps/mobile/public/draco/).
+                                  export_draco_mesh_compression_enable=True,
+                                  export_draco_mesh_compression_level=7,
+                                  export_draco_position_quantization=14,
+                                  export_draco_normal_quantization=10,
+                                  export_draco_texcoord_quantization=12)
         print('wrote', name, tris, '->', sum(len(p.vertices) - 2 for p in obj.data.polygons),
               'tris,', os.path.getsize(out) // 1024, 'KB')
         render(obj, os.path.join(OUT, 'renders', name + '.png'))

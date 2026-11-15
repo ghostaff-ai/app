@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import { Asset } from 'expo-asset';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { STAGE, type SpinState, StudioLight } from './GhostScene';
 
@@ -53,6 +54,11 @@ const FILES: Record<TripoModel, number> = {
 const HEIGHT = 2.0;
 const FLOOR = -1.04;
 
+// The models' geometry is Draco-compressed (design/blender/tripo.py); three.js's
+// decoder is served from apps/mobile/public/draco/.
+const draco = new DRACOLoader().setDecoderPath('/draco/');
+const loader = new GLTFLoader().setDRACOLoader(draco);
+
 const cache = new Map<TripoModel, Promise<THREE.Group>>();
 function load(model: TripoModel) {
   let p = cache.get(model);
@@ -60,7 +66,7 @@ function load(model: TripoModel) {
     p = (async () => {
       const asset = Asset.fromModule(FILES[model]);
       await asset.downloadAsync();
-      const gltf = await new GLTFLoader().loadAsync(asset.localUri ?? asset.uri);
+      const gltf = await loader.loadAsync(asset.localUri ?? asset.uri);
       gltf.scene.traverse((o) => {
         if (o instanceof THREE.Mesh) ripple(o.material as THREE.MeshStandardMaterial);
       });
