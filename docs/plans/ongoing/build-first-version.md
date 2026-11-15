@@ -23,6 +23,20 @@ Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/b
 
 The app on our phones through TestFlight: sign in, pick an organisation, and a decision inbox fed by Órdago's real `por-decidir/` (Órdago is organisation zero). It forces the multi-organisation base from day one.
 
+## Environments: beta and production (proposal, Jaime 2026-11-15, for Álvaro to decide)
+
+Today `ghostaff-prod` acts as beta: its only service, `engine`, talks to the **beta** Supabase (its one secret is `SUPABASE_SERVICE_ROLE_KEY_BETA`, checked 2026-11-15), and there is no production Supabase. Proposal: one pair per environment, as Órdago does with `ordago-beta` and `ordago-prod`.
+
+| Environment | Google Cloud | Supabase | App | Who is in it |
+|---|---|---|---|---|
+| Beta | `ghostaff-beta` (created 2026-11-15, empty) | `ghostaff-beta` | `ai.ghostaff.app.beta`, branch `develop` | us and test organisations |
+| Production | `ghostaff-prod` | to create | `ai.ghostaff.app`, branch `main` | customers |
+
+- **Why:** production will hold customers' AI keys and mailboxes in Secret Manager. A half-done deploy or a broken migration must never reach them while we test (invariant 1, applied to our own tests).
+- **Steps:** deploy the engine to `ghostaff-beta` and move the beta Supabase key there; leave `ghostaff-prod` clean until the production Supabase exists, then pair them.
+- **Where Órdago and Ghostaff live:** production, since their data is real and they are the first customers to notice what breaks. Beta keeps test organisations.
+- **When:** not urgent while only we use it; clean before the first outside organisation (phase 4, which is also when the SL is constituted).
+
 ## What only Álvaro can do (ask when the work reaches it, not before)
 
 - Sign up to Supabase with the Ghostaff Gmail.
