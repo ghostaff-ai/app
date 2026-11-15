@@ -36,3 +36,23 @@ the body does not fling up on a hop. After changing a model or a pose, check it:
 ```bash
 blender -b -P design/blender/clash.py -- secretaria,redes
 ```
+
+## Tripo's models
+
+Since 2026-11-15 Álvaro also turns his pictures into 3D with Tripo
+(studio.tripo3d.ai, account ghostaff.ai, Pro plan: models made on it are private and
+ours to use; one coloured model costs 55 credits). Each ghost and each prop is made
+from one picture, exported as GLB and dropped in the Ghostaff Drive; the originals
+(about 1.2 million vertices, 50-70 MB each) stay there, in `ghosts/tripo/`.
+`design/blender/tripo.py` makes the light copies the app loads, in `design/tripo/`:
+turned to face the front, 1 unit tall standing on the ground, about 60,000
+triangles, 1024 px textures, about 1.6 MB each.
+
+```bash
+rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/models
+blender -b -P design/blender/tripo.py -- ~/Downloads/tripo/models
+```
+
+The app's `/fantasma` screen shows them with a Tripo / Nuestro switch
+(`TripoScene.tsx`). A Tripo model is one solid piece: it spins, floats and hops as a
+whole, but its arms and eyes don't move on their own.

@@ -4,13 +4,23 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { type Agent, DEFAULT_LOOK, type Eyes, type Look, type Surface } from '@/components/ghost/GhostScene';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
+import type { TripoModel } from '@/components/ghost/TripoScene';
 
 // Spike: a live 3D ghost, open without signing in at /fantasma.
 
-const AGENTS: { id: Agent; label: string }[] = [
-  { id: 'base', label: 'Base' },
-  { id: 'secretaria', label: 'Secretaría' },
-  { id: 'redes', label: 'Redes' },
+// Ours (built in Blender by design/blender/ghost.py) exist for the first three;
+// Tripo's (made from Álvaro's pictures) for all five.
+const AGENTS: { id: TripoModel; label: string; ours: boolean }[] = [
+  { id: 'base', label: 'Base', ours: true },
+  { id: 'secretaria', label: 'Secretaría', ours: true },
+  { id: 'redes', label: 'Redes', ours: true },
+  { id: 'incorporacion', label: 'Incorporación', ours: false },
+  { id: 'finanzas', label: 'Finanzas', ours: false },
+];
+type Source = 'tripo' | 'ours';
+const SOURCES: { id: Source; label: string }[] = [
+  { id: 'tripo', label: 'Tripo' },
+  { id: 'ours', label: 'Nuestro' },
 ];
 
 // Look options to compare on the phone; the URL can preset them
@@ -55,8 +65,11 @@ function Chips<T>({
 
 export default function Fantasma() {
   const [focused, setFocused] = useState(true);
-  const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string }>();
-  const [agent, setAgent] = useState<Agent>(params.agent === 'secretaria' || params.agent === 'redes' ? params.agent : 'base');
+  const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string; source?: string }>();
+  const [agent, setAgent] = useState<TripoModel>(AGENTS.find((a) => a.id === params.agent)?.id ?? 'base');
+  const [source, setSource] = useState<Source>(params.source === 'ours' ? 'ours' : 'tripo');
+  const hasOurs = AGENTS.find((a) => a.id === agent)!.ours;
+  const tripo = source === 'tripo' || !hasOurs ? agent : null;
   const [look, setLook] = useState<Look>({
     surface: SURFACES.find((o) => o.id === params.surface)?.id ?? DEFAULT_LOOK.surface,
     eyes: EYES.find((o) => o.id === params.eyes)?.id ?? DEFAULT_LOOK.eyes,
@@ -69,7 +82,7 @@ export default function Fantasma() {
   );
   return (
     <SafeAreaView className="flex-1 bg-surface">
-      <View className="flex-row justify-center gap-2 pt-4">
+      <View className="flex-row flex-wrap justify-center gap-2 px-4 pt-4">
         {AGENTS.map((a) => (
           <Pressable
             key={a.id}
@@ -81,13 +94,31 @@ export default function Fantasma() {
         ))}
       </View>
       <View className="flex-1">
-        <GhostViewer active={focused} agent={agent} look={look} />
+        <GhostViewer active={focused} agent={agent as Agent} look={look} tripo={tripo} />
       </View>
       <View className="gap-2 pb-3">
-        <Chips title="Superficie" options={SURFACES} value={look.surface} onChange={(surface) => setLook({ ...look, surface })} />
-        <Chips title="Ojos" options={EYES} value={look.eyes} onChange={(eyes) => setLook({ ...look, eyes })} />
+        {hasOurs && (
+          <View className="flex-row items-center justify-center gap-2">
+            <Text className="w-20 text-right text-muted">Modelo</Text>
+            {SOURCES.map((o) => (
+              <Pressable
+                key={o.id}
+                onPress={() => setSource(o.id)}
+                className={`h-9 items-center justify-center rounded-full border px-4 ${source === o.id ? 'border-transparent bg-black' : 'border-gray-300'}`}
+              >
+                <Text className={source === o.id ? 'text-white' : 'text-muted'}>{o.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+        {!tripo && (
+          <>
+            <Chips title="Superficie" options={SURFACES} value={look.surface} onChange={(surface) => setLook({ ...look, surface })} />
+            <Chips title="Ojos" options={EYES} value={look.eyes} onChange={(eyes) => setLook({ ...look, eyes })} />
+          </>
+        )}
       </View>
-      <Text className="pb-6 text-center text-base text-muted">Arrástralo para girarlo. Tócalo para cambiar su cara.</Text>
+      <Text className="pb-6 text-center text-base text-muted">{tripo ? 'Arrástralo para girarlo. Tócalo para que salte.' : 'Arrástralo para girarlo. Tócalo para cambiar su cara.'}</Text>
     </SafeAreaView>
   );
 }

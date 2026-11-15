@@ -19,7 +19,7 @@ export type SpinState = {
   hopAt: number | 'now' | null; // when the last tap's hop started; a tap sets 'now'
 };
 
-const STAGE = '#EEEEF2';
+export const STAGE = '#EEEEF2';
 const EYE = '#0B0B26';
 const EYE_RIM = '#9FE4FF';
 
@@ -332,7 +332,7 @@ function makeGlow(surface: Surface, yBottom: number, yTop: number, opts: { strip
 
 // A studio room for the physical materials to reflect, built in code (no file to
 // load, so it works the same on phones).
-function StudioLight() {
+export function StudioLight() {
   const { gl, scene } = useThree();
   useEffect(() => {
     try {

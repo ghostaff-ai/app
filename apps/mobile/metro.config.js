@@ -8,7 +8,13 @@ const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
 
 const config = getDefaultConfig(projectRoot);
-config.watchFolders = [path.resolve(workspaceRoot, 'packages'), path.resolve(workspaceRoot, 'node_modules')];
+config.watchFolders = [
+  path.resolve(workspaceRoot, 'packages'),
+  path.resolve(workspaceRoot, 'node_modules'),
+  // The 3D models the app loads (design/tripo/*.glb).
+  path.resolve(workspaceRoot, 'design', 'tripo'),
+];
+config.resolver.assetExts.push('glb');
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
