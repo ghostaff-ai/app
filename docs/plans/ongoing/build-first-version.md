@@ -2,7 +2,7 @@
 
 **Priority:** high
 **Gate:** none
-**Next:** Jaime into the TestFlight group once he accepts the team invitation; a gcloud configuration for `ghostaff-prod`; then the sync on a schedule
+**Next:** Jaime into the TestFlight group once he accepts the team invitation; then the sync on a schedule
 
 Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#por-fases). We need them for our own projects whether or not Ghostaff becomes a business.
 
@@ -48,6 +48,7 @@ The app on our phones through TestFlight: sign in, pick an organisation, and a d
 - [x] The way in (Álvaro, 2026-11-12): anyone signs up with their email; a welcome screen asks their name (required), what they do and how they heard of us; then **create a company** (name, plus optionally web, what they do and other links, the light first step of Incorporación) or **join one** that invited their email. Owners invite from Organizaciones. pgTAP proves nobody sees or joins an organisation that did not invite them.
 - [ ] A beta build to TestFlight, for Jaime (Álvaro has no iPhone; he tests on his Pixel through Expo Go). Build 5 uploaded 2026-11-13 after Álvaro's one Apple login; signing certificate, profile and an App Store Connect API key (`MRSFCG84GJ`, Admin) now live on EAS's servers, so later builds and submits run without him (`eas build -p ios --profile beta --auto-submit`). Jaime (Apple ID `jaimerd43@icloud.com`) invited to the Apple team 2026-11-13, role Marketing, Ghostaff Beta only. Left: once he accepts, add him to the internal TestFlight group "Team (Expo)".
 - [x] Google Cloud project `ghostaff-prod` under ghostaff.ai@gmail.com. Billing: Órdago's account (`0140DA-ACC4C8-DF8BAE`, Álvaro 2026-11-12); the Ghostaff Gmail has Billing Account User on it. Google raised the account's project quota (2026-11-12) and the project is linked.
+- [x] Google Cloud project `ghostaff-beta` (number 1002624835789), created 2026-11-15 by Jaime from ghostaff.ai@gmail.com, billed to the same account as `ghostaff-prod`; empty, for trying the engine before `ghostaff-prod`. Which services go there is still to decide. A gcloud configuration `ghostaff-prod` (account ghostaff.ai@gmail.com, region `europe-west1`) now exists on Jaime's Mac.
 - [ ] Organisation Ghostaff in the beta project, with its own record. Its first agent is its own Finanzas, keeping Ghostaff's invoices apart from Órdago's ([decision 15](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#ghostaff-usa-ghostaff)); until it runs, they are booked by hand.
 - [ ] An organisation's own AI account (keys or Google Cloud), the first connector and the first piece of the engine on Cloud Run: [llm-connectors](llm-connectors.md). Live on the beta 2026-11-14; not yet tried with a real key.
 - [ ] The sync on a schedule, in the engine's Google Cloud project, reading Órdago's record from GitHub and committing write-backs — needs the project's billing.
