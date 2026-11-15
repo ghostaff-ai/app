@@ -57,7 +57,7 @@ After testing pictures he made in Gemini (kept on `spike/ghost-3d` in `design/co
 
 ## Open questions
 
-- What raises a level, so it means something (not just the number of runs)?
+- What raises a level, so it means something (not just the number of runs)? Jaime's proposal (2026-11-15): the level is the autonomy the agent has earned, raised by OKs without correction and signed rules per decision type, never by runs; written in the product plan, [El aprendizaje](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#el-aprendizaje-lo-que-nos-diferencia), waiting for Álvaro.
 - How goals and milestones are defined, per organisation and per department.
 - Whether the tool "equipment" view is the same screen as connecting a tool.
 - Live 3D, rendered loops, or both. The spike says live 3D works; the look above assumes it.
