@@ -68,3 +68,16 @@ hang from that arm, so they move with it; worn ones (collar, scarf, jacket) sit 
 the body. Labels and digits (calculator keys, badge, pocket plate) are added in
 Blender as real text, since Tripo paints letters crooked. The arms then swing and
 the eyes blink in the app as on our own ghost.
+
+Built (2026-11-15) by `design/blender/assemble.py`:
+
+```bash
+rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/originals
+blender -b -P design/blender/assemble.py -- ~/Downloads/tripo/originals            # all agents
+blender -b -P design/blender/assemble.py -- ~/Downloads/tripo/originals try finanzas   # just renders
+```
+
+Each agent's arm poses, objects, where they sit and their text are in its `AGENTS`
+entry; `FIX` squares up an object Tripo made turned. Worn things are fitted round the
+body and pushed out of it, so nothing passes through. Out: `design/tripo/agents/<agent>.glb`
+(what the app loads) and a picture of each in `design/tripo/agents/renders/`.

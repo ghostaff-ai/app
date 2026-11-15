@@ -9,13 +9,14 @@ import type { Tone, TripoModel } from '@/components/ghost/TripoScene';
 // Spike: a live 3D ghost, open without signing in at /fantasma.
 
 // Ours (built in Blender by design/blender/ghost.py) exist for the first three;
-// Tripo's (made from Álvaro's pictures) for all five.
+// Tripo's (put together from Tripo's parts) for all six.
 const AGENTS: { id: TripoModel; label: string; ours: boolean }[] = [
   { id: 'base', label: 'Base', ours: true },
   { id: 'secretaria', label: 'Secretaría', ours: true },
   { id: 'redes', label: 'Redes', ours: true },
   { id: 'incorporacion', label: 'Incorporación', ours: false },
   { id: 'finanzas', label: 'Finanzas', ours: false },
+  { id: 'productor', label: 'Productor', ours: false },
 ];
 type Source = 'tripo' | 'ours';
 const TONES: { id: Tone; label: string }[] = [
