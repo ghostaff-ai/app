@@ -54,8 +54,21 @@ blender -b -P design/blender/tripo.py -- ~/Downloads/tripo/models
 ```
 
 The app's `/fantasma` screen shows them with a Tripo / Nuestro switch
-(`TripoScene.tsx`). A Tripo model is one solid piece: it spins, floats and hops as a
-whole and its hem ripples (in the shader), but its arms and eyes don't move on their own. A "Tono" switch tries it darker (A as Tripo made it, B and C darker).
+(`TripoScene.tsx`). A Tripo model is one solid piece, so it comes alive as a whole,
+in the shader: it sways like jelly (the top more than the hem, so what it holds sways
+with it), the hem ripples, it breathes, squashes and stretches as it hops, and its
+painted eyes blink. `design/blender/eyes.py` finds each model's eyes in its texture
+(two dark ovals on the front of the head) and writes `design/tripo/eyes.json`, which
+the app reads; a new model needs one run of it. A "Tono" switch tries it darker (A as
+Tripo made it, B and C darker).
+
+```bash
+blender -b -P design/blender/eyes.py -- base,secretaria,redes,incorporacion,finanzas
+```
+
+Since 2026-11-15 (Álvaro: the assembled ones "don't look that good") the app shows
+the whole models again; only Productor, which has no whole model yet, is the
+assembled one. The arms of a whole model don't move on their own.
 
 ### Where this is going (Álvaro, 2026-11-15: "the best option for long term")
 
@@ -69,7 +82,8 @@ the body. Labels and digits (calculator keys, badge, pocket plate) are added in
 Blender as real text, since Tripo paints letters crooked. The arms then swing and
 the eyes blink in the app as on our own ghost.
 
-Built (2026-11-15) by `design/blender/assemble.py`:
+Built (2026-11-15) by `design/blender/assemble.py`, then set aside the same day for the
+whole models, which look better (see above):
 
 ```bash
 rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/originals
