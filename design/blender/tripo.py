@@ -10,15 +10,16 @@ textures, 50-70 MB a file. The originals stay in the Ghostaff Drive
 For each <name>.glb in that folder it writes design/tripo/<name>.glb: turned to
 face the front (Tripo's face +X), standing on the ground, 1 unit tall, centred,
 cut to about TARGET triangles (60,000 left the collar edges ragged), textures shrunk to TEX px,
-with the fine places left whole (KEEP) and any hand fixes for that model
-(touchup.py) applied. And a front render in
-design/tripo/renders/.
+with the fine places left whole (KEEP), the line on its head softened
+(touchup.py) and its objects replaced by Tripo's own models of them, found in
+the same folder (swap.py). And a front render in design/tripo/renders/.
 """
 import bpy, bmesh, sys, os, glob, math
 import json
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import touchup
+import swap
 from mathutils import Vector, Matrix
 
 TARGET = int(os.environ.get('TRIPO_TRIS', 150000))   # triangles
@@ -38,6 +39,9 @@ KEEP = {
     'incorporacion': [(-0.32, 0.32, 0.46, 0.7)],
     'finanzas': [(-0.32, 0.32, 0.46, 0.7)],
 }
+
+# The whole ghosts in the folder; anything else there is a lone object.
+GHOSTS = {'base', 'secretaria', 'redes', 'incorporacion', 'finanzas', 'productor'}
 
 def keep_group(obj, name):
     """A vertex group of the points the cut must leave alone."""
@@ -82,6 +86,8 @@ def run(src):
     os.makedirs(os.path.join(OUT, 'renders'), exist_ok=True)
     for f in sorted(glob.glob(os.path.join(src, '*.glb'))):
         name = os.path.splitext(os.path.basename(f))[0]
+        if name not in GHOSTS:   # the lone objects in the same folder are for swap.py
+            continue
         bpy.ops.wm.read_factory_settings(use_empty=True)
         bpy.ops.import_scene.gltf(filepath=f, merge_vertices=True)
         meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH']
@@ -127,8 +133,12 @@ def run(src):
             if img.size[0] > TEX:
                 img.scale(TEX, TEX)
                 img.pack()
-        if name in touchup.FIXES:
-            touchup.FIXES[name](obj)
+        # the hard line where Tripo's views meet on the head, softened
+        if name in touchup.SEAMS:
+            eyes = [(e['center'], e['radius']) for e in json.load(open(os.path.join(OUT, 'eyes.json'))).get(name, [])]
+            touchup.soften_seams(obj, eyes, **touchup.SEAMS[name])
+        # its objects replaced by Tripo's own models of them (swap.py)
+        swap.swap(obj, name, src)
         out = os.path.join(OUT, name + '.glb')
         bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', use_selection=False,
                                   export_image_format='JPEG', export_jpeg_quality=85,

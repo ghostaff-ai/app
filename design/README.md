@@ -50,13 +50,22 @@ triangles (60,000 left the collar edges ragged), 2048 px textures. Fine places s
 at full detail (`KEEP` in `tripo.py`: the eyes, and the shirt collars of Finanzas and
 Incorporación), because cutting them turned a collar's thin top edge into a fringe of
 spikes and the eye rims ragged; those models end up at 200,000 to 520,000 triangles.
-Hand fixes for one model are in `touchup.py` (Incorporación's badge: card flattened,
-Tripo's crooked "HELLO / I'M GUSTAV" painted out, real "HOLA / Soy Gus" on it).
-Geometry is Draco-compressed (Blender's own encoder; the app decodes it with three.js's decoder in `apps/mobile/public/draco/`), 0.9 to 1.7 MB a model.
+Where Tripo's views of a ghost meet on its head, the colour (and its normal map) jumped
+in a hard line from front to back; `touchup.py` finds that jump and repaints a band
+about 3.5 cm wide round it with colours that run smoothly across (`SEAMS`: where to
+look per model, minus the bun and the hands; Redes' beret covers the place).
+The objects painted into a whole ghost come out soft, with crooked letters, so
+`swap.py` puts Tripo's own model of each object (the lone ones assemble.py uses, in
+the same Drive folder) in its place: same spot, size and turn, measured from the old
+object's front face. A held one (calculator, clipboard) is cut away first; a worn one
+(badge, pocket) is pressed flat into the body, so no hole opens where the outlines
+differ. Real letters go on top ("HOLA / Soy Gus", "1.250,00", "FINANZAS"). Done
+for Incorporación and Finanzas (`SWAPS`); the ties and collars stay Tripo's.
+Geometry is Draco-compressed (Blender's own encoder; the app decodes it with three.js's decoder in `apps/mobile/public/draco/`), 0.9 to 2.2 MB a model.
 
 ```bash
-rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/models
-blender -b -P design/blender/tripo.py -- ~/Downloads/tripo/models
+rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/originals
+blender -b -P design/blender/tripo.py -- ~/Downloads/tripo/originals
 ```
 
 The app lights them with softer reflections than our own ghost (`StudioLight

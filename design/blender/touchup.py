@@ -1,10 +1,9 @@
-"""Hand fixes to single Tripo models, applied by tripo.py before it exports one.
-
-Tripo paints letters crooked (and raises them off the surface). Each fix here
-works on the light model (welded, cut down, 1 unit tall, facing -Y, Blender's z
-up) and its texture, and is listed in FIXES under the model's name. (The spikes
-along a collar and the ragged eye rims came from the cut, not from Tripo: tripo.py
-leaves those places whole, KEEP.)
+"""Hand fixes to whole Tripo ghosts, applied by tripo.py before it exports one:
+the line on the head where Tripo's views meet (soften_seams, SEAMS), and the
+helpers swap.py uses. They work on the light model (welded, cut down, 1 unit
+tall, facing -Y, Blender's z up) and its textures. (The spikes along a collar
+and the ragged eye rims came from the cut, not from Tripo: tripo.py leaves those
+places whole, KEEP.)
 """
 import numpy as np
 
@@ -17,12 +16,18 @@ def mesh_arrays(obj):
     return co.reshape(-1, 3), e.reshape(-1, 2)
 
 
-def texture(obj):
-    for node in obj.data.materials[0].node_tree.nodes:
+def texture(obj, socket='Base Color'):
+    """The image feeding the material's `socket` (through at most one node in
+    between, as the normal map does), and its pixels as an h x w x 4 array."""
+    for node in (nd for m in obj.data.materials if m and m.node_tree for nd in m.node_tree.nodes):
         if node.type == 'TEX_IMAGE' and node.image:
-            img = node.image
-            w, h = img.size
-            return img, np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)
+            ends = [l.to_socket.name for l in node.outputs['Color'].links]
+            ends += [l2.to_socket.name for l in node.outputs['Color'].links for o in l.to_node.outputs for l2 in o.links]
+            if socket in ends:
+                img = node.image
+                w, h = img.size
+                return img, np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)
+    return None, None
 
 
 def save_texture(img, px):
@@ -31,57 +36,111 @@ def save_texture(img, px):
     img.pack()
 
 
-def texel_mask(obj, shape, keep, any_corner=False):
-    """The texels covered by the triangles whose three corners pass keep(xyz)."""
-    me = obj.data
+def raster(uv, tri, shape, grow=1.5):
+    """Texel rows, columns and barycentric weights (n x 3) inside UV triangle
+    `tri` (three loop indices), grown by `grow` texels so the chart's border,
+    which filtering also reads, is covered too."""
     h, w = shape
-    co, _ = mesh_arrays(obj)
+    t = uv[tri] * [w, h]
+    lo = np.clip(np.floor(t.min(0) - grow).astype(int), 0, [w - 1, h - 1])
+    hi = np.clip(np.ceil(t.max(0) + grow).astype(int), 0, [w - 1, h - 1])
+    xs, ys = np.meshgrid(np.arange(lo[0], hi[0] + 1) + 0.5, np.arange(lo[1], hi[1] + 1) + 0.5)
+    a, b, c = t
+    d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+    if abs(d) < 1e-9:
+        return None
+    l1 = ((b[1] - c[1]) * (xs - c[0]) + (c[0] - b[0]) * (ys - c[1])) / d
+    l2 = ((c[1] - a[1]) * (xs - c[0]) + (a[0] - c[0]) * (ys - c[1])) / d
+    l3 = 1 - l1 - l2
+    # how far outside, in texels: a barycentric unit is about the triangle's height
+    size = max(np.ptp(t[:, 0]), np.ptp(t[:, 1]), 1)
+    m = np.minimum(np.minimum(l1, l2), l3) >= -grow / size
+    if not m.any():
+        return None
+    bc = np.clip(np.c_[l1[m], l2[m], l3[m]], 0, 1)
+    bc /= bc.sum(1, keepdims=True)
+    return ys[m].astype(int), xs[m].astype(int), bc
+
+
+def soften_seams(obj, eyes=(), zmin=0.6, skip=(), step=0.12, reach=0.035):
+    """Tripo paints a ghost from a few views, and where two views meet on the
+    head their colours (and its normal map) jump: a hard line from the front
+    to the back. Find where the colour jumps from one point to the next on the
+    head (not at the eyes, not in the `skip` boxes), and repaint a band `reach`
+    wide around it with colours that run smoothly from one side to the other."""
+    me = obj.data
+    co, e = mesh_arrays(obj)
+    n = len(co)
+    img, px = texture(obj)
+    nimg, npx = texture(obj, 'Normal')
+    h, w = px.shape[:2]
     uv = np.zeros(len(me.loops) * 2); me.uv_layers.active.data.foreach_get('uv', uv); uv = uv.reshape(-1, 2)
-    mask = np.zeros((h, w), bool)
-    ok = keep(co)
+    lv = np.zeros(len(me.loops), np.int64); me.loops.foreach_get('vertex_index', lv)
+    lc = px[np.clip((uv[:, 1] * h).astype(int), 0, h - 1), np.clip((uv[:, 0] * w).astype(int), 0, w - 1), :3]
+    vc = np.zeros((n, 3))
+    for k in range(3):
+        vc[:, k] = np.bincount(lv, lc[:, k], n) / np.maximum(np.bincount(lv, None, n), 1)
+    # where the colour jumps: along an edge, or between a point's own corners
+    # (a point on the border of two texture pieces painted from two views)
+    seam = np.zeros(n, bool)
+    jump = np.linalg.norm(vc[e[:, 0]] - vc[e[:, 1]], axis=1) > step
+    seam[e[jump].ravel()] = True
+    gap = np.zeros(n); np.maximum.at(gap, lv, np.linalg.norm(lc - vc[lv], axis=1))
+    seam |= gap > step
+    ok = co[:, 2] > zmin
+    for (cx, cz, _), (rx, rz) in eyes:
+        ok &= ~((np.abs(co[:, 0] - cx) < rx * 1.9) & (np.abs(co[:, 2] - cz) < rz * 1.9) & (co[:, 1] < 0))
+    for x0, x1, y0, y1, z0, z1 in skip:
+        ok &= ~((co[:, 0] > x0) & (co[:, 0] < x1) & (co[:, 1] > y0) & (co[:, 1] < y1) & (co[:, 2] > z0) & (co[:, 2] < z1))
+    seam &= ok
+    if not seam.any():
+        print('seams: none')
+        return
+    from mathutils.kdtree import KDTree
+    kd = KDTree(int(seam.sum()))
+    for i, p in enumerate(co[seam]):
+        kd.insert(p, i)
+    kd.balance()
+    d = np.array([kd.find(p)[2] for p in co])
+    band = (d < reach) & ok
+    wt = np.clip((reach - d) / (reach * 0.5), 0, 1)
+    wt = wt * wt * (3 - 2 * wt) * band
+    # colours inside the band: the smoothest fill between its edges (each point
+    # the average of its neighbours, the points outside held as they are)
+    a = np.r_[e[:, 0], e[:, 1]]; b = np.r_[e[:, 1], e[:, 0]]
+    deg = np.maximum(np.bincount(a, None, n), 1)
+    sm = vc.copy()
+    for _ in range(400):
+        avg = np.stack([np.bincount(a, sm[b, k], n) for k in range(3)], 1) / deg[:, None]
+        sm[band] = avg[band]
+    tris = []
     for poly in me.polygons:
-        vs = list(poly.vertices)
-        if not (any if any_corner else all)(ok[v] for v in vs):
+        if wt[list(poly.vertices)].max() > 0:
+            ls = list(poly.loop_indices)
+            tris += [(ls[0], ls[k], ls[k + 1]) for k in range(1, len(ls) - 1)]
+    flat = np.array([0.5, 0.5, 1.0], np.float32)
+    for tri in tris:
+        r = raster(uv, np.array(tri), (h, w))
+        if r is None:
             continue
-        ls = list(poly.loop_indices)
-        for k in range(1, len(ls) - 1):
-            t = uv[[ls[0], ls[k], ls[k + 1]]] * [w, h]
-            lo = np.floor(t.min(0)).astype(int) - 1; hi = np.ceil(t.max(0)).astype(int) + 1
-            lo = np.clip(lo, 0, [w - 1, h - 1]); hi = np.clip(hi, 0, [w - 1, h - 1])
-            xs, ys = np.meshgrid(np.arange(lo[0], hi[0] + 1) + 0.5, np.arange(lo[1], hi[1] + 1) + 0.5)
-            a, b, c = t
-            d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
-            if abs(d) < 1e-12:
-                continue
-            l1 = ((b[1] - c[1]) * (xs - c[0]) + (c[0] - b[0]) * (ys - c[1])) / d
-            l2 = ((c[1] - a[1]) * (xs - c[0]) + (a[0] - c[0]) * (ys - c[1])) / d
-            inside = (l1 >= -0.05) & (l2 >= -0.05) & (1 - l1 - l2 >= -0.05)
-            mask[ys[inside].astype(int), xs[inside].astype(int)] = True
-    return mask
+        ys, xs, bc = r
+        vs = lv[list(tri)]
+        k = (bc @ wt[vs])[:, None]
+        px[ys, xs, :3] = px[ys, xs, :3] * (1 - k) + (bc @ sm[vs]) * k
+        if npx is not None:
+            npx[ys, xs, :3] = npx[ys, xs, :3] * (1 - k) + flat * k
+    save_texture(img, px)
+    if npx is not None:
+        save_texture(nimg, npx)
+    print('seams: softened', int(seam.sum()), 'points,', int(band.sum()), 'in the band,', len(tris), 'triangles')
 
 
-def plane(co, m):
-    """The plane y = a*x + b*z + c best fitting the points m, refitted twice on
-    the points nearest it, so raised letters don't tilt it."""
-    for _ in range(3):
-        A = np.c_[co[m, 0], co[m, 2], np.ones(m.sum())]
-        coef, *_ = np.linalg.lstsq(A, co[m, 1], rcond=None)
-        r = np.abs(np.c_[co[:, 0], co[:, 2], np.ones(len(co))] @ coef - co[:, 1])
-        m = m & (r < np.percentile(r[m], 60))
-    return coef
-
-
-def text(obj, words, x, z, height, colour, coef):
-    """Real, straight letters lying on the plane coef at (x, z), as a mesh in the
-    model's own coordinates (so the app's sway moves them with it)."""
+def text_at(words, at, right, up, height, colour):
+    """Real, straight letters centred at `at`, reading along `right`, standing
+    along `up`, as a mesh in the model's own coordinates."""
     import bpy
-    from mathutils import Matrix, Vector
-    a, b, c = coef
-    n = Vector((-a, 1, -b)).normalized()          # points into the model (+y)
-    right = Vector((1, a, 0)).normalized()
-    up = n.cross(right).normalized() * -1
-    if up.z < 0:
-        up = -up
+    from mathutils import Matrix
+    n = right.cross(up).normalized()   # out of the face, toward the viewer
     cu = bpy.data.curves.new('text', 'FONT')
     cu.body = words
     cu.align_x = cu.align_y = 'CENTER'
@@ -89,9 +148,7 @@ def text(obj, words, x, z, height, colour, coef):
     cu.extrude = 0.0008
     t = bpy.data.objects.new('text-' + words, cu)
     bpy.context.scene.collection.objects.link(t)
-    y = a * x + b * z + c - 0.0016
-    rot = Matrix((right, up, -n)).transposed().to_4x4()
-    t.matrix_world = Matrix.Translation((x, y, z)) @ rot
+    t.matrix_world = Matrix.Translation(at) @ Matrix((right.normalized(), up.normalized(), n)).transposed().to_4x4()
     mat = bpy.data.materials.new('ink-' + words)
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes['Principled BSDF']
@@ -105,33 +162,13 @@ def text(obj, words, x, z, height, colour, coef):
     return t
 
 
-def incorporacion(obj):
-    # The badge: Tripo's "HELLO / I'M GUSTAV" is crooked and its letters raised.
-    # Flatten the card, paint the letters out, write ours ("HOLA", "Soy Gus").
-    co, _ = mesh_arrays(obj)
-    box = (co[:, 0] > 0.035) & (co[:, 0] < 0.195) & (co[:, 2] > 0.28) & (co[:, 2] < 0.39)
-    box &= co[:, 1] < co[box, 1].min() + 0.03
-    coef = plane(co, box)
-    r = np.c_[co[:, 0], co[:, 2], np.ones(len(co))] @ coef - co[:, 1]
-    card = box & (np.abs(r) < 0.007)
-    co[card, 1] = (np.c_[co[:, 0], co[:, 2], np.ones(len(co))] @ coef)[card]
-    obj.data.vertices.foreach_set('co', co.ravel())
-    obj.data.update()
-    print('badge: flattened', int(card.sum()), 'points')
-    within = lambda x0, x1, z0, z1: card & (co[:, 0] > x0) & (co[:, 0] < x1) & (co[:, 2] > z0) & (co[:, 2] < z1)
-    head = within(0.05, 0.183, 0.357, 0.381)
-    name = within(0.09, 0.188, 0.288, 0.353)
-    img, px = texture(obj)
-    mh = texel_mask(obj, px.shape[:2], lambda c: head, any_corner=True)
-    mn = texel_mask(obj, px.shape[:2], lambda c: name, any_corner=True)
-    lum = px[..., :3] @ np.array([0.3, 0.59, 0.11])
-    blue = np.median(px[mh & (lum < np.percentile(lum[mh], 50))][:, :3], axis=0)
-    white = np.median(px[mn & (lum > np.percentile(lum[mn], 60))][:, :3], axis=0)
-    px[mh, :3] = blue
-    px[mn, :3] = white
-    save_texture(img, px)
-    text(obj, 'HOLA', 0.112, 0.368, 0.019, (0.95, 0.96, 1.0), coef)
-    text(obj, 'Soy Gus', 0.139, 0.321, 0.017, (0.06, 0.07, 0.16), coef)
-
-
-FIXES = {'incorporacion': incorporacion}
+# Where to look for the line on the head, per model: above `zmin`, minus the
+# things that sit there (boxes x0, x1, y0, y1, z0, z1). Redes has none: its
+# beret covers the place.
+SEAMS = {
+    'base': {},
+    'secretaria': {'skip': [(0.03, 0.25, 0.0, 0.23, 0.88, 1.01),      # the bun
+                            (-0.4, -0.15, -0.3, 0.3, 0.4, 0.86)]},    # the phone
+    'incorporacion': {'zmin': 0.66, 'skip': [(-0.5, -0.27, -0.3, 0.3, 0.3, 0.9)]},  # the waving hand
+    'finanzas': {'zmin': 0.66},
+}
