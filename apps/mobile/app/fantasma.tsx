@@ -73,7 +73,7 @@ export default function Fantasma() {
   const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string; source?: string; tone?: string }>();
   const [agent, setAgent] = useState<TripoModel>(AGENTS.find((a) => a.id === params.agent)?.id ?? 'base');
   const [source, setSource] = useState<Source>(params.source === 'ours' ? 'ours' : 'tripo');
-  const [tone, setTone] = useState<Tone>(TONES.find((o) => o.id === params.tone)?.id ?? 'original');
+  const [tone, setTone] = useState<Tone>(TONES.find((o) => o.id === params.tone)?.id ?? 'dark');
   const hasOurs = AGENTS.find((a) => a.id === agent)!.ours;
   const tripo = source === 'tripo' || !hasOurs ? agent : null;
   const [look, setLook] = useState<Look>({

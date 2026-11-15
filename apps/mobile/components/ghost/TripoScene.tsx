@@ -75,7 +75,7 @@ function load(model: TripoModel) {
 export function TripoScene({
   spin,
   model,
-  tone = 'original',
+  tone = 'dark',
 }: {
   spin: React.RefObject<SpinState>;
   model: TripoModel;
