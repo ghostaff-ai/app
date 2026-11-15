@@ -45,7 +45,7 @@ ours to use; one coloured model costs 55 credits). Each ghost and each prop is m
 from one picture, exported as GLB and dropped in the Ghostaff Drive; the originals
 (about 1.2 million vertices, 50-70 MB each) stay there, in `ghosts/tripo/`.
 `design/blender/tripo.py` makes the light copies the app loads, in `design/tripo/`:
-turned to face the front, 1 unit tall standing on the ground, about 60,000
+turned to face the front, 1 unit tall standing on the ground, about 150,000
 triangles (60,000 left the collar edges ragged), 2048 px textures, about 5 MB each.
 
 ```bash
