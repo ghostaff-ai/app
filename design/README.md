@@ -56,3 +56,15 @@ blender -b -P design/blender/tripo.py -- ~/Downloads/tripo/models
 The app's `/fantasma` screen shows them with a Tripo / Nuestro switch
 (`TripoScene.tsx`). A Tripo model is one solid piece: it spins, floats and hops as a
 whole and its hem ripples (in the shader), but its arms and eyes don't move on their own. A "Tono" switch tries it darker (A as Tripo made it, B and C darker).
+
+### Where this is going (Álvaro, 2026-11-15: "the best option for long term")
+
+Every agent is assembled from the same parts instead of being one Tripo model each:
+Tripo's bare base ghost, cut by Tripo's Segment tool into body and two arms (holes
+closed with Fill Parts, Quick Cap), plus each agent's objects, each made alone by
+Tripo from a Gemini picture of just that object (`concepts/agents-props-round1/`,
+drawn with no text). Blender puts them together per agent: objects held in a hand
+hang from that arm, so they move with it; worn ones (collar, scarf, jacket) sit on
+the body. Labels and digits (calculator keys, badge, pocket plate) are added in
+Blender as real text, since Tripo paints letters crooked. The arms then swing and
+the eyes blink in the app as on our own ghost.
