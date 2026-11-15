@@ -9,16 +9,16 @@ textures, 50-70 MB a file. The originals stay in the Ghostaff Drive
 
 For each <name>.glb in that folder it writes design/tripo/<name>.glb: turned to
 face the front (Tripo's face +X), standing on the ground, 1 unit tall, centred,
-cut to about TARGET triangles, textures shrunk to TEX px. And a front render in
+cut to about TARGET triangles (60,000 left the collar edges ragged), textures shrunk to TEX px. And a front render in
 design/tripo/renders/.
 """
 import bpy, bmesh, sys, os, glob, math
 from mathutils import Vector, Matrix
 
-TARGET = 60000   # triangles
-TEX = 1024
+TARGET = int(os.environ.get('TRIPO_TRIS', 150000))   # triangles
+TEX = int(os.environ.get('TRIPO_TEX', 2048))
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, '..', 'tripo')
+OUT = os.environ.get('TRIPO_OUT', os.path.join(HERE, '..', 'tripo'))
 
 def bounds(objs):
     pts = [o.matrix_world @ Vector(c) for o in objs for c in o.bound_box]

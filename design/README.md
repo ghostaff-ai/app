@@ -46,7 +46,7 @@ from one picture, exported as GLB and dropped in the Ghostaff Drive; the origina
 (about 1.2 million vertices, 50-70 MB each) stay there, in `ghosts/tripo/`.
 `design/blender/tripo.py` makes the light copies the app loads, in `design/tripo/`:
 turned to face the front, 1 unit tall standing on the ground, about 60,000
-triangles, 1024 px textures, about 1.6 MB each.
+triangles (60,000 left the collar edges ragged), 2048 px textures, about 5 MB each.
 
 ```bash
 rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/models
@@ -55,4 +55,4 @@ blender -b -P design/blender/tripo.py -- ~/Downloads/tripo/models
 
 The app's `/fantasma` screen shows them with a Tripo / Nuestro switch
 (`TripoScene.tsx`). A Tripo model is one solid piece: it spins, floats and hops as a
-whole, but its arms and eyes don't move on their own.
+whole and its hem ripples (in the shader), but its arms and eyes don't move on their own. A "Tono" switch tries it darker (A as Tripo made it, B and C darker).

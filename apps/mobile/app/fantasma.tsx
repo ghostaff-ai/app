@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { type Agent, DEFAULT_LOOK, type Eyes, type Look, type Surface } from '@/components/ghost/GhostScene';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
-import type { TripoModel } from '@/components/ghost/TripoScene';
+import type { Tone, TripoModel } from '@/components/ghost/TripoScene';
 
 // Spike: a live 3D ghost, open without signing in at /fantasma.
 
@@ -18,6 +18,11 @@ const AGENTS: { id: TripoModel; label: string; ours: boolean }[] = [
   { id: 'finanzas', label: 'Finanzas', ours: false },
 ];
 type Source = 'tripo' | 'ours';
+const TONES: { id: Tone; label: string }[] = [
+  { id: 'original', label: 'A' },
+  { id: 'dark', label: 'B' },
+  { id: 'darker', label: 'C' },
+];
 const SOURCES: { id: Source; label: string }[] = [
   { id: 'tripo', label: 'Tripo' },
   { id: 'ours', label: 'Nuestro' },
@@ -65,9 +70,10 @@ function Chips<T>({
 
 export default function Fantasma() {
   const [focused, setFocused] = useState(true);
-  const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string; source?: string }>();
+  const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string; source?: string; tone?: string }>();
   const [agent, setAgent] = useState<TripoModel>(AGENTS.find((a) => a.id === params.agent)?.id ?? 'base');
   const [source, setSource] = useState<Source>(params.source === 'ours' ? 'ours' : 'tripo');
+  const [tone, setTone] = useState<Tone>(TONES.find((o) => o.id === params.tone)?.id ?? 'original');
   const hasOurs = AGENTS.find((a) => a.id === agent)!.ours;
   const tripo = source === 'tripo' || !hasOurs ? agent : null;
   const [look, setLook] = useState<Look>({
@@ -94,7 +100,7 @@ export default function Fantasma() {
         ))}
       </View>
       <View className="flex-1">
-        <GhostViewer active={focused} agent={agent as Agent} look={look} tripo={tripo} />
+        <GhostViewer active={focused} agent={agent as Agent} look={look} tripo={tripo} tone={tone} />
       </View>
       <View className="gap-2 pb-3">
         {hasOurs && (
@@ -111,6 +117,7 @@ export default function Fantasma() {
             ))}
           </View>
         )}
+        {tripo && <Chips title="Tono" options={TONES} value={tone} onChange={setTone} />}
         {!tripo && (
           <>
             <Chips title="Superficie" options={SURFACES} value={look.surface} onChange={(surface) => setLook({ ...look, surface })} />

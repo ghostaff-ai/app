@@ -1,13 +1,43 @@
 import { useFrame } from '@react-three/fiber';
 import { Asset } from 'expo-asset';
 import { useEffect, useRef, useState } from 'react';
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { STAGE, type SpinState, StudioLight } from './GhostScene';
 
 // A ghost made by Tripo from one of Álvaro's pictures (design/tripo/, made light
 // by design/blender/tripo.py): one solid model with its own colours, so it
-// spins, floats and hops as a whole; arms and eyes do not move on their own.
+// spins, floats and hops as a whole, and the hem ripples (in the shader, like
+// ours); arms and eyes do not move on their own yet.
+
+// Tone: Tripo's colours as they come, or darker. Most of the colour is the
+// studio room reflected, so a tone dims the reflections as well as the paint.
+export type Tone = 'original' | 'dark' | 'darker';
+const TONES: Record<Tone, { paint: number; room: number; lights: number }> = {
+  original: { paint: 1, room: 1, lights: 1 },
+  dark: { paint: 0.6, room: 0.45, lights: 0.7 },
+  darker: { paint: 0.4, room: 0.25, lights: 0.5 },
+};
+
+// The hem: below HEM (the model is 1 unit tall) a wave travels round the skirt,
+// growing to the edge. One time uniform shared by every Tripo material.
+const HEM = 0.32;
+const time = { value: 0 };
+function ripple(material: THREE.MeshStandardMaterial) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = time;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;')
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        float w = pow(clamp((${HEM.toFixed(2)} - position.y) / ${HEM.toFixed(2)}, 0.0, 1.0), 2.2);
+        float a = atan(position.z, position.x);
+        transformed.y += 0.017 * sin(a * 6.0 + uTime * 2.4) * w;
+        transformed.xz *= 1.0 + 0.025 * sin(a * 6.0 + uTime * 2.4 + 1.2) * w;`,
+      );
+  };
+}
 
 export type TripoModel = 'base' | 'secretaria' | 'redes' | 'incorporacion' | 'finanzas';
 
@@ -31,6 +61,9 @@ function load(model: TripoModel) {
       const asset = Asset.fromModule(FILES[model]);
       await asset.downloadAsync();
       const gltf = await new GLTFLoader().loadAsync(asset.localUri ?? asset.uri);
+      gltf.scene.traverse((o) => {
+        if (o instanceof THREE.Mesh) ripple(o.material as THREE.MeshStandardMaterial);
+      });
       return gltf.scene;
     })();
     cache.set(model, p);
@@ -39,7 +72,15 @@ function load(model: TripoModel) {
   return p;
 }
 
-export function TripoScene({ spin, model }: { spin: React.RefObject<SpinState>; model: TripoModel }) {
+export function TripoScene({
+  spin,
+  model,
+  tone = 'original',
+}: {
+  spin: React.RefObject<SpinState>;
+  model: TripoModel;
+  tone?: Tone;
+}) {
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const shadow = useRef<THREE.Mesh>(null);
@@ -57,8 +98,18 @@ export function TripoScene({ spin, model }: { spin: React.RefObject<SpinState>; 
     };
   }, [model]);
 
+  useEffect(() => {
+    scene?.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return;
+      const m = o.material as THREE.MeshStandardMaterial;
+      m.color.setScalar(TONES[tone].paint);
+      m.envMapIntensity = TONES[tone].room;
+    });
+  }, [scene, tone]);
+
   useFrame((state, delta) => {
     const t = state.clock.elapsedTime;
+    time.value = t;
     const s = spin.current;
     if (!s || !root.current || !body.current || !shadow.current) return;
     if (!s.dragging) {
@@ -92,8 +143,8 @@ export function TripoScene({ spin, model }: { spin: React.RefObject<SpinState>; 
     <>
       <color attach="background" args={[STAGE]} />
       <StudioLight />
-      <hemisphereLight args={['#FFFFFF', '#C9C2E8', 0.6]} />
-      <directionalLight position={[-2.5, 4, 3]} intensity={1.2} />
+      <hemisphereLight args={['#FFFFFF', '#C9C2E8', 0.6 * TONES[tone].lights]} />
+      <directionalLight position={[-2.5, 4, 3]} intensity={1.2 * TONES[tone].lights} />
       <mesh ref={shadow} rotation-x={-Math.PI / 2} position-y={FLOOR}>
         <circleGeometry args={[0.95, 48]} />
         <meshBasicMaterial color="#5B4A9A" transparent opacity={0.14} depthWrite={false} />
