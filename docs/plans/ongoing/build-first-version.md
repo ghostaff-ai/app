@@ -16,7 +16,7 @@ Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/b
 
 - **App:** Expo + TypeScript, one codebase for iPhone, Android and web. Reuse `cultuvilla/app`'s patterns and store release pipeline.
 - **Database, login, file store:** Supabase, EU region (Frankfurt). Postgres with row-level security so one organisation's rows are never visible to another; metric readings stored with their date and source.
-- **Engine and vault:** a new Google Cloud project under ghostaff.ai@gmail.com, region `europe-west1`, separate from Órdago's. Agents run on Cloud Run Jobs as `ordago-app/agents` does today; keys in Secret Manager.
+- **Engine and vault:** a new Google Cloud project under ghostaff.ai@gmail.com, region `europe-west1`, separate from Órdago's. Agents run on Cloud Run Jobs as `ghostaff-ai/agents` (moved from `ordago-app` 2026-11-15) does today; keys in Secret Manager.
 - **The record:** Forgejo on a small server in that project, one repo per organisation, with an optional live copy to the organisation's Drive or GitHub.
 
 ## First slice

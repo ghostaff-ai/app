@@ -12,7 +12,7 @@ This repo is the product code: the app (iPhone, Android and web from one codebas
 
 **The product decisions live outside this repo**, in the private Órdago business repo: [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md) (what we build and why) and [`ghostaff.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff.md) (the company). Until Ghostaff is a company of its own, that stays the source of truth for the *why*; this repo holds the *how*. Read it before planning anything here.
 
-**Álvaro decides alone what gets built here and when** (2026-11-12). Jaime is a co-founder, not a gate: never hold work waiting for his review. Only things that are his too (moving `ordago-app/agents`, using his subscription) wait for him.
+**Álvaro decides alone what gets built here and when** (2026-11-12). Jaime is a co-founder, not a gate: never hold work waiting for his review. Only things that are his too (using his subscription) wait for him.
 
 ## Sibling repos
 
@@ -22,7 +22,7 @@ Checked out side by side under `~/githubs/ghostaff-ai/`:
 git clone git@github.com:ghostaff-ai/app.git ~/githubs/ghostaff-ai/app
 ```
 
-- `ordago-app/agents` is today's agent engine (Claude Code on Cloud Run Jobs). It moves into this org once Jaime agrees; until then, read it, don't copy from it blindly.
+- `ghostaff-ai/agents` is today's agent engine (Claude Code on Cloud Run Jobs), moved here from `ordago-app` on 2026-11-15 with Jaime's OK. It still runs Órdago's agents (`proyectos/ordago/`) unchanged; whether this repo's engine replaces it or grows from it is Álvaro's call. Read it, don't copy from it blindly. Clone it beside this one: `git clone git@github.com:ghostaff-ai/agents.git ~/githubs/ghostaff-ai/agents`.
 - `cultuvilla/app` is the reference for an Expo app with the store release pipeline already working. Reuse its patterns.
 
 Start a session in the repo the work belongs to, never in the parent folder.
