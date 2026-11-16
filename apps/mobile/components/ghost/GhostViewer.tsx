@@ -17,7 +17,9 @@ export function GhostViewer({
   tripo = null,
   tone,
   swapped,
+  zoom = 1,
 }: {
+  zoom?: number;
   active?: boolean;
   agent?: Agent;
   look?: Look;
@@ -60,7 +62,7 @@ export function GhostViewer({
     <View style={{ flex: 1 }}>
       <GhostCanvas
         frameloop={active ? 'always' : 'never'}
-        camera={{ position: [0, 0.15, 6.2], fov: 40 }}
+        camera={{ position: [0, 0.15, 6.2 / zoom], fov: 40 }}
       >
         {tripo ? <TripoScene spin={spin} model={tripo} tone={tone} swapped={swapped} /> : <GhostScene spin={spin} agent={agent} look={look} />}
       </GhostCanvas>
