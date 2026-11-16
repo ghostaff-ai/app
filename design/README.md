@@ -90,6 +90,18 @@ Taller page's "Arreglo de tus marcas" switch. Álvaro picked **Más detalle**
 (`detail`, now the default): what he saw as rough was our cutting of triangles
 on the collar and round the eyes, so those keep their full detail.
 
+**Lighter copies** (`design/blender/light.py`, 2026-11-16): Tripo's ghosts are a
+dense, even mesh with the detail in the shape; an artist would use a simple shell
+and put the detail in pictures. `light.py` does that to a built model: the body
+cut evenly to N triangles, unwrapped afresh, and the full model's colour, relief
+and shine baked onto it (the swapped objects cut to a quarter). Incorporación goes
+from 820,000 triangles to 25,000 or 60,000; the file only from 2.2 to about 1.3 MB,
+since the pictures are most of it then. On the Taller page's "Peso" switch for him to judge.
+
+```bash
+blender -b -P design/blender/light.py -- design/tripo/incorporacion.glb <out.glb> 25000
+```
+
 **Visual tries go to Álvaro, not the bin** (2026-11-16): every attempt at a visual
 fix is put in front of him to compare, the ones that look worse included; say
 which you'd pick and why, and let him decide.
