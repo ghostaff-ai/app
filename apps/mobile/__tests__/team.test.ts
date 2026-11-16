@@ -1,4 +1,5 @@
-import { GHOSTS, TEAM, ghostFor } from '@/lib/team';
+import { AGENT_GHOSTS } from '@ghostaff/shared';
+import { GHOSTS, GHOST_ORDER, ghostFor } from '@/lib/team';
 
 describe('ghostFor', () => {
   it("draws Órdago's agents as the ghost of their job", () => {
@@ -16,10 +17,9 @@ describe('ghostFor', () => {
   });
 });
 
-describe('TEAM', () => {
-  it('has every agent drawn, and each once', () => {
-    const agents = TEAM.flatMap((d) => d.agents);
-    expect(new Set(agents).size).toBe(agents.length);
-    for (const a of agents) expect(GHOSTS[a]).toBeTruthy();
+describe('GHOST_ORDER', () => {
+  it('offers every ghost the database accepts, each once', () => {
+    expect([...GHOST_ORDER].sort()).toEqual([...AGENT_GHOSTS].sort());
+    for (const g of GHOST_ORDER) expect(GHOSTS[g]).toBeTruthy();
   });
 });

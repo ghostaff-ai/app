@@ -115,3 +115,28 @@ export type ConnectAiInput =
 
 /** EU regions where Vertex AI serves Claude. The first is the default. */
 export const VERTEX_EU_REGIONS = ['europe-west1', 'europe-west4'] as const;
+
+// Agents: an organisation's team, by department (supabase/migrations/
+// 20261117000000_agents.sql). For now only how the app shows them.
+
+export const DEPARTMENTS = ['direccion', 'finanzas', 'marketing'] as const;
+export type Department = (typeof DEPARTMENTS)[number];
+
+export const AGENT_GHOSTS = ['base', 'secretaria', 'incorporacion', 'finanzas', 'redes', 'productor'] as const;
+export type AgentGhost = (typeof AGENT_GHOSTS)[number];
+
+export interface Agent {
+  id: string;
+  orgId: string;
+  name: string;
+  ghost: AgentGhost;
+  department: Department;
+  createdAt: string;
+}
+
+export interface NewAgent {
+  orgId: string;
+  name: string;
+  ghost: AgentGhost;
+  department: Department;
+}

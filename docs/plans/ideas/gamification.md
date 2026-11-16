@@ -59,7 +59,7 @@ After testing pictures he made in Gemini (kept on `spike/ghost-3d` in `design/co
 
 The six ghosts were made in Tripo from his pictures and cleaned up in Blender (the pipeline and the Taller page to compare tries live on `spike/ghost-3d`, `design/`). He picked them at full detail (not the baked light copies), Tripo's own colours, and only breathing added to the idle (not head or hand moves). They are in the app as `apps/mobile/assets/ghosts/`:
 
-- **Equipo** (link on the inbox): the three departments and their agents as pictures; tap one to see it live.
+- **Equipo** (link on the inbox): the three departments and the organisation's agents as pictures; tap one to see it live. A department with none says «Vacante». An owner adds agents («Nuevo agente»: pick a ghost; name and department follow, both changeable) and removes them from the agent's page. An agent is a row in `agents` (name, ghost, department) and does no work yet (Álvaro, 2026-11-17).
 - **Each decision** shows the ghost of the agent that asks: a picture on the inbox card, live on top of the decision. Órdago's agents map to the ghost of their job (`lib/team`); any other gets the plain ghost.
 - Live 3D needs `expo-gl` and `three`: a new store build, not just an update. Only one live ghost is drawn at a time; the models are 0.9 to 2.7 MB each (about 10 MB in all).
 

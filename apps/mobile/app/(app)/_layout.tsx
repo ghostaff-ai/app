@@ -59,6 +59,7 @@ export default function AppLayout() {
         <Stack.Screen name="decision/[id]" options={{ title: 'Decisión' }} />
         <Stack.Screen name="equipo" options={{ title: 'Equipo' }} />
         <Stack.Screen name="agente/[id]" options={{ title: '' }} />
+        <Stack.Screen name="nuevo-agente" options={{ title: 'Nuevo agente', presentation: 'modal' }} />
         <Stack.Screen name="organizaciones" options={{ title: 'Organizaciones', presentation: 'modal' }} />
         <Stack.Screen name="invitar" options={{ title: 'Invitar', presentation: 'modal' }} />
         <Stack.Screen name="conexiones" options={{ title: 'Conexiones', presentation: 'modal' }} />
