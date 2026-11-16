@@ -53,7 +53,7 @@ spikes and the eye rims ragged; those models end up at 200,000 to 520,000 triang
 Where Tripo's views of a ghost meet on its head, the colour (and its normal map) jumped
 in a hard line from front to back; `touchup.py` finds that jump and repaints a band
 about 3.5 cm wide round it with colours that run smoothly across (`SEAMS`: where to
-look per model, minus the bun and the hands; Redes' beret covers the place).
+look per model, minus the bun and the hands, above Productor's headphones; Redes' beret covers the place).
 The objects painted into a whole ghost come out soft, with crooked letters, so
 `swap.py` also makes a second copy, `<name>-swap.glb`, with Tripo's own model of each
 object (the lone ones assemble.py uses, in the same Drive folder) in its place: same
@@ -85,12 +85,13 @@ the app reads; a new model needs one run of it. A "Tono" switch tries it darker 
 Tripo made it, B and C darker).
 
 ```bash
-blender -b -P design/blender/eyes.py -- base,secretaria,redes,incorporacion,finanzas
+blender -b -P design/blender/eyes.py -- base,secretaria,redes,incorporacion,finanzas,productor
 ```
 
 Since 2026-11-15 (Álvaro: the assembled ones "don't look that good") the app shows
-the whole models again; only Productor, which has no whole model yet, is the
-assembled one. The arms of a whole model don't move on their own.
+the whole models again, all six (Productor's whole model came on 2026-11-16; Tripo
+made it looking along -Y, so `TURN` in `tripo.py` turns it to the front). The arms of
+a whole model don't move on their own.
 
 ### Where this is going (Álvaro, 2026-11-15: "the best option for long term")
 

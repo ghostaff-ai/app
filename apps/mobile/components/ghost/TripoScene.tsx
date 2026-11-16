@@ -97,15 +97,15 @@ function alive(material: THREE.MeshStandardMaterial, eyes: Eye[], blink: { value
 export type TripoModel = 'base' | 'secretaria' | 'redes' | 'incorporacion' | 'finanzas' | 'productor';
 
 // Each agent as Tripo made it, one whole model (design/tripo/<agent>.glb).
-// Productor has no whole model yet, so it is the one put together from Tripo's
-// parts by design/blender/assemble.py (nodes arm_L and arm_R turn at the shoulder).
+// `whole: false` would be one put together from Tripo's parts by
+// design/blender/assemble.py (nodes arm_L and arm_R turn at the shoulder); none is now.
 const FILES: Record<TripoModel, { file: number; whole: boolean }> = {
   base: { file: require('../../../../design/tripo/base.glb'), whole: true },
   secretaria: { file: require('../../../../design/tripo/secretaria.glb'), whole: true },
   redes: { file: require('../../../../design/tripo/redes.glb'), whole: true },
   incorporacion: { file: require('../../../../design/tripo/incorporacion.glb'), whole: true },
   finanzas: { file: require('../../../../design/tripo/finanzas.glb'), whole: true },
-  productor: { file: require('../../../../design/tripo/agents/productor.glb'), whole: false },
+  productor: { file: require('../../../../design/tripo/productor.glb'), whole: true },
 };
 // The same ghosts with Tripo's lone models of their objects in place of the
 // ones painted in (design/blender/swap.py), to compare.

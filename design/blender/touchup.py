@@ -192,4 +192,5 @@ SEAMS = {
                             (-0.4, -0.15, -0.3, 0.3, 0.4, 0.86)]},    # the phone
     'incorporacion': {'zmin': 0.66, 'skip': [(-0.5, -0.27, -0.3, 0.3, 0.3, 0.9)]},  # the waving hand
     'finanzas': {'zmin': 0.66},
+    'productor': {'zmin': 0.68},   # below, the headphones' band
 }

@@ -40,6 +40,10 @@ KEEP = {
     'finanzas': [(-0.32, 0.32, 0.46, 0.7)],
 }
 
+# Tripo's ghosts look along +X; these few came out looking another way (degrees
+# to turn them further, about z, so they face the front too).
+TURN = {'productor': 90}
+
 # The whole ghosts in the folder; anything else there is a lone object.
 GHOSTS = {'base', 'secretaria', 'redes', 'incorporacion', 'finanzas', 'productor'}
 
@@ -106,7 +110,7 @@ def run(src):
         bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
         # Face the front: Tripo's ghosts look along +X, Blender's front is -Y.
         # (Rotate the mesh itself: the importer leaves objects in quaternion mode.)
-        obj.data.transform(Matrix.Rotation(-math.pi / 2, 4, 'Z'))
+        obj.data.transform(Matrix.Rotation(math.radians(TURN.get(name, 0)) - math.pi / 2, 4, 'Z'))
         lo, hi = bounds([obj])
         s = 1.0 / (hi.z - lo.z)
         obj.data.transform(Matrix.Scale(s, 4) @ Matrix.Translation(-Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z))))
