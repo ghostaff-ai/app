@@ -65,6 +65,20 @@ over in the body's colours round it (Tripo's mesh is in loose pieces, so "round 
 found by distance). Real letters go on top ("HOLA / Soy Gus", "1.250,00",
 "FINANZAS"). Done for Incorporación and Finanzas (`SWAPS`); the app's "Objetos" switch
 shows either copy. The ties and collars stay Tripo's.
+
+Where each new object sits can also be set by hand (Álvaro, 2026-11-16) on the
+placing page, a Claude artifact (https://claude.ai/artifact/So36Lc9dohc8gz2i7JDgin):
+each ghost as Tripo made it with the new objects where `swap.py` puts them, to move,
+turn and size, plus two boxes drawn from the front: fingers that stay in front, and
+more of the old object to hide. `placing.py` makes its files (the page serves no
+`.glb`, so each model goes as a script holding it in base64); what is saved there is
+fetched as JSON and turned into `design/blender/place.json` by `place_from_page.py`,
+which `swap.py` reads before its own guess.
+
+```bash
+blender -b -P design/blender/placing.py -- ~/Downloads/tripo/originals <out>
+blender -b -P design/blender/place_from_page.py -- <folder of saved placements>
+```
 Geometry is Draco-compressed (Blender's own encoder; the app decodes it with three.js's decoder in `apps/mobile/public/draco/`), 0.9 to 2.3 MB a model.
 
 ```bash

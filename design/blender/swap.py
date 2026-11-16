@@ -10,8 +10,10 @@ the new: a held or thin one is pushed back inside the new one; a worn one with
 another outline is pressed flat into the body and painted in the body's colours.
 
 Used by tripo.py through SWAPS, on the light model (1 tall, facing -y, z up).
+Where each new object goes is measured, unless Álvaro placed it by hand on the
+placing page (placing.py makes its files): then place.json says, and wins.
 """
-import os, math
+import os, math, json
 import numpy as np
 import bpy
 from mathutils import Matrix, Vector
@@ -43,6 +45,16 @@ SWAPS = {
 
 TURN = Matrix.Rotation(-math.pi / 2, 4, 'Z')   # Tripo's lone objects look along +x
 TEX = 1024
+
+# Placed by hand (place.json, from the placing page), per ghost and object: the
+# new one's middle (`at`), its axes (`right`, `back`, `up`) and size (`size`:
+# width, depth, height), and boxes seen from the front (x0, x1, z0, z1) of what
+# stays in front of it (`keep`: fingers) and what else goes (`also`).
+PLACE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'place.json')
+PLACE = json.load(open(PLACE_FILE)) if os.path.exists(PLACE_FILE) else {}
+
+# Where swap() put each new object, per ghost: (middle, axes, size), for placing.py.
+PLACED = {}
 
 
 def front_plane(co, m, tries=400, tol=0.003, seed=1):
@@ -120,6 +132,24 @@ def old_object(co, spec):
              (np.abs(s @ up - (lo[1] + hi[1]) / 2) < (hi[1] - lo[1]) / 2)
     lead = float(np.clip(-np.percentile(s[inside] @ n, spec.get('cover', 15)), 0, 0.012))
     return centre, right, up, n, hi - lo, lead
+
+
+def where(co, spec, margin):
+    """The new one's front-face middle, axes (right, up, back), the old face's
+    width and height, the new one's width and height, how far it is lifted
+    and how thick it is."""
+    if 'place' in spec:
+        p = spec['place']
+        right, back, up = (np.array(p[k], float) for k in ('right', 'back', 'up'))
+        W, T, H = p['size']
+        centre = np.array(p['at'], float) - back * (T / 2 - margin)
+        return centre, right, up, back, W - 2 * margin, H - 2 * margin, W, H, 0.0, T - margin
+    centre, right, up, back, (w, h), lead = old_object(co, spec)
+    # the new one's size and place: the old face and a margin round it; the
+    # lone one may carry more (a pocket's pen and calculator stick out above
+    # it): `grow` and `lift` make room for that, as fractions of the old face
+    gx, gz = spec.get('grow', (1, 1))
+    return centre, right, up, back, w, h, (w + 2 * margin) * gx, (h + 2 * margin) * gz, spec.get('lift', 0) * h, spec['thick']
 
 
 def load(src, spec):
@@ -222,15 +252,11 @@ def swap(obj, name, src, margin=0.004):
     """Every object of SWAPS[name] in place of its old self in `obj`: the old
     one is flattened out of sight first, so only the new one shows."""
     for spec in SWAPS.get(name, []):
+        hand_placed = PLACE.get(name, {}).get(spec['prop'])
+        if hand_placed:
+            spec = {**spec, 'place': hand_placed, **{k: hand_placed[k] for k in ('keep', 'also') if hand_placed.get(k)}}
         co, e = touchup.mesh_arrays(obj)
-        centre, right, up, back, (w, h), lead = old_object(co, spec)
-        # the new one's size and place: the old face and a margin round it; the
-        # lone one may carry more (a pocket's pen and calculator stick out above
-        # it): `grow` and `lift` make room for that, as fractions of the old face
-        gx, gz = spec.get('grow', (1, 1))
-        W, H = (w + 2 * margin) * gx, (h + 2 * margin) * gz
-        lift = spec.get('lift', 0) * h
-        t = spec['thick']
+        centre, right, up, back, w, h, W, H, lift, t = where(co, spec, margin)
         s = co - centre
         u, v, d = s @ right, (s @ up), s @ back
         if 'press' not in spec:
@@ -243,8 +269,14 @@ def swap(obj, name, src, margin=0.004):
             u0, u1, v0, v1 = spec.get('hand', (0, 0, 0, 0))
             fu, fv = u / w + 0.5, v / h + 0.5
             hand = (fu > u0) & (fu < u1) & (fv > v0) & (fv < v1) & (d < -margin)
+            if spec.get('keep'):   # the same, as a box seen from the front
+                x0, x1, z0, z1 = spec['keep']
+                hand |= (co[:, 0] > x0) & (co[:, 0] < x1) & (co[:, 2] > z0) & (co[:, 2] < z1) & (d < -margin)
             mid = (t - margin) / 2
             flat = inner & ~hand & (d > -0.07) & (d < mid)
+            if spec.get('also'):   # more of it, outside its outline, pushed back too
+                x0, x1, z0, z1 = spec['also']
+                flat |= (co[:, 0] > x0) & (co[:, 0] < x1) & (co[:, 2] > z0) & (co[:, 2] < z1) & ~hand & (d > -0.07) & (d < mid)
             co[flat] += np.outer(mid - d[flat], back)
             print('swap: squashed', int(flat.sum()), 'points of the old', spec['prop'], 'inside the new one')
         else:
@@ -337,6 +369,7 @@ def swap(obj, name, src, margin=0.004):
         at = Vector(centre) + Vector(back) * ((t + margin) / 2 - margin)
         R = Matrix((right, back, up)).transposed().to_4x4()   # x -> right, y -> back, z -> up
         p.data.transform(Matrix.Translation(at) @ R @ S)
+        PLACED.setdefault(name, {})[spec['prop']] = (at.copy(), R.copy(), (W, t + margin, H))
         print('swap:', spec['prop'], 'at', [round(x, 3) for x in centre], 'size', round(w, 3), round(h, 3),
               'turned', round(math.degrees(math.atan2(right[2], right[0])), 1), 'deg')
         bpy.context.view_layer.update()
