@@ -12,7 +12,9 @@ import { STAGE, type SpinState, StudioLight } from './GhostScene';
 // Being one piece, it comes alive as a whole, all in the shader: it sways like
 // jelly (the top more than the hem, so what it holds sways with it), the hem
 // ripples, it squashes and stretches as it hops, and its painted eyes blink
-// (design/blender/eyes.py finds them in the texture).
+// (design/blender/eyes.py finds them in the texture). Its chest also
+// swells and settles as it breathes (Álvaro's pick on the Taller page,
+// 2026-11-16, over moving the head or the hands).
 
 // Tone: Tripo's colours as they come, or darker. Most of the colour is the
 // studio room reflected, so a tone dims the reflections as well as the paint.
@@ -28,6 +30,8 @@ const TONES: Record<Tone, { paint: number; room: number; lights: number }> = {
 // One time uniform shared by every Tripo material; each model has its own blink.
 const HEM = 0.32;
 const time = { value: 0 };
+// The chest's swell, shared by every Tripo material and set each frame.
+const breath = { value: 0 };
 const DARK = 0.03; // a texel darker than this (linear) inside an eye's box is the eye
 
 type Eye = { center: [number, number, number]; radius: [number, number]; lid: [number, number, number] };
@@ -43,11 +47,24 @@ function alive(material: THREE.MeshStandardMaterial, eyes: Eye[], blink: { value
     shader.uniforms.uEyeC = { value: [v3(a, 'center'), v3(b, 'center')] };
     shader.uniforms.uEyeR = { value: [new THREE.Vector2(...(a?.radius ?? [0, 0])), new THREE.Vector2(...(b?.radius ?? [0, 0]))] };
     shader.uniforms.uLid = { value: [v3(a, 'lid'), v3(b, 'lid')] };
+    shader.uniforms.uBreath = breath;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying vec3 vObj;')
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uTime;
+        varying vec3 vObj;
+        uniform float uBreath;`,
+      )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
+        ${
+          sway
+            ? `float bw = smoothstep(0.15, 0.4, position.y) * (1.0 - smoothstep(0.55, 0.8, position.y));
+        transformed.xz *= 1.0 + uBreath * bw;`
+            : ''
+        }
         vObj = position;
         float w = pow(clamp((${HEM.toFixed(2)} - position.y) / ${HEM.toFixed(2)}, 0.0, 1.0), 2.2);
         float a = atan(position.z, position.x);
@@ -152,13 +169,30 @@ function load(model: TripoModel, swapped: boolean) {
       const asset = Asset.fromModule(file);
       await asset.downloadAsync();
       const gltf = await loader.loadAsync(asset.localUri ?? asset.uri);
+      if (!whole) {
+        gltf.scene.traverse((o) => {
+          // An assembled model ripples its body only.
+          if (o instanceof THREE.Mesh && o.name === 'body') alive(o.material as THREE.MeshStandardMaterial, [], blinkOf(model), false);
+        });
+        return gltf.scene;
+      }
+      // A whole model sways, blinks and breathes. Every mesh is put in the model's
+      // own space first, so the chest swells the same on the body and what is on it.
+      gltf.scene.updateMatrixWorld(true);
+      const meshes: THREE.Mesh[] = [];
       gltf.scene.traverse((o) => {
-        // A whole model sways and blinks; an assembled one ripples its body only.
-        if (!(o instanceof THREE.Mesh)) return;
-        if (whole) alive(o.material as THREE.MeshStandardMaterial, EYES[model] ?? [], blinkOf(model), true);
-        else if (o.name === 'body') alive(o.material as THREE.MeshStandardMaterial, [], blinkOf(model), false);
+        if (o instanceof THREE.Mesh) meshes.push(o);
       });
-      return gltf.scene;
+      const group = new THREE.Group();
+      for (const o of meshes) {
+        o.geometry.applyMatrix4(o.matrixWorld);
+        o.position.set(0, 0, 0);
+        o.quaternion.identity();
+        o.scale.set(1, 1, 1);
+        group.add(o);
+        alive(o.material as THREE.MeshStandardMaterial, EYES[model] ?? [], blinkOf(model), true);
+      }
+      return group;
     })();
     cache.set(key, p);
     p.catch(() => cache.delete(key));
@@ -258,6 +292,8 @@ export function TripoScene({
     }
     const q = (t - blinkAt.current) / 0.18;
     blinkOf(model).value = q >= 0 && q < 1 ? Math.sin(Math.PI * q) : 0;
+    // The chest breathes.
+    breath.value = 0.022 * Math.sin(t * 1.5);
     if (stretch.current) stretch.current.scale.set(1 - squash * 0.5, 1 + squash, 1 - squash * 0.5);
     const float = Math.sin(t * 1.6) * 0.08;
     root.current.rotation.y = s.yaw;

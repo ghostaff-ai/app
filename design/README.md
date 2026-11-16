@@ -102,8 +102,8 @@ since the pictures are most of it then. On the Taller page's "Peso" switch for h
 the head (looks round, nods, tilts) and the hands (up and down, or a wave every
 6 s, with what they hold moving whole) and swells the chest, all in the vertex
 shader with no rig: the hands are found as the body's farthest points to each side
-between hem and collar, the neck a little below the eyes. Not in the app yet;
-it waits for Álvaro's pick.
+between hem and collar, the neck a little below the eyes. Álvaro picked only
+the breathing (2026-11-16); it is in the app's `TripoScene`.
 
 ```bash
 blender -b -P design/blender/light.py -- design/tripo/incorporacion.glb <out.glb> 25000
