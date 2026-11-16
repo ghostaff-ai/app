@@ -73,7 +73,7 @@ turn and size, plus two boxes drawn from the front: fingers that stay in front, 
 more of the old object to hide. `placing.py` makes its files (the page serves no
 `.glb`, so each model goes as a script holding it in base64); what is saved there is
 fetched as JSON and turned into `design/blender/place.json` by `place_from_page.py`,
-which `swap.py` reads before its own guess. The same page has a second tab,
+which `swap.py` reads before its own guess. Finanzas' three objects, placed by hand over the old ones, already hide them, so the old ones stay as they are (`keep_old`; pushing and pressing them away spoilt it). The same page has a second tab,
 "Marcar fallos", with all six ghosts: Álvaro paints over flaws, each stroke tagged
 line, smudge, spikes or other, with a note, and saved as points in Blender's space
 (`marks` in the page's store). Each kind gets its own fix (blend the colours across,

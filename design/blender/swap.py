@@ -31,14 +31,14 @@ SWAPS = {
     'incorporacion': [
         {'prop': 'badge', 'box': (0.023, 0.2, 0.265, 0.405), 'thick': 0.006, 'keep_below': 0.34,
          'turn': 180, 'flip': False,
-         'labels': [('HOLA', 0.5, 0.615, 0.085, WHITE), ('Soy Gus', 0.5, 0.44, 0.13, INK)]},
+         'labels': [('HOLA', 0.5, 0.576, 0.085, WHITE), ('Soy Gus', 0.5, 0.309, 0.13, INK)]},
     ],
     'finanzas': [
-        {'prop': 'pocket', 'box': (-0.01, 0.18, 0.24, 0.47), 'also': (0.1, 0.2, 0.24, 0.5), 'thick': 0.012, 'press': 1.15, 'grow': (1.0, 1.3), 'lift': 0.12, 'turn': 205, 'flip': False,
+        {'prop': 'pocket', 'keep_old': True, 'box': (-0.01, 0.18, 0.24, 0.47), 'also': (0.1, 0.2, 0.24, 0.5), 'thick': 0.012, 'press': 1.15, 'grow': (1.0, 1.3), 'lift': 0.12, 'turn': 205, 'flip': False,
          'labels': [('FINANZAS', 0.45, 0.385, 0.06, GOLD)]},
-        {'prop': 'calculator', 'box': (-0.48, -0.23, 0.32, 0.6), 'thick': 0.03, 'turn': 180, 'hand': (0, 0.45, 0, 0.55), 'flip': True,
+        {'prop': 'calculator', 'keep_old': True, 'box': (-0.48, -0.23, 0.32, 0.6), 'thick': 0.03, 'turn': 180, 'hand': (0, 0.45, 0, 0.55), 'flip': True,
          'labels': [('1.250,00', 0.52, 0.835, 0.07, INK)]},
-        {'prop': 'clipboard', 'box': (0.165, 0.48, 0.18, 0.52), 'thick': 0.03, 'turn': 180, 'hand': (0.55, 1, 0, 0.45), 'flip': True,
+        {'prop': 'clipboard', 'keep_old': True, 'box': (0.165, 0.48, 0.18, 0.52), 'thick': 0.03, 'turn': 180, 'hand': (0.55, 1, 0, 0.45), 'flip': True,
          'labels': []},
     ],
 }
@@ -259,7 +259,12 @@ def swap(obj, name, src, margin=0.004):
         centre, right, up, back, w, h, W, H, lift, t = where(co, spec, margin)
         s = co - centre
         u, v, d = s @ right, (s @ up), s @ back
-        if 'press' not in spec:
+        if spec.get('keep_old'):
+            # placed by hand over the old one, which it already hides
+            # (Álvaro, 2026-11-16: pushing or pressing the old one away spoilt
+            # Finanzas, and was not needed)
+            print('swap: left the old', spec['prop'], 'as it is')
+        elif 'press' not in spec:
             # held in a hand: push all of the old one that is in front of the
             # middle of where the new one will be back to that middle, so it
             # is wholly inside the new one; the hand's
