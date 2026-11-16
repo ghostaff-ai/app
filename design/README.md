@@ -67,7 +67,10 @@ found by distance). Real letters go on top ("HOLA / Soy Gus", "1.250,00",
 shows either copy. The ties and collars stay Tripo's.
 
 Where each new object sits can also be set by hand (Álvaro, 2026-11-16) on the
-placing page, a Claude artifact (https://claude.ai/artifact/So36Lc9dohc8gz2i7JDgin):
+placing page (the Taller; its first tab, "Ver resultado", shows every finished
+ghost with the app's own shader, lights and movement, with switches for the
+objects, the tone and the smoothing; the models without smoothing come from
+`TRIPO_NO_MARKS=1 TRIPO_OUT=<dir> blender -b -P design/blender/tripo.py -- <src>`), a Claude artifact (https://claude.ai/artifact/So36Lc9dohc8gz2i7JDgin):
 each ghost as Tripo made it with the new objects where `swap.py` puts them, to move,
 turn and size, plus two boxes drawn from the front: fingers that stay in front, and
 more of the old object to hide. `placing.py` makes its files (the page serves no

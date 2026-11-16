@@ -78,7 +78,7 @@ function Chips<T>({
 export default function Fantasma() {
   const [focused, setFocused] = useState(true);
   const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string; source?: string; tone?: string; objects?: string; zoom?: string }>();
-  // ?zoom=2 brings the camera twice as close (1 to 6)
+  // ?zoom=2 brings the camera twice as close (1 to 6); on the web the mouse wheel zooms too
   const zoom = Math.min(6, Math.max(1, Number(params.zoom) || 1));
   const [swapped, setSwapped] = useState(params.objects === 'swap');
   const [agent, setAgent] = useState<TripoModel>(AGENTS.find((a) => a.id === params.agent)?.id ?? 'base');
@@ -110,7 +110,7 @@ export default function Fantasma() {
         ))}
       </View>
       <View className="flex-1">
-        <GhostViewer active={focused} agent={agent as Agent} look={look} tripo={tripo} tone={tone} swapped={swapped} zoom={zoom} key={zoom} />
+        <GhostViewer active={focused} agent={agent as Agent} look={look} tripo={tripo} tone={tone} swapped={swapped} zoom={zoom} />
       </View>
       <View className="gap-2 pb-3">
         {hasOurs && (

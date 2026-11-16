@@ -49,6 +49,8 @@ TURN = {'productor': 90}
 # saved marks; every kind is treated as rough for now (his word, 2026-11-16).
 MARKS_FILE = os.path.join(HERE, 'marks.json')
 MARKS = json.load(open(MARKS_FILE)) if os.path.exists(MARKS_FILE) else {}
+if os.environ.get('TRIPO_NO_MARKS'):   # to compare, without them
+    MARKS = {}
 
 # The whole ghosts in the folder; anything else there is a lone object.
 GHOSTS = {'base', 'secretaria', 'redes', 'incorporacion', 'finanzas', 'productor'}
