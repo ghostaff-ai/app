@@ -98,6 +98,13 @@ and shine baked onto it (the swapped objects cut to a quarter). Incorporación g
 from 820,000 triangles to 25,000 or 60,000; the file only from 2.2 to about 1.3 MB,
 since the pictures are most of it then. On the Taller page's "Peso" switch for him to judge.
 
+**More movement to try** (2026-11-16): the Taller page's "Animación" switch bends
+the head (looks round, nods, tilts) and the hands (up and down, or a wave every
+6 s, with what they hold moving whole) and swells the chest, all in the vertex
+shader with no rig: the hands are found as the body's farthest points to each side
+between hem and collar, the neck a little below the eyes. Not in the app yet;
+it waits for Álvaro's pick.
+
 ```bash
 blender -b -P design/blender/light.py -- design/tripo/incorporacion.glb <out.glb> 25000
 ```
