@@ -30,7 +30,8 @@ export default function CreateOrganization() {
         links: splitLinks(links),
       });
       await enter(org.id);
-      router.replace('/');
+      // After the layout has re-rendered with the new organisation, so the inbox route exists.
+      requestAnimationFrame(() => router.replace('/'));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(/too many/.test(msg) ? 'Has llegado al máximo de empresas por cuenta.' : msg);

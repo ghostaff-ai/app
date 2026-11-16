@@ -61,8 +61,8 @@ export default function AppLayout() {
         <Stack.Screen name="empezar" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={hasProfile}>
-        <Stack.Screen name="crear-empresa" options={{ title: 'Crear una empresa' }} />
-        <Stack.Screen name="unirme" options={{ title: 'Unirme a una empresa' }} />
+        <Stack.Screen name="crear-empresa" options={{ title: 'Crear una empresa', presentation: 'modal' }} />
+        <Stack.Screen name="unirme" options={{ title: 'Unirme a una empresa', presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>
   );
