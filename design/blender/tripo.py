@@ -51,6 +51,13 @@ MARKS_FILE = os.path.join(HERE, 'marks.json')
 MARKS = json.load(open(MARKS_FILE)) if os.path.exists(MARKS_FILE) else {}
 if os.environ.get('TRIPO_NO_MARKS'):   # to compare, without them
     MARKS = {}
+# Which fixes go on the marks (touchup.smooth_marks); other mixes are made to
+# compare on the Taller page: TRIPO_FIX=colour,shape and so on. 'detail' keeps
+# the collar band and the eyes' rims at full detail instead (KEEP_ROUND).
+FIXES = tuple(os.environ.get('TRIPO_FIX', 'bumps').split(','))
+
+KEEP_ROUND = {'incorporacion': [(0.52, 0.7)], 'finanzas': [(0.52, 0.7)]} if 'detail' in FIXES else {}
+EYE_KEEP = 2.3 if 'detail' in FIXES else 1.6
 
 # The whole ghosts in the folder; anything else there is a lone object.
 GHOSTS = {'base', 'secretaria', 'redes', 'incorporacion', 'finanzas', 'productor'}
@@ -63,10 +70,12 @@ def keep_group(obj, name):
     if os.path.exists(path):
         for e in json.load(open(path)).get(name, []):
             (cx, cz, _), (rx, rz) = e['center'], e['radius']
-            boxes.append((cx - rx * 1.6, cx + rx * 1.6, cz - rz * 1.6, cz + rz * 1.6))
+            boxes.append((cx - rx * EYE_KEEP, cx + rx * EYE_KEEP, cz - rz * EYE_KEEP, cz + rz * EYE_KEEP))
     keep = np.zeros(len(co), bool)
     for x0, x1, z0, z1 in boxes:
         keep |= (co[:, 0] > x0) & (co[:, 0] < x1) & (co[:, 2] > z0) & (co[:, 2] < z1) & (co[:, 1] < 0)
+    for z0, z1 in KEEP_ROUND.get(name, []):
+        keep |= (co[:, 2] > z0) & (co[:, 2] < z1)
     g = obj.vertex_groups.new(name='keep')
     g.add(np.nonzero(keep)[0].tolist(), 1.0, 'REPLACE')
     print('kept whole', int(keep.sum()), 'of', len(co), 'points')
@@ -152,7 +161,7 @@ def run(src):
             touchup.soften_seams(obj, eyes, **touchup.SEAMS[name])
         # the places Álvaro painted as rough on the placing page (marks.json)
         if MARKS.get(name):
-            touchup.smooth_marks(obj, MARKS[name])
+            touchup.smooth_marks(obj, MARKS[name], FIXES)
         # Two of each ghost with objects: as Tripo made them (<name>.glb), and
         # with Tripo's lone models of them in their place (<name>-swap.glb, swap.py)
         export(obj, name, tris)

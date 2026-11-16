@@ -112,12 +112,19 @@ def paint(obj, wt, colour):
     return len(tris)
 
 
-def smooth_marks(obj, marks):
+def smooth_marks(obj, marks, fixes=('bumps',)):
     """Smooth the places Álvaro painted as rough on the placing page
-    (marks.json): their bumps (the normal map) go flat, fading out round each
-    stroke. The roughness is Tripo's normal map, not the shape: the same
-    places are smooth with it taken away, and smoothing the shape itself
-    pulled spikes out of the collar's loose edges (2026-11-16)."""
+    (marks.json), fading out round each stroke, with any of these fixes, which
+    he compares on the Taller page (2026-11-16):
+
+    bumps         the bumps picture (normal map) made flat
+    colour        the colour picture blended with the colours just round it
+                  (Tripo bakes light and shade into it)
+    shape         the shape smoothed gently: across the surface only, at most
+                  1 mm, loose edges left where they are
+    shape_strong  the first try: smoothed freely (pulled spikes out of the
+                  collar's loose edges)
+    """
     co, e = mesh_arrays(obj)
     n = len(co)
     from mathutils.kdtree import KDTree
@@ -134,9 +141,69 @@ def smooth_marks(obj, marks):
         d = np.array([kd.find(co[i])[2] for i in near])
         x = np.clip((1 - d / reach) * 1.6, 0, 1)
         wt[near] = np.maximum(wt[near], x * x * (3 - 2 * x))
-    if wt.any():
+    if not wt.any():
+        return
+    idx = np.nonzero(wt > 0)[0]
+    a = np.r_[e[:, 0], e[:, 1]]; b = np.r_[e[:, 1], e[:, 0]]
+    deg = np.maximum(np.bincount(a, None, n), 1)[:, None]
+    if 'shape' in fixes or 'shape_strong' in fixes:
+        p = co.copy()
+        w = wt.copy()
+        strong = 'shape_strong' in fixes
+        if not strong:
+            # loose edges (an edge with one face) and their neighbours stay
+            import bmesh
+            bm = bmesh.new(); bm.from_mesh(obj.data)
+            edge = np.zeros(n, bool)
+            for ed in bm.edges:
+                if len(ed.link_faces) < 2:
+                    edge[ed.verts[0].index] = edge[ed.verts[1].index] = True
+            bm.free()
+            near_edge = edge.copy()
+            near_edge[b[edge[a]]] = True
+            w[near_edge] = 0
+            nrm = np.zeros(n * 3); obj.data.vertices.foreach_get('normal', nrm); nrm = nrm.reshape(-1, 3)
+        for it in range(80):
+            avg = np.stack([np.bincount(a, p[b, k], n) for k in range(3)], 1) / deg
+            step = (0.5 if it % 2 == 0 else -0.53) * (avg - p)
+            if not strong:
+                step = nrm * (step * nrm).sum(1, keepdims=True)   # along the surface's normal only
+            p += w[:, None] * step
+        if not strong:
+            dv = p - co
+            ln = np.linalg.norm(dv, axis=1, keepdims=True)
+            p = co + dv * np.minimum(1, 0.001 / np.maximum(ln, 1e-9))
+        obj.data.vertices.foreach_set('co', p.ravel())
+        obj.data.update()
+        print('marks: shape', 'strong' if strong else 'gentle', 'moved up to',
+              round(float(np.linalg.norm(p - co, axis=1).max()) * 1000, 2), 'mm')
+    if 'colour' in fixes:
+        # each point's colour: the mean of the colours within 6 mm (by distance:
+        # Tripo's mesh is in loose pieces), more of it the stronger the mark
+        vc, _, _ = colours(obj)
+        around = np.nonzero(np.all((co > co[idx].min(0) - 0.01) & (co < co[idx].max(0) + 0.01), axis=1))[0]
+        kd = KDTree(len(around))
+        for i in around:
+            kd.insert(co[i], int(i))
+        kd.balance()
+        blur = vc.copy()
+        for i in idx:
+            nb = [j for _, j, _ in kd.find_range(co[i], 0.006)]
+            blur[i] = vc[nb].mean(0)
+        paint(obj, wt, blur) if 'bumps' in fixes else paint_colour_only(obj, wt, blur)
+        print('marks: colour blended round', len(idx), 'points')
+    elif 'bumps' in fixes:
         paint(obj, wt, None)
-    print('marks: flattened the bumps round', int((wt > 0).sum()), 'points under', len(marks), 'strokes')
+        print('marks: flattened the bumps round', len(idx), 'points')
+
+
+def paint_colour_only(obj, wt, colour):
+    """paint(), keeping the bumps as they are."""
+    nimg, npx = texture(obj, 'Normal')
+    keep = None if npx is None else npx.copy()
+    paint(obj, wt, colour)
+    if keep is not None:
+        save_texture(nimg, keep)
 
 
 def soften_seams(obj, eyes=(), zmin=0.6, skip=(), step=0.12, reach=0.035):

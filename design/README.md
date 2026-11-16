@@ -84,9 +84,13 @@ repaint from round it, smooth the shape, look by hand); a kind that keeps coming
 back gets a finder of its own, as the head line did. First round (2026-11-16, Finanzas' collar edges and eye
 rims, one spot on Incorporación): the roughness was Tripo's normal map, not the
 shape, so `tripo.py` flattens the bumps under each stroke (`marks.json`, from the
-page's saved marks; `touchup.smooth_marks`). Keeping more of the shape at full
-detail changed nothing, and smoothing the shape itself pulled spikes out of the
-collar's loose edges.
+page's saved marks; `touchup.smooth_marks`). Other tries (more detail kept, the colour blended, the shape
+smoothed gently or freely) are made with `TRIPO_FIX` and shown side by side on the
+Taller page's "Arreglo de tus marcas" switch.
+
+**Visual tries go to Álvaro, not the bin** (2026-11-16): every attempt at a visual
+fix is put in front of him to compare, the ones that look worse included; say
+which you'd pick and why, and let him decide.
 
 ```bash
 blender -b -P design/blender/placing.py -- ~/Downloads/tripo/originals <out>
