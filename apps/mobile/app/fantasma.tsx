@@ -83,7 +83,7 @@ export default function Fantasma() {
   const [swapped, setSwapped] = useState(params.objects === 'swap');
   const [agent, setAgent] = useState<TripoModel>(AGENTS.find((a) => a.id === params.agent)?.id ?? 'base');
   const [source, setSource] = useState<Source>(params.source === 'ours' ? 'ours' : 'tripo');
-  const [tone, setTone] = useState<Tone>(TONES.find((o) => o.id === params.tone)?.id ?? 'dark');
+  const [tone, setTone] = useState<Tone>(TONES.find((o) => o.id === params.tone)?.id ?? 'original');
   const hasOurs = AGENTS.find((a) => a.id === agent)!.ours;
   const tripo = source === 'tripo' || !hasOurs ? agent : null;
   const [look, setLook] = useState<Look>({

@@ -86,7 +86,9 @@ rims, one spot on Incorporación): the roughness was Tripo's normal map, not the
 shape, so `tripo.py` flattens the bumps under each stroke (`marks.json`, from the
 page's saved marks; `touchup.smooth_marks`). Other tries (more detail kept, the colour blended, the shape
 smoothed gently or freely) are made with `TRIPO_FIX` and shown side by side on the
-Taller page's "Arreglo de tus marcas" switch.
+Taller page's "Arreglo de tus marcas" switch. Álvaro picked **Más detalle**
+(`detail`, now the default): what he saw as rough was our cutting of triangles
+on the collar and round the eyes, so those keep their full detail.
 
 **Visual tries go to Álvaro, not the bin** (2026-11-16): every attempt at a visual
 fix is put in front of him to compare, the ones that look worse included; say

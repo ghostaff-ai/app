@@ -169,7 +169,7 @@ function load(model: TripoModel, swapped: boolean) {
 export function TripoScene({
   spin,
   model,
-  tone = 'dark',
+  tone = 'original',
   swapped = false,
 }: {
   spin: React.RefObject<SpinState>;

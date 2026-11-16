@@ -53,8 +53,10 @@ if os.environ.get('TRIPO_NO_MARKS'):   # to compare, without them
     MARKS = {}
 # Which fixes go on the marks (touchup.smooth_marks); other mixes are made to
 # compare on the Taller page: TRIPO_FIX=colour,shape and so on. 'detail' keeps
-# the collar band and the eyes' rims at full detail instead (KEEP_ROUND).
-FIXES = tuple(os.environ.get('TRIPO_FIX', 'bumps').split(','))
+# the collar band and the eyes' rims at full detail instead (KEEP_ROUND): it is
+# the one Álvaro picked (2026-11-16), since the roughness he marked was the
+# triangles we cut away there, not Tripo's surface.
+FIXES = tuple(os.environ.get('TRIPO_FIX', 'detail').split(','))
 
 KEEP_ROUND = {'incorporacion': [(0.52, 0.7)], 'finanzas': [(0.52, 0.7)]} if 'detail' in FIXES else {}
 EYE_KEEP = 2.3 if 'detail' in FIXES else 1.6
