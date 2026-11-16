@@ -23,10 +23,11 @@ import touchup
 # Each model's objects: the lone object's file, the box (x0, x1, z0, z1) its old
 # self sits in, seen from the front, how thick the old one is, a turn to put
 # the lone one the right way up and round, and its letters (words, u, v across
-# the front from its bottom left, letter height, colour).
+# the front from its bottom left, letter height, colour, and maybe a dict:
+# `tilt`, degrees turned in the face, anticlockwise; `align` 'RIGHT' to end at u).
 INK = (0.06, 0.07, 0.16)
 WHITE = (0.95, 0.96, 1.0)
-GOLD = (0.35, 0.18, 0.12)
+GOLD = (0.13, 0.06, 0.035)   # the pocket's plate: dark, to read on its copper
 SWAPS = {
     'incorporacion': [
         {'prop': 'badge', 'box': (0.023, 0.2, 0.265, 0.405), 'thick': 0.006, 'keep_below': 0.34,
@@ -35,9 +36,9 @@ SWAPS = {
     ],
     'finanzas': [
         {'prop': 'pocket', 'keep_old': True, 'box': (-0.01, 0.18, 0.24, 0.47), 'also': (0.1, 0.2, 0.24, 0.5), 'thick': 0.012, 'press': 1.15, 'grow': (1.0, 1.3), 'lift': 0.12, 'turn': 205, 'flip': False,
-         'labels': [('FINANZAS', 0.45, 0.385, 0.06, GOLD)]},
+         'labels': [('FINANZAS', 0.505, 0.369, 0.06, GOLD, {'tilt': 5.6})]},
         {'prop': 'calculator', 'keep_old': True, 'box': (-0.48, -0.23, 0.32, 0.6), 'thick': 0.03, 'turn': 180, 'hand': (0, 0.45, 0, 0.55), 'flip': True,
-         'labels': [('1.250,00', 0.52, 0.835, 0.07, INK)]},
+         'labels': [('1.250,00', 0.845, 0.794, 0.07, INK, {'align': 'RIGHT'})]},
         {'prop': 'clipboard', 'keep_old': True, 'box': (0.165, 0.48, 0.18, 0.52), 'thick': 0.03, 'turn': 180, 'hand': (0.55, 1, 0, 0.45), 'flip': True,
          'labels': []},
     ],
@@ -379,10 +380,14 @@ def swap(obj, name, src, margin=0.004):
               'turned', round(math.degrees(math.atan2(right[2], right[0])), 1), 'deg')
         bpy.context.view_layer.update()
         front = Vector(centre) - Vector(back) * margin
-        for words, fu, fv, height, colour in spec.get('labels', []):
+        for words, fu, fv, height, colour, *more in spec.get('labels', []):
+            opt = more[0] if more else {}
             o = front + Vector(right) * (fu - 0.5) * W + Vector(up) * (fv - 0.5) * H
             # lie on the new object's face: cast a ray at it from the front
             ok, loc, _, _ = p.ray_cast(o - Vector(back) * 0.05, Vector(back))
             if ok:
                 o = loc
-            touchup.text_at(words, o - Vector(back) * 0.0016, Vector(right), Vector(up), height * H, colour)
+            r = math.radians(opt.get('tilt', 0))
+            rt = Vector(right) * math.cos(r) + Vector(up) * math.sin(r)
+            ut = Vector(up) * math.cos(r) - Vector(right) * math.sin(r)
+            touchup.text_at(words, o - Vector(back) * 0.0016, rt, ut, height * H, colour, opt.get('align', 'CENTER'))

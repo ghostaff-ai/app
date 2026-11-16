@@ -78,7 +78,12 @@ which `swap.py` reads before its own guess. Finanzas' three objects, placed by h
 line, smudge, spikes or other, with a note, and saved as points in Blender's space
 (`marks` in the page's store). Each kind gets its own fix (blend the colours across,
 repaint from round it, smooth the shape, look by hand); a kind that keeps coming
-back gets a finder of its own, as the head line did.
+back gets a finder of its own, as the head line did. First round (2026-11-16, Finanzas' collar edges and eye
+rims, one spot on Incorporación): the roughness was Tripo's normal map, not the
+shape, so `tripo.py` flattens the bumps under each stroke (`marks.json`, from the
+page's saved marks; `touchup.smooth_marks`). Keeping more of the shape at full
+detail changed nothing, and smoothing the shape itself pulled spikes out of the
+collar's loose edges.
 
 ```bash
 blender -b -P design/blender/placing.py -- ~/Downloads/tripo/originals <out>

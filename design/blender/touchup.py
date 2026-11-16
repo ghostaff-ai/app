@@ -101,13 +101,42 @@ def paint(obj, wt, colour):
         ys, xs, bc = r
         vs = lv[list(tri)]
         k = (bc @ wt[vs])[:, None]
-        px[ys, xs, :3] = px[ys, xs, :3] * (1 - k) + (bc @ colour[vs]) * k
+        if colour is not None:   # None: the bumps only
+            px[ys, xs, :3] = px[ys, xs, :3] * (1 - k) + (bc @ colour[vs]) * k
         if npx is not None:
             npx[ys, xs, :3] = npx[ys, xs, :3] * (1 - k) + flat * k
-    save_texture(img, px)
+    if colour is not None:
+        save_texture(img, px)
     if npx is not None:
         save_texture(nimg, npx)
     return len(tris)
+
+
+def smooth_marks(obj, marks):
+    """Smooth the places Álvaro painted as rough on the placing page
+    (marks.json): their bumps (the normal map) go flat, fading out round each
+    stroke. The roughness is Tripo's normal map, not the shape: the same
+    places are smooth with it taken away, and smoothing the shape itself
+    pulled spikes out of the collar's loose edges (2026-11-16)."""
+    co, e = mesh_arrays(obj)
+    n = len(co)
+    from mathutils.kdtree import KDTree
+    wt = np.zeros(n)
+    for m in marks:
+        pts = np.array(m['points'], float)
+        reach = max(m.get('radius', 0.006) * 4, 0.02)
+        kd = KDTree(len(pts))
+        for i, p in enumerate(pts):
+            kd.insert(p, i)
+        kd.balance()
+        lo, hi = pts.min(0) - reach, pts.max(0) + reach
+        near = np.nonzero(np.all((co > lo) & (co < hi), axis=1))[0]
+        d = np.array([kd.find(co[i])[2] for i in near])
+        x = np.clip((1 - d / reach) * 1.6, 0, 1)
+        wt[near] = np.maximum(wt[near], x * x * (3 - 2 * x))
+    if wt.any():
+        paint(obj, wt, None)
+    print('marks: flattened the bumps round', int((wt > 0).sum()), 'points under', len(marks), 'strokes')
 
 
 def soften_seams(obj, eyes=(), zmin=0.6, skip=(), step=0.12, reach=0.035):
@@ -156,15 +185,17 @@ def soften_seams(obj, eyes=(), zmin=0.6, skip=(), step=0.12, reach=0.035):
     print('seams: softened', int(seam.sum()), 'points,', int(band.sum()), 'in the band')
 
 
-def text_at(words, at, right, up, height, colour):
-    """Real, straight letters centred at `at`, reading along `right`, standing
-    along `up`, as a mesh in the model's own coordinates."""
+def text_at(words, at, right, up, height, colour, align='CENTER'):
+    """Real, straight letters centred at `at` (or ending there, align
+    'RIGHT'), reading along `right`, standing along `up`, as a mesh in the
+    model's own coordinates."""
     import bpy
     from mathutils import Matrix
     n = right.cross(up).normalized()   # out of the face, toward the viewer
     cu = bpy.data.curves.new('text', 'FONT')
     cu.body = words
-    cu.align_x = cu.align_y = 'CENTER'
+    cu.align_x = align
+    cu.align_y = 'CENTER'
     cu.size = height
     cu.extrude = 0.0008
     t = bpy.data.objects.new('text-' + words, cu)

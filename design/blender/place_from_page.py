@@ -18,6 +18,8 @@ out = {}
 for f in sorted(glob.glob(os.path.join(sys.argv[sys.argv.index('--') + 1], '**', '*.json'), recursive=True)):
     d = json.load(open(f))
     d = d.get('data', d)
+    if 'matrix' not in d:   # not a placement (a painted mark, say)
+        continue
     G = np.array(d['matrix'], float).reshape(4, 4, order='F')
     M = C.T @ G[:3, :3] @ C          # the node's turn and size, in Blender's space
     at = C.T @ G[:3, 3]

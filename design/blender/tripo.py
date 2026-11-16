@@ -44,6 +44,12 @@ KEEP = {
 # to turn them further, about z, so they face the front too).
 TURN = {'productor': 90}
 
+# Flaws Álvaro painted on the placing page, per ghost: strokes of points
+# (Blender's space), a brush radius, a kind and a note. Made from the page's
+# saved marks; every kind is treated as rough for now (his word, 2026-11-16).
+MARKS_FILE = os.path.join(HERE, 'marks.json')
+MARKS = json.load(open(MARKS_FILE)) if os.path.exists(MARKS_FILE) else {}
+
 # The whole ghosts in the folder; anything else there is a lone object.
 GHOSTS = {'base', 'secretaria', 'redes', 'incorporacion', 'finanzas', 'productor'}
 
@@ -142,6 +148,9 @@ def run(src):
         if name in touchup.SEAMS:
             eyes = [(e['center'], e['radius']) for e in json.load(open(os.path.join(OUT, 'eyes.json'))).get(name, [])]
             touchup.soften_seams(obj, eyes, **touchup.SEAMS[name])
+        # the places Álvaro painted as rough on the placing page (marks.json)
+        if MARKS.get(name):
+            touchup.smooth_marks(obj, MARKS[name])
         # Two of each ghost with objects: as Tripo made them (<name>.glb), and
         # with Tripo's lone models of them in their place (<name>-swap.glb, swap.py)
         export(obj, name, tris)
