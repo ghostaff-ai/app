@@ -40,6 +40,13 @@ export default function AppLayout() {
           name="index"
           options={{
             title: org.active?.name ?? '',
+            headerLeft: () => (
+              <Link href="/equipo" asChild>
+                <Pressable accessibilityRole="button" accessibilityLabel="Ver el equipo" hitSlop={12}>
+                  <Text className="text-base text-accent">Equipo</Text>
+                </Pressable>
+              </Link>
+            ),
             headerRight: () => (
               <Link href="/organizaciones" asChild>
                 <Pressable accessibilityRole="button" accessibilityLabel="Cambiar de organización" hitSlop={12}>
@@ -50,6 +57,8 @@ export default function AppLayout() {
           }}
         />
         <Stack.Screen name="decision/[id]" options={{ title: 'Decisión' }} />
+        <Stack.Screen name="equipo" options={{ title: 'Equipo' }} />
+        <Stack.Screen name="agente/[id]" options={{ title: '' }} />
         <Stack.Screen name="organizaciones" options={{ title: 'Organizaciones', presentation: 'modal' }} />
         <Stack.Screen name="invitar" options={{ title: 'Invitar', presentation: 'modal' }} />
         <Stack.Screen name="conexiones" options={{ title: 'Conexiones', presentation: 'modal' }} />

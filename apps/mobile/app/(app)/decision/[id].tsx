@@ -1,13 +1,16 @@
 import { RULE_KIND } from '@ghostaff/shared';
-import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
+import { GhostViewer } from '@/components/ghost/GhostViewer';
 import { Button, ErrorText, Loading, Notice } from '@/components/ui';
 import { answerLabel, shortDate } from '@/lib/format';
 import { useDecision } from '@/lib/hooks/useDecisions';
+import { GHOSTS, ghostFor } from '@/lib/team';
 
 // One decision with its evidence, and OK or no. A rule is signed with its
-// wording, which the person may edit before saying OK.
+// wording, which the person may edit before saying OK. The agent that asks is
+// on top, live, as its ghost.
 
 export default function DecisionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -16,6 +19,13 @@ export default function DecisionScreen() {
   const [signed, setSigned] = useState('');
   const [busy, setBusy] = useState<'ok' | 'no' | null>(null);
   const [answerError, setAnswerError] = useState<string | null>(null);
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
 
   useEffect(() => {
     if (decision?.ruleProposal) setSigned(decision.ruleProposal);
@@ -40,6 +50,9 @@ export default function DecisionScreen() {
 
   return (
     <ScrollView className="flex-1 bg-surface" contentContainerClassName="p-5 pb-16" keyboardShouldPersistTaps="handled">
+      <View className="-mx-5 -mt-5 mb-4 h-56">
+        <GhostViewer ghost={ghostFor(decision.proposedBy)} active={focused} zoom={1.7} />
+      </View>
       <Text className="text-xs uppercase tracking-wide text-muted">
         {decision.proposedBy} · {decision.area} · {shortDate(decision.createdOn)}
       </Text>

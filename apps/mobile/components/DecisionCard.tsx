@@ -1,6 +1,7 @@
 import type { Decision } from '@ghostaff/shared';
-import { Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { answerLabel, shortDate } from '@/lib/format';
+import { GHOSTS, ghostFor } from '@/lib/team';
 
 export function DecisionCard({ decision, onPress }: { decision: Decision; onPress: () => void }) {
   const waiting = !decision.answer;
@@ -9,8 +10,10 @@ export function DecisionCard({ decision, onPress }: { decision: Decision; onPres
       accessibilityRole="button"
       accessibilityLabel={decision.question}
       onPress={onPress}
-      className="mb-3 rounded-2xl border border-line bg-card p-4"
+      className="mb-3 flex-row rounded-2xl border border-line bg-card p-4"
     >
+      <Image testID="agent-ghost" source={GHOSTS[ghostFor(decision.proposedBy)].picture} style={{ width: 48, height: 48, marginRight: 12 }} resizeMode="contain" />
+      <View className="flex-1">
       <View className="flex-row items-center">
         {waiting ? <View testID="waiting-dot" className="mr-2 h-2.5 w-2.5 rounded-full bg-waiting" /> : null}
         <Text className="text-xs uppercase tracking-wide text-muted">
@@ -19,6 +22,7 @@ export function DecisionCard({ decision, onPress }: { decision: Decision; onPres
       </View>
       <Text className="mt-2 text-base font-semibold text-ink">{decision.question}</Text>
       {decision.answer ? <Text className="mt-2 text-sm text-muted">{answerLabel(decision.answer)}</Text> : null}
+      </View>
     </Pressable>
   );
 }
