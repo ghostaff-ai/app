@@ -81,6 +81,7 @@ def render(obj, path):
     sc.camera = cam
     sc.render.filepath = path
     bpy.ops.render.render(write_still=True)
+    bpy.data.objects.remove(cam)   # or the next export carries it
 
 def run(src):
     os.makedirs(os.path.join(OUT, 'renders'), exist_ok=True)
@@ -137,21 +138,27 @@ def run(src):
         if name in touchup.SEAMS:
             eyes = [(e['center'], e['radius']) for e in json.load(open(os.path.join(OUT, 'eyes.json'))).get(name, [])]
             touchup.soften_seams(obj, eyes, **touchup.SEAMS[name])
-        # its objects replaced by Tripo's own models of them (swap.py)
-        swap.swap(obj, name, src)
-        out = os.path.join(OUT, name + '.glb')
-        bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', use_selection=False,
-                                  export_image_format='JPEG', export_jpeg_quality=85,
-                                  export_apply=True,
-                                  # Draco shrinks the geometry about five times; the app
-                                  # decodes it with three.js's decoder (apps/mobile/public/draco/).
-                                  export_draco_mesh_compression_enable=True,
-                                  export_draco_mesh_compression_level=7,
-                                  export_draco_position_quantization=14,
-                                  export_draco_normal_quantization=10,
-                                  export_draco_texcoord_quantization=12)
-        print('wrote', name, tris, '->', sum(len(p.vertices) - 2 for p in obj.data.polygons),
-              'tris,', os.path.getsize(out) // 1024, 'KB')
-        render(obj, os.path.join(OUT, 'renders', name + '.png'))
+        # Two of each ghost with objects: as Tripo made them (<name>.glb), and
+        # with Tripo's lone models of them in their place (<name>-swap.glb, swap.py)
+        export(obj, name, tris)
+        if name in swap.SWAPS:
+            swap.swap(obj, name, src)
+            export(obj, name + '-swap', tris)
+
+def export(obj, name, tris):
+    out = os.path.join(OUT, name + '.glb')
+    bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', use_selection=False,
+                              export_image_format='JPEG', export_jpeg_quality=85,
+                              export_apply=True,
+                              # Draco shrinks the geometry about five times; the app
+                              # decodes it with three.js's decoder (apps/mobile/public/draco/).
+                              export_draco_mesh_compression_enable=True,
+                              export_draco_mesh_compression_level=7,
+                              export_draco_position_quantization=14,
+                              export_draco_normal_quantization=10,
+                              export_draco_texcoord_quantization=12)
+    print('wrote', name, tris, '->', sum(len(p.vertices) - 2 for p in obj.data.polygons),
+          'tris,', os.path.getsize(out) // 1024, 'KB')
+    render(obj, os.path.join(OUT, 'renders', name + '.png'))
 
 run(sys.argv[sys.argv.index('--') + 1])

@@ -55,13 +55,17 @@ in a hard line from front to back; `touchup.py` finds that jump and repaints a b
 about 3.5 cm wide round it with colours that run smoothly across (`SEAMS`: where to
 look per model, minus the bun and the hands; Redes' beret covers the place).
 The objects painted into a whole ghost come out soft, with crooked letters, so
-`swap.py` puts Tripo's own model of each object (the lone ones assemble.py uses, in
-the same Drive folder) in its place: same spot, size and turn, measured from the old
-object's front face. A held one (calculator, clipboard) is cut away first; a worn one
-(badge, pocket) is pressed flat into the body, so no hole opens where the outlines
-differ. Real letters go on top ("HOLA / Soy Gus", "1.250,00", "FINANZAS"). Done
-for Incorporación and Finanzas (`SWAPS`); the ties and collars stay Tripo's.
-Geometry is Draco-compressed (Blender's own encoder; the app decodes it with three.js's decoder in `apps/mobile/public/draco/`), 0.9 to 2.2 MB a model.
+`swap.py` also makes a second copy, `<name>-swap.glb`, with Tripo's own model of each
+object (the lone ones assemble.py uses, in the same Drive folder) in its place: same
+spot, size and turn, measured from the old object's front face. The old one never
+shows next to the new: one held in a hand (calculator, clipboard) or as thin as a
+badge is pushed back inside the new one (the fingers in front stay); a worn one with
+a different outline (the pocket and its pen) is pressed flat into the body and painted
+over in the body's colours round it (Tripo's mesh is in loose pieces, so "round it" is
+found by distance). Real letters go on top ("HOLA / Soy Gus", "1.250,00",
+"FINANZAS"). Done for Incorporación and Finanzas (`SWAPS`); the app's "Objetos" switch
+shows either copy. The ties and collars stay Tripo's.
+Geometry is Draco-compressed (Blender's own encoder; the app decodes it with three.js's decoder in `apps/mobile/public/draco/`), 0.9 to 2.3 MB a model.
 
 ```bash
 rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/originals

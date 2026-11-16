@@ -16,12 +16,14 @@ export function GhostViewer({
   look,
   tripo = null,
   tone,
+  swapped,
 }: {
   active?: boolean;
   agent?: Agent;
   look?: Look;
   tripo?: TripoModel | null;
   tone?: Tone;
+  swapped?: boolean;
 }) {
   const spin = useRef<SpinState>({ yaw: 0, velocity: 0, dragging: false, hopAt: null });
   const startYaw = useRef(0);
@@ -60,7 +62,7 @@ export function GhostViewer({
         frameloop={active ? 'always' : 'never'}
         camera={{ position: [0, 0.15, 6.2], fov: 40 }}
       >
-        {tripo ? <TripoScene spin={spin} model={tripo} tone={tone} /> : <GhostScene spin={spin} agent={agent} look={look} />}
+        {tripo ? <TripoScene spin={spin} model={tripo} tone={tone} swapped={swapped} /> : <GhostScene spin={spin} agent={agent} look={look} />}
       </GhostCanvas>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} {...responder.panHandlers} />
     </View>

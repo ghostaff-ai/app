@@ -1,13 +1,13 @@
-"""Put Tripo's own model of an object over the one painted into a whole ghost.
+"""Put Tripo's own model of an object in place of the one painted into a whole ghost.
 
 A whole Tripo ghost carries its objects (a badge, a calculator, a pocket) made
 in the same go as the body, and they come out soft and with crooked letters.
 Tripo also made each object alone, from a picture of just that object
 (assemble.py uses them), and those are crisper. swap() finds the flat face of
 the ghost's own object, fits the lone object to the same place, size and turn,
-a little larger so it covers the old one completely, and writes real letters
-on it. Nothing of the ghost is cut away: the old object stays inside the new
-one, so no hole can show.
+a little larger, and writes real letters on it. The old one never shows beside
+the new: a held or thin one is pushed back inside the new one; a worn one with
+another outline is pressed flat into the body and painted in the body's colours.
 
 Used by tripo.py through SWAPS, on the light model (1 tall, facing -y, z up).
 """
@@ -27,17 +27,17 @@ WHITE = (0.95, 0.96, 1.0)
 GOLD = (0.35, 0.18, 0.12)
 SWAPS = {
     'incorporacion': [
-        {'prop': 'badge', 'box': (0.023, 0.2, 0.265, 0.405), 'thick': 0.006, 'press': 1.1, 'keep_below': 0.34,
+        {'prop': 'badge', 'box': (0.023, 0.2, 0.265, 0.405), 'thick': 0.006, 'keep_below': 0.34,
          'turn': 180, 'flip': False,
          'labels': [('HOLA', 0.5, 0.615, 0.085, WHITE), ('Soy Gus', 0.5, 0.44, 0.13, INK)]},
     ],
     'finanzas': [
-        {'prop': 'calculator', 'box': (-0.48, -0.23, 0.32, 0.6), 'thick': 0.03, 'turn': 180, 'clear': (-0.015, 0.035), 'flip': True,
-         'labels': [('1.250,00', 0.52, 0.835, 0.07, INK)]},
-        {'prop': 'clipboard', 'box': (0.165, 0.48, 0.18, 0.52), 'thick': 0.03, 'turn': 180, 'clear': (-0.02, 0.025), 'flip': True,
-         'labels': []},
-        {'prop': 'pocket', 'box': (-0.01, 0.18, 0.24, 0.47), 'thick': 0.012, 'press': 1.15, 'grow': (1.0, 1.3), 'lift': 0.12, 'turn': 205, 'flip': False,
+        {'prop': 'pocket', 'box': (-0.01, 0.18, 0.24, 0.47), 'also': (0.1, 0.2, 0.24, 0.5), 'thick': 0.012, 'press': 1.15, 'grow': (1.0, 1.3), 'lift': 0.12, 'turn': 205, 'flip': False,
          'labels': [('FINANZAS', 0.45, 0.385, 0.06, GOLD)]},
+        {'prop': 'calculator', 'box': (-0.48, -0.23, 0.32, 0.6), 'thick': 0.03, 'turn': 180, 'hand': (0, 0.45, 0, 0.55), 'flip': True,
+         'labels': [('1.250,00', 0.52, 0.835, 0.07, INK)]},
+        {'prop': 'clipboard', 'box': (0.165, 0.48, 0.18, 0.52), 'thick': 0.03, 'turn': 180, 'hand': (0.55, 1, 0, 0.45), 'flip': True,
+         'labels': []},
     ],
 }
 
@@ -219,39 +219,46 @@ def load(src, spec):
 
 
 def swap(obj, name, src, margin=0.004):
-    """Every object of SWAPS[name] over its old self in `obj`."""
+    """Every object of SWAPS[name] in place of its old self in `obj`: the old
+    one is flattened out of sight first, so only the new one shows."""
     for spec in SWAPS.get(name, []):
-        co, _ = touchup.mesh_arrays(obj)
+        co, e = touchup.mesh_arrays(obj)
         centre, right, up, back, (w, h), lead = old_object(co, spec)
-        if 'clear' in spec:
-            # where the new object's face would sit level with the old one's
-            # (paper, a plate), the old would show through: take its face away,
-            # down to `clear` behind it; what is behind stays, hidden
-            near, far = spec['clear']
-            s = co - centre
-            u, v, d = s @ right, s @ up, s @ back
-            gone = (np.abs(u) < w / 2 * 1.03) & (np.abs(v) < h / 2 * 1.03) & (d > near) & (d < far)
-            import bmesh
-            b = bmesh.new()
-            b.from_mesh(obj.data)
-            b.verts.ensure_lookup_table()
-            faces = [f for f in b.faces if all(gone[v.index] for v in f.verts)]
-            bmesh.ops.delete(b, geom=faces, context='FACES')
-            b.to_mesh(obj.data)
-            b.free()
-            obj.data.update()
-            print('swap: took away', len(faces), 'faces of the old', spec['prop'])
-            lead = 0.0
-        if 'press' in spec:
-            # an object worn on the body (a pocket, a badge): press the old one
-            # flat into the body instead, so no hole opens where the new one's
-            # outline differs; the body's surface there is guessed from the
-            # body round it
+        # the new one's size and place: the old face and a margin round it; the
+        # lone one may carry more (a pocket's pen and calculator stick out above
+        # it): `grow` and `lift` make room for that, as fractions of the old face
+        gx, gz = spec.get('grow', (1, 1))
+        W, H = (w + 2 * margin) * gx, (h + 2 * margin) * gz
+        lift = spec.get('lift', 0) * h
+        t = spec['thick']
+        s = co - centre
+        u, v, d = s @ right, (s @ up), s @ back
+        if 'press' not in spec:
+            # held in a hand: push all of the old one that is in front of the
+            # middle of where the new one will be back to that middle, so it
+            # is wholly inside the new one; the hand's
+            # fingers in front of it (the `hand` box, fractions of the face
+            # from its bottom left) stay
+            inner = (np.abs(u / (W / 2 - 0.002)) ** 8 + np.abs((v - lift) / (H / 2 - 0.002)) ** 8) < 1
+            u0, u1, v0, v1 = spec.get('hand', (0, 0, 0, 0))
+            fu, fv = u / w + 0.5, v / h + 0.5
+            hand = (fu > u0) & (fu < u1) & (fv > v0) & (fv < v1) & (d < -margin)
+            mid = (t - margin) / 2
+            flat = inner & ~hand & (d > -0.07) & (d < mid)
+            co[flat] += np.outer(mid - d[flat], back)
+            print('swap: squashed', int(flat.sum()), 'points of the old', spec['prop'], 'inside the new one')
+        else:
+            # worn on the body (a pocket, a badge): press the old one flat into
+            # the body, so no hole opens where the new one's outline differs,
+            # and paint the body's own colour over it; the body's surface and
+            # colour there are guessed from the body round it
             k = spec['press']
-            s = co - centre
-            u, v, d = s @ right, s @ up, s @ back
-            foot = (np.abs(u) < w / 2 * k) & (np.abs(v) < h / 2 * k)
-            ring = (np.abs(u) < w / 2 * (k + 0.5)) & (np.abs(v) < h / 2 * (k + 0.5)) & ~foot & (d > -0.01) & (d < 0.08)
+            # and `also` (x0, x1, z0, z1, from the front): a pen standing out
+            x0, x1, z0, z1 = spec.get('also', spec['box'])
+            foot = ((np.abs(u) < w / 2 * k) & (np.abs(v) < h / 2 * k)) | \
+                   ((np.abs(u) < W / 2) & (np.abs(v - lift) < H / 2)) | \
+                   ((co[:, 0] > x0) & (co[:, 0] < x1) & (co[:, 2] > z0) & (co[:, 2] < z1) & (d > -0.05) & (d < 0.04))
+            ring = (np.abs(u) < W / 2 + w * 0.3) & (np.abs(v - lift) < H / 2 + h * 0.3) & ~foot & (d > -0.01) & (d < 0.08)
             A = lambda m: np.c_[u[m] ** 2, u[m] * v[m], v[m] ** 2, u[m], v[m], np.ones(m.sum())]
             fit = ring.copy()
             for _ in range(4):
@@ -259,35 +266,83 @@ def swap(obj, name, src, margin=0.004):
                 r = A(ring) @ coef - d[ring]
                 fit = ring.copy()
                 fit[ring] = np.abs(r) < np.percentile(np.abs(r), 60)
+            # only the front of the body there, not its back
+            everywhere = np.ones(len(co), bool)
+            foot &= d < A(everywhere) @ coef + 0.01
             body = A(foot) @ coef
-            ahead = d[foot] < body - 0.001
+            ahead = d[foot] < body + 0.004
             idx = np.nonzero(foot)[0][ahead]
             co[idx] += np.outer(body[ahead] - 0.001 - d[idx], back)
+            # its colour: the body's round it, run smoothly across, matching
+            # the body at its edge (each point the mean of its neighbours, the
+            # points outside held as they are; a guess from the shirt nearby,
+            # not a tie, to start from)
+            vc, _, _ = touchup.colours(obj)
+            near = ring & fit
+            gap = np.linalg.norm(vc[near] - np.median(vc[near], 0), axis=1)
+            near[near] = gap < np.percentile(gap, 60)
+            fill = vc.copy()
+            for c in range(3):
+                cf, *_ = np.linalg.lstsq(A(near), vc[near, c], rcond=None)
+                fill[foot, c] = A(foot) @ cf
+            # Tripo's mesh is in many loose pieces, so what is next to what is
+            # found by distance, not by the mesh's edges
+            from mathutils.kdtree import KDTree
+            around = np.nonzero(foot | ring)[0]
+            kd = KDTree(int(foot.sum()))
+            for i, q in enumerate(co[foot]):
+                kd.insert(q, i)
+            kd.balance()
+            dist = np.full(len(co), np.inf)
+            dist[around] = [kd.find(co[i])[2] for i in around]
+            # all of the footprint, and a soft edge 6 mm wide round it
+            x = np.clip(1 - dist / 0.006, 0, 1)
+            soft = x * x * (3 - 2 * x)
+            soft[foot] = 1
+            kd = KDTree(len(around))
+            for i in around:
+                kd.insert(co[i], int(i))
+            kd.balance()
+            ids = np.nonzero(foot)[0]
+            nb = [[j for _, j, _ in kd.find_range(co[i], 0.0025)] for i in ids]
+            start = np.r_[0, np.cumsum([len(l) for l in nb])[:-1]]
+            flat_nb = np.concatenate([np.array(l, np.int64) for l in nb])
+            cnt = np.array([len(l) for l in nb])[:, None]
+            for _ in range(4000):
+                fill[ids] = np.add.reduceat(fill[flat_nb], start, axis=0) / cnt
+            touchup.paint(obj, soft, np.clip(fill, 0, 1))
+            # pressed flat, the old one's back and inner faces now lie on its
+            # front, turned the wrong way, and show dark: take them away
             obj.data.vertices.foreach_set('co', co.ravel())
             obj.data.update()
-            print('swap: pressed', len(idx), 'points of the old', spec['prop'], 'into the body')
-            lead = 0.0
-        t = spec['thick'] + lead
+            import bmesh
+            b = bmesh.new()
+            b.from_mesh(obj.data)
+            b.faces.ensure_lookup_table()
+            bk = Vector(back)
+            wrong = [f for f in b.faces if all(foot[v.index] for v in f.verts) and f.normal.dot(bk) > 0.3]
+            bmesh.ops.delete(b, geom=wrong, context='FACES_ONLY')
+            b.to_mesh(obj.data)
+            b.free()
+            co, e = touchup.mesh_arrays(obj)
+            print('swap: pressed and painted over', len(idx), 'points of the old', spec['prop'], 'and took away', len(wrong), 'faces turned the wrong way')
+        obj.data.vertices.foreach_set('co', co.ravel())
+        obj.data.update()
         p = load(src, spec)
         a = np.array([v.co[:] for v in p.data.vertices])
         size = a.max(0) - a.min(0)
-        # the old one measured only by its face; the lone one may carry more
-        # (a pocket's pen and calculator stick out above it): `grow` and `lift`
-        # make room for that, as fractions of the old face
-        gx, gz = spec.get('grow', (1, 1))
-        W, H = (w + 2 * margin) * gx, (h + 2 * margin) * gz
-        centre = centre + up * spec.get('lift', 0) * h
+        centre = centre + up * lift
         S = Matrix.Diagonal(Vector((W / size[0], (t + margin) / size[1], H / size[2], 1)))
-        # its front a margin in front of the old face, its back inside the old object
-        at = Vector(centre) + Vector(back) * ((t + margin) / 2 - margin - lead)
+        # its front a margin in front of the old face, its back `thick` behind it
+        at = Vector(centre) + Vector(back) * ((t + margin) / 2 - margin)
         R = Matrix((right, back, up)).transposed().to_4x4()   # x -> right, y -> back, z -> up
         p.data.transform(Matrix.Translation(at) @ R @ S)
         print('swap:', spec['prop'], 'at', [round(x, 3) for x in centre], 'size', round(w, 3), round(h, 3),
-              'turned', round(math.degrees(math.atan2(right[2], right[0])), 1), 'deg, standing out', round(lead, 4))
+              'turned', round(math.degrees(math.atan2(right[2], right[0])), 1), 'deg')
         bpy.context.view_layer.update()
-        front = Vector(centre) - Vector(back) * (margin + lead)
-        for words, u, v, height, colour in spec.get('labels', []):
-            o = front + Vector(right) * (u - 0.5) * W + Vector(up) * (v - 0.5) * H
+        front = Vector(centre) - Vector(back) * margin
+        for words, fu, fv, height, colour in spec.get('labels', []):
+            o = front + Vector(right) * (fu - 0.5) * W + Vector(up) * (fv - 0.5) * H
             # lie on the new object's face: cast a ray at it from the front
             ok, loc, _, _ = p.ray_cast(o - Vector(back) * 0.05, Vector(back))
             if ok:

@@ -107,6 +107,13 @@ const FILES: Record<TripoModel, { file: number; whole: boolean }> = {
   finanzas: { file: require('../../../../design/tripo/finanzas.glb'), whole: true },
   productor: { file: require('../../../../design/tripo/agents/productor.glb'), whole: false },
 };
+// The same ghosts with Tripo's lone models of their objects in place of the
+// ones painted in (design/blender/swap.py), to compare.
+const SWAPPED: Partial<Record<TripoModel, number>> = {
+  incorporacion: require('../../../../design/tripo/incorporacion-swap.glb'),
+  finanzas: require('../../../../design/tripo/finanzas-swap.glb'),
+};
+export const hasSwapped = (m: TripoModel) => m in SWAPPED;
 const EYES = eyesJson as unknown as Partial<Record<TripoModel, Eye[]>>;
 const blinks = new Map<TripoModel, { value: number }>();
 const blinkOf = (m: TripoModel) => blinks.get(m) ?? blinks.set(m, { value: 0 }).get(m)!;
@@ -134,12 +141,14 @@ const loader = new GLTFLoader().setDRACOLoader(draco);
 const AXIS_Z = new THREE.Vector3(0, 0, 1);
 const swing = new THREE.Quaternion();
 
-const cache = new Map<TripoModel, Promise<THREE.Group>>();
-function load(model: TripoModel) {
-  let p = cache.get(model);
+const cache = new Map<string, Promise<THREE.Group>>();
+function load(model: TripoModel, swapped: boolean) {
+  const key = `${model}${swapped ? '-swap' : ''}`;
+  let p = cache.get(key);
   if (!p) {
     p = (async () => {
-      const { file, whole } = FILES[model];
+      const { whole } = FILES[model];
+      const file = (swapped && SWAPPED[model]) || FILES[model].file;
       const asset = Asset.fromModule(file);
       await asset.downloadAsync();
       const gltf = await loader.loadAsync(asset.localUri ?? asset.uri);
@@ -151,8 +160,8 @@ function load(model: TripoModel) {
       });
       return gltf.scene;
     })();
-    cache.set(model, p);
-    p.catch(() => cache.delete(model));
+    cache.set(key, p);
+    p.catch(() => cache.delete(key));
   }
   return p;
 }
@@ -161,10 +170,12 @@ export function TripoScene({
   spin,
   model,
   tone = 'dark',
+  swapped = false,
 }: {
   spin: React.RefObject<SpinState>;
   model: TripoModel;
   tone?: Tone;
+  swapped?: boolean;
 }) {
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
@@ -178,14 +189,14 @@ export function TripoScene({
   useEffect(() => {
     let live = true;
     setScene(null);
-    load(model).then(
+    load(model, swapped).then(
       (s) => live && setScene(s),
       (e) => console.warn('[tripo] could not load', model, e),
     );
     return () => {
       live = false;
     };
-  }, [model]);
+  }, [model, swapped]);
 
   useEffect(() => {
     arms.current = [];

@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { type Agent, DEFAULT_LOOK, type Eyes, type Look, type Surface } from '@/components/ghost/GhostScene';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
-import type { Tone, TripoModel } from '@/components/ghost/TripoScene';
+import { hasSwapped, type Tone, type TripoModel } from '@/components/ghost/TripoScene';
 
 // Spike: a live 3D ghost, open without signing in at /fantasma.
 
@@ -23,6 +23,12 @@ const TONES: { id: Tone; label: string }[] = [
   { id: 'original', label: 'A' },
   { id: 'dark', label: 'B' },
   { id: 'darker', label: 'C' },
+];
+// Incorporación and Finanzas: their objects as Tripo painted them in, or
+// Tripo's lone models of them put in their place.
+const OBJECTS: { id: boolean; label: string }[] = [
+  { id: false, label: 'Tripo' },
+  { id: true, label: 'Cambiados' },
 ];
 const SOURCES: { id: Source; label: string }[] = [
   { id: 'tripo', label: 'Tripo' },
@@ -71,7 +77,8 @@ function Chips<T>({
 
 export default function Fantasma() {
   const [focused, setFocused] = useState(true);
-  const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string; source?: string; tone?: string }>();
+  const params = useLocalSearchParams<{ agent?: string; surface?: string; eyes?: string; source?: string; tone?: string; objects?: string }>();
+  const [swapped, setSwapped] = useState(params.objects === 'swap');
   const [agent, setAgent] = useState<TripoModel>(AGENTS.find((a) => a.id === params.agent)?.id ?? 'base');
   const [source, setSource] = useState<Source>(params.source === 'ours' ? 'ours' : 'tripo');
   const [tone, setTone] = useState<Tone>(TONES.find((o) => o.id === params.tone)?.id ?? 'dark');
@@ -101,7 +108,7 @@ export default function Fantasma() {
         ))}
       </View>
       <View className="flex-1">
-        <GhostViewer active={focused} agent={agent as Agent} look={look} tripo={tripo} tone={tone} />
+        <GhostViewer active={focused} agent={agent as Agent} look={look} tripo={tripo} tone={tone} swapped={swapped} />
       </View>
       <View className="gap-2 pb-3">
         {hasOurs && (
@@ -114,6 +121,20 @@ export default function Fantasma() {
                 className={`h-9 items-center justify-center rounded-full border px-4 ${source === o.id ? 'border-transparent bg-black' : 'border-gray-300'}`}
               >
                 <Text className={source === o.id ? 'text-white' : 'text-muted'}>{o.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+        {tripo && hasSwapped(tripo) && (
+          <View className="flex-row items-center justify-center gap-2">
+            <Text className="w-20 text-right text-muted">Objetos</Text>
+            {OBJECTS.map((o) => (
+              <Pressable
+                key={o.label}
+                onPress={() => setSwapped(o.id)}
+                className={`h-9 items-center justify-center rounded-full border px-4 ${swapped === o.id ? 'border-transparent bg-black' : 'border-gray-300'}`}
+              >
+                <Text className={swapped === o.id ? 'text-white' : 'text-muted'}>{o.label}</Text>
               </Pressable>
             ))}
           </View>

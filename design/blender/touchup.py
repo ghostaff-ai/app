@@ -62,17 +62,12 @@ def raster(uv, tri, shape, grow=1.5):
     return ys[m].astype(int), xs[m].astype(int), bc
 
 
-def soften_seams(obj, eyes=(), zmin=0.6, skip=(), step=0.12, reach=0.035):
-    """Tripo paints a ghost from a few views, and where two views meet on the
-    head their colours (and its normal map) jump: a hard line from the front
-    to the back. Find where the colour jumps from one point to the next on the
-    head (not at the eyes, not in the `skip` boxes), and repaint a band `reach`
-    wide around it with colours that run smoothly from one side to the other."""
+def colours(obj):
+    """Each point's colour in the texture (the mean of its corners'), and its
+    corners' own colours."""
     me = obj.data
-    co, e = mesh_arrays(obj)
-    n = len(co)
+    n = len(me.vertices)
     img, px = texture(obj)
-    nimg, npx = texture(obj, 'Normal')
     h, w = px.shape[:2]
     uv = np.zeros(len(me.loops) * 2); me.uv_layers.active.data.foreach_get('uv', uv); uv = uv.reshape(-1, 2)
     lv = np.zeros(len(me.loops), np.int64); me.loops.foreach_get('vertex_index', lv)
@@ -80,6 +75,50 @@ def soften_seams(obj, eyes=(), zmin=0.6, skip=(), step=0.12, reach=0.035):
     vc = np.zeros((n, 3))
     for k in range(3):
         vc[:, k] = np.bincount(lv, lc[:, k], n) / np.maximum(np.bincount(lv, None, n), 1)
+    return vc, lc, lv
+
+
+def paint(obj, wt, colour):
+    """Repaint the texture round the points with weight `wt` > 0: toward
+    `colour` (one per point) by that weight, the bumps (normal map) toward
+    flat by the same."""
+    me = obj.data
+    img, px = texture(obj)
+    nimg, npx = texture(obj, 'Normal')
+    h, w = px.shape[:2]
+    uv = np.zeros(len(me.loops) * 2); me.uv_layers.active.data.foreach_get('uv', uv); uv = uv.reshape(-1, 2)
+    lv = np.zeros(len(me.loops), np.int64); me.loops.foreach_get('vertex_index', lv)
+    tris = []
+    for poly in me.polygons:
+        if wt[list(poly.vertices)].max() > 0:
+            ls = list(poly.loop_indices)
+            tris += [(ls[0], ls[k], ls[k + 1]) for k in range(1, len(ls) - 1)]
+    flat = np.array([0.5, 0.5, 1.0], np.float32)
+    for tri in tris:
+        r = raster(uv, np.array(tri), (h, w))
+        if r is None:
+            continue
+        ys, xs, bc = r
+        vs = lv[list(tri)]
+        k = (bc @ wt[vs])[:, None]
+        px[ys, xs, :3] = px[ys, xs, :3] * (1 - k) + (bc @ colour[vs]) * k
+        if npx is not None:
+            npx[ys, xs, :3] = npx[ys, xs, :3] * (1 - k) + flat * k
+    save_texture(img, px)
+    if npx is not None:
+        save_texture(nimg, npx)
+    return len(tris)
+
+
+def soften_seams(obj, eyes=(), zmin=0.6, skip=(), step=0.12, reach=0.035):
+    """Tripo paints a ghost from a few views, and where two views meet on the
+    head their colours (and its normal map) jump: a hard line from the front
+    to the back. Find where the colour jumps from one point to the next on the
+    head (not at the eyes, not in the `skip` boxes), and repaint a band `reach`
+    wide around it with colours that run smoothly from one side to the other."""
+    co, e = mesh_arrays(obj)
+    n = len(co)
+    vc, lc, lv = colours(obj)
     # where the colour jumps: along an edge, or between a point's own corners
     # (a point on the border of two texture pieces painted from two views)
     seam = np.zeros(n, bool)
@@ -113,26 +152,8 @@ def soften_seams(obj, eyes=(), zmin=0.6, skip=(), step=0.12, reach=0.035):
     for _ in range(400):
         avg = np.stack([np.bincount(a, sm[b, k], n) for k in range(3)], 1) / deg[:, None]
         sm[band] = avg[band]
-    tris = []
-    for poly in me.polygons:
-        if wt[list(poly.vertices)].max() > 0:
-            ls = list(poly.loop_indices)
-            tris += [(ls[0], ls[k], ls[k + 1]) for k in range(1, len(ls) - 1)]
-    flat = np.array([0.5, 0.5, 1.0], np.float32)
-    for tri in tris:
-        r = raster(uv, np.array(tri), (h, w))
-        if r is None:
-            continue
-        ys, xs, bc = r
-        vs = lv[list(tri)]
-        k = (bc @ wt[vs])[:, None]
-        px[ys, xs, :3] = px[ys, xs, :3] * (1 - k) + (bc @ sm[vs]) * k
-        if npx is not None:
-            npx[ys, xs, :3] = npx[ys, xs, :3] * (1 - k) + flat * k
-    save_texture(img, px)
-    if npx is not None:
-        save_texture(nimg, npx)
-    print('seams: softened', int(seam.sum()), 'points,', int(band.sum()), 'in the band,', len(tris), 'triangles')
+    paint(obj, wt, sm)
+    print('seams: softened', int(seam.sum()), 'points,', int(band.sum()), 'in the band')
 
 
 def text_at(words, at, right, up, height, colour):
