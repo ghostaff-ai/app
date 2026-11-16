@@ -47,7 +47,7 @@ Today `ghostaff-prod` acts as beta: its only service, `engine`, talks to the **b
 
 **2026-11-12, the first slice runs locally** (branch `feat/first-slice-scaffold`):
 
-- [x] pnpm monorepo on cultuvilla/app's pattern: `apps/mobile` (Expo 56, expo-router, NativeWind), `packages/shared`, per-env bundle ids `ai.ghostaff.app[.dev|.beta]`, `eas.json` profiles, commitlint, CI.
+- [x] pnpm monorepo on cultuvilla/app's pattern: `apps/mobile` (Expo 58 since 2026-11-16, expo-router, NativeWind), `packages/shared`, per-env bundle ids `ai.ghostaff.app[.dev|.beta]`, `eas.json` profiles, commitlint, CI.
 - [x] Database: organisations, memberships, decisions, with row-level security; the app answers only through `answer_decision()`. pgTAP proves one organisation's member sees and answers nothing of another's.
 - [x] Sign in with a 6-digit email code; only people an organisation added can sign in.
 - [x] Organisation picker, remembered on the device.

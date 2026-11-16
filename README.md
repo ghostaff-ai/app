@@ -61,10 +61,10 @@ On a phone, from anywhere on the tailnet, with Expo Go:
 APP_ENV=beta tailnet-dev pnpm app:start --go
 ```
 
-Then scan the QR code in Expo Go, or type `exp://<the printed address>:<port>`. The stores' Expo Go
-lags behind SDK 56 (it says the project is incompatible); install the SDK 56 one from
-[expo.dev/go](https://expo.dev/go) instead. It replaces the old one, so an SDK 54 app (ordago-apps)
-then needs its own dev build.
+Then scan the QR code in Expo Go, or type `exp://<the printed address>:<port>`. The app is on SDK 58,
+the one the stores' Expo Go runs. When Expo Go moves past it, it says the project is incompatible:
+upgrade the app (`npx expo install expo@<new> && npx expo install --fix` in `apps/mobile`) rather than
+install an older Expo Go from [expo.dev/go](https://expo.dev/go); the app is young and upgrades are cheap now.
 
 An answer given in the app is written into the record's file by the next
 `pnpm sync:por-decidir … --write-back`, which edits the checkout and leaves the commit to you.
