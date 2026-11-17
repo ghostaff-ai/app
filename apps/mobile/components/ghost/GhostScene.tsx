@@ -2,7 +2,6 @@ import { useFrame } from '@react-three/fiber';
 import { Asset } from 'expo-asset';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import eyesJson from '@/assets/ghosts/eyes.json';
 import { GHOSTS, type GhostId } from '@/lib/team';
@@ -94,10 +93,10 @@ const blinkOf = (g: GhostId) => blinks.get(g) ?? blinks.set(g, { value: 0 }).get
 const HEIGHT = 2.0;
 const FLOOR = -1.04;
 
-// The models' geometry is Draco-compressed; three.js's decoder is served from
-// public/draco/.
-const draco = new DRACOLoader().setDecoderPath('/draco/');
-const loader = new GLTFLoader().setDRACOLoader(draco);
+// Plain glTF, no Draco: a phone app has no WebAssembly to run the decoder, and
+// the pure-JS one takes seconds and freezes the screen. The models are cut to
+// about 60,000 triangles instead, 2 to 3 MB each (2026-11-17).
+const loader = new GLTFLoader();
 
 const cache = new Map<GhostId, Promise<THREE.Group>>();
 function load(ghost: GhostId) {
