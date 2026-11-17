@@ -162,7 +162,8 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# Where Google in Expo Go returns to: exp://<host>:<port>/--/entrar.
+additional_redirect_urls = ["https://127.0.0.1:3000", "exp://**", "ghostaff://**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -335,20 +336,24 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack_oidc`, `spotify`, `workos`, `zoom`.
+# Google: the web's button and the phones' native sheet hand Supabase an ID token,
+# checked against these client ids (the web client first, then each iPhone app's;
+# Android tokens carry the web client's id). The secret is only for the browser
+# flow in Expo Go. The free Google Sign-In SDK on iPhone cannot pass a nonce, so
+# the nonce check is skipped. Same clients on the hosted projects (dashboard).
+[auth.external.google]
+enabled = true
+client_id = "664656500315-o45bt01ao6pb1s7oehv4n77c3k1uu76p.apps.googleusercontent.com,664656500315-a9gv4p3v4kq1r5oasv6eldvfmdbdlg94.apps.googleusercontent.com,664656500315-h8oqbdihq2rophdsvo51r7c9biqal2qe.apps.googleusercontent.com,664656500315-55k96qirco28jb9q0c4isaek7c05pqtv.apps.googleusercontent.com"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+skip_nonce_check = true
+
+# Apple: only the iPhone's native sheet, so only the bundle ids (the token's
+# audience) and no secret. host.exp.Exponent is Expo Go on an iPhone.
 [auth.external.apple]
-enabled = false
-client_id = ""
-# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
-secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
-# Overrides the default auth callback URL derived from auth.external_url.
-redirect_uri = ""
-# Overrides the default auth provider URL. Used to support self-hosted gitlab, single-tenant Azure,
-# or any other third-party OIDC providers.
-url = ""
-# If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
+enabled = true
+client_id = "ai.ghostaff.app.dev,ai.ghostaff.app.beta,ai.ghostaff.app,host.exp.Exponent"
+secret = ""
 skip_nonce_check = false
-# If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
-email_optional = false
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.

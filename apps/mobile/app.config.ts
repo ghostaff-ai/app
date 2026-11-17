@@ -54,11 +54,11 @@ const engineUrl = process.env[`ENGINE_URL_${suffix}`] || engineUrlPerEnv[env];
 // has its own iOS client, and each Android package its own Android client (no id
 // here: Google matches it by package and signing certificate). The iOS URL scheme
 // is the iOS client id reversed.
-const googleWebClientId = '';
+const googleWebClientId = '664656500315-o45bt01ao6pb1s7oehv4n77c3k1uu76p.apps.googleusercontent.com';
 const googleIosClientIdPerEnv: Record<Env, string> = {
-  dev: '',
-  beta: '',
-  prod: '',
+  dev: '664656500315-a9gv4p3v4kq1r5oasv6eldvfmdbdlg94.apps.googleusercontent.com',
+  beta: '664656500315-h8oqbdihq2rophdsvo51r7c9biqal2qe.apps.googleusercontent.com',
+  prod: '664656500315-55k96qirco28jb9q0c4isaek7c05pqtv.apps.googleusercontent.com',
 };
 const googleIosClientId = googleIosClientIdPerEnv[env];
 const googleIosUrlScheme = googleIosClientId
