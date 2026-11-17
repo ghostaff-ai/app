@@ -24,6 +24,7 @@
       }
     },
     "beta": {
+      "channel": "beta",
       "environment": "preview",
       "env": {
         "APP_ENV": "beta"
@@ -42,6 +43,7 @@
       }
     },
     "production": {
+      "channel": "production",
       "environment": "production",
       "env": {
         "APP_ENV": "prod"

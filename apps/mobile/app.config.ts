@@ -83,6 +83,16 @@ const config: ExpoConfig = {
   // another's EAS project. Account ghostaff.ai (ghostaff.ai@gmail.com).
   owner: 'ghostaff.ai',
   version: '0.1.0',
+  // Over-the-air updates (EAS Update): a beta build listens on channel `beta`
+  // (eas.json) and takes each push to develop on its next launch
+  // (.github/workflows/beta.yml). Checked on launch without holding the splash.
+  updates: {
+    url: 'https://u.expo.dev/8a688732-55c1-4ef0-9a23-0fbb3f401911',
+    fallbackToCacheTimeout: 0,
+  },
+  // The fingerprint of the native side (fingerprint.config.js): an update
+  // reaches only builds that can run it, and a native change needs a new build.
+  runtimeVersion: { policy: 'fingerprint' },
   orientation: 'portrait',
   scheme: 'ghostaff',
   userInterfaceStyle: 'automatic',
