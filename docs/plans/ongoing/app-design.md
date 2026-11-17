@@ -84,7 +84,7 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 - [ ] «Hecho sin ti» on Hoy: nothing records what agents did alone yet.
 - [x] Three native tabs, Hoy · Equipo · Registro (Registro: what was decided); Organizaciones as a native sheet with counts (PR #11).
 - [ ] The mic: needs the engine's always-on service for talking to Secretaría.
-- [ ] «Preguntar»: a chat about one decision. Needs the engine's always-on service for talking to a department.
+- [ ] «Preguntar»: a chat about one decision, a thread of the team chat ([team-chat.md](../ready/team-chat.md)). Needs the engine's always-on service for talking to a department.
 - [x] The ghost-tinted greys and the night-studio dark set (`lib/palette.ts`), following the phone (PR #10).
 - [x] The halo behind the ghost on Hoy, a glow after dark (`GhostScene`, PR #11).
 - [ ] Expo UI (decision 33): add it with the first native control the app needs (a menu, picker or switch); the org sheet is already a native form sheet.
