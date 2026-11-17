@@ -59,6 +59,7 @@ Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm engine
 ## Branches
 
 - `develop` is the default branch and where work lands, through pull requests.
+- **Merge your own pull request as soon as its checks are green** (Álvaro, 2026-11-17): `gh pr checks <n> --watch`, then `gh pr merge <n> --merge`. Don't wait for him to test on the phone first; a problem found later gets its own fix PR. Stacked PRs merge in order, the base first.
 - `main` is what is released.
 - Markdown-only changes (plans, this file) may be committed straight to `develop`.
 
