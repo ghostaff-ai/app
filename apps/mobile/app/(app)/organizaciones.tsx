@@ -2,14 +2,20 @@ import { router } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { useWaitingCounts } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+
+// A sheet over Hoy, opened from the organisation's name (app-design.md,
+// decision 3): each organisation with how many decisions wait in it.
 
 export default function Organizations() {
   const { organizations, active, choose } = useActiveOrg();
   const { session, signOut } = useAuth();
+  const waiting = useWaitingCounts(organizations.map((o) => o.id));
 
   return (
-    <ScrollView className="flex-1 bg-surface" contentContainerClassName="p-5">
+    <ScrollView className="flex-1 bg-surface" contentContainerClassName="p-5 pb-12">
+      <Text className="mb-4 font-display text-xl text-ink">Organizaciones</Text>
       {organizations.map((o) => (
         <Pressable
           key={o.id}
@@ -21,7 +27,14 @@ export default function Organizations() {
           }}
           className={`mb-3 rounded-2xl border bg-card p-4 ${o.id === active?.id ? 'border-accent' : 'border-line'}`}
         >
-          <Text className="text-base font-semibold text-ink">{o.name}</Text>
+          <View className="flex-row items-center justify-between">
+            <Text className="flex-1 text-base font-semibold text-ink">{o.name}</Text>
+            {waiting[o.id] ? (
+              <View className="ml-2 rounded-full bg-waiting px-2 py-0.5">
+                <Text className="text-xs font-semibold text-white">{waiting[o.id] === 1 ? '1 te espera' : `${waiting[o.id]} te esperan`}</Text>
+              </View>
+            ) : null}
+          </View>
           <Text className="mt-1 text-sm text-muted">Firmas como {o.displayName}</Text>
         </Pressable>
       ))}

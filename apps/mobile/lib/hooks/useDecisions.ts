@@ -1,13 +1,22 @@
 import type { Decision } from '@ghostaff/shared';
 import { RULE_KIND } from '@ghostaff/shared';
-import { answerDecision, getDecision, listOpenDecisions, okStreak, unanswerDecision, type AnswerInput } from '@ghostaff/shared/services';
+import {
+  answerDecision,
+  countWaiting,
+  getDecision,
+  listDecidedDecisions,
+  listOpenDecisions,
+  okStreak,
+  unanswerDecision,
+  type AnswerInput,
+} from '@ghostaff/shared/services';
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** The open decisions of one organisation, with a pull-to-refresh. */
-export function useInbox(orgId: string | null) {
+/** A list of one organisation's decisions, loaded by `fetch`, with a reload. */
+function useDecisionList(orgId: string | null, fetch: (orgId: string) => Promise<Decision[]>) {
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,20 +29,49 @@ export function useInbox(orgId: string | null) {
     }
     setLoading(true);
     try {
-      setDecisions(await listOpenDecisions(supabase, orgId));
+      setDecisions(await fetch(orgId));
       setError(null);
     } catch (e) {
       setError(message(e));
     } finally {
       setLoading(false);
     }
-  }, [orgId]);
+  }, [orgId, fetch]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   return { decisions, loading, error, reload: load };
+}
+
+const fetchOpen = (orgId: string) => listOpenDecisions(supabase, orgId);
+const fetchDecided = (orgId: string) => listDecidedDecisions(supabase, orgId);
+
+/** The open decisions of one organisation, what waits first: Hoy. */
+export function useInbox(orgId: string | null) {
+  return useDecisionList(orgId, fetchOpen);
+}
+
+/** What the organisation has answered, newest first: Registro. */
+export function useDecided(orgId: string | null) {
+  return useDecisionList(orgId, fetchDecided);
+}
+
+/** How many decisions wait in each of the person's organisations; empty until loaded or on error. */
+export function useWaitingCounts(orgIds: string[]) {
+  const key = orgIds.join(',');
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let alive = true;
+    countWaiting(supabase, key ? key.split(',') : [])
+      .then((c) => alive && setCounts(c))
+      .catch(() => alive && setCounts({})); // the counts are a nicety; switching still works without them
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+  return counts;
 }
 
 export function useDecision(id: string | undefined) {
