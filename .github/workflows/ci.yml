@@ -109,13 +109,21 @@ jobs:
           E2E_SERIAL: emulator-5554
           MAESTRO_DRIVER_STARTUP_TIMEOUT: 120000
         with:
-          api-level: 36
-          target: google_apis
+          # The Automated Test Device image: Android without the parts a test
+          # never uses, so a 2-core runner isn't swamped by System UI ("isn't
+          # responding" over the app). No Google services: flows/google runs
+          # only locally.
+          api-level: 34
+          target: aosp_atd
           arch: x86_64
           profile: pixel_6
+          ram-size: 4096M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
-          script: bash scripts/e2e/android.sh test
+          # Any "isn't responding" dialog from a slow boot stays hidden.
+          script: |
+            adb -s emulator-5554 shell settings put global hide_error_dialogs 1
+            bash scripts/e2e/android.sh test
 
       - name: Keep Maestro's screenshots and logs
         if: failure()
