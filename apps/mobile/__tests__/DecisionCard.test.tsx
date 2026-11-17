@@ -21,22 +21,22 @@ const decision: Decision = {
 };
 
 describe('DecisionCard', () => {
-  it('shows the question, who asks and a dot while it waits', () => {
+  it('shows the question, who asks and a dot while it waits', async () => {
     const onPress = jest.fn();
-    render(<DecisionCard decision={decision} onPress={onPress} />);
+    await render(<DecisionCard decision={decision} onPress={onPress} />);
     expect(screen.getByText('¿Vuelves a publicar el título nuevo?')).toBeTruthy();
     expect(screen.getByText('seo · seo · 9 nov')).toBeTruthy();
     expect(screen.getByTestId('waiting-dot')).toBeTruthy();
-    fireEvent.press(screen.getByRole('button'));
+    await fireEvent.press(screen.getByRole('button'));
     expect(onPress).toHaveBeenCalled();
   });
 
-  it('drops the dot once answered and says whether the agent has it', () => {
+  it('drops the dot once answered and says whether the agent has it', async () => {
     const answered: Decision = {
       ...decision,
       answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-12T09:00:00Z', note: null, signedText: null, source: 'app', writtenBackAt: null },
     };
-    render(<DecisionCard decision={answered} onPress={() => {}} />);
+    await render(<DecisionCard decision={answered} onPress={() => {}} />);
     expect(screen.queryByTestId('waiting-dot')).toBeNull();
     expect(screen.getByText('OK de Álvaro · llegando al registro')).toBeTruthy();
   });

@@ -24,7 +24,8 @@ export default function Join() {
     try {
       const org = await acceptInvitation(supabase, id);
       await enter(org.id);
-      router.replace('/');
+      // After the layout has re-rendered with the new organisation, so the inbox route exists.
+      requestAnimationFrame(() => router.replace('/'));
     } catch (e) {
       setJoinError(e instanceof Error ? e.message : String(e));
       setBusy(null);

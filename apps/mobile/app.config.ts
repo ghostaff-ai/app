@@ -83,7 +83,7 @@ const config: ExpoConfig = {
     bundler: 'metro',
     output: 'single',
   },
-  plugins: ['expo-router'],
+  plugins: ['expo-router', 'expo-splash-screen', 'expo-status-bar'],
   experiments: {
     typedRoutes: true,
   },
