@@ -81,6 +81,7 @@ export default function Conversacion() {
           contentContainerStyle={{ paddingBottom: 16 }}
           style={{ flex: 1 }}
         />
+        {error ? <Text className="px-4 pb-1 text-sm text-no">{error}</Text> : null}
         {canTalk ? (
           <Composer placeholder={agent ? `Escribe a ${agent.name}` : 'Escribe aquí'} names={names} onSend={send} />
         ) : (

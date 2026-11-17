@@ -15,6 +15,10 @@ export interface ChatMessage {
   /** How the author signs, kept if they leave. */
   authorName: string;
   parts: MessagePart[];
+  /** An agent's reply is «working» while it is written, then «done» (or «failed»). */
+  state: 'working' | 'done' | 'failed';
+  /** What the agent did, one plain line per step. */
+  steps: string[];
   createdAt: string;
 }
 

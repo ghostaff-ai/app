@@ -636,6 +636,8 @@ interface MessageRow {
   author_agent: string | null;
   author_name: string;
   parts: MessagePart[];
+  state?: 'working' | 'done' | 'failed';
+  steps?: string[];
   created_at: string;
 }
 
@@ -648,11 +650,13 @@ export function messageFromRow(r: MessageRow): ChatMessage {
     authorAgentId: r.author_agent,
     authorName: r.author_name,
     parts: Array.isArray(r.parts) ? r.parts : [],
+    state: r.state ?? 'done',
+    steps: Array.isArray(r.steps) ? r.steps : [],
     createdAt: r.created_at,
   };
 }
 
-const MESSAGE_COLUMNS = 'id, thread_id, author_kind, author_user, author_agent, author_name, parts, created_at';
+const MESSAGE_COLUMNS = 'id, thread_id, author_kind, author_user, author_agent, author_name, parts, state, steps, created_at';
 
 /** A thread's latest messages, oldest first. */
 export async function listMessages(client: SupabaseClient, threadId: string, limit = 300): Promise<ChatMessage[]> {
@@ -685,17 +689,41 @@ export async function markThreadRead(client: SupabaseClient, threadId: string): 
   if (error) throw error;
 }
 
-/** Calls `onMessage` for each new message in the thread, live; returns how to stop. */
-export function subscribeToThread(client: SupabaseClient, threadId: string, onMessage: (m: ChatMessage) => void): () => void {
+/**
+ * Calls `onMessage` for each new or changed message in the thread, live (an
+ * agent's reply changes as it is written); returns how to stop. `onLive` runs
+ * each time the subscription (re)starts delivering: whatever changed before
+ * that was missed, so the caller reloads then.
+ */
+export function subscribeToThread(
+  client: SupabaseClient,
+  threadId: string,
+  onMessage: (m: ChatMessage) => void,
+  onLive?: () => void,
+): () => void {
   const channel = client
     .channel(`thread:${threadId}`)
     .on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` },
-      (payload) => onMessage(messageFromRow(payload.new as MessageRow)),
+      { event: '*', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` },
+      (payload) => {
+        if (payload.eventType !== 'DELETE') onMessage(messageFromRow(payload.new as MessageRow));
+      },
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') onLive?.();
+    });
   return () => {
     void client.removeChannel(channel);
   };
+}
+
+/** Asks the thread's agent to answer its last message; resolves when it has. */
+export async function askAgent(engine: EngineAccess, threadId: string): Promise<{ replied: boolean }> {
+  return callEngine(engine, 'POST', `/threads/${threadId}/reply`);
+}
+
+/** A newly added agent introduces itself in a thread of its own; returns that thread. */
+export async function agentHello(engine: EngineAccess, agentId: string): Promise<{ threadId: string }> {
+  return callEngine(engine, 'POST', `/agents/${agentId}/hello`);
 }

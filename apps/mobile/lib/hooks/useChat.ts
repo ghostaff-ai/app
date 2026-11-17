@@ -1,5 +1,7 @@
-import type { AgentLevel, ChatMessage, ChatThread, OrgMember } from '@ghostaff/shared';
+import { type AgentLevel, type ChatMessage, type ChatThread, messageText, type OrgMember } from '@ghostaff/shared';
 import {
+  askAgent,
+  type EngineAccess,
   getThread,
   listMembers,
   listMessages,
@@ -12,6 +14,7 @@ import {
 } from '@ghostaff/shared/services';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase';
+import { useEngine } from './useConnections';
 
 // The team chat's data for the screens (docs/plans/ongoing/team-chat.md). All
 // of it goes through @ghostaff/shared/services; row-level security decides what
@@ -70,9 +73,26 @@ export function useMyLevels(orgId: string | null) {
   return { levels: data, ...rest };
 }
 
-/** Appends a message unless it is already there (it arrives both from post_message and from Realtime). */
+/** Whether `next` is a later version of the same message than `prev` (an agent's reply changes as it is written). */
+function isNewer(prev: ChatMessage, next: ChatMessage): boolean {
+  if (prev.state !== 'working') return next.state !== 'working';
+  if (next.state !== 'working') return true;
+  return messageText(next.parts).length >= messageText(prev.parts).length;
+}
+
+/**
+ * Adds a message, or its later version (it arrives from post_message, from the
+ * history and from Realtime, and an agent's reply arrives many times as it grows).
+ */
 export function addMessage(list: ChatMessage[], m: ChatMessage): ChatMessage[] {
-  if (list.some((x) => x.id === m.id)) return list;
+  const i = list.findIndex((x) => x.id === m.id);
+  if (i >= 0) {
+    const prev = list[i];
+    if (!prev || !isNewer(prev, m)) return list;
+    const next = list.slice();
+    next[i] = m;
+    return next;
+  }
   const next = [...list, m];
   // Realtime may deliver out of order; keep them in the order they were written.
   return next.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -90,38 +110,58 @@ export function useThread(threadId: string | null) {
   useEffect(() => {
     if (!threadId) return;
     let alive = true;
-    // Subscribe first, so nothing written while the history loads is lost.
-    const stop = subscribeToThread(supabase, threadId, (m) => {
-      if (!alive) return;
-      setMessages((list) => addMessage(list, m));
-      void markThreadRead(supabase, threadId).catch(() => {});
-    });
-    Promise.all([getThread(supabase, threadId), listMessages(supabase, threadId)])
-      .then(([h, ms]) => {
+    const load = () =>
+      Promise.all([getThread(supabase, threadId), listMessages(supabase, threadId)])
+        .then(([h, ms]) => {
+          if (!alive) return;
+          setHead(h);
+          setMessages((live) => ms.reduce(addMessage, live));
+          if (h) void markThreadRead(supabase, threadId).catch(() => {});
+        })
+        .catch((e: unknown) => {
+          if (!alive) return;
+          setError(message(e));
+          setHead((h) => h ?? null);
+        });
+    // Live changes from the moment the subscription delivers; the history is
+    // loaded now, for a quick first paint, and again then, for anything
+    // written in between (an agent's reply can finish in that gap).
+    const stop = subscribeToThread(
+      supabase,
+      threadId,
+      (m) => {
         if (!alive) return;
-        setHead(h);
-        setMessages((live) => ms.reduce(addMessage, live));
-        if (h) void markThreadRead(supabase, threadId).catch(() => {});
-      })
-      .catch((e: unknown) => {
-        if (!alive) return;
-        setError(message(e));
-        setHead(null);
-      });
+        setMessages((list) => addMessage(list, m));
+        void markThreadRead(supabase, threadId).catch(() => {});
+      },
+      () => void load(),
+    );
+    void load();
     return () => {
       alive = false;
       stop();
     };
   }, [threadId]);
 
+  const engine = useEngine();
   const send = useCallback(
     async (body: string) => {
       if (!threadId) return;
       const m = await postMessage(supabase, threadId, body);
       setMessages((list) => addMessage(list, m));
+      // The agent's reply arrives through Realtime as it is written.
+      if (engine) letAgentAnswer(engine, threadId, setError);
     },
-    [threadId],
+    [threadId, engine],
   );
 
   return { head, messages, error, send };
+}
+
+/**
+ * Asks the thread's agent to answer, without waiting: the reply arrives in the
+ * thread live. Only a failure to reach the engine is reported.
+ */
+export function letAgentAnswer(engine: EngineAccess, threadId: string, onError?: (e: string) => void) {
+  askAgent(engine, threadId).catch(() => onError?.('El agente no ha podido contestar ahora. Prueba de nuevo en un momento.'));
 }

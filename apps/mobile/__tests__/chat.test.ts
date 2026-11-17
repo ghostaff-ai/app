@@ -18,6 +18,8 @@ const msg = (id: string, who: string, at: string, kind: 'person' | 'agent' = 'pe
   authorKind: kind,
   authorUserId: kind === 'person' ? who : null,
   authorAgentId: kind === 'agent' ? who : null,
+  state: 'done',
+  steps: [],
   authorName: who,
   parts: [{ type: 'text', text: id }],
   createdAt: at,
@@ -47,6 +49,22 @@ describe('the chat rules', () => {
     const a = msg('a', 'ana', '2026-11-18T10:00:00Z');
     const b = msg('b', 'ana', '2026-11-18T10:01:00Z');
     expect(addMessage(addMessage([b], a), b).map((m) => m.id)).toEqual(['a', 'b']);
+  });
+
+  it('keeps the latest version of a reply as it is written', () => {
+    const w = (text: string, state: ChatMessage['state'] = 'working'): ChatMessage => ({
+      ...msg('r', 'fin', '2026-11-18T10:02:00Z', 'agent'),
+      parts: [{ type: 'text', text }],
+      state,
+    });
+    let list = addMessage([], w('Ho'));
+    list = addMessage(list, w('Hola, '));
+    list = addMessage(list, w('Ho')); // a late, older copy
+    expect(list).toHaveLength(1);
+    expect(list[0]?.parts).toEqual([{ type: 'text', text: 'Hola, ' }]);
+    list = addMessage(list, w('Hola, Ana.', 'done'));
+    list = addMessage(list, w('Hola, Ana. Y m')); // a working copy after it finished
+    expect(list[0]?.state).toBe('done');
   });
 
   it('sends the mic to Secretaría when the person may talk to her', () => {
