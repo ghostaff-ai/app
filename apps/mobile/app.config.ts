@@ -93,6 +93,9 @@ const config: ExpoConfig = {
   // The fingerprint of the native side (fingerprint.config.js): an update
   // reaches only builds that can run it, and a native change needs a new build.
   runtimeVersion: { policy: 'fingerprint' },
+  // One icon for every env (Álvaro, 2026-11-17): the name under it tells them
+  // apart. Rendered from the ghost's model by assets/icon/render.py.
+  icon: './assets/icon/icon.png',
   orientation: 'portrait',
   scheme: 'ghostaff',
   userInterfaceStyle: 'automatic',
@@ -108,10 +111,15 @@ const config: ExpoConfig = {
   },
   android: {
     package: bundleIdPerEnv[env],
+    adaptiveIcon: {
+      foregroundImage: './assets/icon/adaptive-foreground.png',
+      backgroundColor: '#0b0b0f',
+    },
   },
   web: {
     bundler: 'metro',
     output: 'single',
+    favicon: './assets/icon/favicon.png',
   },
   plugins: [
     // A dev build talks to the local Supabase over plain http (the e2e build:
