@@ -2,7 +2,7 @@ import type { Agent } from '@ghostaff/shared';
 import { deleteAgent, getAgent } from '@ghostaff/shared/services';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
 import { Button, ErrorText, Loading, Notice } from '@/components/ui';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -10,7 +10,8 @@ import { supabase } from '@/lib/supabase';
 import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
 // One agent of the team, live in 3D: drag to spin it, tap to make it hop. An
-// owner can remove it from here (two taps, so not by accident).
+// owner sets from here who may use it, and can remove it (two taps, so not by
+// accident).
 
 export default function Agente() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -66,7 +67,20 @@ export default function Agente() {
         <Text className="mt-2 text-center text-base text-ink">{g.job}</Text>
         <Text className="mt-3 text-center text-sm text-muted">Arrástralo para girarlo. Tócalo para que salte.</Text>
         {owner ? (
-          <View className="mt-6">
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push(`/acceso/${agent.id}`)}
+            className="mt-6 flex-row items-center justify-between rounded-2xl border border-line bg-card px-4 py-3"
+          >
+            <View>
+              <Text className="text-base font-semibold text-ink">Quién puede</Text>
+              <Text className="text-sm text-muted">Ver o hablar con {agent.name}, persona a persona</Text>
+            </View>
+            <Text className="text-xl text-muted">›</Text>
+          </Pressable>
+        ) : null}
+        {owner ? (
+          <View className="mt-3">
             {confirming ? (
               <View className="flex-row gap-3">
                 <View className="flex-1">

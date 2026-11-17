@@ -141,3 +141,43 @@ export function Choice({ title, body, onPress }: { title: string; body: string; 
     </Pressable>
   );
 }
+
+/** What each level on an agent is called in the app. */
+export const LEVEL_NAMES = { none: 'Nada', read: 'Ver', talk: 'Hablar' } as const;
+type Level = keyof typeof LEVEL_NAMES;
+const LEVEL_ORDER: Level[] = ['none', 'read', 'talk'];
+
+/** Nada · Ver · Hablar, one of three, for one person on one agent. */
+export function LevelPicker({
+  value,
+  onChange,
+  label,
+  disabled,
+}: {
+  value: Level;
+  onChange: (v: Level) => void;
+  /** Read out with each segment, e.g. «Ana, Finanzas». */
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <View accessibilityRole="radiogroup" accessibilityLabel={label} className={`flex-row rounded-full border border-line bg-card p-0.5 ${disabled ? 'opacity-50' : ''}`}>
+      {LEVEL_ORDER.map((l) => {
+        const on = l === value;
+        return (
+          <Pressable
+            key={l}
+            accessibilityRole="radio"
+            accessibilityLabel={`${LEVEL_NAMES[l]}, ${label}`}
+            accessibilityState={{ checked: on, disabled: !!disabled }}
+            onPress={disabled || on ? undefined : () => onChange(l)}
+            hitSlop={4}
+            className={`rounded-full px-3 py-1.5 ${on ? 'bg-accent' : ''}`}
+          >
+            <Text className={`text-sm ${on ? 'font-semibold text-on-accent' : 'text-muted'}`}>{LEVEL_NAMES[l]}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}

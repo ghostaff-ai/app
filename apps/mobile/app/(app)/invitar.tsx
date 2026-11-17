@@ -1,19 +1,28 @@
+import type { AgentLevel } from '@ghostaff/shared';
 import { inviteMember, revokeInvitation } from '@ghostaff/shared/services';
 import { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
-import { Button, ErrorText, Field } from '@/components/ui';
+import { Image, ScrollView, Text, View } from 'react-native';
+import { Button, ErrorText, Field, LevelPicker } from '@/components/ui';
+import { useAgents } from '@/lib/hooks/useAgents';
 import { usePendingInvitations } from '@/lib/hooks/useInvitations';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
+import { GHOSTS } from '@/lib/team';
 
-// An owner invites someone by email. The person sees the invitation when they
-// sign in to Ghostaff with that email; we send no mail of our own yet.
+// An owner invites someone by email, choosing what they may do with each agent
+// (team-chat.md, decision 6): each starts at the agent's usual level (Hablar
+// for Secretaría, Ver for the rest) and only the changed ones are sent. The
+// person sees the invitation when they sign in to Ghostaff with that email; we
+// send no mail of our own yet.
 
 const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 
 export default function Invite() {
   const { active } = useActiveOrg();
   const { items, reload } = usePendingInvitations(active?.id ?? null);
+  const agents = useAgents(active?.id ?? null);
+  // Only the levels the owner changed from each agent's usual one.
+  const [levels, setLevels] = useState<Record<string, AgentLevel>>({});
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -25,9 +34,10 @@ export default function Invite() {
     setBusy(true);
     setError(null);
     try {
-      await inviteMember(supabase, active.id, email);
+      await inviteMember(supabase, active.id, email, 'member', levels);
       setSentTo(email.trim().toLowerCase());
       setEmail('');
+      setLevels({});
       await reload();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -59,6 +69,27 @@ export default function Invite() {
         value={email}
         onChangeText={setEmail}
       />
+      {agents.items.length > 0 ? (
+        <View className="mt-6">
+          <Text className="text-sm font-semibold text-ink">Qué puede hacer con cada agente</Text>
+          <Text className="mt-1 text-sm text-muted">Con «Ver» lee sus conversaciones; con «Hablar» además le pide trabajo. Lo cambias cuando quieras en la página del agente.</Text>
+          <View className="mt-2 overflow-hidden rounded-2xl border border-line bg-card">
+            {agents.items.map((a, i) => (
+              <View key={a.id} className={`flex-row items-center gap-3 px-4 py-2.5 ${i > 0 ? 'border-t border-line' : ''}`}>
+                <Image source={GHOSTS[a.ghost].picture} className="h-8 w-8" resizeMode="contain" accessibilityIgnoresInvertColors />
+                <Text className="flex-1 text-base text-ink" numberOfLines={1}>{a.name}</Text>
+                <LevelPicker
+                  label={a.name}
+                  value={levels[a.id] ?? a.memberDefault}
+                  onChange={(l) =>
+                    setLevels(({ [a.id]: _, ...rest }) => (l === a.memberDefault ? rest : { ...rest, [a.id]: l }))
+                  }
+                />
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
       <View className="mt-4">
         <Button label="Invitar" disabled={!looksLikeEmail(email)} busy={busy} onPress={() => void invite()} />
       </View>

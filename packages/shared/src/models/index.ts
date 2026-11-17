@@ -149,7 +149,25 @@ export interface Agent {
   name: string;
   ghost: AgentGhost;
   department: Department;
+  /** The level a member has on it until an owner chooses one: talk for Secretaría, read for the rest. */
+  memberDefault: AgentLevel;
   createdAt: string;
+}
+
+// Who may use each agent (supabase/migrations/20261118000000_team_chat.sql):
+// none doesn't see it, read sees its threads, talk also writes in them. An
+// owner always talks.
+export const AGENT_LEVELS = ['none', 'read', 'talk'] as const;
+export type AgentLevel = (typeof AGENT_LEVELS)[number];
+
+/** One member's level on one agent, as its owners see it. */
+export interface AgentAccess {
+  userId: string;
+  displayName: string;
+  role: MembershipRole;
+  level: AgentLevel;
+  /** True while the member has the agent's default level, not one an owner chose. */
+  isDefault: boolean;
 }
 
 export interface NewAgent {

@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   Agent,
+  AgentAccess,
   AgentGhost,
+  AgentLevel,
   AiProvider,
   Answer,
   ConnectAiInput,
@@ -330,8 +332,20 @@ export async function listPendingInvitations(client: SupabaseClient, orgId: stri
   }));
 }
 
-export async function inviteMember(client: SupabaseClient, orgId: string, email: string, role: MembershipRole = 'member'): Promise<void> {
-  const { error } = await client.rpc('invite_member', { target_org: orgId, invitee_email: email, invitee_role: role });
+/** Invites someone by email; `agentLevels` (agent id → level) applies when they accept. */
+export async function inviteMember(
+  client: SupabaseClient,
+  orgId: string,
+  email: string,
+  role: MembershipRole = 'member',
+  agentLevels: Record<string, AgentLevel> = {},
+): Promise<void> {
+  const { error } = await client.rpc('invite_member', {
+    target_org: orgId,
+    invitee_email: email,
+    invitee_role: role,
+    agent_levels: agentLevels,
+  });
   if (error) throw error;
 }
 
@@ -456,8 +470,8 @@ export async function getEngineIdentity(engine: EngineAccess): Promise<{ service
   return callEngine(engine, 'GET', '/identity');
 }
 
-// Agents. Every member reads the team; only owners add or remove agents, through
-// create_agent and delete_agent.
+// Agents. Members read the agents they may see (not those set to «none» for
+// them); only owners add or remove agents, through create_agent and delete_agent.
 
 interface AgentRow {
   id: string;
@@ -465,14 +479,23 @@ interface AgentRow {
   name: string;
   ghost: AgentGhost;
   department: Department;
+  member_default: AgentLevel;
   created_at: string;
 }
 
 export function agentFromRow(r: AgentRow): Agent {
-  return { id: r.id, orgId: r.org_id, name: r.name, ghost: r.ghost, department: r.department, createdAt: r.created_at };
+  return {
+    id: r.id,
+    orgId: r.org_id,
+    name: r.name,
+    ghost: r.ghost,
+    department: r.department,
+    memberDefault: r.member_default,
+    createdAt: r.created_at,
+  };
 }
 
-const AGENT_COLUMNS = 'id, org_id, name, ghost, department, created_at';
+const AGENT_COLUMNS = 'id, org_id, name, ghost, department, member_default, created_at';
 
 /** The organisation's agents, oldest first. */
 export async function listAgents(client: SupabaseClient, orgId: string): Promise<Agent[]> {
@@ -505,4 +528,41 @@ export async function createAgent(client: SupabaseClient, a: NewAgent): Promise<
 export async function deleteAgent(client: SupabaseClient, id: string): Promise<void> {
   const { error } = await client.rpc('delete_agent', { agent_id: id });
   if (error) throw error;
+}
+
+// Who may use each agent: owners set it per agent and member (set_agent_access);
+// everyone reads their own levels.
+
+interface AgentAccessRow {
+  user_id: string;
+  display_name: string;
+  role: MembershipRole;
+  level: AgentLevel;
+  is_default: boolean;
+}
+
+/** Every member's level on this agent, owners first. Owners only. */
+export async function listAgentAccess(client: SupabaseClient, agentId: string): Promise<AgentAccess[]> {
+  const { data, error } = await client.rpc('list_agent_access', { target_agent: agentId });
+  if (error) throw error;
+  return ((data ?? []) as AgentAccessRow[]).map((r) => ({
+    userId: r.user_id,
+    displayName: r.display_name,
+    role: r.role,
+    level: r.level,
+    isDefault: r.is_default,
+  }));
+}
+
+/** Sets one member's level on one agent. Owners only; an owner's own level never changes. */
+export async function setAgentAccess(client: SupabaseClient, agentId: string, userId: string, level: AgentLevel): Promise<void> {
+  const { error } = await client.rpc('set_agent_access', { target_agent: agentId, member: userId, new_level: level });
+  if (error) throw error;
+}
+
+/** The signed-in person's level on each agent of the organisation they may see, by agent id. */
+export async function myAgentLevels(client: SupabaseClient, orgId: string): Promise<Record<string, AgentLevel>> {
+  const { data, error } = await client.rpc('my_agent_levels', { target_org: orgId });
+  if (error) throw error;
+  return Object.fromEntries(((data ?? []) as { agent_id: string; level: AgentLevel }[]).map((r) => [r.agent_id, r.level]));
 }
