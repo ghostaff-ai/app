@@ -41,6 +41,20 @@ Metro starts on 8083, or on 8093, 8103 … 8173 when another copy already holds 
 (`scripts/metro-port.sh`; `METRO_PORT` overrides it). Every script that starts Metro goes
 through it: a bare `expo start` takes 8081, another app's port on the same machine.
 
+### Google and Apple sign-in
+
+Google's OAuth clients are in Google Cloud project `ghostaff-prod` (ghostaff.ai@gmail.com),
+Google Auth Platform, Clients: one web client for every env (Supabase checks tokens against it), one iOS
+client per bundle id, one Android client per package and signing certificate. The ids are public and pinned
+in `apps/mobile/app.config.ts`. The web client's secret is only for the browser flow Expo Go uses;
+`secret env ghostaff-ai/app` writes it to `supabase/.env`, where `pnpm db:start` reads it.
+
+- **Web:** Google's button works on `http://localhost:8083` … `8113` (the client's allowed origins).
+- **Expo Go:** a browser window; it only works against the beta, since Google cannot return to a phone's
+  local Supabase.
+- **Apple:** iPhone only, in a real build (TestFlight); Expo Go on an iPhone works too.
+- While the Google app is in Testing, only its test users can use Google (Audience page).
+
 ### The hosted beta project
 
 `ghostaff-beta` (Frankfurt). Its keys live encrypted in `secrets/secrets.enc.yml` (listed in
