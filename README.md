@@ -53,6 +53,8 @@ in `apps/mobile/app.config.ts`. The web client's secret is only for the browser 
 - **Expo Go:** a browser window; it only works against the beta, since Google cannot return to a phone's
   local Supabase.
 - **Apple:** iPhone only, in a real build (TestFlight); Expo Go on an iPhone works too.
+- **Android phone without Play:** `eas build -p android --profile beta-apk` gives an APK of the beta to
+  install straight from its link; it is signed with the same key the beta's Android OAuth client knows.
 - While the Google app is in Testing, only its test users can use Google (Audience page).
 
 ### The hosted beta project
