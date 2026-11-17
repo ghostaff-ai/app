@@ -1,0 +1,91 @@
+name: Beta
+
+# Every push to develop reaches the beta app on Álvaro's phone by itself
+# (AGENTS.md, «Branches»). For each platform, the fingerprint of the app's
+# native side decides how:
+#   - a beta build with this fingerprint exists: publish the change over the
+#     air (EAS Update, branch `beta`); the app picks it up on its next launch;
+#   - none exists (a native module or a config plugin changed): start a new
+#     beta build; iPhone goes to TestFlight, Android is an APK to install from
+#     its link (profile `beta-apk`). The update for it lands with the build.
+# Same pattern as cultuvilla/app's mobile-ota, with Expo's own action deciding.
+# Needs the EXPO_TOKEN secret (account ghostaff.ai); without it this run does
+# nothing and says so.
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/beta.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: beta-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ship:
+    name: Beta (${{ matrix.platform }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ios
+            profile: beta
+            submit: true
+          - platform: android
+            profile: beta-apk
+            submit: false
+    env:
+      # app.config.ts picks the beta's project, bundle id and name from this, as
+      # the beta build profiles do; the fingerprint must be computed the same way.
+      APP_ENV: beta
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Skip without EXPO_TOKEN
+        id: token
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::notice::EXPO_TOKEN is not set, so nothing reaches the beta app. Add it in the repo's Actions secrets."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.token.outputs.ok == 'true'
+        uses: actions/checkout@v5
+      - if: steps.token.outputs.ok == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.token.outputs.ok == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.token.outputs.ok == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.token.outputs.ok == 'true'
+        uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build or update
+        if: steps.token.outputs.ok == 'true'
+        uses: expo/expo-github-action/continuous-deploy-fingerprint@v9
+        with:
+          working-directory: apps/mobile
+          platform: ${{ matrix.platform }}
+          profile: ${{ matrix.profile }}
+          branch: beta
+          # The beta's Supabase keys live in EAS's `preview` environment, as for
+          # the beta builds; an update without them would ship an empty config.
+          environment: preview
+          auto-submit-builds: ${{ matrix.submit }}
