@@ -2,7 +2,7 @@
 
 **Priority:** high
 **Gate:** none
-**Next:** Hoy with the ghost on top, one sentence and the folded «Hecho sin ti»; then the three tabs with the mic
+**Next:** the signature motion (decision 26); then «Hecho sin ti» and the mic once the engine records what agents do alone and can talk
 
 Álvaro asked (2026-11-17) for the app's design from first principles, with the state of the art in agent products, and every decision put in front of him to review. He took all my picks («go», 2026-11-17). The pages he reviewed, with the reasoning and the sources:
 
@@ -80,11 +80,14 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 - [x] The decision screen with the five parts, the named button, the folded context, the autonomy bar and «Cambiar la respuesta»; a success haptic on the phone.
 - [x] The inbox card: ghost, question, who asks and when it is due; ordered by `vence`.
 - [x] The palette and Rubik headings in `lib/theme.ts`, used by Tailwind, headers and the 3D stage.
-- [ ] Hoy: ghost on top with one sentence from Secretaría, «Te esperan», «Hecho sin ti».
-- [ ] Three tabs and the mic (native tabs); Organizaciones as a sheet with counts.
+- [x] Hoy: Secretaría on top with the halo and one sentence (`lib/hoy.ts`), «Te esperan», «Respondidas» (PR #11).
+- [ ] «Hecho sin ti» on Hoy: nothing records what agents did alone yet.
+- [x] Three native tabs, Hoy · Equipo · Registro (Registro: what was decided); Organizaciones as a native sheet with counts (PR #11).
+- [ ] The mic: needs the engine's always-on service for talking to Secretaría.
 - [ ] «Preguntar»: a chat about one decision. Needs the engine's always-on service for talking to a department.
-- [ ] The ghost-tinted greys and the night-studio dark set in `lib/theme.ts`; dark mode on (the app is light only today, `app.config.ts`).
-- [ ] The halo behind the ghost on Hoy.
+- [x] The ghost-tinted greys and the night-studio dark set (`lib/palette.ts`), following the phone (PR #10).
+- [x] The halo behind the ghost on Hoy, a glow after dark (`GhostScene`, PR #11).
+- [ ] Expo UI (decision 33): add it with the first native control the app needs (a menu, picker or switch); the org sheet is already a native form sheet.
 - [ ] The signature motion when a decision is answered.
 - [ ] Notifications, the weekly summary, the widget: each its own plan when the engine sends them.
 - [ ] Órdago's agents writing the new fields: they read the README; check the first decisions that come with them.
