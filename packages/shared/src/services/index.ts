@@ -20,6 +20,7 @@ import type {
   PendingInvitation,
   Profile,
 } from '../models';
+import type { ChatMessage, ChatThread, MessagePart, OrgMember } from '../chat';
 
 // The only place the app talks to the database. Screens, hooks and components
 // call these functions, never `supabase.from(...)` (the same rule as
@@ -565,4 +566,136 @@ export async function myAgentLevels(client: SupabaseClient, orgId: string): Prom
   const { data, error } = await client.rpc('my_agent_levels', { target_org: orgId });
   if (error) throw error;
   return Object.fromEntries(((data ?? []) as { agent_id: string; level: AgentLevel }[]).map((r) => [r.agent_id, r.level]));
+}
+
+// The team chat (docs/plans/ongoing/team-chat.md). What a person sees follows
+// their level on each agent; they write only through start_thread and
+// post_message, and new messages arrive through Realtime under the same rules.
+
+/** The organisation's members, by name: for «pide acceso a …» and @mentions. */
+export async function listMembers(client: SupabaseClient, orgId: string): Promise<OrgMember[]> {
+  const { data, error } = await client
+    .from('memberships')
+    .select('user_id, display_name, role')
+    .eq('org_id', orgId)
+    .order('display_name')
+    .returns<{ user_id: string; display_name: string; role: MembershipRole }[]>();
+  if (error) throw error;
+  return (data ?? []).map((m) => ({ userId: m.user_id, displayName: m.display_name, role: m.role }));
+}
+
+interface ThreadListRow {
+  id: string;
+  agent_id: string;
+  title: string;
+  created_at: string;
+  last_message_at: string;
+  last_author: string | null;
+  last_text: string | null;
+  unread: boolean;
+}
+
+/** Threads the person may see, newest first; with `agentId`, only that agent's. */
+export async function listThreads(client: SupabaseClient, orgId: string, agentId?: string): Promise<ChatThread[]> {
+  const { data, error } = await client.rpc('my_threads', { target_org: orgId, target_agent: agentId ?? null });
+  if (error) throw error;
+  return ((data ?? []) as ThreadListRow[]).map((r) => ({
+    id: r.id,
+    agentId: r.agent_id,
+    title: r.title,
+    createdAt: r.created_at,
+    lastMessageAt: r.last_message_at,
+    lastAuthor: r.last_author,
+    lastText: r.last_text,
+    unread: r.unread,
+  }));
+}
+
+export interface ThreadHead {
+  id: string;
+  orgId: string;
+  agentId: string;
+  title: string;
+}
+
+export async function getThread(client: SupabaseClient, id: string): Promise<ThreadHead | null> {
+  const { data, error } = await client
+    .from('threads')
+    .select('id, org_id, agent_id, title')
+    .eq('id', id)
+    .maybeSingle<{ id: string; org_id: string; agent_id: string; title: string }>();
+  if (error) throw error;
+  return data ? { id: data.id, orgId: data.org_id, agentId: data.agent_id, title: data.title } : null;
+}
+
+interface MessageRow {
+  id: string;
+  thread_id: string;
+  author_kind: 'person' | 'agent';
+  author_user: string | null;
+  author_agent: string | null;
+  author_name: string;
+  parts: MessagePart[];
+  created_at: string;
+}
+
+export function messageFromRow(r: MessageRow): ChatMessage {
+  return {
+    id: r.id,
+    threadId: r.thread_id,
+    authorKind: r.author_kind,
+    authorUserId: r.author_user,
+    authorAgentId: r.author_agent,
+    authorName: r.author_name,
+    parts: Array.isArray(r.parts) ? r.parts : [],
+    createdAt: r.created_at,
+  };
+}
+
+const MESSAGE_COLUMNS = 'id, thread_id, author_kind, author_user, author_agent, author_name, parts, created_at';
+
+/** A thread's latest messages, oldest first. */
+export async function listMessages(client: SupabaseClient, threadId: string, limit = 300): Promise<ChatMessage[]> {
+  const { data, error } = await client
+    .from('messages')
+    .select(MESSAGE_COLUMNS)
+    .eq('thread_id', threadId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+    .returns<MessageRow[]>();
+  if (error) throw error;
+  return (data ?? []).map(messageFromRow).reverse();
+}
+
+/** Starts a thread with an agent the person may talk to; returns its id. */
+export async function startThread(client: SupabaseClient, agentId: string, body: string): Promise<string> {
+  const { data, error } = await client.rpc('start_thread', { target_agent: agentId, body }).single<{ id: string }>();
+  if (error) throw error;
+  return data.id;
+}
+
+export async function postMessage(client: SupabaseClient, threadId: string, body: string): Promise<ChatMessage> {
+  const { data, error } = await client.rpc('post_message', { target_thread: threadId, body }).single<MessageRow>();
+  if (error) throw error;
+  return messageFromRow(data);
+}
+
+export async function markThreadRead(client: SupabaseClient, threadId: string): Promise<void> {
+  const { error } = await client.rpc('mark_thread_read', { target_thread: threadId });
+  if (error) throw error;
+}
+
+/** Calls `onMessage` for each new message in the thread, live; returns how to stop. */
+export function subscribeToThread(client: SupabaseClient, threadId: string, onMessage: (m: ChatMessage) => void): () => void {
+  const channel = client
+    .channel(`thread:${threadId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` },
+      (payload) => onMessage(messageFromRow(payload.new as MessageRow)),
+    )
+    .subscribe();
+  return () => {
+    void client.removeChannel(channel);
+  };
 }

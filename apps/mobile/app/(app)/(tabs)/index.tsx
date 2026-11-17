@@ -2,6 +2,7 @@ import type { Decision } from '@ghostaff/shared';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, SectionList, Text, View } from 'react-native';
+import { MicButton } from '@/components/chat/MicButton';
 import { DecisionCard } from '@/components/DecisionCard';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
 import { Button, Loading, Notice } from '@/components/ui';
@@ -14,7 +15,8 @@ import { TAB_SCREEN_TOP } from '@/lib/tabs';
 // Hoy (app-design.md): Secretaría on top with one sentence, a soft halo behind
 // her (decision 21); under it only what waits for you, then what you answered
 // and the agent hasn't picked up yet (decision 8: you can still take it back).
-// The organisation's name opens the switcher (decision 3).
+// The organisation's name opens the switcher (decision 3); the mic beside it
+// talks to Secretaría (decisions 1 and 2).
 
 export default function Hoy() {
   const { active } = useActiveOrg();
@@ -51,6 +53,7 @@ export default function Hoy() {
       refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
       ListHeaderComponent={
         <View className="pb-2 pt-3">
+          <View className="flex-row items-center justify-between">
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`${active?.name ?? ''}. Cambiar de organización`}
@@ -61,6 +64,8 @@ export default function Hoy() {
             <Text className="font-display text-xl text-ink">{active?.name}</Text>
             <Text className="ml-1.5 text-base text-muted">▾</Text>
           </Pressable>
+          <MicButton />
+          </View>
           <View className="mt-2 h-56">
             <GhostViewer ghost="secretaria" active={focused} halo zoom={1.15} />
           </View>

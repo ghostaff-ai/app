@@ -6,6 +6,7 @@ import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Loading, Notice } from '@/components/ui';
 import { AuthProvider, useAuth } from '@/lib/auth/AuthContext';
+import { KeyboardRoot } from '@/lib/keyboard';
 import { ActiveOrgProvider } from '@/lib/org/ActiveOrgContext';
 import { ProfileProvider } from '@/lib/profile/ProfileContext';
 import { isConfigured } from '@/lib/supabase';
@@ -27,6 +28,7 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
   return (
     <SafeAreaProvider>
+      <KeyboardRoot>
       <StatusBar style="auto" />
       <ThemeProvider value={navTheme}>
       <View style={[{ flex: 1, backgroundColor: c.surface }, colorVars(c)]}>
@@ -46,6 +48,7 @@ export default function RootLayout() {
       )}
       </View>
       </ThemeProvider>
+      </KeyboardRoot>
     </SafeAreaProvider>
   );
 }

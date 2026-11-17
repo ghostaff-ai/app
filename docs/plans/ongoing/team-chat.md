@@ -2,7 +2,7 @@
 
 **Priority:** high — «hablar con un departamento» is one of the four things the first version promises
 **Gate:** none
-**Next:** step 2, the chat screens: services for threads and messages, the thread list inside Equipo, a thread with live messages between people, the mic to Secretaría
+**Next:** step 3, agents talking: the engine's always-on service answers in threads (see «Step 3» below)
 
 Álvaro asked (2026-11-17) for a really good, curated chat: several people of one organisation talking to its agents, the owner deciding who can read or talk to each agent, and agents that are added by department and start working the moment they arrive, as a conversation rather than a form. I researched the libraries and guidelines and drew ten decisions; he took all my picks («go», 2026-11-17). The page he reviewed, with the options drawn and the sources: [Ghostaff chat choices](https://claude.ai/artifact/DCyY8cKXptDmf3xgBJp5an).
 
@@ -39,13 +39,18 @@ Guidelines that shaped the picks: Slack's agent design (show progress, threads w
 - [x] pgTAP: `supabase/tests/database/team_chat.test.sql` (defaults, none/read/talk, owners only, nothing across organisations, invitations).
 - [x] «Quién puede» on the agent's page (`app/(app)/acceso/[id].tsx`) and per-agent levels in the invite screen.
 
-**Step 2, the chat screens:**
+**Step 2, the chat screens** (branch `feat/chat-screens`, 2026-11-18):
 
-- [ ] Services: list threads of an agent, read a thread, start one, post, subscribe to new messages.
-- [ ] Threads inside Equipo, an unread dot on the agent row, the «Conversaciones» filter.
-- [ ] A thread: people in bubbles, agents flat; «Solo lectura» composer with «Ver»; @ mentions.
-- [ ] The mic to Secretaría; vacancies in Equipo.
+- [x] Read marks and the thread list (`supabase/migrations/20261118100000_thread_reads.sql`, `my_threads`, `mark_thread_read`, pgTAP `thread_reads.test.sql`); messages ordered by the clock, not the transaction.
+- [x] Services in `@ghostaff/shared/services` (threads, messages, members, Realtime) and the pure helpers in `packages/shared/src/chat.ts` (@mentions).
+- [x] Equipo: «Equipo · Conversaciones», an orange dot on an agent with unread messages, vacancies for owners («Vacante · Redes» → `contratar`, which adds the agent and opens its page).
+- [x] The agent's page lists its threads, «+ Nueva» with «Hablar»; a thread (`conversacion/[id]`) with people in bubbles, agents flat, live through Realtime; «Solo lectura» with «Ver»; @ suggests agents and people and bolds them.
+- [x] The mic on Hoy, Equipo and Registro opens a new thread with Secretaría (or the first agent the person may talk to). Speaking is the keyboard's own dictation for now.
+- [x] Legend List for the messages and react-native-keyboard-controller on the phone (a new native module: the next beta is a build, not an over-the-air update).
+- Checked on the web against local Supabase (two people, Realtime, a mention, a vacancy filled); not yet on a phone.
+- Left for later: an @person sends no push yet (notifications are their own plan), and @agent doesn't bring that agent into the thread until agents talk.
 
 **Step 3, agents talking** (needs the engine's always-on service, [build-first-version.md](build-first-version.md), «The engine»):
 
-- [ ] The live working line, replies as they are written, decision cards in the chat, a new agent's first message.
+- [ ] The engine's always-on service: when a person writes in a thread, the thread's agent answers there, with the rights of the person who asked.
+- [ ] The live working line, replies as they are written, decision cards in the chat, a new agent's first message (the vacancy flow then lands in its first thread), @agent bringing that agent in.

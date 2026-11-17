@@ -47,6 +47,12 @@ export default function AppLayout() {
         <Stack.Screen name="decision/[id]" options={{ title: 'Decisión' }} />
         <Stack.Screen name="agente/[id]" options={{ title: '' }} />
         <Stack.Screen name="acceso/[id]" options={{ title: 'Quién puede' }} />
+        <Stack.Screen name="conversacion/[id]" options={{ title: '' }} />
+        <Stack.Screen name="conversacion/nueva" options={{ title: 'Nueva conversación' }} />
+        <Stack.Screen
+          name="contratar"
+          options={{ title: 'Incorporar', presentation: 'formSheet', sheetAllowedDetents: [0.65, 1], sheetGrabberVisible: true, headerShown: false }}
+        />
         <Stack.Screen name="nuevo-agente" options={{ title: 'Nuevo agente', presentation: 'modal' }} />
         <Stack.Screen
           name="organizaciones"
