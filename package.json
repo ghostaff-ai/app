@@ -26,7 +26,11 @@
     "prepare": "husky",
     "engine:dev": "pnpm --filter @ghostaff/engine dev",
     "engine:test": "pnpm --filter @ghostaff/engine test",
-    "engine:typecheck": "pnpm --filter @ghostaff/engine typecheck"
+    "engine:typecheck": "pnpm --filter @ghostaff/engine typecheck",
+    "e2e:avd": "bash scripts/e2e/android.sh avd",
+    "e2e:build": "bash scripts/e2e/android.sh build",
+    "e2e": "bash scripts/e2e/android.sh test",
+    "e2e:google": "bash scripts/e2e/android.sh test .maestro/flows/google"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.0.1",

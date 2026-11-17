@@ -1,0 +1,25 @@
+appId: ${APP_ID}
+name: Sign in with Google, the phone's own account sheet
+---
+# Needs a Google account on the emulator (added by hand once, .maestro/README.md)
+# that is a test user of the Google app while it is in Testing, passed as
+# GOOGLE_ACCOUNT. Talks to real Google, so it is not in ci/.
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Continuar con Google"
+    timeout: 60000
+- tapOn: "Continuar con Google"
+- extendedWaitUntil:
+    visible: ${GOOGLE_ACCOUNT}
+    timeout: 30000
+- tapOn: ${GOOGLE_ACCOUNT}
+# Google asks to share name and email the first time.
+- runFlow:
+    when:
+      visible: "Continue|Continuar"
+    commands:
+      - tapOn: "Continue|Continuar"
+- extendedWaitUntil:
+    visible: "Te damos la bienvenida|Hola, .*"
+    timeout: 30000

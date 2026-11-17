@@ -1,0 +1,18 @@
+appId: ${APP_ID}
+name: A new person signs up with the emailed code and lands on the welcome
+---
+- evalScript: ${output.email = 'e2e-' + Date.now() + '@ghostaff.test'}
+- runFlow:
+    file: ../subflows/sign-in-email.yaml
+    env:
+      EMAIL: ${output.email}
+- extendedWaitUntil:
+    visible: "Te damos la bienvenida"
+    timeout: 30000
+- tapOn: "Nombre y apellido"
+- inputText: "Prueba E2E"
+- hideKeyboard
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "Hola, Prueba"
+    timeout: 30000

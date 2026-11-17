@@ -47,6 +47,24 @@ const engineUrlPerEnv: Record<Env, string> = {
 };
 const engineUrl = process.env[`ENGINE_URL_${suffix}`] || engineUrlPerEnv[env];
 
+// Google sign-in's OAuth clients, all in Google Cloud project ghostaff-prod
+// (ghostaff.ai@gmail.com), APIs & Services, Clients. Public by design: they ship
+// inside every app and say only which app is asking. One web client serves every
+// env (the web's button and Supabase's check of the token); each iPhone bundle id
+// has its own iOS client, and each Android package its own Android client (no id
+// here: Google matches it by package and signing certificate). The iOS URL scheme
+// is the iOS client id reversed.
+const googleWebClientId = '664656500315-o45bt01ao6pb1s7oehv4n77c3k1uu76p.apps.googleusercontent.com';
+const googleIosClientIdPerEnv: Record<Env, string> = {
+  dev: '664656500315-a9gv4p3v4kq1r5oasv6eldvfmdbdlg94.apps.googleusercontent.com',
+  beta: '664656500315-h8oqbdihq2rophdsvo51r7c9biqal2qe.apps.googleusercontent.com',
+  prod: '664656500315-55k96qirco28jb9q0c4isaek7c05pqtv.apps.googleusercontent.com',
+};
+const googleIosClientId = googleIosClientIdPerEnv[env];
+const googleIosUrlScheme = googleIosClientId
+  ? `com.googleusercontent.apps.${googleIosClientId.replace(/\.apps\.googleusercontent\.com$/, '')}`
+  : '';
+
 function projectUrlFromKey(key: string): string | null {
   try {
     const payload = (key.split('.')[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
@@ -71,6 +89,8 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: bundleIdPerEnv[env],
     supportsTablet: true,
+    // EAS turns Sign in with Apple on for the App ID at the next build.
+    usesAppleSignIn: true,
     infoPlist: {
       // Only standard HTTPS/TLS: saves the export-compliance question on every build.
       ITSAppUsesNonExemptEncryption: false,
@@ -83,7 +103,16 @@ const config: ExpoConfig = {
     bundler: 'metro',
     output: 'single',
   },
-  plugins: ['expo-router', 'expo-splash-screen', 'expo-status-bar'],
+  plugins: [
+    // A dev build talks to the local Supabase over plain http (the e2e build:
+    // scripts/e2e/android-build.sh); beta and prod only ever speak https.
+    ['expo-build-properties', { android: { usesCleartextTraffic: env === 'dev' } }],
+    'expo-apple-authentication',
+    ...(googleIosUrlScheme ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }] as [string, object]] : []),
+    'expo-router',
+    'expo-splash-screen',
+    'expo-status-bar',
+  ],
   experiments: {
     typedRoutes: true,
   },
@@ -93,6 +122,7 @@ const config: ExpoConfig = {
     supabaseUrl,
     supabaseAnonKey,
     engineUrl,
+    google: { webClientId: googleWebClientId, iosClientId: googleIosClientId },
   },
 };
 
