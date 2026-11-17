@@ -43,7 +43,7 @@ Since 2026-11-15 Álvaro also turns his pictures into 3D with Tripo
 (studio.tripo3d.ai, account ghostaff.ai, Pro plan: models made on it are private and
 ours to use; one coloured model costs 55 credits). Each ghost and each prop is made
 from one picture, exported as GLB and dropped in the Ghostaff Drive; the originals
-(about 1.2 million vertices, 50-70 MB each) stay there, in `ghosts/tripo/`.
+(about 1.2 million vertices, 50-70 MB each) stay there, in `ghosts/2-tripo/`.
 `design/blender/tripo.py` makes the light copies the app loads, in `design/tripo/`:
 turned to face the front, 1 unit tall standing on the ground, about 150,000
 triangles (60,000 left the collar edges ragged), 2048 px textures. Fine places stay
@@ -120,7 +120,7 @@ blender -b -P design/blender/place_from_page.py -- <folder of saved placements>
 Geometry is Draco-compressed (Blender's own encoder; the app decodes it with three.js's decoder in `apps/mobile/public/draco/`), 0.9 to 2.3 MB a model.
 
 ```bash
-rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/originals
+rclone copy drive-ghostaff:ghosts/2-tripo ~/Downloads/tripo/originals
 blender -b -P design/blender/tripo.py -- ~/Downloads/tripo/originals
 ```
 
@@ -161,7 +161,7 @@ Built (2026-11-15) by `design/blender/assemble.py`, then set aside the same day 
 whole models, which look better (see above):
 
 ```bash
-rclone copy drive-ghostaff:ghosts/tripo ~/Downloads/tripo/originals
+rclone copy drive-ghostaff:ghosts/2-tripo ~/Downloads/tripo/originals
 blender -b -P design/blender/assemble.py -- ~/Downloads/tripo/originals            # all agents
 blender -b -P design/blender/assemble.py -- ~/Downloads/tripo/originals try finanzas   # just renders
 ```
