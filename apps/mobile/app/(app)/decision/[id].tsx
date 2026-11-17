@@ -10,7 +10,7 @@ import { answerLabel, dueLabel, kindLabel, shortDate } from '@/lib/format';
 import { useDecision } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { GHOSTS, agentLabel, ghostFor } from '@/lib/team';
-import { COLORS } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 
 // One decision, laid out so it can be decided in a minute (docs/plans/ongoing/
 // app-design.md): who asks, the question, one quoted source, the sources, what
@@ -23,6 +23,7 @@ export default function DecisionScreen() {
   const { decision, loading, error, answer, takeBack, streak } = useDecision(id);
   const { active } = useActiveOrg();
   const insets = useSafeAreaInsets();
+  const colors = usePalette();
   const [note, setNote] = useState('');
   const [noteOpen, setNoteOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
@@ -176,7 +177,7 @@ export default function DecisionScreen() {
               <TextInput
                 accessibilityLabel={`Nota para ${agent}`}
                 placeholder={`Nota para ${agent}`}
-                placeholderTextColor={COLORS.muted}
+                placeholderTextColor={colors.muted}
                 multiline
                 maxLength={2000}
                 autoFocus
@@ -272,6 +273,7 @@ function ActionButton({
   onPress: () => void;
 }) {
   const primary = tone === 'primary';
+  const colors = usePalette();
   return (
     <Pressable
       accessibilityRole="button"
@@ -281,8 +283,8 @@ function ActionButton({
         primary ? 'bg-accent' : 'border border-line bg-card'
       } ${disabled && !busy ? 'opacity-50' : ''}`}
     >
-      {busy ? <ActivityIndicator color={primary ? COLORS.card : COLORS.ink} /> : null}
-      <Text numberOfLines={1} className={`text-base font-semibold ${primary ? 'text-white' : 'text-ink'} ${busy ? 'ml-2' : ''}`}>
+      {busy ? <ActivityIndicator color={primary ? colors.onAccent : colors.ink} /> : null}
+      <Text numberOfLines={1} className={`text-base font-semibold ${primary ? 'text-on-accent' : 'text-ink'} ${busy ? 'ml-2' : ''}`}>
         {label}
       </Text>
     </Pressable>

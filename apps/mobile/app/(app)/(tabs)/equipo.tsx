@@ -5,6 +5,7 @@ import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { Button, ErrorText, Loading } from '@/components/ui';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { TAB_SCREEN_TOP } from '@/lib/tabs';
 import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
 // The organisation's team: its three departments and the agents in each, drawn
@@ -24,7 +25,8 @@ export default function Equipo() {
   const owner = active.role === 'owner';
 
   return (
-    <ScrollView className="flex-1 bg-surface" contentContainerClassName="p-4 pb-16">
+    <ScrollView className="flex-1 bg-surface" contentContainerStyle={{ padding: 16, paddingBottom: 64, paddingTop: 16 + TAB_SCREEN_TOP }} contentInsetAdjustmentBehavior="automatic">
+      <Text className="mb-5 font-display text-2xl text-ink">Equipo</Text>
       {DEPARTMENTS.map((d) => {
         const agents = items.filter((a) => a.department === d);
         return (

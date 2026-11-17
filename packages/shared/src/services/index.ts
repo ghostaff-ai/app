@@ -124,6 +124,36 @@ export async function listOpenDecisions(client: SupabaseClient, orgId: string): 
   return sortInbox((data ?? []).map(decisionFromRow));
 }
 
+/** What the organisation has answered, newest answer first: the app's Registro. */
+export async function listDecidedDecisions(client: SupabaseClient, orgId: string, limit = 100): Promise<Decision[]> {
+  const { data, error } = await client
+    .from('decisions')
+    .select(DECISION_COLUMNS)
+    .eq('org_id', orgId)
+    .not('answer', 'is', null)
+    .order('answered_at', { ascending: false })
+    .limit(limit)
+    .returns<DecisionRow[]>();
+  if (error) throw error;
+  return (data ?? []).map(decisionFromRow);
+}
+
+/** How many decisions wait for a person in each of these organisations (none listed: 0). */
+export async function countWaiting(client: SupabaseClient, orgIds: string[]): Promise<Record<string, number>> {
+  const counts: Record<string, number> = Object.fromEntries(orgIds.map((id) => [id, 0]));
+  if (orgIds.length === 0) return counts;
+  const { data, error } = await client
+    .from('decisions')
+    .select('org_id')
+    .in('org_id', orgIds)
+    .is('answer', null)
+    .is('closed_at', null)
+    .returns<{ org_id: string }[]>();
+  if (error) throw error;
+  for (const r of data ?? []) counts[r.org_id] = (counts[r.org_id] ?? 0) + 1;
+  return counts;
+}
+
 /** Waiting first; among those, the nearest deadline first, then the newest. */
 export function sortInbox(ds: Decision[]): Decision[] {
   return [...ds].sort((a, b) => {
