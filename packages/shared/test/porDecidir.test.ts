@@ -8,7 +8,7 @@ import {
   recordIdFromPath,
   writeAnswer,
 } from '../src/record';
-import { sortInbox } from '../src/services';
+import { countStreak, sortInbox } from '../src/services';
 import type { Decision } from '../src/models';
 
 const FILE = `area: seo          # la pestaña
@@ -119,7 +119,8 @@ describe('paths and dates', () => {
 });
 
 describe('sortInbox', () => {
-  const base = { orgId: 'o', sourcePath: '', area: 'a', kind: 'k', question: '', context: '', proposedBy: 'p', ruleProposal: null, closedAt: null };
+  const base = { orgId: 'o', sourcePath: '', area: 'a', kind: 'k', question: '', context: '', proposedBy: 'p', ruleProposal: null, closedAt: null,
+    recommendation: null, ifYes: null, ifNo: null, quote: null, sources: [], dueOn: null };
   it('puts what waits for you first, newest first', () => {
     const ds: Decision[] = [
       { ...base, id: '1', recordId: '1', createdOn: '2026-11-10', answer: null },
@@ -127,5 +128,62 @@ describe('sortInbox', () => {
       { ...base, id: '3', recordId: '3', createdOn: '2026-11-09', answer: null },
     ];
     expect(sortInbox(ds).map((d) => d.id)).toEqual(['1', '3', '2']);
+  });
+
+  it('puts the nearest deadline first among what waits', () => {
+    const ds: Decision[] = [
+      { ...base, id: 'new', recordId: 'new', createdOn: '2026-11-12', answer: null },
+      { ...base, id: 'late', recordId: 'late', createdOn: '2026-11-01', dueOn: '2026-11-20', answer: null },
+      { ...base, id: 'soon', recordId: 'soon', createdOn: '2026-11-02', dueOn: '2026-11-18', answer: null },
+    ];
+    expect(sortInbox(ds).map((d) => d.id)).toEqual(['soon', 'late', 'new']);
+  });
+});
+
+describe('countStreak', () => {
+  it('counts OKs in a row until a no or a correcting note', () => {
+    const ok = { answer: 'ok' as const, answer_note: null };
+    expect(countStreak([ok, ok, { answer: 'ok', answer_note: 'mal el importe' }, ok])).toBe(2);
+    expect(countStreak([{ answer: 'no', answer_note: null }, ok])).toBe(0);
+    expect(countStreak([])).toBe(0);
+  });
+});
+
+describe('readDecision, optional fields for the app', () => {
+  const FULL = `${FILE}recomienda: Cambiarlo
+con_si: Lo cambio hoy y lo mido a 14 días.
+con_no: Se queda como está.
+cita: «amarraco» tiene 1.900 búsquedas al mes
+fuentes:
+  - Search Console, 06/11
+  - texto: Consultas
+    enlace: seo/datos/consultas.yaml
+vence: 2026-11-10
+`;
+
+  it('reads them', () => {
+    const d = readDecision('seo-glosario', FULL);
+    expect(d.recomienda).toBe('Cambiarlo');
+    expect(d.con_si).toBe('Lo cambio hoy y lo mido a 14 días.');
+    expect(d.con_no).toBe('Se queda como está.');
+    expect(d.cita).toBe('«amarraco» tiene 1.900 búsquedas al mes');
+    expect(d.fuentes).toEqual([{ texto: 'Search Console, 06/11' }, { texto: 'Consultas', enlace: 'seo/datos/consultas.yaml' }]);
+    expect(d.vence).toBe('2026-11-10');
+  });
+
+  it('leaves them out when absent or empty', () => {
+    const d = readDecision('seo-glosario', `${FILE}recomienda: ""\n`);
+    expect(d).not.toHaveProperty('recomienda');
+    expect(d).not.toHaveProperty('fuentes');
+  });
+
+  it('refuses a bad date or a source that is not text', () => {
+    expect(() => readDecision('seo-glosario', `${FILE}vence: pronto\n`)).toThrow(/vence/);
+    expect(() => readDecision('seo-glosario', `${FILE}fuentes:\n  - 3\n`)).toThrow(/fuentes\[0\]/);
+  });
+
+  it('keeps them when the answer is written back', () => {
+    const out = writeAnswer(FULL, 'seo-glosario', { decision: 'ok', por: 'Álvaro', fecha: '2026-11-17 10:00' });
+    expect(readDecision('seo-glosario', out).recomienda).toBe('Cambiarlo');
   });
 });

@@ -1,5 +1,6 @@
 import type { Decision } from '@ghostaff/shared';
-import { answerDecision, getDecision, listOpenDecisions, type AnswerInput } from '@ghostaff/shared/services';
+import { RULE_KIND } from '@ghostaff/shared';
+import { answerDecision, getDecision, listOpenDecisions, okStreak, unanswerDecision, type AnswerInput } from '@ghostaff/shared/services';
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 
@@ -52,10 +53,30 @@ export function useDecision(id: string | undefined) {
     };
   }, [id]);
 
+  // OKs in a row for this agent and kind: shown as progress toward autonomy.
+  const [streak, setStreak] = useState<number | null>(null);
+  const streakKey = decision && decision.kind !== RULE_KIND ? `${decision.orgId}|${decision.proposedBy}|${decision.kind}` : null;
+  useEffect(() => {
+    if (!decision || !streakKey) return;
+    let alive = true;
+    okStreak(supabase, decision)
+      .then((n) => alive && setStreak(n))
+      .catch(() => alive && setStreak(null)); // progress is a nicety; the decision still works without it
+    return () => {
+      alive = false;
+    };
+    // Refetch only when the agent or kind changes, or after an answer.
+  }, [streakKey, decision?.answer?.at]);
+
   const answer = useCallback(async (input: Omit<AnswerInput, 'decisionId'>) => {
     if (!id) return;
     setDecision(await answerDecision(supabase, { ...input, decisionId: id }));
   }, [id]);
 
-  return { decision, loading, error, answer };
+  const takeBack = useCallback(async () => {
+    if (!id) return;
+    setDecision(await unanswerDecision(supabase, id));
+  }, [id]);
+
+  return { decision, loading, error, answer, takeBack, streak };
 }

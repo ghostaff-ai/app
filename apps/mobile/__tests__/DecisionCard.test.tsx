@@ -1,7 +1,7 @@
 import type { Decision } from '@ghostaff/shared';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { DecisionCard } from '@/components/DecisionCard';
-import { answerLabel, shortDate } from '@/lib/format';
+import { answerLabel, dueLabel, kindLabel, shortDate } from '@/lib/format';
 import { friendlyAuthError } from '@/lib/auth/errors';
 
 const decision: Decision = {
@@ -16,6 +16,12 @@ const decision: Decision = {
   proposedBy: 'seo',
   createdOn: '2026-11-09',
   ruleProposal: null,
+  recommendation: null,
+  ifYes: null,
+  ifNo: null,
+  quote: null,
+  sources: [],
+  dueOn: null,
   answer: null,
   closedAt: null,
 };
@@ -25,7 +31,8 @@ describe('DecisionCard', () => {
     const onPress = jest.fn();
     await render(<DecisionCard decision={decision} onPress={onPress} />);
     expect(screen.getByText('¿Vuelves a publicar el título nuevo?')).toBeTruthy();
-    expect(screen.getByText('seo · seo · 9 nov')).toBeTruthy();
+    expect(screen.getByText('Redes · ')).toBeTruthy();
+    expect(screen.getByText('9 nov')).toBeTruthy();
     expect(screen.getByTestId('waiting-dot')).toBeTruthy();
     await fireEvent.press(screen.getByRole('button'));
     expect(onPress).toHaveBeenCalled();
@@ -43,6 +50,17 @@ describe('DecisionCard', () => {
 });
 
 describe('format', () => {
+  it('says when a decision is due, and whether it is urgent', () => {
+    expect(dueLabel('2026-11-17', '2026-11-17')).toEqual({ text: 'Vence hoy', urgent: true });
+    expect(dueLabel('2026-11-18', '2026-11-17')).toEqual({ text: 'Vence mañana', urgent: false });
+    expect(dueLabel('2026-11-30', '2026-11-17')).toEqual({ text: 'Vence el 30 nov', urgent: false });
+    expect(dueLabel('2026-11-10', '2026-11-17')).toEqual({ text: 'Venció el 10 nov', urgent: true });
+  });
+
+  it('reads a decision kind', () => {
+    expect(kindLabel('quien-pago')).toBe('Quien pago');
+  });
+
   it('writes short Spanish dates', () => {
     expect(shortDate('2026-01-03')).toBe('3 ene');
   });

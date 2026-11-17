@@ -30,6 +30,12 @@ export interface DecisionUpsert {
   proposed_by: string;
   created_on: string;
   rule_proposal: string | null;
+  recommendation: string | null;
+  if_yes: string | null;
+  if_no: string | null;
+  quote: string | null;
+  sources: { text: string; link?: string }[];
+  due_on: string | null;
   source_commit: string | null;
   synced_at: string;
   closed_at: null;
@@ -98,6 +104,12 @@ export function planSync(args: {
       proposed_by: d.propone,
       created_on: d.creada.slice(0, 10),
       rule_proposal: d.regla?.propuesta ?? null,
+      recommendation: d.recomienda ?? null,
+      if_yes: d.con_si ?? null,
+      if_no: d.con_no ?? null,
+      quote: d.cita ?? null,
+      sources: (d.fuentes ?? []).map((f) => (f.enlace ? { text: f.texto, link: f.enlace } : { text: f.texto })),
+      due_on: d.vence ?? null,
       source_commit: commit,
       synced_at: syncedAt,
       closed_at: null,

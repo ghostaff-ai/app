@@ -47,3 +47,11 @@ const BY_AGENT: Record<string, GhostId> = {
 export function ghostFor(agent: string): GhostId {
   return BY_AGENT[agent.trim().toLowerCase()] ?? 'base';
 }
+
+/** The name a decision's agent goes by in the app: its ghost's job, or its own name for an agent of another kind. */
+export function agentLabel(agent: string): string {
+  const g = ghostFor(agent);
+  if (g !== 'base') return GHOSTS[g].label;
+  const a = agent.trim();
+  return a.charAt(0).toUpperCase() + a.slice(1);
+}

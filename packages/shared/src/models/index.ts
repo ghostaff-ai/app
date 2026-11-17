@@ -63,6 +63,12 @@ export interface DecisionAnswer {
   writtenBackAt: string | null;
 }
 
+/** Where a claim comes from; `link` is a URL or a path in the record. */
+export interface DecisionSource {
+  text: string;
+  link?: string;
+}
+
 export interface Decision {
   id: string;
   orgId: string;
@@ -79,6 +85,18 @@ export interface Decision {
   createdOn: string;
   /** Only for `kind === 'regla'`: the wording the agent proposes. */
   ruleProposal: string | null;
+  // Optional parts the app lays out in fixed places (por-decidir `recomienda`,
+  // `con_si`, `con_no`, `cita`, `fuentes`, `vence`); null or empty when the
+  // agent did not write them.
+  /** What the agent would do, as a verb: the OK button's label. */
+  recommendation: string | null;
+  ifYes: string | null;
+  ifNo: string | null;
+  /** One literal line from the most telling source. */
+  quote: string | null;
+  sources: DecisionSource[];
+  /** `YYYY-MM-DD`: the last day the answer is useful. */
+  dueOn: string | null;
   answer: DecisionAnswer | null;
   closedAt: string | null;
 }

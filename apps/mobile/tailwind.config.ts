@@ -1,7 +1,7 @@
 import type { Config } from 'tailwindcss';
+import { COLORS, FONTS } from './lib/theme';
 
-// One small palette until there is a brand (the brand is parked in this phase,
-// ghostaff-producto.md decision 8).
+// The palette and heading face live in lib/theme.ts (docs/plans/ongoing/app-design.md).
 export default {
   content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   presets: [require('nativewind/preset')],
@@ -11,16 +11,10 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
-      colors: {
-        surface: '#F7F6F3',
-        card: '#FFFFFF',
-        ink: '#1C1B19',
-        muted: '#6B6862',
-        line: '#E4E1DA',
-        accent: '#2F5D50',
-        ok: '#2F7D4F',
-        no: '#A23B2C',
-        waiting: '#C2410C',
+      colors: { ...COLORS },
+      fontFamily: {
+        display: [FONTS.display],
+        'display-medium': [FONTS.displayMedium],
       },
     },
   },

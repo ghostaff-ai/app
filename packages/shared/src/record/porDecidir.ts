@@ -27,6 +27,12 @@ export interface RecordRule {
   cambia?: string;
 }
 
+/** Where a claim comes from: what it is, and a link or a path in the record if there is one. */
+export interface RecordSource {
+  texto: string;
+  enlace?: string;
+}
+
 export interface RecordDecision {
   id: string;
   area: string;
@@ -37,6 +43,18 @@ export interface RecordDecision {
   creada: string;
   regla?: RecordRule;
   respuesta?: RecordAnswer;
+  // Optional, for the app (por-decidir/README.md, «Los campos opcionales»):
+  /** What the agent would do, as a verb: the OK button's label. */
+  recomienda?: string;
+  /** What the agent does with the OK, in one sentence. */
+  con_si?: string;
+  /** What happens with the no, in one sentence. */
+  con_no?: string;
+  /** One literal line from the most telling source. */
+  cita?: string;
+  fuentes?: RecordSource[];
+  /** `YYYY-MM-DD`: the last day the answer is useful. */
+  vence?: string;
 }
 
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -88,6 +106,25 @@ export function readDecision(id: string, yaml: string): RecordDecision {
     if (d.cambia != null) regla.cambia = text(d.cambia, 'cambia', id);
   }
 
+  const optional = (field: string): string | undefined => {
+    const v = d[field];
+    if (v == null) return undefined;
+    if (typeof v === 'number' || v instanceof Date) return dateish(v);
+    if (typeof v !== 'string') throw new Error(`${DECISIONS_DIR}/${id}.yaml: \`${field}\` is text`);
+    return v.trim() || undefined;
+  };
+  const extras: Partial<RecordDecision> = {};
+  for (const f of ['recomienda', 'con_si', 'con_no', 'cita'] as const) {
+    const v = optional(f);
+    if (v) extras[f] = v;
+  }
+  const vence = optional('vence');
+  if (vence) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(vence)) throw new Error(`${DECISIONS_DIR}/${id}.yaml: \`vence\` is a date, YYYY-MM-DD («${vence}»)`);
+    extras.vence = vence;
+  }
+  if (d.fuentes != null) extras.fuentes = readSources(d.fuentes, id);
+
   return {
     id,
     area,
@@ -98,7 +135,23 @@ export function readDecision(id: string, yaml: string): RecordDecision {
     creada: text(d.creada, 'creada', id),
     ...(regla ? { regla } : {}),
     ...(respuesta ? { respuesta } : {}),
+    ...extras,
   };
+}
+
+// `fuentes` is a list; each item is a plain string or `{ texto, enlace }`.
+function readSources(v: unknown, id: string): RecordSource[] {
+  if (!Array.isArray(v)) throw new Error(`${DECISIONS_DIR}/${id}.yaml: \`fuentes\` is a list`);
+  return v.map((item, i) => {
+    if (typeof item === 'string' && item.trim()) return { texto: item.trim() };
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const o = item as Record<string, unknown>;
+      const src: RecordSource = { texto: text(o.texto, `fuentes[${i}].texto`, id) };
+      if (typeof o.enlace === 'string' && o.enlace.trim()) src.enlace = o.enlace.trim();
+      return src;
+    }
+    throw new Error(`${DECISIONS_DIR}/${id}.yaml: \`fuentes[${i}]\` is text or { texto, enlace }`);
+  });
 }
 
 /** Writes the answer into the YAML without touching anything else (comments and order kept). */

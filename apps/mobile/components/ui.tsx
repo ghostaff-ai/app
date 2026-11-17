@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { COLORS } from '@/lib/theme';
 import { ActivityIndicator, Pressable, Text, TextInput, View, type TextInputProps } from 'react-native';
 
 // The few building blocks every screen uses. Grow this before adding a
@@ -54,7 +55,7 @@ export function Button({
       accessibilityRole="button"
       accessibilityState={{ disabled: !!off, busy: !!busy }}
       onPress={off ? undefined : onPress}
-      className={`min-h-12 flex-row items-center justify-center rounded-xl px-5 py-3 ${toneClass[tone]} ${off ? 'opacity-50' : ''}`}
+      className={`min-h-12 flex-row items-center justify-center rounded-full px-5 py-3 ${toneClass[tone]} ${off ? 'opacity-50' : ''}`}
     >
       {busy ? <ActivityIndicator color={tone === 'plain' ? undefined : '#fff'} /> : null}
       <Text className={`text-base font-semibold ${tone === 'plain' ? 'text-ink' : 'text-white'} ${busy ? 'ml-2' : ''}`}>
@@ -84,7 +85,7 @@ export function Field({
       {hint ? <Text className="mt-1 text-sm text-muted">{hint}</Text> : null}
       <TextInput
         accessibilityLabel={label}
-        placeholderTextColor="#6B6862"
+        placeholderTextColor={COLORS.muted}
         className={`mt-2 ${inputClass} ${multiline ? 'min-h-24' : ''}`}
         multiline={multiline}
         textAlignVertical={multiline ? 'top' : undefined}
