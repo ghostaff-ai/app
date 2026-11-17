@@ -57,8 +57,15 @@ jobs:
     # build is what reaches phones, so a crash only it has (R8, a native module)
     # shows up here and not on Metro. Same script as locally: scripts/e2e/android.sh.
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
+      # The release build, Supabase's images and the emulator's system image
+      # don't fit the runner's disk next to everything it comes with.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost \
+            /usr/local/lib/node_modules /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/powershell
+          df -h /
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
@@ -78,7 +85,12 @@ jobs:
         run: pnpm exec supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta
 
       - name: Build the release APK
-        run: bash scripts/e2e/android.sh build
+        run: |
+          bash scripts/e2e/android.sh build
+          # Only the APK is needed from here on; the build's intermediates are gigabytes.
+          rm -rf apps/mobile/android/app/build/intermediates apps/mobile/android/app/.cxx apps/mobile/android/build
+          find node_modules/.pnpm -path '*/android/build' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+          df -h /
 
       - name: Install Maestro
         run: |
