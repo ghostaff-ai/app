@@ -3,6 +3,7 @@ import { Pressable, Text } from 'react-native';
 import { Button, Loading, Notice } from '@/components/ui';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
+import { COLORS, FONTS } from '@/lib/theme';
 
 // Signed in. The way in has three steps, each a guard: a profile first
 // (bienvenida), then an organisation (empezar: create one or join one), then
@@ -10,8 +11,9 @@ import { useProfile } from '@/lib/profile/ProfileContext';
 
 const header = {
   headerShadowVisible: false,
-  headerStyle: { backgroundColor: '#F7F6F3' },
-  headerTintColor: '#1C1B19',
+  headerStyle: { backgroundColor: COLORS.surface },
+  headerTintColor: COLORS.ink,
+  headerTitleStyle: { fontFamily: FONTS.display },
   headerBackTitle: 'Atrás',
 } as const;
 

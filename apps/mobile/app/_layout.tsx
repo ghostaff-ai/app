@@ -1,4 +1,5 @@
 import '../global.css';
+import { Rubik_500Medium, Rubik_600SemiBold, useFonts } from '@expo-google-fonts/rubik';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,6 +10,10 @@ import { ProfileProvider } from '@/lib/profile/ProfileContext';
 import { isConfigured } from '@/lib/supabase';
 
 export default function RootLayout() {
+  // Headings are Rubik; until it loads (or if it fails) nothing is drawn, so
+  // no screen jumps from the phone's face to Rubik.
+  const [fontsLoaded, fontError] = useFonts({ Rubik_500Medium, Rubik_600SemiBold });
+  if (!fontsLoaded && !fontError) return null;
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
