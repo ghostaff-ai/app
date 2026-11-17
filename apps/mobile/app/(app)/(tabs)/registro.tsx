@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { FlatList, RefreshControl, Text, View } from 'react-native';
+import { MicButton } from '@/components/chat/MicButton';
 import { DecisionCard } from '@/components/DecisionCard';
 import { Button, Loading, Notice } from '@/components/ui';
 import { useDecided } from '@/lib/hooks/useDecisions';
@@ -30,7 +31,10 @@ export default function Registro() {
       refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
       ListHeaderComponent={
         <View className="mb-4">
-          <Text className="font-display text-2xl text-ink">Registro</Text>
+          <View className="flex-row items-center justify-between">
+            <Text className="font-display text-2xl text-ink">Registro</Text>
+            <MicButton />
+          </View>
           <Text className="mt-1 text-base text-muted">Lo decidido, lo último primero.</Text>
         </View>
       }
