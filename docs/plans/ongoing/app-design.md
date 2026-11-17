@@ -9,6 +9,7 @@
 - [Design principles](https://claude.ai/artifact/QUoNFtzcvwGfQw2gwhNhBM): the job, ten principles, what 2025–26 agent products teach.
 - [Five concepts](https://claude.ai/artifact/K3gRpphDEWUf3ejNm8oSEP): five ways the whole app could feel, drawn as phone screens.
 - [Thirty decisions](https://claude.ai/artifact/QsmaX1eqA42kCzyaWSv4Eu): one card per call, with options drawn and my pick.
+- [Look and stack](https://claude.ai/artifact/8uiV3YbjsXDxsLDeTYC1cs): the 2026 system looks (Liquid Glass, Material 3 Expressive) and the React Native UI libraries, eight decisions. He mixed the style himself (light from one option, dark from another) and took my picks for the rest («go», 2026-11-17). They refine 21–30 below and add 31–34.
 
 ## The idea
 
@@ -52,16 +53,23 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 
 **The look**
 
-21. **Ink and cool greys**; orange only for «te espera», green only for earned autonomy, red only for errors (`apps/mobile/lib/theme.ts`).
-22. Light and dark, **following the phone**.
+21. **Ink and greys tinted a few degrees toward the ghost's violet** (`#F3F3F7` surface, `#FFFFFF` card, `#E9E8F0` sunk, `#6A687A` muted, `#16151E` ink), so the iridescent ghost sits in the page; orange only for «te espera», green only for earned autonomy, red only for errors (`apps/mobile/lib/theme.ts`). On Hoy only, a faint iridescent halo taken from the ghost sits behind it; the only new thing we draw.
+22. Light and dark, **following the phone**. Dark is a **night studio**, not inverted greys: deep ink (`#0C0D13` ground, `#171922` cards, `#ECEDF3` ink, `#8C8FA0` muted, `#FF8A4C` «te espera») and the ghost glowing. Both sets are the same tokens.
 23. Headings in **Rubik**; body text in the phone's own face.
 24. Cards only for things you act on (decisions, agents); the rest are plain rows.
-25. **Native** tab bar, sheets and haptics; our own decision card and ghosts.
+25. **Native** tab bar, sheets and haptics; our own decision card and ghosts. The tab bar is the phone's own in light and dark: the floating Liquid Glass bar on iOS 26, Material 3 on Android, so it stays current as the systems change.
 26. One signature motion: the answered card folds into its ghost, whose eyes turn happy, with a light haptic.
 27. Ghosts big on Hoy and on agent pages, small on rows; nowhere else.
 28. The ghost's face shows state only (waiting, working, happy, resting); it never nags.
 29. «Te espera» is the ghost's warm orange.
-30. Thin line icons (Phosphor).
+30. Thin line icons (Phosphor) wherever we draw; SF Symbols and Material Symbols inside native tabs and menus, where the system expects them.
+
+**The stack** (state of the libraries in Nov 2026 and the alternatives weighed: the Look and stack page)
+
+31. Styles stay on **NativeWind 4**; dark mode through its CSS variables. Move to Tailwind 4 when NativeWind 5 leaves release candidate (the class names barely change). Uniwind and Unistyles 3 were weighed and not needed.
+32. Components stay **our own** (`components/ui.tsx`). When one is hard to get right (an accessible dialog, a select, a toast), copy that single component from React Native Reusables into the repo and restyle it. No installed kit (HeroUI Native, gluestack, Tamagui, Paper).
+33. Native controls through **Expo UI** (`@expo/ui`, stable since SDK 56) and Expo Router's **native tabs**: the organisation sheet, menus, pickers, switches, settings. On the web Expo UI is still experimental, so there our own components stand in.
+34. Motion with **Reanimated 4** only; no Skia or Rive until a style or a designer needs them.
 
 ## Progress
 
@@ -75,7 +83,8 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 - [ ] Hoy: ghost on top with one sentence from Secretaría, «Te esperan», «Hecho sin ti».
 - [ ] Three tabs and the mic (native tabs); Organizaciones as a sheet with counts.
 - [ ] «Preguntar»: a chat about one decision. Needs the engine's always-on service for talking to a department.
-- [ ] Dark mode (the app is light only today, `app.config.ts`).
+- [ ] The ghost-tinted greys and the night-studio dark set in `lib/theme.ts`; dark mode on (the app is light only today, `app.config.ts`).
+- [ ] The halo behind the ghost on Hoy.
 - [ ] The signature motion when a decision is answered.
 - [ ] Notifications, the weekly summary, the widget: each its own plan when the engine sends them.
 - [ ] Órdago's agents writing the new fields: they read the README; check the first decisions that come with them.
