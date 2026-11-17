@@ -6,7 +6,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import eyesJson from '@/assets/ghosts/eyes.json';
 import { GHOSTS, type GhostId } from '@/lib/team';
-import { usePalette } from '@/lib/theme';
+import { usePalette, useScheme } from '@/lib/theme';
 import { type SpinState, StudioLight } from './stage';
 
 // One ghost, live: a solid model made by Tripo from Álvaro's pictures
@@ -131,7 +131,63 @@ function load(ghost: GhostId) {
   return p;
 }
 
-export function GhostScene({ spin, ghost }: { spin: React.RefObject<SpinState>; ghost: GhostId }) {
+// The halo behind the ghost on Hoy (app-design.md, decision 21): soft spots of
+// the ghost's own lilac, teal and pink. By day a faint tint on the page; after
+// dark they add up to a glow, the night studio's ghost. One soft round texture,
+// built in code so it works the same on phones, tinted per spot.
+let glow: THREE.DataTexture | null = null;
+function glowTexture() {
+  if (glow) return glow;
+  const n = 64;
+  const data = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const d = Math.min(1, Math.hypot(x - n / 2 + 0.5, y - n / 2 + 0.5) / (n / 2));
+      const a = (1 - d) * (1 - d);
+      data.set([255, 255, 255, Math.round(a * 255)], (y * n + x) * 4);
+    }
+  glow = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
+  glow.magFilter = THREE.LinearFilter;
+  glow.needsUpdate = true;
+  return glow;
+}
+
+const HALO: Record<'light' | 'dark', { color: string; x: number; y: number; size: number; opacity: number }[]> = {
+  light: [
+    { color: '#8C6EFF', x: -0.55, y: 0.25, size: 3.4, opacity: 0.32 },
+    { color: '#50C8DC', x: 0.65, y: 0.5, size: 3.0, opacity: 0.26 },
+    { color: '#FF78C8', x: 0.2, y: -0.45, size: 2.8, opacity: 0.2 },
+  ],
+  dark: [
+    { color: '#7A5CFF', x: 0, y: 0.05, size: 4.2, opacity: 0.55 },
+    { color: '#3FB6CC', x: 0.5, y: 0.45, size: 2.6, opacity: 0.22 },
+    { color: '#E060B0', x: -0.45, y: -0.35, size: 2.4, opacity: 0.18 },
+  ],
+};
+
+function Halo() {
+  const scheme = useScheme();
+  const map = glowTexture();
+  return (
+    <group position={[0, FLOOR + HEIGHT * 0.55, -1.2]}>
+      {HALO[scheme].map((h) => (
+        <mesh key={`${scheme}${h.color}`} position={[h.x, h.y, 0]}>
+          <planeGeometry args={[h.size, h.size]} />
+          <meshBasicMaterial
+            map={map}
+            color={h.color}
+            transparent
+            opacity={h.opacity}
+            depthWrite={false}
+            blending={scheme === 'dark' ? THREE.AdditiveBlending : THREE.NormalBlending}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+export function GhostScene({ spin, ghost, halo = false }: { spin: React.RefObject<SpinState>; ghost: GhostId; halo?: boolean }) {
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const shadow = useRef<THREE.Mesh>(null);
@@ -206,6 +262,7 @@ export function GhostScene({ spin, ghost }: { spin: React.RefObject<SpinState>; 
     <>
       <color attach="background" args={[stage]} />
       <StudioLight />
+      {halo ? <Halo /> : null}
       <hemisphereLight args={['#FFFFFF', '#C9C2E8', 0.6]} />
       <directionalLight position={[-2.5, 4, 3]} intensity={1.2} />
       <mesh ref={shadow} rotation-x={-Math.PI / 2} position-y={FLOOR}>
