@@ -104,6 +104,9 @@ const config: ExpoConfig = {
     output: 'single',
   },
   plugins: [
+    // A dev build talks to the local Supabase over plain http (the e2e build:
+    // scripts/e2e/android-build.sh); beta and prod only ever speak https.
+    ['expo-build-properties', { android: { usesCleartextTraffic: env === 'dev' } }],
     'expo-apple-authentication',
     ...(googleIosUrlScheme ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }] as [string, object]] : []),
     'expo-router',

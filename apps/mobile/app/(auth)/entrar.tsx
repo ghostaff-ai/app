@@ -52,6 +52,7 @@ export default function SignIn() {
             </View>
             <TextInput
               accessibilityLabel="Correo"
+              testID="signin-email"
               className="rounded-xl border border-line bg-card px-4 py-3 text-base text-ink"
               placeholder="tu@correo.com"
               autoCapitalize="none"
@@ -75,6 +76,7 @@ export default function SignIn() {
           <View className="mt-8">
             <TextInput
               accessibilityLabel="Código"
+              testID="signin-code"
               className="rounded-xl border border-line bg-card px-4 py-3 text-center text-2xl tracking-widest text-ink"
               placeholder="123456"
               keyboardType="number-pad"

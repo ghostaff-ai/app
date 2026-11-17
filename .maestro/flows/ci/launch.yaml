@@ -1,0 +1,14 @@
+appId: ${APP_ID}
+name: The sign-in screen offers every way in
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Ghostaff"
+    timeout: 60000
+- assertVisible: "Continuar con Google"
+- assertVisible: "o con tu correo"
+- assertVisible:
+    id: "signin-email"
+# Apple is iPhone only.
+- assertNotVisible: ".*Apple.*"
