@@ -35,10 +35,12 @@ function Routes() {
   if (loading) return <Loading />;
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={!!session}>
+      {/* SDK 58 sends a guarded route to the navigator's first open one, which for
+          (auth) is "/(auth)", a path with no screen: say where to go instead. */}
+      <Stack.Protected guard={!!session} redirectTo="/entrar">
         <Stack.Screen name="(app)" />
       </Stack.Protected>
-      <Stack.Protected guard={!session}>
+      <Stack.Protected guard={!session} redirectTo="/">
         <Stack.Screen name="(auth)" />
       </Stack.Protected>
     </Stack>

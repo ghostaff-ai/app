@@ -32,10 +32,12 @@ export default function AppLayout() {
 
   const hasProfile = !!me.profile;
   const inOrg = hasProfile && !!org.active;
+  // Where each step sends someone who isn't there yet (or is past it).
+  const step = !hasProfile ? '/bienvenida' : !org.active ? '/empezar' : '/';
 
   return (
     <Stack screenOptions={header}>
-      <Stack.Protected guard={inOrg}>
+      <Stack.Protected guard={inOrg} redirectTo={step}>
         <Stack.Screen
           name="index"
           options={{
@@ -64,13 +66,13 @@ export default function AppLayout() {
         <Stack.Screen name="invitar" options={{ title: 'Invitar', presentation: 'modal' }} />
         <Stack.Screen name="conexiones" options={{ title: 'Conexiones', presentation: 'modal' }} />
       </Stack.Protected>
-      <Stack.Protected guard={!hasProfile}>
+      <Stack.Protected guard={!hasProfile} redirectTo={step}>
         <Stack.Screen name="bienvenida" options={{ headerShown: false }} />
       </Stack.Protected>
-      <Stack.Protected guard={hasProfile && !org.active}>
+      <Stack.Protected guard={hasProfile && !org.active} redirectTo={step}>
         <Stack.Screen name="empezar" options={{ headerShown: false }} />
       </Stack.Protected>
-      <Stack.Protected guard={hasProfile}>
+      <Stack.Protected guard={hasProfile} redirectTo={step}>
         <Stack.Screen name="crear-empresa" options={{ title: 'Crear una empresa', presentation: 'modal' }} />
         <Stack.Screen name="unirme" options={{ title: 'Unirme a una empresa', presentation: 'modal' }} />
       </Stack.Protected>
