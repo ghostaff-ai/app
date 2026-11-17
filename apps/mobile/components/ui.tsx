@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { COLORS } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 import { ActivityIndicator, Pressable, Text, TextInput, View, type TextInputProps } from 'react-native';
 
 // The few building blocks every screen uses. Grow this before adding a
@@ -50,6 +50,7 @@ export function Button({
   busy?: boolean;
 }) {
   const off = disabled || busy;
+  const colors = usePalette();
   return (
     <Pressable
       accessibilityRole="button"
@@ -57,8 +58,8 @@ export function Button({
       onPress={off ? undefined : onPress}
       className={`min-h-12 flex-row items-center justify-center rounded-full px-5 py-3 ${toneClass[tone]} ${off ? 'opacity-50' : ''}`}
     >
-      {busy ? <ActivityIndicator color={tone === 'plain' ? undefined : '#fff'} /> : null}
-      <Text className={`text-base font-semibold ${tone === 'plain' ? 'text-ink' : 'text-white'} ${busy ? 'ml-2' : ''}`}>
+      {busy ? <ActivityIndicator color={tone === 'plain' ? colors.ink : tone === 'primary' ? colors.onAccent : '#fff'} /> : null}
+      <Text className={`text-base font-semibold ${tone === 'plain' ? 'text-ink' : tone === 'primary' ? 'text-on-accent' : 'text-white'} ${busy ? 'ml-2' : ''}`}>
         {label}
       </Text>
     </Pressable>
@@ -79,13 +80,14 @@ export function Field({
   multiline,
   ...input
 }: { label: string; hint?: string } & TextInputProps) {
+  const colors = usePalette();
   return (
     <View className="mt-5">
       <Text className="text-sm font-semibold text-ink">{label}</Text>
       {hint ? <Text className="mt-1 text-sm text-muted">{hint}</Text> : null}
       <TextInput
         accessibilityLabel={label}
-        placeholderTextColor={COLORS.muted}
+        placeholderTextColor={colors.muted}
         className={`mt-2 ${inputClass} ${multiline ? 'min-h-24' : ''}`}
         multiline={multiline}
         textAlignVertical={multiline ? 'top' : undefined}
@@ -121,7 +123,7 @@ export function Chips({
               onPress={() => onChange(on ? null : o)}
               className={`rounded-full border px-4 py-2 ${on ? 'border-accent bg-accent' : 'border-line bg-card'}`}
             >
-              <Text className={`text-sm ${on ? 'text-white' : 'text-ink'}`}>{o}</Text>
+              <Text className={`text-sm ${on ? 'text-on-accent' : 'text-ink'}`}>{o}</Text>
             </Pressable>
           );
         })}

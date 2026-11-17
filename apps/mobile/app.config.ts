@@ -67,7 +67,7 @@ const config: ExpoConfig = {
   version: '0.1.0',
   orientation: 'portrait',
   scheme: 'ghostaff',
-  userInterfaceStyle: 'light',
+  userInterfaceStyle: 'automatic',
   ios: {
     bundleIdentifier: bundleIdPerEnv[env],
     supportsTablet: true,

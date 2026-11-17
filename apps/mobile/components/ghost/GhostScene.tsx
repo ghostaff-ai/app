@@ -6,7 +6,8 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import eyesJson from '@/assets/ghosts/eyes.json';
 import { GHOSTS, type GhostId } from '@/lib/team';
-import { type SpinState, STAGE, StudioLight } from './stage';
+import { usePalette } from '@/lib/theme';
+import { type SpinState, StudioLight } from './stage';
 
 // One ghost, live: a solid model made by Tripo from Álvaro's pictures
 // (assets/ghosts/, made light in the design pipeline). Being one piece, it comes
@@ -135,6 +136,7 @@ export function GhostScene({ spin, ghost }: { spin: React.RefObject<SpinState>; 
   const body = useRef<THREE.Group>(null);
   const shadow = useRef<THREE.Mesh>(null);
   const stretch = useRef<THREE.Group>(null);
+  const stage = usePalette().surface; // the page's own colour, so the ghost sits on the page, light or dark
   const [scene, setScene] = useState<THREE.Group | null>(null);
   const blinkAt = useRef(-9);
   const nextBlink = useRef(1.5);
@@ -202,7 +204,7 @@ export function GhostScene({ spin, ghost }: { spin: React.RefObject<SpinState>; 
 
   return (
     <>
-      <color attach="background" args={[STAGE]} />
+      <color attach="background" args={[stage]} />
       <StudioLight />
       <hemisphereLight args={['#FFFFFF', '#C9C2E8', 0.6]} />
       <directionalLight position={[-2.5, 4, 3]} intensity={1.2} />

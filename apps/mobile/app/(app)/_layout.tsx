@@ -3,23 +3,25 @@ import { Pressable, Text } from 'react-native';
 import { Button, Loading, Notice } from '@/components/ui';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
-import { COLORS, FONTS } from '@/lib/theme';
+import { FONTS, usePalette, type Palette } from '@/lib/theme';
 
 // Signed in. The way in has three steps, each a guard: a profile first
 // (bienvenida), then an organisation (empezar: create one or join one), then
 // the inbox. Creating and joining stay reachable later, from Organizaciones.
 
-const header = {
-  headerShadowVisible: false,
-  headerStyle: { backgroundColor: COLORS.surface },
-  headerTintColor: COLORS.ink,
-  headerTitleStyle: { fontFamily: FONTS.display },
-  headerBackTitle: 'Atrás',
-} as const;
+const headerFor = (c: Palette) =>
+  ({
+    headerShadowVisible: false,
+    headerStyle: { backgroundColor: c.surface },
+    headerTintColor: c.ink,
+    headerTitleStyle: { fontFamily: FONTS.display },
+    headerBackTitle: 'Atrás',
+  }) as const;
 
 export default function AppLayout() {
   const org = useActiveOrg();
   const me = useProfile();
+  const header = headerFor(usePalette());
 
   if (org.loading || me.loading) return <Loading />;
   const error = me.error ?? org.error;
