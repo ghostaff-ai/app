@@ -109,18 +109,18 @@ jobs:
           E2E_SERIAL: emulator-5554
           MAESTRO_DRIVER_STARTUP_TIMEOUT: 120000
         with:
-          # The Automated Test Device image: Android without the parts a test
-          # never uses, so a 2-core runner isn't swamped by System UI ("isn't
-          # responding" over the app). No Google services: flows/google runs
-          # only locally.
+          # Android 14 with Google APIs: lighter on a 2-core runner than the
+          # local emulator's 16, with a keyboard (the flows hide it; the
+          # stripped test-device image has none, and hiding one there leaves
+          # the app). Google sign-in (flows/google) runs only locally.
           api-level: 34
-          target: aosp_atd
+          target: google_apis
           arch: x86_64
           profile: pixel_6
           ram-size: 4096M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
-          # Any "isn't responding" dialog from a slow boot stays hidden.
+          # A slow boot's "System UI isn't responding" would cover the app: hidden.
           script: |
             adb -s emulator-5554 shell settings put global hide_error_dialogs 1
             bash scripts/e2e/android.sh test
