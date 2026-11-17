@@ -22,6 +22,12 @@ const row = (over: Partial<DecisionRow> = {}): DecisionRow => ({
   proposed_by: 'seo',
   created_on: '2026-11-07',
   rule_proposal: null,
+  recommendation: null,
+  if_yes: null,
+  if_no: null,
+  quote: null,
+  sources: [],
+  due_on: null,
   answer: null,
   answered_by_name: null,
   answered_at: null,
@@ -41,6 +47,20 @@ describe('planSync', () => {
     expect(plan.upserts).toHaveLength(1);
     expect(plan.upserts[0]).toMatchObject({ record_id: 'seo-titulo', kind: 'titulo-web', source_commit: 'abc', closed_at: null });
     expect(plan.upserts[0]).not.toHaveProperty('answer');
+  });
+
+  it('carries the optional parts the app lays out', () => {
+    const extra = 'recomienda: Cambiarlo\ncon_si: Lo cambio.\ncon_no: Se queda.\ncita: 1.900 búsquedas\nfuentes:\n  - texto: Search Console\n    enlace: seo/datos.yaml\nvence: 2026-11-10\n';
+    const plan = planSync({ orgId: 'org', files: [{ id: 'seo-titulo', yaml: yaml(extra) }], existing: [], commit: 'abc', now });
+    expect(plan.upserts[0]).toMatchObject({
+      recommendation: 'Cambiarlo', if_yes: 'Lo cambio.', if_no: 'Se queda.', quote: '1.900 búsquedas',
+      sources: [{ text: 'Search Console', link: 'seo/datos.yaml' }], due_on: '2026-11-10',
+    });
+  });
+
+  it('writes empty parts when the file has none', () => {
+    const plan = planSync({ orgId: 'org', files: [{ id: 'seo-titulo', yaml: yaml() }], existing: [], commit: 'abc', now });
+    expect(plan.upserts[0]).toMatchObject({ recommendation: null, sources: [], due_on: null });
   });
 
   it('closes a decision whose file the agent deleted', () => {

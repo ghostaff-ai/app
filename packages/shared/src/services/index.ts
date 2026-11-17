@@ -7,6 +7,7 @@ import type {
   ConnectAiInput,
   Connection,
   Decision,
+  DecisionSource,
   Department,
   MembershipRole,
   MyInvitation,
@@ -37,6 +38,12 @@ export interface DecisionRow {
   proposed_by: string;
   created_on: string;
   rule_proposal: string | null;
+  recommendation: string | null;
+  if_yes: string | null;
+  if_no: string | null;
+  quote: string | null;
+  sources: DecisionSource[] | null;
+  due_on: string | null;
   answer: Answer | null;
   answered_by_name: string | null;
   answered_at: string | null;
@@ -60,6 +67,12 @@ export function decisionFromRow(r: DecisionRow): Decision {
     proposedBy: r.proposed_by,
     createdOn: r.created_on,
     ruleProposal: r.rule_proposal,
+    recommendation: r.recommendation,
+    ifYes: r.if_yes,
+    ifNo: r.if_no,
+    quote: r.quote,
+    sources: r.sources ?? [],
+    dueOn: r.due_on,
     answer:
       r.answer && r.answered_at
         ? {
@@ -77,7 +90,7 @@ export function decisionFromRow(r: DecisionRow): Decision {
 }
 
 const DECISION_COLUMNS =
-  'id, org_id, record_id, source_path, area, kind, question, context, proposed_by, created_on, rule_proposal, answer, answered_by_name, answered_at, answer_note, answer_text, answer_source, written_back_at, closed_at';
+  'id, org_id, record_id, source_path, area, kind, question, context, proposed_by, created_on, rule_proposal, recommendation, if_yes, if_no, quote, sources, due_on, answer, answered_by_name, answered_at, answer_note, answer_text, answer_source, written_back_at, closed_at';
 
 interface MembershipWithOrg {
   role: MembershipRole;
@@ -111,9 +124,15 @@ export async function listOpenDecisions(client: SupabaseClient, orgId: string): 
   return sortInbox((data ?? []).map(decisionFromRow));
 }
 
+/** Waiting first; among those, the nearest deadline first, then the newest. */
 export function sortInbox(ds: Decision[]): Decision[] {
   return [...ds].sort((a, b) => {
     if (!a.answer !== !b.answer) return a.answer ? 1 : -1;
+    if (!a.answer && a.dueOn !== b.dueOn) {
+      if (!a.dueOn) return 1;
+      if (!b.dueOn) return -1;
+      return a.dueOn.localeCompare(b.dueOn);
+    }
     return b.createdOn.localeCompare(a.createdOn);
   });
 }
@@ -144,6 +163,41 @@ export async function answerDecision(client: SupabaseClient, input: AnswerInput)
     .single<DecisionRow>();
   if (error) throw error;
   return decisionFromRow(data);
+}
+
+/** Takes back an answer given in the app, while the agent does not have it yet. */
+export async function unanswerDecision(client: SupabaseClient, decisionId: string): Promise<Decision> {
+  const { data, error } = await client.rpc('unanswer_decision', { decision_id: decisionId }).single<DecisionRow>();
+  if (error) throw error;
+  return decisionFromRow(data);
+}
+
+/** How many OKs in a row, without a note correcting them, this agent has for this kind of decision. */
+export async function okStreak(client: SupabaseClient, d: Pick<Decision, 'orgId' | 'proposedBy' | 'kind'>): Promise<number> {
+  const { data, error } = await client
+    .from('decisions')
+    .select('answer, answer_note')
+    .eq('org_id', d.orgId)
+    .eq('proposed_by', d.proposedBy)
+    .eq('kind', d.kind)
+    .not('answer', 'is', null)
+    .order('answered_at', { ascending: false })
+    .limit(AUTONOMY_STREAK)
+    .returns<{ answer: Answer; answer_note: string | null }[]>();
+  if (error) throw error;
+  return countStreak(data ?? []);
+}
+
+/** The streak a kind of decision needs before its agent may propose doing it alone (autonomia-por-tipo.md). */
+export const AUTONOMY_STREAK = 10;
+
+export function countStreak(answers: { answer: Answer; answer_note: string | null }[]): number {
+  let n = 0;
+  for (const a of answers) {
+    if (a.answer !== 'ok' || a.answer_note?.trim()) break;
+    n++;
+  }
+  return n;
 }
 
 // The way in: profile, then create an organisation or accept an invitation.
