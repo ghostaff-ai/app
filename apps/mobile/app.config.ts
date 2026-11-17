@@ -151,6 +151,8 @@ const config: ExpoConfig = {
     supabaseAnonKey,
     engineUrl,
     google: { webClientId: googleWebClientId, iosClientId: googleIosClientId },
+    // The end-to-end tests' build (scripts/e2e/android.sh sets E2E=1).
+    e2e: process.env.E2E === '1',
   },
 };
 

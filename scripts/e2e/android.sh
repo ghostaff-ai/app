@@ -53,7 +53,7 @@ cmd_build() {
   eval "$(supabase_env)"
   [[ -n "${ANON_KEY:-}" ]] || { echo "Local Supabase is not running: pnpm db:start" >&2; exit 1; }
   cd "$MOBILE"
-  export APP_ENV=dev SUPABASE_URL_DEV=http://127.0.0.1:54321 SUPABASE_ANON_KEY_DEV="$ANON_KEY" NODE_ENV=production
+  export E2E=1 APP_ENV=dev SUPABASE_URL_DEV=http://127.0.0.1:54321 SUPABASE_ANON_KEY_DEV="$ANON_KEY" NODE_ENV=production
   npx expo prebuild -p android --clean --no-install
   # The emulator is x86_64: building only that ABI takes a fraction of the time.
   (cd android && ./gradlew assembleRelease -q -PreactNativeArchitectures=x86_64)
