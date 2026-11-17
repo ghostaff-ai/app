@@ -2,7 +2,7 @@
 
 **Priority:** high — «hablar con un departamento» is one of the four things the first version promises
 **Gate:** none
-**Next:** migration for `agent_access`, `threads` and `messages` with row-level security and pgTAP tests, then the access control on the agent's page
+**Next:** step 2, the chat screens: services for threads and messages, the thread list inside Equipo, a thread with live messages between people, the mic to Secretaría
 
 Álvaro asked (2026-11-17) for a really good, curated chat: several people of one organisation talking to its agents, the owner deciding who can read or talk to each agent, and agents that are added by department and start working the moment they arrive, as a conversation rather than a form. I researched the libraries and guidelines and drew ten decisions; he took all my picks («go», 2026-11-17). The page he reviewed, with the options drawn and the sources: [Ghostaff chat choices](https://claude.ai/artifact/DCyY8cKXptDmf3xgBJp5an).
 
@@ -30,7 +30,22 @@ Guidelines that shaped the picks: Slack's agent design (show progress, threads w
 9. **@ to bring others in.** `@Redes` adds that agent to the thread; `@Ana` sends her a push. The list offers only agents the asker can talk to and people who can see the thread's agent.
 10. **Threads live inside Equipo, per agent**, with an unread dot on the agent row and a «Conversaciones» filter at the top of Equipo. No fourth tab. On a computer: agents, threads and the open thread side by side.
 
-## Open for the start
+## Progress
 
-- Where the agent's first message comes from when the engine's always-on service doesn't exist yet. Until it does, the app can ship threads between people and the access controls; agent replies need that service ([build-first-version.md](../ongoing/build-first-version.md), «The engine»).
-- Whether `agent_access` replaces checks on `memberships.role` for agents, or sits beside it (owners always «Hablar»).
+**Step 1, data and access** (branch `feat/agent-access`, 2026-11-18):
+
+- [x] `supabase/migrations/20261118000000_team_chat.sql`: levels per agent and member (`agent_access`, `agents.member_default`, `agent_level()`), `threads` and `messages` (parts in the AI SDK's shape) readable by level, written only through `start_thread` and `post_message`, live through Realtime. Owners always talk; it sits beside `memberships.role`, it doesn't replace it.
+- [x] Invitations carry per-agent levels (`invite_member(…, agent_levels)`), applied by `accept_invitation`.
+- [x] pgTAP: `supabase/tests/database/team_chat.test.sql` (defaults, none/read/talk, owners only, nothing across organisations, invitations).
+- [x] «Quién puede» on the agent's page (`app/(app)/acceso/[id].tsx`) and per-agent levels in the invite screen.
+
+**Step 2, the chat screens:**
+
+- [ ] Services: list threads of an agent, read a thread, start one, post, subscribe to new messages.
+- [ ] Threads inside Equipo, an unread dot on the agent row, the «Conversaciones» filter.
+- [ ] A thread: people in bubbles, agents flat; «Solo lectura» composer with «Ver»; @ mentions.
+- [ ] The mic to Secretaría; vacancies in Equipo.
+
+**Step 3, agents talking** (needs the engine's always-on service, [build-first-version.md](build-first-version.md), «The engine»):
+
+- [ ] The live working line, replies as they are written, decision cards in the chat, a new agent's first message.

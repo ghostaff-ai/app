@@ -46,6 +46,7 @@ export default function AppLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false, title: org.active?.name ?? '' }} />
         <Stack.Screen name="decision/[id]" options={{ title: 'Decisión' }} />
         <Stack.Screen name="agente/[id]" options={{ title: '' }} />
+        <Stack.Screen name="acceso/[id]" options={{ title: 'Quién puede' }} />
         <Stack.Screen name="nuevo-agente" options={{ title: 'Nuevo agente', presentation: 'modal' }} />
         <Stack.Screen
           name="organizaciones"
