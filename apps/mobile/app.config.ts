@@ -47,6 +47,24 @@ const engineUrlPerEnv: Record<Env, string> = {
 };
 const engineUrl = process.env[`ENGINE_URL_${suffix}`] || engineUrlPerEnv[env];
 
+// Google sign-in's OAuth clients, all in Google Cloud project ghostaff-prod
+// (ghostaff.ai@gmail.com), APIs & Services, Clients. Public by design: they ship
+// inside every app and say only which app is asking. One web client serves every
+// env (the web's button and Supabase's check of the token); each iPhone bundle id
+// has its own iOS client, and each Android package its own Android client (no id
+// here: Google matches it by package and signing certificate). The iOS URL scheme
+// is the iOS client id reversed.
+const googleWebClientId = '';
+const googleIosClientIdPerEnv: Record<Env, string> = {
+  dev: '',
+  beta: '',
+  prod: '',
+};
+const googleIosClientId = googleIosClientIdPerEnv[env];
+const googleIosUrlScheme = googleIosClientId
+  ? `com.googleusercontent.apps.${googleIosClientId.replace(/\.apps\.googleusercontent\.com$/, '')}`
+  : '';
+
 function projectUrlFromKey(key: string): string | null {
   try {
     const payload = (key.split('.')[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
@@ -71,6 +89,8 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: bundleIdPerEnv[env],
     supportsTablet: true,
+    // EAS turns Sign in with Apple on for the App ID at the next build.
+    usesAppleSignIn: true,
     infoPlist: {
       // Only standard HTTPS/TLS: saves the export-compliance question on every build.
       ITSAppUsesNonExemptEncryption: false,
@@ -83,7 +103,13 @@ const config: ExpoConfig = {
     bundler: 'metro',
     output: 'single',
   },
-  plugins: ['expo-router', 'expo-splash-screen', 'expo-status-bar'],
+  plugins: [
+    'expo-apple-authentication',
+    ...(googleIosUrlScheme ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }] as [string, object]] : []),
+    'expo-router',
+    'expo-splash-screen',
+    'expo-status-bar',
+  ],
   experiments: {
     typedRoutes: true,
   },
@@ -93,6 +119,7 @@ const config: ExpoConfig = {
     supabaseUrl,
     supabaseAnonKey,
     engineUrl,
+    google: { webClientId: googleWebClientId, iosClientId: googleIosClientId },
   },
 };
 

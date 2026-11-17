@@ -16,6 +16,8 @@ export const supabase = createClient(supabaseUrl || 'http://localhost', supabase
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    // Google in Expo Go comes back with a one-time code to exchange for the session.
+    flowType: 'pkce',
   },
 });
 

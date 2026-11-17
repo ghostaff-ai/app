@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Chips, ErrorText, Field } from '@/components/ui';
+import { useAuth } from '@/lib/auth/AuthContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
 
 // First screen after the first code: who you are. Only the name is required;
@@ -12,7 +13,13 @@ const HEARD_FROM = ['Alguien que conozco', 'Redes sociales', 'Buscando en intern
 
 export default function Welcome() {
   const { save } = useProfile();
-  const [name, setName] = useState('');
+  const { session } = useAuth();
+  // Google, and Apple the first time, tell us the name: offer it, editable.
+  const [name, setName] = useState(() => {
+    const meta = session?.user.user_metadata ?? {};
+    const given = meta.full_name ?? meta.name;
+    return typeof given === 'string' ? given : '';
+  });
   const [occupation, setOccupation] = useState<string | null>(null);
   const [occupationOther, setOccupationOther] = useState('');
   const [heardFrom, setHeardFrom] = useState<string | null>(null);
