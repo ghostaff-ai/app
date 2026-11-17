@@ -1,10 +1,14 @@
 name: CI
 
+# The beta app waits for this whole workflow, end-to-end tests included, to pass
+# on develop (beta.yml). Markdown alone changes no code, so it runs nothing.
 on:
   push:
     branches: [develop, main]
+    paths-ignore: ['**/*.md', 'docs/**']
   pull_request:
     branches: [develop, main]
+    paths-ignore: ['**/*.md', 'docs/**']
 
 permissions:
   contents: read
@@ -44,3 +48,69 @@ jobs:
       # Only Postgres: the migrations, the seed and the policy tests need nothing else.
       - run: pnpm exec supabase db start
       - run: pnpm db:test
+
+  e2e-android:
+    name: End-to-end (Android)
+    # The real app, as a release build, on an Android emulator against a local
+    # Supabase: the Maestro flows in .maestro/flows/ci (sign-in, sign-up,
+    # creating a company and walking its tabs, a cold relaunch). A release
+    # build is what reaches phones, so a crash only it has (R8, a native module)
+    # shows up here and not on Metro. Same script as locally: scripts/e2e/android.sh.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v5
+      - run: pnpm install --frozen-lockfile
+
+      # Auth (and Mailpit, where the sign-in codes land), the API and Realtime;
+      # what the app doesn't use stays off to save the runner's memory.
+      - name: Start the local Supabase
+        run: pnpm exec supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta
+
+      - name: Build the release APK
+        run: bash scripts/e2e/android.sh build
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Let the emulator use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run the flows on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          E2E_SERIAL: emulator-5554
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: 120000
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash scripts/e2e/android.sh test
+
+      - name: Keep Maestro's screenshots and logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-debug
+          path: |
+            ~/.maestro/tests/
+            ~/.local/state/maestro/tests/
+          if-no-files-found: ignore

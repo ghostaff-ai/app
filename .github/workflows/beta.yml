@@ -1,7 +1,8 @@
 name: Beta
 
 # Every push to develop reaches the beta app on Álvaro's phone by itself
-# (AGENTS.md, «Branches»). For each platform, the fingerprint of the app's
+# (AGENTS.md, «Branches»), once CI (typecheck, unit, database and end-to-end
+# tests) has passed on it. For each platform, the fingerprint of the app's
 # native side decides how:
 #   - a beta build with this fingerprint exists: publish the change over the
 #     air (EAS Update, branch `beta`); the app picks it up on its next launch;
@@ -13,25 +14,49 @@ name: Beta
 # nothing and says so.
 
 on:
-  push:
+  # Only once CI, end-to-end tests included, has passed on develop: a push that
+  # breaks the app never reaches the phone (2026-11-17, after a beta that crashed
+  # on every launch).
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [develop]
-    paths:
-      - 'apps/mobile/**'
-      - 'packages/shared/**'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/beta.yml'
   workflow_dispatch:
 
 concurrency:
-  group: beta-${{ github.ref }}
+  group: beta
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Did the app change?
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.diff.outputs.app }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+      # The push's last commit against its first parent: for a merged pull
+      # request, everything the pull request changed.
+      - id: diff
+        run: |
+          if [ "${{ github.event_name }}" = workflow_dispatch ] || git diff --name-only HEAD^1 HEAD | grep -qE '^(apps/mobile|packages/shared)/|^pnpm-lock\.yaml$|^\.github/workflows/beta\.yml$'; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Nothing in the app changed, so nothing goes to the beta."
+          fi
+
   ship:
     name: Beta (${{ matrix.platform }})
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -62,6 +87,9 @@ jobs:
 
       - if: steps.token.outputs.ok == 'true'
         uses: actions/checkout@v5
+        with:
+          # The commit CI passed, not whatever develop is by now.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - if: steps.token.outputs.ok == 'true'
         uses: pnpm/action-setup@v4
       - if: steps.token.outputs.ok == 'true'
