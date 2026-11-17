@@ -1,24 +1,22 @@
-// The app's colours and faces, in one place for Tailwind classes and for the
-// few props that take a raw value (headers, placeholders, the 3D stage).
-// «A calm desk» (docs/plans/ongoing/app-design.md): ink and cool greys, the
-// ghost is the only colour; orange only for what waits for you, green only for
-// earned autonomy, red only for errors.
+import { vars } from 'nativewind';
+import { useColorScheme } from 'react-native';
+import { kebab, PALETTES, type Palette, type Scheme } from './palette';
 
-export const COLORS = {
-  surface: '#F3F4F6',
-  card: '#FFFFFF',
-  sunk: '#E9EBEF',
-  ink: '#15161C',
-  muted: '#686B77',
-  line: '#E0E2E8',
-  accent: '#15161C',
-  ok: '#2F7D4F',
-  no: '#A23B2C',
-  waiting: '#D9622B',
-} as const;
+// The colours for the phone's light or dark setting (lib/palette.ts holds the
+// values). Screens use Tailwind classes; the few props that take a raw value
+// (headers, placeholders, the 3D stage) use usePalette().
 
-/** Headings: Rubik, loaded in app/_layout.tsx. Body text stays the phone's own face. */
-export const FONTS = {
-  display: 'Rubik_600SemiBold',
-  displayMedium: 'Rubik_500Medium',
-} as const;
+export * from './palette';
+
+/** The phone's light or dark setting; light when it says neither. */
+export function useScheme(): Scheme {
+  return useColorScheme() === 'dark' ? 'dark' : 'light';
+}
+
+export function usePalette(): Palette {
+  return PALETTES[useScheme()];
+}
+
+/** The CSS variables Tailwind's colour names read, set once on the root view. */
+export const colorVars = (p: Palette) =>
+  vars(Object.fromEntries(Object.entries(p).map(([k, v]) => [`--c-${kebab(k)}`, v])));

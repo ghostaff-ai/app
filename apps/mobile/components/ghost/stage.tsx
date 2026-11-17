@@ -1,4 +1,3 @@
-import { COLORS } from '@/lib/theme';
 import { useThree } from '@react-three/fiber';
 import { useEffect } from 'react';
 import * as THREE from 'three';
@@ -6,8 +5,6 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 
 // What every ghost scene shares: the backdrop, the studio light it reflects, and
 // how the finger has spun it.
-
-export const STAGE = COLORS.surface; // the app's surface colour, so the ghost sits on the page
 
 export type SpinState = {
   yaw: number; // radians, the turn the finger gave it
