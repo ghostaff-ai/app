@@ -7,7 +7,8 @@ import { Composer } from '@/components/chat/Composer';
 import { Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useAgents } from '@/lib/hooks/useAgents';
-import { useMembers, useMyLevels } from '@/lib/hooks/useChat';
+import { letAgentAnswer, useMembers, useMyLevels } from '@/lib/hooks/useChat';
+import { useEngine } from '@/lib/hooks/useConnections';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
@@ -26,6 +27,7 @@ export default function NuevaConversacion() {
   const { levels, loading: levelsLoading } = useMyLevels(orgId);
   const { members } = useMembers(orgId);
   const headerHeight = useHeaderHeight();
+  const engine = useEngine();
   const names = useMemo(
     () => [...agents.map((a) => a.name), ...members.filter((m) => m.userId !== session?.user.id).map((m) => m.displayName)],
     [agents, members, session?.user.id],
@@ -39,6 +41,7 @@ export default function NuevaConversacion() {
 
   const send = async (text: string) => {
     const id = await startThread(supabase, agent.id, text);
+    if (engine) letAgentAnswer(engine, id);
     router.replace(`/conversacion/${id}`);
   };
 

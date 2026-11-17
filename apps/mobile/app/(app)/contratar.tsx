@@ -1,22 +1,25 @@
-import { createAgent } from '@ghostaff/shared/services';
+import { agentHello, createAgent } from '@ghostaff/shared/services';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, Text, View } from 'react-native';
 import { Button, ErrorText, Notice } from '@/components/ui';
+import { letAgentAnswer } from '@/lib/hooks/useChat';
+import { useEngine } from '@/lib/hooks/useConnections';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
 import { DEPARTMENT_NAMES, GHOSTS, isGhostId } from '@/lib/team';
 
 // A vacancy, tapped (team-chat.md, decision 8): the ghost, its one-line job and
 // «Que empiece». Its name and department come from the job; both change later
-// on its page. Today it joins the team and opens its page; once the engine
-// talks, it will arrive with a first message of its own.
+// on its page. It joins the team and arrives talking: its first thread opens
+// and it introduces itself there, proposing a first piece of work.
 
 export default function Contratar() {
   const { ghost } = useLocalSearchParams<{ ghost: string }>();
   const { active } = useActiveOrg();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const engine = useEngine();
 
   if (!active || !ghost || !isGhostId(ghost)) return <Notice title="No encontramos este puesto" />;
   if (active.role !== 'owner') return <Notice title="Solo quien es propietario de la empresa incorpora agentes" />;
@@ -27,7 +30,14 @@ export default function Contratar() {
     setError(null);
     try {
       const a = await createAgent(supabase, { orgId: active.id, name: g.label, ghost, department: g.department });
-      router.replace(`/agente/${a.id}`);
+      // Its first thread; if the engine can't be reached, its page instead.
+      const hello = engine ? await agentHello(engine, a.id).catch(() => null) : null;
+      if (hello && engine) {
+        letAgentAnswer(engine, hello.threadId);
+        router.replace(`/conversacion/${hello.threadId}`);
+      } else {
+        router.replace(`/agente/${a.id}`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);

@@ -6,6 +6,7 @@ import { serve } from '@hono/node-server';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleAuth } from 'google-auth-library';
 import { createApp } from './app';
+import { supabaseChatStore, writerFactory } from './chatStore';
 import { supabaseStore } from './connections';
 import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
@@ -49,6 +50,7 @@ const app = createApp({
     return error ? null : (data.user?.id ?? null);
   },
   serviceAccount: process.env.ENGINE_SERVICE_ACCOUNT ?? '',
+  chat: { chat: supabaseChatStore(admin), writerFor: writerFactory(vault, auth) },
 });
 
 const port = Number(process.env.PORT ?? 8787);

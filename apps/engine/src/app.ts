@@ -1,10 +1,11 @@
-// The engine's HTTP service. Today it only connects AI accounts; the agents'
-// always-on service (talking to a department) grows here later. Every call but
+// The engine's HTTP service: it connects AI accounts, and it is the agents'
+// always-on service for the team chat (an agent answering in a thread). Every call but
 // /health carries the person's Supabase access token, so the engine knows who
 // is asking; what they may do is checked against their membership.
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { agentHello, type ChatDeps, replyInThread } from './chat';
 import { connectAi, type Deps, disconnectAi, Refusal } from './connections';
 
 export interface AppDeps extends Deps {
@@ -12,6 +13,8 @@ export interface AppDeps extends Deps {
   userFromToken(token: string): Promise<string | null>;
   /** The service account customers grant Vertex AI access to. */
   serviceAccount: string;
+  /** The team chat: agents answering in threads. */
+  chat: ChatDeps;
 }
 
 type Env = { Variables: { userId: string } };
@@ -44,6 +47,11 @@ export function createApp(deps: AppDeps) {
     await disconnectAi(deps, c.get('userId'), c.req.query('org'), c.req.param('provider'));
     return c.json({ ok: true });
   });
+
+  // Answers when the reply is written: Cloud Run keeps the CPU only while a request is open.
+  app.post('/threads/:id/reply', async (c) => c.json(await replyInThread(deps.chat, c.get('userId'), c.req.param('id'))));
+
+  app.post('/agents/:id/hello', async (c) => c.json(await agentHello(deps.chat, c.get('userId'), c.req.param('id')), 201));
 
   app.onError((e, c) => {
     if (e instanceof Refusal) return c.json({ error: e.code, message: e.message }, e.status);

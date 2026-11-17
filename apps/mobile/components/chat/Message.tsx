@@ -1,11 +1,14 @@
 import { type ChatMessage, messageText, splitMentions } from '@ghostaff/shared';
-import { Image, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { GHOSTS, type GhostId } from '@/lib/team';
 
 // One message of a thread (team-chat.md, decision 3): people in bubbles (yours
 // on the right in ink, colleagues on the left with their initials), agents
 // flat and full width in the muted agent style (app-design.md #18) with their
 // small ghost. Consecutive messages from the same author drop the name.
+// An agent's reply carries one status line (decision 4): what it is doing
+// while it writes, then «Hecho · 3 s», which unfolds into its steps.
 
 const AVATAR_COLOURS = ['#5B6CB8', '#3E8A8A', '#8A5B9E', '#B0703A', '#4F7D3E', '#A0506A'];
 
@@ -52,6 +55,48 @@ function Body({ text, names, className }: { text: string; names: string[]; class
   );
 }
 
+/** The agent's live status line: what it is doing now, then a folded record of what it did. */
+export function StatusLine({ message }: { message: ChatMessage }) {
+  const [open, setOpen] = useState(false);
+  const steps = message.steps;
+  if (message.state === 'working') {
+    const now = steps[steps.length - 1] ?? 'Pensando';
+    return (
+      <View className="mb-1 flex-row items-center" accessibilityLiveRegion="polite" accessibilityLabel={`${message.authorName} está trabajando: ${now}`}>
+        <ActivityIndicator size="small" />
+        <Text className="ml-2 text-sm text-muted">{now}…</Text>
+      </View>
+    );
+  }
+  if (message.state === 'failed') {
+    return <Text className="mb-1 text-sm text-no">No ha podido terminar</Text>;
+  }
+  if (steps.length === 0) return null;
+  const last = steps[steps.length - 1] ?? '';
+  const took = /^\d+ s$/.test(last) ? last : null;
+  const done = took ? steps.slice(0, -1) : steps;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      accessibilityLabel={open ? 'Ocultar lo que ha hecho' : 'Ver lo que ha hecho'}
+      onPress={() => setOpen((o) => !o)}
+      className="mb-1 self-start"
+    >
+      <Text className="text-xs text-muted">
+        {open ? '▾' : '▸'} Hecho{took ? ` · ${took}` : ''}
+      </Text>
+      {open
+        ? done.map((st, i) => (
+            <Text key={i} className="ml-3 text-xs text-muted">
+              · {st}
+            </Text>
+          ))
+        : null}
+    </Pressable>
+  );
+}
+
 export function MessageView({
   message,
   mine,
@@ -79,7 +124,8 @@ export function MessageView({
             <Text className="ml-1.5 text-sm font-semibold text-ink">{message.authorName}</Text>
           </View>
         ) : null}
-        <Body text={text} names={names} className="text-base leading-6 text-muted" />
+        <StatusLine message={message} />
+        {text ? <Body text={text} names={names} className="text-base leading-6 text-muted" /> : null}
       </View>
     );
   }

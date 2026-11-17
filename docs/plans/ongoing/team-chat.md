@@ -2,7 +2,7 @@
 
 **Priority:** high — «hablar con un departamento» is one of the four things the first version promises
 **Gate:** none
-**Next:** step 3, agents talking: the engine's always-on service answers in threads (see «Step 3» below)
+**Next:** step 4, decision cards in the chat: when an agent can raise a decision (it needs the record and tools from the engine), show it inline as the Hoy card (decision 5)
 
 Álvaro asked (2026-11-17) for a really good, curated chat: several people of one organisation talking to its agents, the owner deciding who can read or talk to each agent, and agents that are added by department and start working the moment they arrive, as a conversation rather than a form. I researched the libraries and guidelines and drew ten decisions; he took all my picks («go», 2026-11-17). The page he reviewed, with the options drawn and the sources: [Ghostaff chat choices](https://claude.ai/artifact/DCyY8cKXptDmf3xgBJp5an).
 
@@ -50,7 +50,14 @@ Guidelines that shaped the picks: Slack's agent design (show progress, threads w
 - Checked on the web against local Supabase (two people, Realtime, a mention, a vacancy filled); not yet on a phone.
 - Left for later: an @person sends no push yet (notifications are their own plan), and @agent doesn't bring that agent into the thread until agents talk.
 
-**Step 3, agents talking** (needs the engine's always-on service, [build-first-version.md](build-first-version.md), «The engine»):
+**Step 3, agents talking** (branch `feat/agents-talk`, 2026-11-18):
 
-- [ ] The engine's always-on service: when a person writes in a thread, the thread's agent answers there, with the rights of the person who asked.
-- [ ] The live working line, replies as they are written, decision cards in the chat, a new agent's first message (the vacancy flow then lands in its first thread), @agent bringing that agent in.
+- [x] The engine answers in threads (`apps/engine/src/chat.ts`, `POST /threads/:id/reply`): the app asks after each message; the engine checks the asker may talk to the agent (`agent_level_for`, service role only), and the agent answers with Claude through the organisation's own AI account (Vertex in its EU project first, else its Anthropic key from the vault). No account: the agent says to connect one in Conexiones. Model `claude-opus-5-5` at low effort, `ENGINE_CHAT_MODEL` overrides it.
+- [x] A reply is one message that grows (`supabase/migrations/20261118200000_agent_replies.sql`: `state` working → done / failed, `steps`), one per thread at a time (a unique index); a message written meanwhile gets the next answer. Realtime now carries updates too, and a thread reloads once its subscription is live.
+- [x] The status line (decision 4): what the agent is doing while it writes, then «Hecho · 3 s», which unfolds into its steps.
+- [x] A vacancy filled lands in the agent's first thread, «Primeros pasos», where it introduces itself and proposes a first task (`POST /agents/:id/hello` opens the thread; the empty thread's reply is the introduction).
+- [x] @agent brings that agent in: the agents a message mentions answer instead of the thread's own, if the asker may talk to them; a message that mentions only people gets no answer.
+- Checked on the web against local Supabase with the real engine and store and a stand-in model (streaming, Bea's message answered live on Ana's screen, Redes arriving talking). The first real model call is on beta.
+- Agents only talk today: no record, mail or tools, and their prompt says so.
+
+**Step 4, decision cards in the chat** (decision 5): needs agents that can raise decisions, which needs the engine to give them the record and tools ([build-first-version.md](build-first-version.md), «The engine»). A message part of type decision, drawn as the Hoy card.

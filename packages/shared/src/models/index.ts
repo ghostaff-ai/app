@@ -143,6 +143,19 @@ export type Department = (typeof DEPARTMENTS)[number];
 export const AGENT_GHOSTS = ['base', 'secretaria', 'incorporacion', 'finanzas', 'redes', 'productor'] as const;
 export type AgentGhost = (typeof AGENT_GHOSTS)[number];
 
+/**
+ * Each ghost's job, as the app shows it and as the agent is told it
+ * (ghostaff-producto.md, «El equipo de partida»). One place for both.
+ */
+export const AGENT_JOBS: Record<AgentGhost, { label: string; job: string }> = {
+  base: { label: 'Agente', job: 'Un agente del equipo.' },
+  secretaria: { label: 'Secretaría', job: 'Que no se escape nada: lee el correo y te trae solo lo que necesita de ti.' },
+  incorporacion: { label: 'Incorporación', job: 'Monta el registro de la organización con lo que ya tenéis, y guarda lo nuevo que llegue.' },
+  finanzas: { label: 'Finanzas', job: 'El libro al día, con un documento detrás de cada euro.' },
+  redes: { label: 'Redes', job: 'Hace crecer vuestras redes, aprendiendo qué funciona.' },
+  productor: { label: 'Productor', job: 'Convierte encargos y material en bruto en piezas listas para publicar.' },
+};
+
 export interface Agent {
   id: string;
   orgId: string;

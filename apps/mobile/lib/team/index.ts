@@ -1,4 +1,4 @@
-import type { AgentGhost, Department } from '@ghostaff/shared';
+import { AGENT_JOBS, type AgentGhost, type Department } from '@ghostaff/shared';
 import type { ImageSourcePropType } from 'react-native';
 
 // The ghosts an organisation's agents are drawn as: the ones Álvaro designed
@@ -9,12 +9,12 @@ import type { ImageSourcePropType } from 'react-native';
 export type GhostId = AgentGhost;
 
 export const GHOSTS: Record<GhostId, { label: string; job: string; department: Department; picture: ImageSourcePropType; model: number }> = {
-  base: { department: 'direccion', label: 'Agente', job: 'Un agente del equipo.', picture: require('../../assets/ghosts/base.png'), model: require('../../assets/ghosts/base.glb') },
-  secretaria: { department: 'direccion', label: 'Secretaría', job: 'Que no se escape nada: lee el correo y te trae solo lo que necesita de ti.', picture: require('../../assets/ghosts/secretaria.png'), model: require('../../assets/ghosts/secretaria.glb') },
-  incorporacion: { department: 'direccion', label: 'Incorporación', job: 'Monta el registro de la organización con lo que ya tenéis, y guarda lo nuevo que llegue.', picture: require('../../assets/ghosts/incorporacion.png'), model: require('../../assets/ghosts/incorporacion.glb') },
-  finanzas: { department: 'finanzas', label: 'Finanzas', job: 'El libro al día, con un documento detrás de cada euro.', picture: require('../../assets/ghosts/finanzas.png'), model: require('../../assets/ghosts/finanzas.glb') },
-  redes: { department: 'marketing', label: 'Redes', job: 'Hace crecer vuestras redes, aprendiendo qué funciona.', picture: require('../../assets/ghosts/redes.png'), model: require('../../assets/ghosts/redes.glb') },
-  productor: { department: 'marketing', label: 'Productor', job: 'Convierte encargos y material en bruto en piezas listas para publicar.', picture: require('../../assets/ghosts/productor.png'), model: require('../../assets/ghosts/productor.glb') },
+  base: { department: 'direccion', ...AGENT_JOBS.base, picture: require('../../assets/ghosts/base.png'), model: require('../../assets/ghosts/base.glb') },
+  secretaria: { department: 'direccion', ...AGENT_JOBS.secretaria, picture: require('../../assets/ghosts/secretaria.png'), model: require('../../assets/ghosts/secretaria.glb') },
+  incorporacion: { department: 'direccion', ...AGENT_JOBS.incorporacion, picture: require('../../assets/ghosts/incorporacion.png'), model: require('../../assets/ghosts/incorporacion.glb') },
+  finanzas: { department: 'finanzas', ...AGENT_JOBS.finanzas, picture: require('../../assets/ghosts/finanzas.png'), model: require('../../assets/ghosts/finanzas.glb') },
+  redes: { department: 'marketing', ...AGENT_JOBS.redes, picture: require('../../assets/ghosts/redes.png'), model: require('../../assets/ghosts/redes.glb') },
+  productor: { department: 'marketing', ...AGENT_JOBS.productor, picture: require('../../assets/ghosts/productor.png'), model: require('../../assets/ghosts/productor.glb') },
 };
 
 export const isGhostId = (id: string): id is GhostId => id in GHOSTS;

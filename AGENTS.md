@@ -32,7 +32,7 @@ Start a session in the repo the work belongs to, never in the parent folder.
 ```
 apps/mobile/       the app: Expo + expo-router + NativeWind, iPhone, Android and web
 apps/sync/         record → database job (run by hand today, Cloud Run Jobs later)
-apps/engine/       the engine's HTTP service on Cloud Run: today, an organisation's AI keys into the vault
+apps/engine/       the engine's HTTP service on Cloud Run: an organisation's AI keys into the vault, agents answering in the team chat
 packages/shared/   models, the record's file formats (por-decidir/), the data services
 supabase/          migrations, row-level-security tests (pgTAP), local config
 ```
