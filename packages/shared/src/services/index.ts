@@ -1,13 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
+  Agent,
+  AgentGhost,
   AiProvider,
   Answer,
   ConnectAiInput,
   Connection,
   Decision,
+  Department,
   MembershipRole,
   MyInvitation,
   MyOrganization,
+  NewAgent,
   NewOrganization,
   Organization,
   PendingInvitation,
@@ -366,4 +370,55 @@ export async function disconnectAi(engine: EngineAccess, orgId: string, provider
 /** The service account a customer grants Vertex AI access to on their own project. */
 export async function getEngineIdentity(engine: EngineAccess): Promise<{ serviceAccount: string }> {
   return callEngine(engine, 'GET', '/identity');
+}
+
+// Agents. Every member reads the team; only owners add or remove agents, through
+// create_agent and delete_agent.
+
+interface AgentRow {
+  id: string;
+  org_id: string;
+  name: string;
+  ghost: AgentGhost;
+  department: Department;
+  created_at: string;
+}
+
+export function agentFromRow(r: AgentRow): Agent {
+  return { id: r.id, orgId: r.org_id, name: r.name, ghost: r.ghost, department: r.department, createdAt: r.created_at };
+}
+
+const AGENT_COLUMNS = 'id, org_id, name, ghost, department, created_at';
+
+/** The organisation's agents, oldest first. */
+export async function listAgents(client: SupabaseClient, orgId: string): Promise<Agent[]> {
+  const { data, error } = await client
+    .from('agents')
+    .select(AGENT_COLUMNS)
+    .eq('org_id', orgId)
+    .order('created_at')
+    .returns<AgentRow[]>();
+  if (error) throw error;
+  return (data ?? []).map(agentFromRow);
+}
+
+export async function getAgent(client: SupabaseClient, id: string): Promise<Agent | null> {
+  const { data, error } = await client.from('agents').select(AGENT_COLUMNS).eq('id', id).maybeSingle<AgentRow>();
+  if (error) throw error;
+  return data ? agentFromRow(data) : null;
+}
+
+/** Adds an agent to the organisation's team. Owners only. */
+export async function createAgent(client: SupabaseClient, a: NewAgent): Promise<Agent> {
+  const { data, error } = await client
+    .rpc('create_agent', { target_org: a.orgId, name: a.name.trim(), ghost: a.ghost, department: a.department })
+    .single<AgentRow>();
+  if (error) throw error;
+  return agentFromRow(data);
+}
+
+/** Removes an agent from its team. Owners only. */
+export async function deleteAgent(client: SupabaseClient, id: string): Promise<void> {
+  const { error } = await client.rpc('delete_agent', { agent_id: id });
+  if (error) throw error;
 }

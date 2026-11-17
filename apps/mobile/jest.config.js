@@ -5,6 +5,7 @@ module.exports = {
     '/node_modules/(?!(.pnpm|react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|react-navigation|@react-navigation/.*|nativewind|react-native-css-interop|@ghostaff|@supabase))',
   ],
   moduleNameMapper: {
+    '\\.glb$': '<rootDir>/test/glbStub.js',
     '^@/(.*)$': '<rootDir>/$1',
   },
 };
