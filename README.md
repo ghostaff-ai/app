@@ -27,15 +27,17 @@ for `apps/engine/.env` (its vault stays in memory locally). No `.env` is committ
 running (`pnpm engine:dev`, port 8787), set `ENGINE_URL_DEV=http://localhost:8787` in `apps/mobile/.env`
 to try Conexiones.
 
-Give yourself a login in Órdago (organisation zero, created by the seed) and load its decisions:
+Then `pnpm app:web` (or `pnpm app:start` for a phone) and sign up with any email: the sign-in
+code never leaves the machine, it lands in the local mail catcher that `pnpm db:start` prints
+(Mailpit, port 54324). The welcome screen asks your name and lets you create a company.
+
+To see Órdago's real decisions too, make yourself a member of Órdago (organisation zero, created
+by the seed) and load its `por-decidir/`:
 
 ```bash
 pnpm --filter @ghostaff/sync org add-member --org ordago --email you@example.com --name Álvaro --role owner
 pnpm sync:por-decidir --org ordago --record ~/githubs/ordago-app/business
 ```
-
-Then `pnpm app:web` (or `pnpm app:start` for a phone). The sign-in code arrives in the local
-mail catcher that `pnpm db:start` prints (Mailpit, port 54324).
 
 Metro starts on 8083, or on 8093, 8103 … 8173 when another copy already holds it
 (`scripts/metro-port.sh`; `METRO_PORT` overrides it). Every script that starts Metro goes
