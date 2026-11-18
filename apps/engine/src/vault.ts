@@ -19,6 +19,11 @@ export function secretName(orgId: string, provider: string): string {
   return `org-${orgId}-ai-${provider}`.replace(/[^A-Za-z0-9_-]/g, '-');
 }
 
+/** An outside account's token (Google…), one per organisation and provider. */
+export function accountSecretName(orgId: string, provider: string): string {
+  return `org-${orgId}-account-${provider}`.replace(/[^A-Za-z0-9_-]/g, '-');
+}
+
 export class MemoryVault implements Vault {
   readonly secrets = new Map<string, { value: string; labels: Record<string, string> }>();
   async put(name: string, value: string, labels: Record<string, string>) {

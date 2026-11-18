@@ -5,9 +5,11 @@
 import { serve } from '@hono/node-server';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleAuth } from 'google-auth-library';
+import { type AccountDeps, accessTokens, supabaseAccountStore, toolsFor } from './accounts';
 import { createApp } from './app';
 import { supabaseChatStore, writerFactory } from './chatStore';
 import { supabaseStore } from './connections';
+import { googleOAuth, googleTools } from './google';
 import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
 
@@ -32,6 +34,23 @@ if (process.env.VAULT === 'memory') {
   vault = new SecretManagerVault(auth, required('GCP_PROJECT'), process.env.SECRETS_LOCATION ?? 'europe-west1');
 }
 
+// Google: our OAuth client «Ghostaff Conectores». The ID is public; the secret
+// comes from Secret Manager on Cloud Run and from .env locally. Without them
+// the engine runs, and connecting Google answers «not configured».
+const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+const accounts: AccountDeps = {
+  accounts: supabaseAccountStore(admin),
+  vault,
+  providers:
+    googleClientId && googleClientSecret ? { google: googleOAuth({ clientId: googleClientId, clientSecret: googleClientSecret }) } : {},
+  publicUrl: process.env.ENGINE_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8787}`,
+  returnOrigins: (process.env.APP_RETURN_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
+  tools: googleTools(),
+};
+if (!accounts.providers.google) console.warn('Google connector off: set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET.');
+const tokenFor = accessTokens(accounts);
+
 const app = createApp({
   store: supabaseStore(admin),
   vault,
@@ -50,7 +69,12 @@ const app = createApp({
     return error ? null : (data.user?.id ?? null);
   },
   serviceAccount: process.env.ENGINE_SERVICE_ACCOUNT ?? '',
-  chat: { chat: supabaseChatStore(admin), writerFor: writerFactory(vault, auth) },
+  chat: {
+    chat: supabaseChatStore(admin),
+    writerFor: writerFactory(vault, auth),
+    toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
+  },
+  accounts,
 });
 
 const port = Number(process.env.PORT ?? 8787);

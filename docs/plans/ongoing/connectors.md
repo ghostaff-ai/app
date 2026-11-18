@@ -1,8 +1,8 @@
 # Connectors: every outside account behind one button
 
 **Priority:** high — Jaime (2026-11-18): without connectors a non-technical person can use, the product is worthless; Álvaro (2026-11-14): connectors are a crucial part of the app
-**Gate:** decision:Álvaro takes this to ready/, since what gets built here is his call (Jaime's proposal, 2026-11-18)
-**Next:** give the engine's agents tools that act for one organisation (phase 0 below); it is needed whichever way open question 1 goes
+**Gate:** blocked:Jaime creates the OAuth client «Ghostaff Conectores» in ghostaff-prod and puts its secret in Secret Manager (recheck 2026-11-19)
+**Next:** connect a real Google account locally, have an agent list and create a calendar event and a spreadsheet, then land `feat/connectors-google`
 
 ## Goal
 
@@ -11,7 +11,7 @@ An organisation connects the accounts it already uses (Instagram, its mail, its 
 ## Context
 
 - **Why it matters, and what the research found:** the product plan's section [Conectores](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#conectores-cómo-entra-y-sale-todo) and the full research of 2026-11-18, [ghostaff-conectores.md](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-conectores.md) (Zernio, what each platform demands, the providers and their costs). The short version: what is worth owning is the *approval* each platform gives an app, not the code; whoever registered the app the person accepted owns that link, and moving away from them makes every customer connect again.
-- **What exists today:** `public.connections` holds only AI connections (`kind = 'ai'`), the engine keeps their keys in Secret Manager (`apps/engine/src/vault.ts`), and the Conexiones screen shows them ([llm-connectors.md](../ongoing/llm-connectors.md)). Agents have no tools yet: they only talk (`apps/engine/src/chat.ts`).
+- **What exists today:** `public.connections` holds only AI connections (`kind = 'ai'`), the engine keeps their keys in Secret Manager (`apps/engine/src/vault.ts`), and the Conexiones screen shows them ([llm-connectors.md](llm-connectors.md)). Agents have no tools yet: they only talk (`apps/engine/src/chat.ts`).
 - **How Órdago does it today** (`ghostaff-ai/agents`, `proyectos/ordago/`): tokens made by hand by Jaime and Álvaro (`ordago-meta-token`, ElevenLabs, a Google app password for the mailbox), mounted into each agent as environment variables. That is exactly what a customer cannot do.
 
 ## The three kinds of connector
@@ -72,34 +72,32 @@ A line in the checklist is ticked only after step 4.
 
 ## Phases
 
-Each phase says what we do and which connectors it opens. Phases 1 and 2 run side by side: phase 2 spends most of its life waiting on Meta's and TikTok's reviews, and phase 1 needs no review at all.
+Ordered by what Jaime put first (2026-11-18): Google (calendar, spreadsheets, reviews), then Instagram and TikTok, then invoices. Everything else waits until someone asks. Each phase says what we do and which connectors it opens.
 
-**Phase 0: the foundation.** Opens no named app, but every organisation gets the general ways in.
-- Agents get tools that act for one organisation, with the organisation taken from the run and never from the model.
-- The engine becomes an MCP client (open question 3), and `connections` and the vault hold every kind of connection.
-- Conexiones lists every kind; each connection shows its health, and a failing one becomes a decision for an owner to reconnect.
-- Register our developer apps on Meta, TikTok and Google now, in test mode, so phase 2 starts from a running app.
+**Phase 0: the foundation.**
+- Built (branch `feat/connectors-google`): agents get tools that act for one organisation, with the organisation taken from the run and never from the model (`apps/engine/src/tools.ts`, `accounts.ts`); connecting by signing in with a one-time state and PKCE, finished by the app as the person who started it (so nobody can get a stranger's account into their own organisation by sending them a sign-in link); tokens in the vault, the database keeping only the account's email and granted scopes; a connection Google stops honouring turns `failing` and the card says to reconnect.
+- Still to do: the forwarding address, uploading a file, asking for a connector we lack, and the engine as an MCP client for the makers' servers (open question 3).
 - *Opens:* the forwarding address (Finanzas gets invoices and bank notices from day one), uploading a file, asking for a connector we lack.
 
-**Phase 1: the makers' open connectors.** No platform review, no cost per app.
-- Each connector goes through the four steps, step 2 being a test with an account that is not ours.
-- Holded and Factorial first, since they are the Spanish small company's tools; then the rest by demand.
-- *Opens:* Holded, Factorial, Stripe, Notion, Calendly, Wix, WordPress.com. Then, as organisations ask: PayPal, Airtable, Pipedrive, monday.com, Linear, Typeform, Webflow, Squarespace.
+**Phase 1: Google.** One OAuth client, «Ghostaff Conectores» in `ghostaff-prod`, opens several apps.
+- Calendar and Sheets first (built on the same branch). Sheets is how an agent hands over an Excel: it creates the spreadsheet in the organisation's Drive, and it downloads as .xlsx from there. Through Google's stable REST APIs: its MCP servers for Calendar and Sheets are still a developer preview.
+- Then answering Google reviews (Google Business Profile, kind A: no MCP; its API needs an access form first), Drive files the person picks, Search Console and Analytics.
+- While the Google app is in Testing, a connection lasts seven days and only listed test users can connect. Verifying it (sensitive scopes only, no security assessment) needs a home page and a privacy policy on ghostaff.ai, the same ones Google sign-in waits for ([build-first-version.md](build-first-version.md)).
+- *Opens:* Google Calendar, Google Sheets, Google Business Profile reviews, Drive files the person picks, Search Console, Google Analytics.
 
-**Phase 2: Órdago's social networks, ours.** The first kind-A connectors, and what Marketing needs.
+**Phase 2: Instagram and TikTok, ours.** The first kind-A connectors, and what Marketing needs.
 - Decide first: whose name the apps go in (open question 4), and own vault or Zernio (open question 1).
 - Build publishing (reels, carousels, video), stats and comments for Instagram and Facebook Pages on our Meta app, and publishing and stats for TikTok with the consent screen TikTok's audit checks (the account's name, avatar and privacy options shown before posting).
 - Órdago uses it first in Meta's test mode (`@ordago.app` given a role in our app), which retires the hand-made `ordago-meta-token`. TikTok without its audit only posts privately, so Órdago keeps its current way there until the audit passes.
 - Film each permission working, verify the business with Meta, send Meta's App Review and TikTok's audit.
-- *Opens:* Instagram, Facebook Pages, TikTok. Read-only ad stats (Meta Ads, TikTok Ads) can ride on the same apps afterwards.
+- *Opens:* Instagram, Facebook Pages, TikTok.
 
-**Phase 3: Google and Microsoft, without the restricted scopes.** One verification each opens several apps.
-- Verify our Google OAuth client for sensitive scopes. It needs a home page and a privacy policy on ghostaff.ai, the same ones Google sign-in already waits for ([build-first-version.md](../ongoing/build-first-version.md)).
-- Run Google's official Analytics MCP server ourselves; fill in Google Business Profile's access form; verify as a Microsoft publisher.
-- *Opens:* Google Calendar, Google Drive, Docs and Sheets (only files the person picks), Search Console, Google Analytics, Google Business Profile, Microsoft 365 (Outlook, calendar, OneDrive).
+**Phase 3: invoices.**
+- Receiving them is phase 0's forwarding address.
+- Issuing them is not ours to build: an invoice a Spanish company sends must come from invoicing software that meets the tax agency's rules (Verifactu), so the agent issues it through the organisation's own tool. Holded first, through its official MCP server (kind B-open).
+- *Opens:* Holded.
 
-**Phase 4: when paying organisations ask.** Each has a cost or a heavy review, so it waits for demand that pays for it.
-- *Opens:* reading Gmail (CASA every year, 499–5,400 USD), bank movements (an aggregator, price on request), WhatsApp conversations (Meta Tech Provider), YouTube (quota audit), LinkedIn pages (needs the SL), and the rest of kind B-app as asked (HubSpot, Shopify, Dropbox, Asana, Zoom, Slack through its Marketplace, Canva, Intercom, Atlassian, Salesforce). X only if someone asks, at 0.20 USD a post with a link.
+**On demand.** Built when an organisation asks and, where there is a cost or a heavy review, pays for it: the rest of kind B-open (Factorial, Stripe, Notion, Calendly, Wix, WordPress.com…), the rest of kind B-app (Microsoft 365, HubSpot, Shopify, Slack…), reading Gmail (CASA every year, 499–5,400 USD), bank movements (an aggregator), WhatsApp conversations, YouTube, LinkedIn pages (needs the SL), X.
 
 ## The checklist
 
@@ -139,8 +137,9 @@ Each phase says what we do and which connectors it opens. Phases 1 and 2 run sid
 
 ### Kind B-app — the maker's, our app registered first
 
-- [ ] Google Calendar — our Google OAuth client, sensitive scope
-- [ ] Google Drive, Docs, Sheets — same client; reading every file is a restricted scope, so only files the person picks
+- [~] Google Calendar (see and create events) — step 1: built, waiting for the OAuth client to try it with a real account
+- [~] Google Sheets (create a spreadsheet: the Excel) — step 1, same
+- [ ] Google Drive, Docs — same client; reading every file is a restricted scope, so only files the person picks
 - [ ] Gmail, reading (invoices, notices) — restricted scope: CASA every year, 499–5,400 USD
 - [ ] Google Analytics — Google's official server, run by us
 - [ ] Microsoft 365 (Outlook, calendar, OneDrive) — our Entra app, publisher verification

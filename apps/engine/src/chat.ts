@@ -6,11 +6,13 @@
 // and writes the reply as it comes: a «working» message with a line of what it
 // is doing, its text growing, then «done». Everyone in the thread sees it live.
 //
-// Today an agent only talks: it has no tools and no access to the record yet,
-// and says so when asked for something that needs them.
+// An agent has the tools of the organisation's connected accounts (accounts.ts,
+// docs/plans/ongoing/connectors.md) and nothing else yet: no record, no mail. It
+// says so when asked for something that needs them.
 
 import { AGENT_JOBS, type AgentGhost, type ChatMessage, messageText, splitMentions } from '@ghostaff/shared';
 import { Refusal } from './connections';
+import type { AgentTools } from './tools';
 
 export type Level = 'none' | 'read' | 'talk';
 
@@ -58,13 +60,25 @@ export interface ModelTurn {
   content: string;
 }
 
-/** Streams a model reply; calls `onText` with each piece. */
-export type Writer = (req: { system: string; messages: ModelTurn[]; onText: (t: string) => void }) => Promise<void>;
+/**
+ * Streams a model reply; calls `onText` with each piece. When the model asks
+ * for a tool, the writer runs it through `tools` (calling `onTool` first, so
+ * the person sees what is happening) and lets the model go on.
+ */
+export type Writer = (req: {
+  system: string;
+  messages: ModelTurn[];
+  tools: AgentTools;
+  onText: (t: string) => void;
+  onTool: (name: string) => void;
+}) => Promise<void>;
 
 export interface ChatDeps {
   chat: ChatStore;
   /** A writer for this organisation's AI account. */
   writerFor(orgId: string, account: AiAccount): Promise<Writer>;
+  /** The tools of the organisation's connected accounts. */
+  toolsFor(orgId: string): Promise<AgentTools>;
   /** How often the growing text is written to the database. */
   flushMs?: number;
   now?: () => number;
@@ -76,9 +90,43 @@ const NO_ACCOUNT =
   'Para contestarte necesito una cuenta de IA conectada. Quien es propietario de la empresa puede conectarla en Conexiones.';
 const FAILED = 'No he podido contestar ahora. Vuelve a escribirme en un momento.';
 
+/** «martes, 18 de noviembre de 2026, 10:30», in Madrid: what «today» means to the agent. */
+export function madridNow(at: Date): string {
+  return new Intl.DateTimeFormat('es-ES', {
+    timeZone: 'Europe/Madrid',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(at);
+}
+
+/** What the agent is told about its reach: the connected accounts it may use, or that it has none. */
+function reachLines(accounts: string[], today: string): string[] {
+  if (accounts.length === 0) {
+    return [
+      'Todavía no tienes acceso al registro de la organización, a su correo ni a otras herramientas. Si te piden algo que lo necesita, dilo claramente y explica qué harías y qué necesitarías.',
+    ];
+  }
+  return [
+    `Ahora es ${today}, hora de Madrid.`,
+    `Puedes usar estas cuentas de la organización, con las herramientas que tienes: ${accounts.join('; ')}. No tienes acceso al registro ni al correo.`,
+    'Mira los datos reales con las herramientas antes de hablar de ellos.',
+    'Crea o cambia algo fuera de Ghostaff (un evento, una hoja de cálculo) solo si te lo han pedido en esta conversación; si no, propónlo y pregunta.',
+    'Si una herramienta falla, dilo tal cual. Nunca digas que has hecho algo que la herramienta no ha confirmado, y da el enlace que devuelva.',
+  ];
+}
+
 /** The agent's standing instructions. Spanish, first person, «tú» (app-design.md #17). */
-export function systemPrompt(agent: ChatAgent, orgName: string, broughtInto?: string): string {
+export function systemPrompt(
+  agent: ChatAgent,
+  orgName: string,
+  opts: { broughtInto?: string; accounts?: string[]; now?: Date } = {},
+): string {
   const job = AGENT_JOBS[agent.ghost]?.job ?? '';
+  const broughtInto = opts.broughtInto;
   return [
     `Eres ${agent.name}, un agente del equipo de ${orgName} en Ghostaff, en el departamento de ${agent.department}.`,
     job ? `Tu trabajo: ${job}` : '',
@@ -87,7 +135,7 @@ export function systemPrompt(agent: ChatAgent, orgName: string, broughtInto?: st
       : '',
     'Hablas en una conversación compartida: pueden escribir varias personas de la organización; cada mensaje de una persona empieza con su nombre.',
     'Contesta en español, en primera persona y de tú, breve y concreto, sin fórmulas de cortesía. Usa listas solo si ayudan.',
-    'Todavía no tienes acceso al registro de la organización, a su correo ni a otras herramientas. Si te piden algo que lo necesita, dilo claramente y explica qué harías y qué necesitarías.',
+    ...reachLines(opts.accounts ?? [], madridNow(opts.now ?? new Date())),
     'No inventes datos de la organización. Si no sabes algo, pregúntalo.',
     'Cuando algo necesite la decisión de una persona, dilo de forma explícita.',
   ]
@@ -154,6 +202,7 @@ async function writeReply(
   agent: ChatAgent,
   system: string,
   turns: ModelTurn[],
+  tools: AgentTools,
   first = 'Leyendo la conversación',
 ): Promise<void> {
   const now = deps.now ?? Date.now;
@@ -174,6 +223,13 @@ async function writeReply(
     await write({
       system,
       messages: turns,
+      tools,
+      onTool: (name) => {
+        // The tool's line goes before «Escribiendo»: it is what the agent is doing now.
+        steps.splice(steps.length - 1, 0, tools.stepFor(name));
+        const snapshot = [...steps];
+        pending = pending.then(() => deps.chat.updateReply(replyId, { steps: snapshot })).catch(() => {});
+      },
       onText: (t) => {
         text += t;
         if (now() - flushed >= flushMs) {
@@ -208,11 +264,13 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
   const agent = await deps.chat.agent(thread.agentId);
   if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
 
-  const [names, orgName, agents] = await Promise.all([
+  const [names, orgName, agents, tools] = await Promise.all([
     deps.chat.memberNames(thread.orgId),
     deps.chat.orgName(thread.orgId),
     deps.chat.orgAgents(thread.orgId),
+    deps.toolsFor(thread.orgId),
   ]);
+  const now = new Date(deps.now ? deps.now() : Date.now());
   let replied = false;
   let handled: string | null = null;
   // A message written while an agent was answering gets its own answer next
@@ -224,7 +282,7 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
     if (messages.length === 0) {
       const replyId = await deps.chat.startReply(thread, agent, ['Presentándome']);
       if (!replyId) break;
-      await writeReply(deps, replyId, agent, systemPrompt(agent, orgName), [introTurn(orgName)], 'Presentándome');
+      await writeReply(deps, replyId, agent, systemPrompt(agent, orgName, { accounts: tools.accounts, now }), [introTurn(orgName)], tools, 'Presentándome');
       replied = true;
       continue;
     }
@@ -239,8 +297,12 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
       if (!replyId) return { replied }; // a reply is already being written; it will pick this up
       // A second agent reads the first one's answer too.
       const history = i === 0 ? messages : await deps.chat.recentMessages(thread.id, 40);
-      const system = systemPrompt(who, orgName, who.id === agent.id ? undefined : agent.name);
-      await writeReply(deps, replyId, who, system, toTurns(history, who.id));
+      const system = systemPrompt(who, orgName, {
+        broughtInto: who.id === agent.id ? undefined : agent.name,
+        accounts: tools.accounts,
+        now,
+      });
+      await writeReply(deps, replyId, who, system, toTurns(history, who.id), tools);
       replied = true;
     }
   }

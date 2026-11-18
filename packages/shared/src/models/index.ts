@@ -106,20 +106,23 @@ export const RULE_KIND = 'regla';
 // Connections: an organisation's links to outside accounts (supabase/migrations/
 // 20261114000000_connections.sql). Never a key: keys stay in the engine's vault.
 
-export type ConnectionKind = 'ai';
+export type ConnectionKind = 'ai' | 'account';
 export type AiProvider = 'anthropic' | 'openai' | 'vertex';
-export type ConnectionMethod = 'api_key' | 'cloud_project';
+/** Outside accounts an organisation connects by signing in there (docs/plans/ongoing/connectors.md). */
+export type AccountProvider = 'google';
+export const ACCOUNT_PROVIDERS: readonly AccountProvider[] = ['google'];
+export type ConnectionMethod = 'api_key' | 'cloud_project' | 'oauth';
 
 export interface Connection {
   id: string;
   orgId: string;
   kind: ConnectionKind;
-  provider: AiProvider;
+  provider: AiProvider | AccountProvider;
   method: ConnectionMethod;
-  /** What the app shows to recognise it: a key's last 4 characters, or the project. */
+  /** What the app shows to recognise it: a key's last 4 characters, the project, or the account's email. */
   hint: string;
-  /** A cloud project's project and region; empty for a key. */
-  settings: { project?: string; region?: string };
+  /** A cloud project's project and region; an account's granted scopes; empty for a key. */
+  settings: { project?: string; region?: string; scopes?: string[] };
   status: 'ok' | 'failing';
   checkedAt: string;
   connectedByName: string;
@@ -130,6 +133,12 @@ export interface Connection {
 export type ConnectAiInput =
   | { orgId: string; provider: 'anthropic' | 'openai'; apiKey: string }
   | { orgId: string; provider: 'vertex'; project: string; region: string };
+
+/**
+ * How a connect by sign-in ended, as the engine sends the person back to the
+ * app (`?connected=<provider>&result=<result>`).
+ */
+export type AccountConnectResult = 'ok' | 'denied' | 'missing_scopes' | 'expired' | 'failed';
 
 /** EU regions where Vertex AI serves Claude. The first is the default. */
 export const VERTEX_EU_REGIONS = ['europe-west1', 'europe-west4'] as const;

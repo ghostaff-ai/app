@@ -2,6 +2,7 @@ import type { ChatMessage } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { type AiAccount, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, whoAnswers, type Writer } from '../src/chat';
+import { type AgentTools, NO_TOOLS } from '../src/tools';
 import { MemoryVault } from '../src/vault';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
@@ -30,7 +31,14 @@ function msg(p: Partial<ChatMessage> & { text: string }): ChatMessage {
 }
 
 function setup(
-  opts: { levels?: Record<string, Level>; account?: AiAccount | null; write?: Writer; messages?: ChatMessage[]; expose?: { messages?: ChatMessage[] } } = {},
+  opts: {
+    levels?: Record<string, Level>;
+    account?: AiAccount | null;
+    write?: Writer;
+    messages?: ChatMessage[];
+    expose?: { messages?: ChatMessage[] };
+    tools?: AgentTools;
+  } = {},
 ) {
   const levels = opts.levels ?? { ana: 'talk', bea: 'read' };
   const messages: ChatMessage[] = opts.messages ?? [msg({ text: '¿Cómo vamos este mes?' })];
@@ -92,7 +100,9 @@ function setup(
         asked.push(req);
         await write(req);
       },
+      toolsFor: async () => opts.tools ?? NO_TOOLS,
     },
+    accounts: {} as never,
   });
   const call = (user: string, path: string) => app.request(path, { method: 'POST', headers: { Authorization: `Bearer token-${user}` } });
   return { call, updates, asked, threads };
@@ -214,5 +224,46 @@ describe('the chat as the model reads it', () => {
     expect(s).toContain('Eres Finanzas');
     expect(s).toContain('Panadería');
     expect(s).toContain('con un documento detrás de cada euro');
+    expect(s).toContain('Todavía no tienes acceso');
+  });
+
+  it('tells the agent which accounts it may use, what day it is, and to act only when asked', () => {
+    const s = systemPrompt(finanzas, 'Panadería', {
+      accounts: ['Google, con la cuenta ana@panaderia.es'],
+      now: new Date('2026-11-18T09:30:00Z'),
+    });
+    expect(s).toContain('Google, con la cuenta ana@panaderia.es');
+    expect(s).toContain('miércoles, 18 de noviembre de 2026');
+    expect(s).toContain('10:30');
+    expect(s).toContain('solo si te lo han pedido');
+    expect(s).not.toContain('Todavía no tienes acceso');
+  });
+});
+
+describe("an agent using its organisation's tools", () => {
+  const tools: AgentTools = {
+    specs: [{ name: 'google_calendar_list_events', description: 'Lista eventos', input_schema: { type: 'object', properties: {} } }],
+    accounts: ['Google, con la cuenta ana@panaderia.es'],
+    stepFor: (name) => (name === 'google_calendar_list_events' ? 'Mirando el calendario' : 'Trabajando'),
+    run: async () => ({ content: '{"events":[]}', isError: false }),
+  };
+
+  it('gets the tools and the accounts, and shows the tool\'s step while it runs', async () => {
+    const ran: unknown[] = [];
+    const { call, updates, asked } = setup({
+      tools,
+      write: async ({ tools: t, onTool, onText }) => {
+        onTool('google_calendar_list_events');
+        ran.push(await t.run('google_calendar_list_events', {}));
+        onText('No tienes nada esta semana.');
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(ran).toEqual([{ content: '{"events":[]}', isError: false }]);
+    expect(asked[0]?.system).toContain('Google, con la cuenta ana@panaderia.es');
+    expect(updates.some((u) => JSON.stringify(u.steps) === JSON.stringify(['Leyendo la conversación', 'Mirando el calendario', 'Escribiendo']))).toBe(true);
+    const last = updates[updates.length - 1];
+    expect(last).toMatchObject({ text: 'No tienes nada esta semana.', state: 'done' });
+    expect(last?.steps?.slice(0, 3)).toEqual(['Leyendo la conversación', 'Mirando el calendario', 'Escribiendo']);
   });
 });

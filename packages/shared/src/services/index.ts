@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
+  AccountConnectResult,
+  AccountProvider,
   Agent,
   AgentAccess,
   AgentGhost,
@@ -378,7 +380,7 @@ interface ConnectionRow {
   id: string;
   org_id: string;
   kind: Connection['kind'];
-  provider: AiProvider;
+  provider: Connection['provider'];
   method: Connection['method'];
   hint: string;
   settings: Connection['settings'] | null;
@@ -464,6 +466,40 @@ export async function connectAi(engine: EngineAccess, input: ConnectAiInput): Pr
 /** Removes the connection and deletes its key from the vault. */
 export async function disconnectAi(engine: EngineAccess, orgId: string, provider: AiProvider): Promise<void> {
   await callEngine(engine, 'DELETE', `/connections/ai/${provider}?org=${encodeURIComponent(orgId)}`);
+}
+
+/**
+ * Starts connecting an outside account by signing in there. Returns the
+ * provider's sign-in page. The engine sends the person back to `returnTo` with
+ * `?connected=<provider>&state=…&code=…`, which `finishAccountConnect` turns
+ * into the connection; or with `&result=<AccountConnectResult>` when it ended
+ * there (they said no).
+ */
+export async function startAccountConnect(
+  engine: EngineAccess,
+  input: { orgId: string; provider: AccountProvider; returnTo: string },
+): Promise<{ url: string }> {
+  return callEngine(engine, 'POST', `/connections/accounts/${input.provider}/start`, { orgId: input.orgId, returnTo: input.returnTo });
+}
+
+/**
+ * Finishes a connect as the person who started it: the engine refuses anyone
+ * else, so a stranger lured into signing in gives nothing away.
+ */
+export async function finishAccountConnect(
+  engine: EngineAccess,
+  input: { provider: AccountProvider; state: string; code: string },
+): Promise<AccountConnectResult> {
+  const { result } = await callEngine<{ result: AccountConnectResult }>(engine, 'POST', `/connections/accounts/${input.provider}/finish`, {
+    state: input.state,
+    code: input.code,
+  });
+  return result;
+}
+
+/** Removes the account connection, revokes our access with the provider and deletes the token. */
+export async function disconnectAccount(engine: EngineAccess, orgId: string, provider: AccountProvider): Promise<void> {
+  await callEngine(engine, 'DELETE', `/connections/accounts/${provider}?org=${encodeURIComponent(orgId)}`);
 }
 
 /** The service account a customer grants Vertex AI access to on their own project. */

@@ -1,10 +1,13 @@
-// The engine's HTTP service: it connects AI accounts, and it is the agents'
-// always-on service for the team chat (an agent answering in a thread). Every call but
-// /health carries the person's Supabase access token, so the engine knows who
-// is asking; what they may do is checked against their membership.
+// The engine's HTTP service: it connects AI accounts and outside accounts, and
+// it is the agents' always-on service for the team chat (an agent answering in
+// a thread). Every call but /health and a provider's sign-in callback carries
+// the person's Supabase access token, so the engine knows who is asking; what
+// they may do is checked against their membership. The callback only passes the
+// provider's code on to the app, which finishes the connect signed in (accounts.ts).
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromProvider, startAccountConnect } from './accounts';
 import { agentHello, type ChatDeps, replyInThread } from './chat';
 import { connectAi, type Deps, disconnectAi, Refusal } from './connections';
 
@@ -15,6 +18,8 @@ export interface AppDeps extends Deps {
   serviceAccount: string;
   /** The team chat: agents answering in threads. */
   chat: ChatDeps;
+  /** Outside accounts connected by signing in there. */
+  accounts: AccountDeps;
 }
 
 type Env = { Variables: { userId: string } };
@@ -26,6 +31,19 @@ export function createApp(deps: AppDeps) {
   app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'DELETE'], allowHeaders: ['Authorization', 'Content-Type'] }));
 
   app.get('/health', (c) => c.json({ ok: true }));
+
+  // The provider sends the browser here after sign-in; no Supabase token on this one.
+  app.get('/connections/oauth/:provider/callback', async (c) => {
+    const to = await returnFromProvider(deps.accounts, c.req.param('provider'), {
+      state: c.req.query('state'),
+      code: c.req.query('code'),
+      error: c.req.query('error'),
+    });
+    c.header('Cache-Control', 'no-store');
+    c.header('Referrer-Policy', 'no-referrer');
+    if (!to) return c.text('Este enlace ya no sirve. Vuelve a Ghostaff y conecta la cuenta otra vez.', 400);
+    return c.redirect(to, 302);
+  });
 
   app.use('*', async (c, next) => {
     const token = c.req.header('Authorization')?.match(/^Bearer (.+)$/)?.[1];
@@ -45,6 +63,21 @@ export function createApp(deps: AppDeps) {
 
   app.delete('/connections/ai/:provider', async (c) => {
     await disconnectAi(deps, c.get('userId'), c.req.query('org'), c.req.param('provider'));
+    return c.json({ ok: true });
+  });
+
+  app.post('/connections/accounts/:provider/start', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    return c.json(await startAccountConnect(deps.accounts, c.get('userId'), c.req.param('provider'), body));
+  });
+
+  app.post('/connections/accounts/:provider/finish', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    return c.json(await finishAccountConnect(deps.accounts, c.get('userId'), c.req.param('provider'), body));
+  });
+
+  app.delete('/connections/accounts/:provider', async (c) => {
+    await disconnectAccount(deps.accounts, c.get('userId'), c.req.query('org'), c.req.param('provider'));
     return c.json({ ok: true });
   });
 
