@@ -8,6 +8,7 @@
 // security assessment) and drive.file, which reaches only files Ghostaff itself
 // creates, never the rest of the person's Drive.
 
+import type { AccountProvider, GoogleConnector } from '@ghostaff/shared';
 import type { AccountGrant, OAuthProvider } from './accounts';
 import { AccountGone, codeChallenge, randomToken } from './accounts';
 import { clip, type Tool, type ToolContext, ToolError } from './tools';
@@ -15,6 +16,7 @@ import { clip, type Tool, type ToolContext, ToolError } from './tools';
 export const GOOGLE_SCOPES = {
   calendar: 'https://www.googleapis.com/auth/calendar.events',
   driveFile: 'https://www.googleapis.com/auth/drive.file',
+  business: 'https://www.googleapis.com/auth/business.manage',
 } as const;
 
 const AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -42,20 +44,24 @@ async function tokenRequest(f: Fetch, form: Record<string, string>): Promise<Rec
   return json;
 }
 
-export const GOOGLE_REQUESTED_SCOPES = ['openid', 'email', GOOGLE_SCOPES.calendar, GOOGLE_SCOPES.driveFile];
-
-export function googleOAuth(client: GoogleClient, f: Fetch = fetch): OAuthProvider {
+/**
+ * One Google card of the catalogue (calendar and sheets, or reviews), through
+ * our one OAuth client. Each card asks only for its own scopes, plus who the
+ * account is.
+ */
+export function googleOAuth(client: GoogleClient, connector: GoogleConnector, f: Fetch = fetch): OAuthProvider {
+  const requested = ['openid', 'email', ...connector.scopes];
   return {
-    id: 'google',
+    id: connector.id as AccountProvider,
     method: 'oauth',
-    usefulScopes: [GOOGLE_SCOPES.calendar, GOOGLE_SCOPES.driveFile],
+    usefulScopes: [...connector.scopes],
     async begin({ state, redirectUri }) {
       const codeVerifier = randomToken();
       const q = new URLSearchParams({
         client_id: client.clientId,
         redirect_uri: redirectUri,
         response_type: 'code',
-        scope: GOOGLE_REQUESTED_SCOPES.join(' '),
+        scope: requested.join(' '),
         // A refresh token, and asked again each time so a reconnect always yields one.
         access_type: 'offline',
         prompt: 'consent',
@@ -112,7 +118,8 @@ export function googleOAuth(client: GoogleClient, f: Fetch = fetch): OAuthProvid
 
 // ── Tools ────────────────────────────────────────────────────────────────────
 
-async function google(ctx: ToolContext, url: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+/** A Google API call with the run's token; Google's refusals become words the agent can pass on. */
+export async function google(ctx: ToolContext, url: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
   const res = await ctx.fetch(url, {
     ...init,
     headers: { Authorization: `Bearer ${ctx.accessToken}`, 'Content-Type': 'application/json', ...(init.headers ?? {}) },
@@ -126,7 +133,7 @@ async function google(ctx: ToolContext, url: string, init: RequestInit = {}): Pr
   throw new ToolError(`Google no responde bien ahora (${res.status}). Prueba en un momento.`);
 }
 
-const str = (v: unknown, max = 500): string | undefined =>
+export const str = (v: unknown, max = 500): string | undefined =>
   typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined;
 
 /** An RFC 3339 date-time with its offset, or a bare date for an all-day event. */

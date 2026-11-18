@@ -1,7 +1,9 @@
+import { connectorFor, type GoogleConnector } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { AccountGone, codeChallenge } from '../src/accounts';
 import { streamWith } from '../src/chatStore';
 import { GOOGLE_SCOPES, googleOAuth, googleTools } from '../src/google';
+import { googleBusinessTools } from '../src/googleBusiness';
 import type { AgentTools } from '../src/tools';
 import { ToolError } from '../src/tools';
 
@@ -19,10 +21,11 @@ function fakeFetch(answers: Array<{ status?: number; json: unknown }>) {
 }
 
 const client = { clientId: 'client-id.apps.googleusercontent.com', clientSecret: 'client-secret' };
+const card = connectorFor('google') as GoogleConnector;
 
 describe('Google sign-in', () => {
   it('asks for offline access with PKCE and only the narrow scopes', async () => {
-    const begun = await googleOAuth(client).begin({ state: 's', redirectUri: 'https://e/cb' });
+    const begun = await googleOAuth(client, card).begin({ state: 's', redirectUri: 'https://e/cb' });
     const url = new URL(begun.url);
     const q = url.searchParams;
     expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
@@ -40,7 +43,7 @@ describe('Google sign-in', () => {
     const { f, calls } = fakeFetch([
       { json: { access_token: 'a', refresh_token: 'r', expires_in: 3599, scope: `openid ${GOOGLE_SCOPES.calendar}` } },
     ]);
-    const grant = await googleOAuth(client, f).exchange({ code: 'c', codeVerifier: 'v', redirectUri: 'https://e/cb' });
+    const grant = await googleOAuth(client, card, f).exchange({ code: 'c', codeVerifier: 'v', redirectUri: 'https://e/cb' });
     expect(grant).toEqual({ refreshToken: 'r', accessToken: 'a', expiresIn: 3599, scopes: ['openid', GOOGLE_SCOPES.calendar] });
     const form = new URLSearchParams(calls[0]?.body);
     expect(calls[0]?.url).toBe('https://oauth2.googleapis.com/token');
@@ -50,7 +53,7 @@ describe('Google sign-in', () => {
 
   it('a revoked or expired grant is AccountGone', async () => {
     const { f } = fakeFetch([{ status: 400, json: { error: 'invalid_grant' } }]);
-    await expect(googleOAuth(client, f).refresh('r')).rejects.toBeInstanceOf(AccountGone);
+    await expect(googleOAuth(client, card, f).refresh('r')).rejects.toBeInstanceOf(AccountGone);
   });
 });
 
@@ -182,5 +185,53 @@ describe('the model writer with tools', () => {
       onTool: () => {},
     });
     expect(requests[0]?.tools).toBeUndefined();
+  });
+});
+
+describe('Google reviews', () => {
+  const tool = (name: string) => {
+    const t = googleBusinessTools().find((x) => x.name === name);
+    if (!t) throw new Error(name);
+    return t;
+  };
+
+  it('the reviews card asks only for business.manage, apart from the calendar', async () => {
+    const begun = await googleOAuth(client, connectorFor('googlebusiness') as GoogleConnector).begin({ state: 's', redirectUri: 'https://e/cb' });
+    expect(new URL(begun.url).searchParams.get('scope')?.split(' ')).toEqual(['openid', 'email', GOOGLE_SCOPES.business]);
+  });
+
+  it('lists the businesses and their reviews, the unanswered ones on request', async () => {
+    const { f, calls } = fakeFetch([
+      { json: { accounts: [{ name: 'accounts/111' }] } },
+      { json: { locations: [{ name: 'locations/222', title: 'Panadería', storefrontAddress: { addressLines: ['Calle Mayor 1'], locality: 'Madrid' } }] } },
+      {
+        json: {
+          averageRating: 4.5,
+          totalReviewCount: 2,
+          reviews: [
+            { name: 'accounts/111/locations/222/reviews/r1', reviewer: { displayName: 'Luis' }, starRating: 'FIVE', comment: 'Buenísimo', reviewReply: { comment: 'Gracias' } },
+            { name: 'accounts/111/locations/222/reviews/r2', reviewer: { displayName: 'Eva' }, starRating: 'TWO', comment: 'Tardaron' },
+          ],
+        },
+      },
+    ]);
+    const locs = JSON.parse(await tool('google_business_list_locations').run({ accessToken: 't', fetch: f }, {}));
+    expect(locs.locations).toEqual([{ location: 'accounts/111/locations/222', title: 'Panadería', address: 'Calle Mayor 1, Madrid' }]);
+    const out = JSON.parse(await tool('google_business_list_reviews').run({ accessToken: 't', fetch: f }, { location: 'accounts/111/locations/222', onlyUnanswered: true }));
+    expect(out.reviews).toEqual([{ review: 'accounts/111/locations/222/reviews/r2', author: 'Eva', stars: 2, text: 'Tardaron', reply: null }]);
+    expect(calls[2]?.url).toContain('/v4/accounts/111/locations/222/reviews?pageSize=20');
+  });
+
+  it('replies to a review, and refuses anything that is not a review\'s exact name', async () => {
+    const { f, calls } = fakeFetch([{ json: {} }]);
+    const reply = tool('google_business_reply_review');
+    await reply.run({ accessToken: 't', fetch: f }, { review: 'accounts/1/locations/2/reviews/abc', reply: 'Gracias, Eva' });
+    expect(calls[0]).toMatchObject({ url: 'https://mybusiness.googleapis.com/v4/accounts/1/locations/2/reviews/abc/reply', method: 'PUT' });
+    expect(JSON.parse(calls[0]?.body ?? '{}')).toEqual({ comment: 'Gracias, Eva' });
+    for (const review of ['accounts/1/locations/2/reviews/abc/../../x', 'https://evil.example', 'accounts/1']) {
+      await expect(reply.run({ accessToken: 't', fetch: f }, { review, reply: 'x' })).rejects.toBeInstanceOf(ToolError);
+    }
+    await expect(tool('google_business_list_reviews').run({ accessToken: 't', fetch: f }, { location: '../x' })).rejects.toBeInstanceOf(ToolError);
+    expect(calls).toHaveLength(1);
   });
 });

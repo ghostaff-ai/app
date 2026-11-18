@@ -22,6 +22,8 @@ interface ConnectorBase {
 
 export interface GoogleConnector extends ConnectorBase {
   kind: 'google';
+  /** The Google scopes this card asks for, through our one OAuth client «Ghostaff Conectores». */
+  scopes: readonly string[];
 }
 
 export interface McpConnector extends ConnectorBase {
@@ -45,9 +47,19 @@ export const CONNECTORS = [
     id: 'google',
     kind: 'google',
     name: 'Google',
+    scopes: ['https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/drive.file'],
     title: 'Google: calendario y hojas de cálculo',
     reach:
       'Tus agentes podrán ver y crear eventos en tu Google Calendar y crear hojas de cálculo (tus Excel) en tu Drive. Del Drive solo ven las hojas que creen ellos.',
+  },
+  {
+    id: 'googlebusiness',
+    kind: 'google',
+    name: 'Google Business Profile',
+    scopes: ['https://www.googleapis.com/auth/business.manage'],
+    title: 'Google: tus reseñas',
+    reach: 'Tus agentes podrán leer las reseñas de tu ficha de Google y contestarlas.',
+    before: 'Entra con la cuenta de Google que gestiona la ficha de tu negocio.',
   },
   {
     id: 'holded',

@@ -108,7 +108,7 @@ Ordered by what Jaime put first (2026-11-18): Google (calendar, spreadsheets, re
 - [ ] Instagram (publish, stats, comments) — Meta's App Review and business verification
 - [ ] Facebook Pages — same Meta review
 - [ ] TikTok (publish, stats) — Content Posting API audit
-- [ ] Google Business Profile (reviews, posts) — access form
+- [~] Google Business Profile reviews (read and answer) — built as its own card on our Google OAuth client (`business.manage`, `apps/engine/src/googleBusiness.ts`); Google answers 403 until our access request for the Business Profile APIs is approved
 - [ ] WhatsApp Business conversations — Meta Tech Provider, 10 new customers a week until verified
 - [ ] Google Search Console — our Google OAuth client
 - [ ] YouTube — quota audit past 10,000 units a day

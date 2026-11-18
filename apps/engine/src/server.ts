@@ -11,6 +11,7 @@ import { supabaseChatStore, writerFactory } from './chatStore';
 import { supabaseStore } from './connections';
 import { CONNECTORS } from '@ghostaff/shared';
 import { googleOAuth, googleTools } from './google';
+import { googleBusinessTools } from './googleBusiness';
 import { mcpOAuth } from './mcp';
 import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
@@ -48,11 +49,18 @@ const accounts: AccountDeps = {
   providers: {
     // The makers' MCP servers need nothing configured: the engine registers itself with each.
     ...Object.fromEntries(CONNECTORS.flatMap((c) => (c.kind === 'mcp' ? [[c.id, mcpOAuth(c, { vault, publicUrl })]] : []))),
-    ...(googleClientId && googleClientSecret ? { google: googleOAuth({ clientId: googleClientId, clientSecret: googleClientSecret }) } : {}),
+    // Every Google card of the catalogue, through our one OAuth client.
+    ...(googleClientId && googleClientSecret
+      ? Object.fromEntries(
+          CONNECTORS.flatMap((c) =>
+            c.kind === 'google' ? [[c.id, googleOAuth({ clientId: googleClientId, clientSecret: googleClientSecret }, c)]] : [],
+          ),
+        )
+      : {}),
   },
   publicUrl,
   returnOrigins: (process.env.APP_RETURN_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
-  tools: googleTools(),
+  tools: [...googleTools(), ...googleBusinessTools()],
 };
 if (!accounts.providers.google) console.warn('Google connector off: set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET.');
 const tokenFor = accessTokens(accounts);
