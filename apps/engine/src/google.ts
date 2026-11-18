@@ -22,7 +22,6 @@ export const GOOGLE_SCOPES = {
 const AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN = 'https://oauth2.googleapis.com/token';
 const USERINFO = 'https://openidconnect.googleapis.com/v1/userinfo';
-const REVOKE = 'https://oauth2.googleapis.com/revoke';
 
 export interface GoogleClient {
   clientId: string;
@@ -106,13 +105,10 @@ export function googleOAuth(client: GoogleClient, connector: GoogleConnector, f:
       if (!res.ok || typeof json.email !== 'string') throw new Error(`google userinfo answered ${res.status}`);
       return json.email;
     },
-    async revoke(token) {
-      await f(REVOKE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ token }).toString(),
-      });
-    },
+    // Not revoked with Google: a revocation ends the whole grant between that Google account and our one
+    // client, which would also cut the account's other Google card and any other organisation it is
+    // connected in. The token is deleted from the vault; the person can remove Ghostaff in their Google account.
+    async revoke() {},
   };
 }
 
@@ -217,6 +213,7 @@ export function googleTools(now: () => Date = () => new Date()): Tool[] {
       scope: GOOGLE_SCOPES.calendar,
       writes: true,
       step: 'Creando el evento en el calendario',
+      action: 'Crear un evento en el calendario de Google',
       async run(ctx, input) {
         const title = str(input.title, 300);
         if (!title) throw new ToolError('Falta el título del evento.');
@@ -259,6 +256,7 @@ export function googleTools(now: () => Date = () => new Date()): Tool[] {
       scope: GOOGLE_SCOPES.driveFile,
       writes: true,
       step: 'Creando la hoja de cálculo',
+      action: 'Crear una hoja de cálculo en Google Drive',
       async run(ctx, input) {
         const title = str(input.title, 200);
         if (!title) throw new ToolError('Falta el nombre de la hoja.');

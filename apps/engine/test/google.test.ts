@@ -148,6 +148,8 @@ describe('the model writer with tools', () => {
       specs: [{ name: 'google_calendar_list_events', description: 'd', input_schema: { type: 'object', properties: {} } }],
       accounts: [],
       stepFor: () => 's',
+      writes: () => false,
+      actionFor: () => '',
       run: async (name, input) => {
         ran.push({ name, input });
         return { content: '{"events":[]}', isError: false };
@@ -180,7 +182,7 @@ describe('the model writer with tools', () => {
     await streamWith(client as never)({
       system: 's',
       messages: [{ role: 'user', content: 'hola' }],
-      tools: { specs: [], accounts: [], stepFor: () => '', run: async () => ({ content: '', isError: true }) },
+      tools: { specs: [], accounts: [], stepFor: () => '', writes: () => false, actionFor: () => '', run: async () => ({ content: '', isError: true }) },
       onText: () => {},
       onTool: () => {},
     });

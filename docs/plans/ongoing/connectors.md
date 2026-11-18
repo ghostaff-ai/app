@@ -52,7 +52,7 @@ Kind B is the same flow with the maker's consent screen in step 2 and the maker'
 - **One `connections` table for every kind.** `kind` grows past `'ai'` (`'account'`); `method` grows to `'oauth'`, `'mcp'`, `'forwarding'`. Still never a token in the table, still only the engine writes (invariant 3).
 - **Tokens in the vault we already have.** Secret Manager, one secret per organisation and account. Refresh, locks and revocation either in the engine or in a self-hosted Nango in `europe-west1` (open question 2).
 - **Agents see one shape of tool.** Our kind-A connectors are exposed to agents the same way as a maker's MCP server (our own MCP server, or tools with the same contract), so an agent does not care who built a tool and a connector can move between kinds without touching agents.
-- **Writes go through a decision.** The product rule stays: the agent proposes, a person approves, then it happens, until that kind of decision has earned autonomy. Reads need no approval.
+- **Writes wait for an owner's approval** (built, `apps/engine/src/actions.ts`). A tool that creates or changes something outside Ghostaff never runs when the model asks: the engine records it in `agent_actions` and shows a card in the agent's message; it runs, from the stored row and exactly once, only when an owner presses «Aprobar». That is also what stops text the agent reads (a comment, a review, a page) from talking it into acting. Reads need no approval. A kind of action earning autonomy later is a separate decision.
 - **Health is visible.** Each connection shows ok or failing in Conexiones; a failing one becomes a decision for an owner («Instagram se ha desconectado: vuelve a conectar»), never a silent gap in an agent's numbers.
 
 ## How we iterate
@@ -163,6 +163,26 @@ All built on `feat/connectors-google` through one generic MCP connector (`apps/e
 - [ ] Forwarding address per organisation
 - [ ] Upload a file (a bank export, a spreadsheet)
 - [ ] Ask for a connector we lack (and count the requests)
+
+## Handoff
+
+State on 2026-11-19 (branch `feat/connectors-google`, not merged): 18 connectors built and unit-tested (Google calendar and sheets, Google reviews, Instagram, TikTok, 15 makers' MCP servers); none yet connected with a real account. What each still needs, in the order to do it:
+
+1. **Try the local ones (Jaime, no one else needed).** With the branch's engine and Metro running locally, open Conexiones (simulator or http://localhost:8083) and press Conectar on each card you have an account for: Google (calendar and sheets) first, then Holded, Stripe, Notion, Calendly and the rest. Each one: sign in there and accept. Google needs the account listed as a test user in the Google Auth Platform (`ghostaff-prod`, Audience). Squarespace cannot connect locally (it needs the https engine).
+2. **An AI account for the agents**, or the chat cannot use any of it: enable Claude in Vertex AI Model Garden in `ghostaff-prod` (accept Anthropic's terms there), or connect an Anthropic key in Conexiones.
+3. **Google reviews:** request access to the Business Profile APIs for project `ghostaff-prod` (Google's access form, linked from developers.google.com/my-business/content/prereqs). Until it is granted every review call answers 403.
+4. **Our Meta app (Instagram):** in Meta for Developers create an app «Ghostaff», use case «Manage messaging and content on Instagram», business login with Instagram. Redirect URI: `https://engine-664656500315.europe-west1.run.app/connections/oauth/instagram/callback` (Meta takes https only, so it is tried on beta). Add `@ordago.app` as an Instagram tester. Put the Instagram app ID in `scripts/deploy-engine.sh` and its secret in Secret Manager as `instagram-app-secret`.
+5. **Our TikTok app:** in TikTok for Developers create an app «Ghostaff» with Login Kit and Content Posting API (Direct Post), scopes `user.info.basic`, `user.info.stats`, `video.list`, `video.publish`, redirect URI `https://engine-664656500315.europe-west1.run.app/connections/oauth/tiktok/callback`. Client key in `scripts/deploy-engine.sh`, secret in Secret Manager as `tiktok-client-secret`.
+6. **Beta (Álvaro, who holds the Supabase login):** `supabase db push --remote` for `20261119000000_account_connections.sql`, then `bash scripts/deploy-engine.sh`. Only then merge the PR: merging first would show the new cards in the beta app against an engine that cannot connect them.
+
+## Known gaps
+
+From the security review of 2026-11-19; fixed on the branch unless listed here.
+
+- **A refresh across two Cloud Run instances at once.** Within an instance there is one refresh per account at a time, and a refused refresh rereads the vault before giving up, which covers the common case. Two instances refreshing the same rotating token in the same instant can still cost the grant (some providers revoke the whole token family on reuse). Fix when it shows: a lease row per account, taken in a `security definer` function before refreshing.
+- **`ghostaff://` on Android can be claimed by another app.** The engine sends the provider's code only to the app's scheme (or a listed web origin), and only the person who started can finish, but an app registering the same scheme could read the code. Fix: verified App Links / Universal Links for the return address.
+- **TikTok's video fetch checks the host name, not the address it resolves to.** A public name pointing to a private address would pass; low on Cloud Run without a VPC. Fix: resolve and refuse private ranges.
+- **Approving is owners only.** Whether a member with «talk» on the agent may approve some kinds of action is a product decision (Álvaro).
 
 ## Open questions
 

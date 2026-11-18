@@ -38,3 +38,42 @@ create table public.connection_attempts (
 
 alter table public.connection_attempts enable row level security;
 revoke all on public.connection_attempts from anon, authenticated;
+
+-- Actions an agent proposes that create or change something outside Ghostaff
+-- with a connected account (publish a reel, answer a review, create an
+-- invoice). The engine never runs one when the agent asks: it records it here
+-- and shows it in the agent's message, and runs it only once an owner approves
+-- (apps/engine/src/actions.ts). The engine runs what is stored here, never what
+-- a message says, so editing a message cannot change an action. Members see an
+-- organisation's actions in the threads they may see; only the engine writes.
+create table public.agent_actions (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organizations (id) on delete cascade,
+  thread_id uuid not null references public.threads (id) on delete cascade,
+  -- The agent's message that carries the action's card.
+  message_id uuid not null references public.messages (id) on delete cascade,
+  agent_id uuid references public.agents (id) on delete set null,
+  tool text not null check (tool ~ '^[a-zA-Z0-9_-]{1,64}$'),
+  input jsonb not null check (jsonb_typeof(input) = 'object'),
+  -- What the person reads on the card, in Spanish.
+  label text not null check (length(label) between 1 and 200),
+  status text not null default 'pending' check (status in ('pending', 'running', 'done', 'failed', 'rejected')),
+  -- What came of it: the link, or the error, as the tool said it.
+  result text check (length(result) <= 4000),
+  requested_by uuid references auth.users (id) on delete set null,
+  decided_by uuid references auth.users (id) on delete set null,
+  decided_by_name text,
+  created_at timestamptz not null default now(),
+  decided_at timestamptz
+);
+
+create index agent_actions_thread on public.agent_actions (thread_id, created_at);
+create index agent_actions_org_pending on public.agent_actions (org_id) where status = 'pending';
+
+alter table public.agent_actions enable row level security;
+
+create policy "members read the actions of threads they may see"
+  on public.agent_actions for select to authenticated
+  using (public.is_member(org_id) and public.thread_level(thread_id) <> 'none');
+
+revoke insert, update, delete, truncate on public.agent_actions from anon, authenticated;

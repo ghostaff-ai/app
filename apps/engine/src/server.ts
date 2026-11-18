@@ -6,6 +6,7 @@ import { serve } from '@hono/node-server';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleAuth } from 'google-auth-library';
 import { type AccountDeps, accessTokens, supabaseAccountStore, toolsFor } from './accounts';
+import { supabaseActionStore } from './actions';
 import { createApp } from './app';
 import { supabaseChatStore, writerFactory } from './chatStore';
 import { supabaseStore } from './connections';
@@ -104,6 +105,7 @@ const app = createApp({
     toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
   },
   accounts,
+  actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId) },
 });
 
 const port = Number(process.env.PORT ?? 8787);

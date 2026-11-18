@@ -57,7 +57,9 @@ function setup(opts: { grantScopes?: string[]; now?: () => Date; exchangeFails?:
       if (r) rows.set(`${o}/${p}`, { ...r, status: status as 'ok' });
     },
     accounts: async (o) =>
-      [...rows.values()].filter((r) => r.org_id === o).map((r) => ({ provider: r.provider, hint: r.hint, scopes: r.settings.scopes, status: r.status })),
+      [...rows.values()]
+        .filter((r) => r.org_id === o)
+        .map((r) => ({ provider: r.provider, hint: r.hint, scopes: r.settings.scopes, status: r.status, version: r.updated_at })),
   };
   const calls = { exchanged: [] as Array<{ code: string; codeVerifier: string; redirectUri: string }>, revoked: [] as string[], refreshed: 0 };
   let refreshGone = false;
@@ -97,6 +99,7 @@ function setup(opts: { grantScopes?: string[]; now?: () => Date; exchangeFails?:
     serviceAccount: 'x',
     chat: { chat: {} as never, writerFor: async () => async () => {}, toolsFor: async () => NO_TOOLS },
     accounts: deps,
+    actions: {} as never,
   });
   const call = (user: string | null, method: string, path: string, body?: unknown) =>
     app.request(path, {
@@ -168,10 +171,13 @@ describe('connecting a Google account', () => {
       expect((await start(ANA, { orgId: ORG, returnTo })).status).toBe(400);
     }
     expect(allowedReturn('ghostaff://conexiones', [])).toBe(true);
-    expect(allowedReturn('exp+ghostaff://expo-development-client/?url=x', [])).toBe(true);
-    expect(allowedReturn('http://localhost:8083/conexiones', [])).toBe(true);
     expect(allowedReturn('https://app.ghostaff.ai/conexiones', ['https://app.ghostaff.ai'])).toBe(true);
     expect(allowedReturn('https://app.ghostaff.ai.evil.example/', ['https://app.ghostaff.ai'])).toBe(false);
+    // Development addresses only for a local engine: Expo Go could open anyone's project with the code in it.
+    expect(allowedReturn('exp://attacker.example/--/x', [])).toBe(false);
+    expect(allowedReturn('http://localhost:8083/conexiones', [])).toBe(false);
+    expect(allowedReturn('exp+ghostaff://expo-development-client/?url=x', [], true)).toBe(true);
+    expect(allowedReturn('http://localhost:8083/conexiones', [], true)).toBe(true);
   });
 
   it('coming back from Google passes the code on to the app and keeps nothing yet', async () => {
@@ -383,8 +389,8 @@ describe('keeping a connection alive', () => {
     const statuses: string[] = [];
     const accounts = {
       accounts: async () => [
-        { provider: 'notion', hint: 'Cuenta de Notion', scopes: [], status: 'ok' },
-        { provider: 'stripe', hint: 'Cuenta de Stripe', scopes: [], status: 'ok' },
+        { provider: 'notion', hint: 'Cuenta de Notion', scopes: [], status: 'ok', version: 'v1' },
+        { provider: 'stripe', hint: 'Cuenta de Stripe', scopes: [], status: 'ok', version: 'v1' },
       ],
       setStatus: async (_o: string, p: string, st: string) => {
         statuses.push(`${p}:${st}`);

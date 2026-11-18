@@ -31,7 +31,7 @@ import type {
   OAuthClientInformationMixed,
   OAuthProtectedResourceMetadata,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { AccountGone, callbackUrl, type OAuthProvider } from './accounts';
+import { AccountGone, callbackUrl, type GrantClient, type OAuthProvider, TOOL_CALL_TIMEOUT_MS, timedFetch } from './accounts';
 import { clip, type Tool, type ToolInputSchema, ToolError } from './tools';
 import type { Vault } from './vault';
 
@@ -83,7 +83,7 @@ async function connectOverHttp(url: string, accessToken: string, f?: typeof fetc
   const client = new Client({ name: 'ghostaff', version: '1.0.0' });
   const transport = new StreamableHTTPClientTransport(new URL(url), {
     requestInit: { headers: { Authorization: `Bearer ${accessToken}` } },
-    ...(f ? { fetch: f } : {}),
+    fetch: timedFetch(f ?? fetch, TOOL_CALL_TIMEOUT_MS),
   });
   await client.connect(transport);
   return {
@@ -148,20 +148,28 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
   };
 
   /** Our client with this server: a metadata-document URL, or one registered once and kept in the vault. */
-  const clientFor = async (fresh = false): Promise<OAuthClientInformationMixed> => {
+  let registering: Promise<OAuthClientInformationMixed> | null = null;
+  const clientFor = async (): Promise<OAuthClientInformationMixed> => {
     const { as, metadata, scope } = await info();
     if (deps.publicUrl.startsWith('https://') && metadata.client_id_metadata_document_supported) {
       return { client_id: clientMetadataUrl(deps.publicUrl) };
     }
     if (!metadata.registration_endpoint) throw new Error(`${c.id}: the server takes no client registration and the engine is not on https`);
     const name = mcpClientSecretName(c.id);
-    if (!fresh) {
-      const kept = await deps.vault.get(name);
-      if (kept) {
-        const k = JSON.parse(kept) as OAuthClientInformationMixed & { redirect_uri?: string };
-        if (k.redirect_uri === redirectUri) return k;
-      }
+    const kept = await deps.vault.get(name);
+    if (kept) {
+      const k = JSON.parse(kept) as OAuthClientInformationMixed & { redirect_uri?: string };
+      if (k.redirect_uri === redirectUri) return k;
     }
+    // One registration at a time in this instance. A second one elsewhere orphans no grant: each grant keeps the client it was issued to.
+    registering ??= register(name).finally(() => {
+      registering = null;
+    });
+    return registering;
+  };
+  const register = async (name: string): Promise<OAuthClientInformationMixed> => {
+    const { as, metadata, scope } = await info();
+    if (!metadata.registration_endpoint) throw new Error(`${c.id}: the server takes no client registration`);
     const methods = metadata.token_endpoint_auth_methods_supported ?? ['client_secret_basic'];
     const method = methods.includes('none') ? 'none' : methods.includes('client_secret_post') ? 'client_secret_post' : 'client_secret_basic';
     const registered = await registerClient(as, {
@@ -183,6 +191,10 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
 
   // A server's tool list barely changes: listed once per access token (about an hour).
   const listed = new Map<string, { tools: Tool[]; until: number }>();
+  const asClient = (ci: OAuthClientInformationMixed): GrantClient => ({
+    clientId: ci.client_id,
+    ...('client_secret' in ci && ci.client_secret ? { clientSecret: ci.client_secret } : {}),
+  });
 
   const toTool = (t: McpToolInfo): Tool => ({
     name: toolName(c.id, t.name),
@@ -192,6 +204,7 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
     scope: '',
     writes: t.annotations?.readOnlyHint !== true,
     step: `Usando ${c.name}`,
+    action: `${c.name}: ${t.annotations?.title ?? t.title ?? t.name}`.slice(0, 200),
     async run(ctx, input) {
       let session: McpSession;
       try {
@@ -229,9 +242,10 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
     },
     async exchange({ code, codeVerifier }) {
       const { as, metadata, resource } = await info();
+      const clientInformation = await clientFor();
       const tokens = await exchangeAuthorization(as, {
         metadata,
-        clientInformation: await clientFor(),
+        clientInformation,
         authorizationCode: code,
         codeVerifier,
         redirectUri,
@@ -243,14 +257,15 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
         accessToken: tokens.access_token,
         expiresIn: tokens.expires_in ?? 3600,
         scopes: tokens.scope ? tokens.scope.split(' ').filter(Boolean) : null,
+        client: asClient(clientInformation),
       };
     },
-    async refresh(refreshToken) {
+    async refresh(refreshToken, client) {
       const { as, metadata, resource } = await info();
       try {
         const tokens = await refreshAuthorization(as, {
           metadata,
-          clientInformation: await clientFor(),
+          clientInformation: client ? { client_id: client.clientId, ...(client.clientSecret ? { client_secret: client.clientSecret } : {}) } : await clientFor(),
           refreshToken,
           resource,
           ...(f ? { fetchFn: f } : {}),
@@ -296,6 +311,7 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
         await session.close().catch(() => {});
       }
       const tools = all.map(toTool);
+      for (const [k, v] of listed) if (v.until <= now()) listed.delete(k);
       listed.set(accessToken, { tools, until: now() + 30 * 60_000 });
       return tools;
     },

@@ -8,6 +8,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromProvider, startAccountConnect } from './accounts';
+import { type ActionDeps, approveAction, rejectAction } from './actions';
 import { CONNECTORS } from '@ghostaff/shared';
 import { agentHello, type ChatDeps, replyInThread } from './chat';
 import { clientMetadataDocument } from './mcp';
@@ -22,6 +23,8 @@ export interface AppDeps extends Deps {
   chat: ChatDeps;
   /** Outside accounts connected by signing in there. */
   accounts: AccountDeps;
+  /** What agents propose to do with those accounts, for an owner to approve. */
+  actions: ActionDeps;
 }
 
 type Env = { Variables: { userId: string } };
@@ -85,6 +88,11 @@ export function createApp(deps: AppDeps) {
     await disconnectAccount(deps.accounts, c.get('userId'), c.req.query('org'), c.req.param('provider'));
     return c.json({ ok: true });
   });
+
+  // Answers when the action has run: Cloud Run keeps the CPU only while a request is open.
+  app.post('/actions/:id/approve', async (c) => c.json(await approveAction(deps.actions, c.get('userId'), c.req.param('id'))));
+
+  app.post('/actions/:id/reject', async (c) => c.json(await rejectAction(deps.actions, c.get('userId'), c.req.param('id'))));
 
   // Answers when the reply is written: Cloud Run keeps the CPU only while a request is open.
   app.post('/threads/:id/reply', async (c) => c.json(await replyInThread(deps.chat, c.get('userId'), c.req.param('id'))));

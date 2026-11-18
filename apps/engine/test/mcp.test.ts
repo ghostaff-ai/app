@@ -114,12 +114,20 @@ describe('connecting a maker\'s MCP server', () => {
     const server = fakeServer();
     const p = mcpOAuth(connector, { vault: new MemoryVault(), publicUrl: 'http://localhost:8787', fetch: server.f });
     const grant = await p.exchange({ code: 'the-code', codeVerifier: 'v'.repeat(43), redirectUri: '' });
-    expect(grant).toEqual({ refreshToken: 'refresh-1', accessToken: 'access-1', expiresIn: 3600, scopes: ['read', 'write'] });
+    expect(grant).toEqual({
+      refreshToken: 'refresh-1',
+      accessToken: 'access-1',
+      expiresIn: 3600,
+      scopes: ['read', 'write'],
+      client: { clientId: 'registered-client' },
+    });
     const form = new URLSearchParams(server.to('/token')[0]?.body);
     expect(form.get('code')).toBe('the-code');
     expect(form.get('code_verifier')).toBe('v'.repeat(43));
     expect(form.get('resource')).toBe(MCP);
-    expect(await p.refresh('refresh-1')).toEqual({ accessToken: 'access-2', expiresIn: 3600, refreshToken: 'refresh-2' });
+    expect(await p.refresh('refresh-1', grant.client)).toEqual({ accessToken: 'access-2', expiresIn: 3600, refreshToken: 'refresh-2' });
+    // A grant refreshes with the client it was issued to, even after the engine registered another one.
+    expect(new URLSearchParams(server.to('/token')[1]?.body).get('client_id')).toBe('registered-client');
   });
 
   it('a revoked grant is AccountGone', async () => {

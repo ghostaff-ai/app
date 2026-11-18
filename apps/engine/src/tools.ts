@@ -32,6 +32,8 @@ export interface Tool {
   writes: boolean;
   /** The line the person sees while it runs, in Spanish («Mirando tu calendario»). */
   step: string;
+  /** For a tool that writes: what the approval card says it will do («Publicar en Instagram»). */
+  action?: string;
   /** Returns what the model reads back. Throws ToolError for a failure the model should hear about. */
   run(ctx: ToolContext, input: Record<string, unknown>): Promise<string>;
 }
@@ -65,6 +67,10 @@ export interface AgentTools {
   accounts: string[];
   /** The step line to show while `name` runs. */
   stepFor(name: string): string;
+  /** Whether `name` creates or changes something outside Ghostaff (unknown tools count as writing). */
+  writes(name: string): boolean;
+  /** What the approval card says a writing tool will do. */
+  actionFor(name: string): string;
   run(name: string, input: unknown): Promise<ToolOutcome>;
 }
 
@@ -72,5 +78,7 @@ export const NO_TOOLS: AgentTools = {
   specs: [],
   accounts: [],
   stepFor: () => 'Trabajando',
+  writes: () => true,
+  actionFor: (name) => name,
   run: async (name) => ({ content: `No existe la herramienta ${name}.`, isError: true }),
 };

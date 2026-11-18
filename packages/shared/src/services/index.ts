@@ -502,6 +502,15 @@ export async function disconnectAccount(engine: EngineAccess, orgId: string, pro
   await callEngine(engine, 'DELETE', `/connections/accounts/${provider}?org=${encodeURIComponent(orgId)}`);
 }
 
+/**
+ * An owner's answer to an action an agent proposed (a card in its message):
+ * approving runs it with the organisation's connected account; the card then
+ * shows how it went. Anyone but an owner is refused.
+ */
+export async function decideAction(engine: EngineAccess, actionId: string, decision: 'approve' | 'reject'): Promise<{ status: string; result?: string }> {
+  return callEngine(engine, 'POST', `/actions/${encodeURIComponent(actionId)}/${decision}`);
+}
+
 /** The service account a customer grants Vertex AI access to on their own project. */
 export async function getEngineIdentity(engine: EngineAccess): Promise<{ serviceAccount: string }> {
   return callEngine(engine, 'GET', '/identity');

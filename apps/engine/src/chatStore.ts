@@ -75,13 +75,33 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
     },
     async updateReply(id, patch) {
       const row: Record<string, unknown> = {};
-      if (patch.text !== undefined) row.parts = text(patch.text);
+      if (patch.text !== undefined) row.parts = [...text(patch.text), ...(patch.actions ?? [])];
       if (patch.steps) row.steps = patch.steps;
       if (patch.state) {
         row.state = patch.state;
         if (patch.state !== 'working') row.finished_at = new Date().toISOString();
       }
       check(await admin.from('messages').update(row).eq('id', id));
+    },
+    async proposeAction(a) {
+      const r = check(
+        await admin
+          .from('agent_actions')
+          .insert({
+            org_id: a.orgId,
+            thread_id: a.threadId,
+            message_id: a.messageId,
+            agent_id: a.agentId,
+            tool: a.tool,
+            input: a.input,
+            label: a.label.slice(0, 200),
+            requested_by: a.requestedBy,
+          })
+          .select('id')
+          .single(),
+      );
+      if (!r) throw new Error('action not recorded');
+      return r.id as string;
     },
     async touchThread(threadId) {
       check(await admin.from('threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId));

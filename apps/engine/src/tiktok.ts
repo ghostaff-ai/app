@@ -131,6 +131,38 @@ export function chunking(size: number): { chunkSize: number; count: number } {
   return { chunkSize, count: Math.floor(size / chunkSize) };
 }
 
+/**
+ * Reads the video as it comes, counting: a server that sends no length, or
+ * lies about it, cannot make the engine hold more than MAX_VIDEO_BYTES.
+ */
+async function download(ctx: ToolContext, url: URL): Promise<Uint8Array> {
+  const res = await ctx.fetch(url, { redirect: 'error' });
+  if (!res.ok || !res.body) throw new ToolError(`No se puede descargar el vídeo (${res.status}).`);
+  const tooBig = () => new ToolError('El vídeo es demasiado grande: como mucho 120 MB.');
+  if (Number(res.headers.get('content-length') ?? 0) > MAX_VIDEO_BYTES) throw tooBig();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  const reader = res.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > MAX_VIDEO_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw tooBig();
+    }
+    parts.push(value);
+  }
+  if (size === 0) throw new ToolError('El vídeo está vacío.');
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) {
+    bytes.set(p, at);
+    at += p.length;
+  }
+  return bytes;
+}
+
 export function tiktokTools(): Tool[] {
   const base = { provider: 'tiktok' as const };
   return [
@@ -185,6 +217,7 @@ export function tiktokTools(): Tool[] {
       },
       writes: true,
       step: 'Subiendo el vídeo a TikTok',
+      action: 'Subir un vídeo a TikTok',
       async run(ctx, input) {
         const url = publicHttpsUrl(input.video);
         const privacy = typeof input.privacy === 'string' ? input.privacy : 'PUBLIC_TO_EVERYONE';
@@ -197,12 +230,7 @@ export function tiktokTools(): Tool[] {
               : `TikTok no deja publicarlo así; opciones de esta cuenta: ${options.join(', ') || 'ninguna'}.`,
           );
         }
-        const res = await ctx.fetch(url, { redirect: 'error' });
-        if (!res.ok) throw new ToolError(`No se puede descargar el vídeo (${res.status}).`);
-        const declared = Number(res.headers.get('content-length') ?? 0);
-        if (declared > MAX_VIDEO_BYTES) throw new ToolError('El vídeo es demasiado grande: como mucho 120 MB.');
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        if (bytes.length === 0 || bytes.length > MAX_VIDEO_BYTES) throw new ToolError('El vídeo está vacío o pasa de 120 MB.');
+        const bytes = await download(ctx, url);
         const { chunkSize, count } = chunking(bytes.length);
         const init = await tiktok(ctx, '/post/publish/video/init/', {
           post_info: {

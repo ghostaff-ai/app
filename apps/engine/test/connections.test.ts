@@ -40,6 +40,7 @@ function setup(checks: Partial<Checks> = {}) {
     now: () => new Date('2026-11-14T10:00:00Z'),
     chat: { chat: {} as never, writerFor: async () => async () => {}, toolsFor: async () => NO_TOOLS },
     accounts: {} as never,
+    actions: {} as never,
   });
   const call = (user: string | null, method: string, path: string, body?: unknown) =>
     app.request(path, {

@@ -1,4 +1,4 @@
-import { type ChatMessage, messageText, splitMentions } from '@ghostaff/shared';
+import { type ActionPart, type ChatMessage, isActionPart, messageText, splitMentions } from '@ghostaff/shared';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { GHOSTS, type GhostId } from '@/lib/team';
@@ -97,12 +97,99 @@ export function StatusLine({ message }: { message: ChatMessage }) {
   );
 }
 
+const ACTION_STATUS: Record<ActionPart['status'], string> = {
+  pending: 'Pendiente de aprobación',
+  running: 'Haciéndolo…',
+  done: 'Hecho',
+  failed: 'No se ha podido hacer',
+  rejected: 'Rechazado',
+};
+
+/** The first link in a tool's answer, to open what was done. */
+function linkIn(result: string | undefined): string | null {
+  return result?.match(/https:\/\/[^\s"']+/)?.[0] ?? null;
+}
+
+/**
+ * What an agent wants to do outside Ghostaff, waiting for an owner (apps/engine/
+ * src/actions.ts). Nothing happens until someone presses «Aprobar».
+ */
+export function ActionCard({
+  action,
+  canDecide,
+  onDecide,
+}: {
+  action: ActionPart;
+  canDecide: boolean;
+  onDecide?: (actionId: string, decision: 'approve' | 'reject') => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const decide = async (d: 'approve' | 'reject') => {
+    if (!onDecide) return;
+    setBusy(d);
+    setError(null);
+    try {
+      await onDecide(action.actionId, d);
+    } catch {
+      setError('No se ha podido. Inténtalo otra vez.');
+    } finally {
+      setBusy(null);
+    }
+  };
+  const link = action.status === 'done' ? linkIn(action.result) : null;
+  return (
+    <View className="mt-2 rounded-xl border border-line bg-card p-3" accessibilityLabel={`Propuesta: ${action.label}. ${ACTION_STATUS[action.status]}`}>
+      <Text className="text-sm font-semibold text-ink">{action.label}</Text>
+      {action.preview ? (
+        <Text className="mt-1 text-xs text-muted" selectable numberOfLines={8}>
+          {action.preview}
+        </Text>
+      ) : null}
+      <Text className={`mt-2 text-xs ${action.status === 'failed' ? 'text-no' : action.status === 'done' ? 'text-ok' : 'text-muted'}`}>
+        {ACTION_STATUS[action.status]}
+        {action.decidedBy && action.status !== 'pending' ? ` · ${action.decidedBy}` : ''}
+      </Text>
+      {action.status === 'failed' && action.result ? <Text className="mt-1 text-xs text-no">{action.result}</Text> : null}
+      {link ? (
+        <Text className="mt-1 text-xs text-accent" selectable>
+          {link}
+        </Text>
+      ) : null}
+      {action.status === 'pending' && canDecide ? (
+        <View className="mt-3 flex-row gap-2">
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy !== null}
+            onPress={() => void decide('approve')}
+            className="flex-1 items-center rounded-full bg-accent px-3 py-2"
+          >
+            {busy === 'approve' ? <ActivityIndicator size="small" /> : <Text className="text-sm font-semibold text-on-accent">Aprobar</Text>}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy !== null}
+            onPress={() => void decide('reject')}
+            className="flex-1 items-center rounded-full border border-line bg-surface px-3 py-2"
+          >
+            {busy === 'reject' ? <ActivityIndicator size="small" /> : <Text className="text-sm font-semibold text-ink">Rechazar</Text>}
+          </Pressable>
+        </View>
+      ) : null}
+      {action.status === 'pending' && !canDecide ? <Text className="mt-2 text-xs text-muted">Lo aprueba quien es propietario de la empresa.</Text> : null}
+      {error ? <Text className="mt-2 text-xs text-no">{error}</Text> : null}
+    </View>
+  );
+}
+
 export function MessageView({
   message,
   mine,
   ghost,
   showAuthor,
   names,
+  canDecide = false,
+  onDecide,
 }: {
   message: ChatMessage;
   mine: boolean;
@@ -112,8 +199,12 @@ export function MessageView({
   showAuthor: boolean;
   /** Names that can be @mentioned, to highlight them. */
   names: string[];
+  /** Whether the viewer may approve the agent's proposed actions (owners). */
+  canDecide?: boolean;
+  onDecide?: (actionId: string, decision: 'approve' | 'reject') => Promise<void>;
 }) {
   const text = messageText(message.parts);
+  const actions = message.parts.filter(isActionPart);
 
   if (message.authorKind === 'agent') {
     return (
@@ -126,6 +217,10 @@ export function MessageView({
         ) : null}
         <StatusLine message={message} />
         {text ? <Body text={text} names={names} className="text-base leading-6 text-muted" /> : null}
+        {actions.map((a) => (
+          // An action is decided once the agent has finished writing its message.
+          <ActionCard key={a.actionId} action={a} canDecide={canDecide && message.state !== 'working'} onDecide={onDecide} />
+        ))}
       </View>
     );
   }
