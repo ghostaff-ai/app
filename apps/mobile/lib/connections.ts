@@ -1,4 +1,4 @@
-import type { AccountConnectResult, AccountProvider, AiProvider } from '@ghostaff/shared';
+import type { AccountConnectResult, AiProvider } from '@ghostaff/shared';
 import { EngineError } from '@ghostaff/shared/services';
 
 // What the connections screen says, in Spanish. One place, so the engine's
@@ -69,20 +69,7 @@ export function connectErrorMessage(e: unknown, provider: AiProvider): string {
 }
 
 // Outside accounts, connected by signing in there (docs/plans/ongoing/connectors.md).
-
-export interface AccountCopy {
-  title: string;
-  /** What the agents may do with it, and what they cannot see. */
-  reach: string;
-}
-
-export const ACCOUNTS: Record<AccountProvider, AccountCopy> = {
-  google: {
-    title: 'Google: calendario y hojas de cálculo',
-    reach:
-      'Tus agentes podrán ver y crear eventos en tu Google Calendar y crear hojas de cálculo en tu Drive. Del Drive solo ven las hojas que creen ellos. Puedes quitar el acceso cuando quieras.',
-  },
-};
+// Their titles and what they reach live in the catalogue (@ghostaff/shared, CONNECTORS).
 
 /** What the screen says when the person comes back from the provider's sign-in. */
 export function accountResultMessage(result: AccountConnectResult | string | null): { text: string; ok: boolean } {
@@ -105,6 +92,8 @@ export function accountErrorMessage(e: unknown): string {
   switch (code) {
     case 'provider_not_configured':
       return 'Esta conexión todavía no está disponible.';
+    case 'provider_unavailable':
+      return 'Ahora mismo no podemos conectar con ese servicio. Inténtalo más tarde; si sigue, avísanos.';
     case 'not_yours':
     case 'not_found':
       return 'Esa conexión la empezó otra persona o ya terminó. Pulsa Conectar para empezar de nuevo.';

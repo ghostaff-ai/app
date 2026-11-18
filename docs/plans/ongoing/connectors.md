@@ -118,21 +118,23 @@ Ordered by what Jaime put first (2026-11-18): Google (calendar, spreadsheets, re
 
 ### Kind B-open — the maker's, any client
 
-- [ ] Holded (invoices, contacts, accounting) — the organisation must have Holded's API turned on
-- [ ] Factorial (time off, clocking, people)
-- [ ] Stripe (payments) — OAuth per account; Connect platforms need an agent key instead
-- [ ] Notion
-- [ ] Calendly (bookings on paid plans)
-- [ ] Wix (site, store, bookings)
-- [ ] WordPress.com (sites hosted on WordPress.com only)
-- [ ] PayPal
-- [ ] Airtable
-- [ ] Pipedrive
-- [ ] monday.com
-- [ ] Linear
-- [ ] Typeform
-- [ ] Webflow
-- [ ] Squarespace
+All built on `feat/connectors-google` through one generic MCP connector (`apps/engine/src/mcp.ts`), each a line in the catalogue (`packages/shared/src/connectors.ts`). Discovery checked against every real server on 2026-11-18; none has yet been connected with a real account (step 1).
+
+- [~] Holded (invoices, contacts, accounting) — the organisation must have Holded's API turned on
+- [~] Stripe (payments) — OAuth per account; Connect platforms need an agent key instead
+- [~] Notion
+- [~] Calendly (bookings on paid plans)
+- [~] Factorial (time off, clocking, people) — wants a confidential client: the engine registers one and keeps its secret in the vault
+- [~] Wix (site, store, bookings)
+- [~] WordPress.com (sites hosted on WordPress.com only) — asks for the server's whole scope list, `global` included; narrow it if the consent screen is too broad
+- [~] Airtable
+- [~] Pipedrive — without admin and mail-sending scopes
+- [~] monday.com
+- [~] Typeform
+- [~] Linear
+- [~] Webflow
+- [~] PayPal
+- [~] Squarespace — takes only a client metadata document, so it connects from an https engine (beta), never from localhost
 - [ ] TikTok Ads — read only, Marketing never pays for ads
 
 ### Kind B-app — the maker's, our app registered first
@@ -166,5 +168,5 @@ Ordered by what Jaime put first (2026-11-18): Google (calendar, spreadsheets, re
 
 1. **Own vault or Zernio for social networks** (the gate). If invariant 2 covers social tokens, only our own apps and vault meet it. If it does not, Zernio with our own app ids (`oauthAppId`, where the platform allows it) is cheaper and covers video publishing for us. Before deciding, ask Zernio in writing where tokens live.
 2. **Nango or our own refresh code.** Self-hosted Nango (Elastic License 2.0) brings what Nango learnt the hard way about refresh and rate limits; our own code avoids running another service. `[unknown: what the free self-hosted Nango leaves out, and whether ELv2 allows our use]`
-3. **How the engine gives a maker's MCP tools to an agent.** The engine calls Claude through the Messages API today, not the Agent SDK the product plan names. Either way the engine registers as an MCP client the way the MCP authorisation spec (2026-07-28) asks: our pre-registered client where the maker requires one, otherwise a client metadata document at a Ghostaff URL, dynamic registration only as a last resort (the spec now deprecates it); PKCE, the `resource` parameter on every token request, and tokens kept per organisation and server. `[unknown: whether the Messages API's MCP connector works on Vertex AI in the EU, or whether the engine must be the MCP client itself]`
+3. ~~How the engine gives a maker's MCP tools to an agent.~~ Settled 2026-11-18: the engine is the MCP client itself (`apps/engine/src/mcp.ts`, the official TypeScript SDK), so it works whatever model provider runs the agent, Vertex AI in the EU included. It signs in as the MCP authorisation spec asks: a client metadata document at a Ghostaff URL where the server takes one and the engine is on https, otherwise a client registered once per server and kept in the vault; PKCE and the `resource` parameter on every request; tokens kept per organisation and server, refreshed and rotated by the engine. A server's tools are listed once per access token and named `<connector>_<tool>`.
 4. **Whose name the platform apps are in.** Only LinkedIn requires a registered company. Meta verifies the business, and by consultants' accounts a registered autónomo passes `[unknown: which documents Meta accepts from an autónomo in Spain]`; TikTok asks for no legal form in what was read. So one of the founders as autónomo could hold the Meta and TikTok apps now, or we wait for the SL and skip moving them later. It is in the product plan's «Por decidir entre los dos».

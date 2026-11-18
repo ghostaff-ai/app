@@ -9,7 +9,7 @@
 // creates, never the rest of the person's Drive.
 
 import type { AccountGrant, OAuthProvider } from './accounts';
-import { AccountGone } from './accounts';
+import { AccountGone, codeChallenge, randomToken } from './accounts';
 import { clip, type Tool, type ToolContext, ToolError } from './tools';
 
 export const GOOGLE_SCOPES = {
@@ -42,25 +42,28 @@ async function tokenRequest(f: Fetch, form: Record<string, string>): Promise<Rec
   return json;
 }
 
+export const GOOGLE_REQUESTED_SCOPES = ['openid', 'email', GOOGLE_SCOPES.calendar, GOOGLE_SCOPES.driveFile];
+
 export function googleOAuth(client: GoogleClient, f: Fetch = fetch): OAuthProvider {
   return {
     id: 'google',
-    scopes: ['openid', 'email', GOOGLE_SCOPES.calendar, GOOGLE_SCOPES.driveFile],
+    method: 'oauth',
     usefulScopes: [GOOGLE_SCOPES.calendar, GOOGLE_SCOPES.driveFile],
-    authorizeUrl({ state, codeChallenge, redirectUri }) {
+    async begin({ state, redirectUri }) {
+      const codeVerifier = randomToken();
       const q = new URLSearchParams({
         client_id: client.clientId,
         redirect_uri: redirectUri,
         response_type: 'code',
-        scope: this.scopes.join(' '),
+        scope: GOOGLE_REQUESTED_SCOPES.join(' '),
         // A refresh token, and asked again each time so a reconnect always yields one.
         access_type: 'offline',
         prompt: 'consent',
         state,
-        code_challenge: codeChallenge,
+        code_challenge: codeChallenge(codeVerifier),
         code_challenge_method: 'S256',
       });
-      return `${AUTHORIZE}?${q}`;
+      return { url: `${AUTHORIZE}?${q}`, codeVerifier };
     },
     async exchange({ code, codeVerifier, redirectUri }): Promise<AccountGrant> {
       const t = await tokenRequest(f, {

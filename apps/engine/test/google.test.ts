@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AccountGone } from '../src/accounts';
+import { AccountGone, codeChallenge } from '../src/accounts';
 import { streamWith } from '../src/chatStore';
 import { GOOGLE_SCOPES, googleOAuth, googleTools } from '../src/google';
 import type { AgentTools } from '../src/tools';
@@ -21,14 +21,17 @@ function fakeFetch(answers: Array<{ status?: number; json: unknown }>) {
 const client = { clientId: 'client-id.apps.googleusercontent.com', clientSecret: 'client-secret' };
 
 describe('Google sign-in', () => {
-  it('asks for offline access with PKCE and only the narrow scopes', () => {
-    const url = new URL(googleOAuth(client).authorizeUrl({ state: 's', codeChallenge: 'ch', redirectUri: 'https://e/cb' }));
+  it('asks for offline access with PKCE and only the narrow scopes', async () => {
+    const begun = await googleOAuth(client).begin({ state: 's', redirectUri: 'https://e/cb' });
+    const url = new URL(begun.url);
     const q = url.searchParams;
     expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
     expect(q.get('scope')?.split(' ')).toEqual(['openid', 'email', GOOGLE_SCOPES.calendar, GOOGLE_SCOPES.driveFile]);
     expect(q.get('access_type')).toBe('offline');
     expect(q.get('code_challenge_method')).toBe('S256');
-    expect(q.get('code_challenge')).toBe('ch');
+    expect(q.get('code_challenge')).toBe(codeChallenge(begun.codeVerifier));
+    expect(begun.codeVerifier.length).toBeGreaterThanOrEqual(43);
+    expect(url.toString()).not.toContain(begun.codeVerifier);
     expect(q.get('state')).toBe('s');
     expect(url.toString()).not.toContain('client-secret');
   });

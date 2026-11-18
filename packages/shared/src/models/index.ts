@@ -1,3 +1,5 @@
+import type { AccountProvider } from '../connectors';
+
 // The shapes the app and the sync job share. They mirror the tables in
 // supabase/migrations/; a column added there is added here in the same change.
 
@@ -108,10 +110,7 @@ export const RULE_KIND = 'regla';
 
 export type ConnectionKind = 'ai' | 'account';
 export type AiProvider = 'anthropic' | 'openai' | 'vertex';
-/** Outside accounts an organisation connects by signing in there (docs/plans/ongoing/connectors.md). */
-export type AccountProvider = 'google';
-export const ACCOUNT_PROVIDERS: readonly AccountProvider[] = ['google'];
-export type ConnectionMethod = 'api_key' | 'cloud_project' | 'oauth';
+export type ConnectionMethod = 'api_key' | 'cloud_project' | 'oauth' | 'mcp';
 
 export interface Connection {
   id: string;

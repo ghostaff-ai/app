@@ -26,7 +26,7 @@ export interface Tool {
   description: string;
   input_schema: ToolInputSchema;
   provider: AccountProvider;
-  /** The provider scope the tool needs; it is offered only when the account granted it. */
+  /** The provider scope the tool needs; it is offered only when the account granted it. Empty for a tool the account lists itself (an MCP server's). */
   scope: string;
   /** Creates or changes something outside Ghostaff. */
   writes: boolean;

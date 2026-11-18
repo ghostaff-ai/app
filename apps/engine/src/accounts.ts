@@ -21,7 +21,7 @@
 // Tokens never reach the database, the app or a log.
 
 import { createHash, randomBytes } from 'node:crypto';
-import { ACCOUNT_PROVIDERS, type AccountConnectResult, type AccountProvider } from '@ghostaff/shared';
+import { ACCOUNT_PROVIDERS, type AccountConnectResult, type AccountProvider, connectorFor } from '@ghostaff/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type Membership, Refusal, requireOwner } from './connections';
 import { type AgentTools, NO_TOOLS, type Tool, ToolError } from './tools';
@@ -36,27 +36,42 @@ export class AccountGone extends Error {
 }
 
 export interface AccountGrant {
-  refreshToken: string;
+  /** Absent when the provider gives none: the connection then lasts as long as the access token. */
+  refreshToken?: string;
   accessToken: string;
   /** Seconds. */
   expiresIn: number;
-  scopes: string[];
+  /** The scopes granted, or null when the provider does not say. */
+  scopes: string[] | null;
 }
 
-/** One provider's sign-in, as the engine needs it. */
+/** What the vault keeps for a connected account. */
+export interface StoredGrant {
+  refreshToken?: string;
+  accessToken?: string;
+  /** Epoch milliseconds. */
+  expiresAt?: number;
+}
+
+/** One provider's sign-in, as the engine needs it: our own (Google) or a maker's MCP server. */
 export interface OAuthProvider {
   id: AccountProvider;
-  /** What we ask for. The person may grant fewer: some consent screens let them untick boxes. */
-  scopes: string[];
-  /** Without at least one of these the connection serves no tool, so it is not kept. */
-  usefulScopes: string[];
-  authorizeUrl(p: { state: string; codeChallenge: string; redirectUri: string }): string;
+  method: 'oauth' | 'mcp';
+  /**
+   * Without at least one of these the connection serves no tool, so it is not
+   * kept. Null when the provider does not report what was granted.
+   */
+  usefulScopes: string[] | null;
+  /** The provider's sign-in page, and the PKCE verifier to keep until the person comes back. */
+  begin(p: { state: string; redirectUri: string }): Promise<{ url: string; codeVerifier: string }>;
   exchange(p: { code: string; codeVerifier: string; redirectUri: string }): Promise<AccountGrant>;
-  /** Throws AccountGone when the grant is no longer valid. */
-  refresh(refreshToken: string): Promise<{ accessToken: string; expiresIn: number }>;
-  /** The account's email, which the app shows to recognise it. */
-  identity(accessToken: string): Promise<string>;
+  /** Throws AccountGone when the grant is no longer valid. A provider that rotates refresh tokens returns the new one. */
+  refresh(refreshToken: string): Promise<{ accessToken: string; expiresIn: number; refreshToken?: string }>;
+  /** The account's email, which the app shows to recognise it; null when the provider does not tell. */
+  identity(accessToken: string): Promise<string | null>;
   revoke(token: string): Promise<void>;
+  /** The account's own tools (an MCP server lists them). Absent: the engine's tools for this provider, by scope. */
+  tools?(accessToken: string): Promise<Tool[]>;
 }
 
 export interface Attempt {
@@ -73,7 +88,7 @@ export interface AccountRecord {
   org_id: string;
   kind: 'account';
   provider: AccountProvider;
-  method: 'oauth';
+  method: 'oauth' | 'mcp';
   hint: string;
   settings: { scopes: string[] };
   status: 'ok';
@@ -122,7 +137,7 @@ export interface AccountDeps {
 export const ATTEMPT_TTL_MS = 10 * 60_000;
 
 const base64url = (b: Buffer) => b.toString('base64url');
-const randomToken = () => base64url(randomBytes(32));
+export const randomToken = () => base64url(randomBytes(32));
 export const codeChallenge = (verifier: string) => base64url(createHash('sha256').update(verifier).digest());
 
 export const isAccountProvider = (p: unknown): p is AccountProvider => ACCOUNT_PROVIDERS.includes(p as AccountProvider);
@@ -172,7 +187,15 @@ export async function startAccountConnect(deps: AccountDeps, userId: string, pro
   await requireOwner(deps.accounts, input.orgId, userId);
   if (!allowedReturn(input.returnTo, deps.returnOrigins)) throw new Refusal(400, 'bad_return', 'returnTo is not an address of the app');
   const state = randomToken();
-  const codeVerifier = randomToken();
+  let begun: { url: string; codeVerifier: string };
+  try {
+    begun = await p.begin({ state, redirectUri: callbackUrl(deps.publicUrl, p.id) });
+  } catch (e) {
+    // The provider's sign-in could not be prepared: its server is down, or it will not take this engine as a client.
+    console.error('account connect could not start', p.id, e instanceof Error ? e.message.slice(0, 200) : typeof e);
+    throw new Refusal(502, 'provider_unavailable', `${p.id} could not start a sign-in`);
+  }
+  const { url, codeVerifier } = begun;
   await deps.accounts.createAttempt({
     state,
     orgId: input.orgId as string,
@@ -181,7 +204,7 @@ export async function startAccountConnect(deps: AccountDeps, userId: string, pro
     codeVerifier,
     returnTo: input.returnTo,
   });
-  return { url: p.authorizeUrl({ state, codeChallenge: codeChallenge(codeVerifier), redirectUri: callbackUrl(deps.publicUrl, p.id) }) };
+  return { url };
 }
 
 /**
@@ -235,13 +258,18 @@ export async function finishAccountConnect(
   if (!owner || owner.role !== 'owner') throw new Refusal(403, 'not_owner', 'only an owner manages connections');
   try {
     const grant = await p.exchange({ code: input.code, codeVerifier: attempt.codeVerifier, redirectUri: callbackUrl(deps.publicUrl, p.id) });
-    const useful = grant.scopes.filter((s) => p.usefulScopes.includes(s));
-    if (useful.length === 0) {
-      await p.revoke(grant.refreshToken).catch(() => {});
+    const useful = p.usefulScopes && grant.scopes ? grant.scopes.filter((s) => p.usefulScopes?.includes(s)) : (grant.scopes ?? []);
+    if (p.usefulScopes && useful.length === 0) {
+      await p.revoke(grant.refreshToken ?? grant.accessToken).catch(() => {});
       return { result: 'missing_scopes' };
     }
-    const email = await p.identity(grant.accessToken);
-    await deps.vault.put(accountSecretName(attempt.orgId, p.id), JSON.stringify({ refreshToken: grant.refreshToken }), {
+    const email = await p.identity(grant.accessToken).catch(() => null);
+    const stored: StoredGrant = {
+      refreshToken: grant.refreshToken,
+      accessToken: grant.accessToken,
+      expiresAt: now.getTime() + grant.expiresIn * 1000,
+    };
+    await deps.vault.put(accountSecretName(attempt.orgId, p.id), JSON.stringify(stored), {
       org_id: attempt.orgId,
       provider: p.id,
       kind: 'account',
@@ -251,8 +279,8 @@ export async function finishAccountConnect(
       org_id: attempt.orgId,
       kind: 'account',
       provider: p.id,
-      method: 'oauth',
-      hint: email.slice(0, 80),
+      method: p.method,
+      hint: (email ?? `Cuenta de ${connectorFor(p.id).name}`).slice(0, 80),
       settings: { scopes: useful },
       status: 'ok',
       checked_at: at,
@@ -274,7 +302,11 @@ export async function disconnectAccount(deps: AccountDeps, userId: string, orgId
   const name = accountSecretName(orgId as string, provider);
   const stored = await deps.vault.get(name);
   const p = deps.providers[provider];
-  if (stored && p) await p.revoke((JSON.parse(stored) as { refreshToken: string }).refreshToken).catch(() => {});
+  if (stored && p) {
+    const grant = JSON.parse(stored) as StoredGrant;
+    const token = grant.refreshToken ?? grant.accessToken;
+    if (token) await p.revoke(token).catch(() => {});
+  }
   // The token goes first: if that fails, the row stays and the owner can retry.
   await deps.vault.remove(name);
   await deps.accounts.removeAccount(orgId as string, provider);
@@ -292,15 +324,26 @@ export function accessTokens(deps: AccountDeps) {
     const hit = cache.get(key);
     if (hit && hit.until > now()) return hit.token;
     const p = deps.providers[provider];
-    const stored = await deps.vault.get(accountSecretName(orgId, provider));
-    if (!p || !stored) throw new AccountGone(provider);
-    const { accessToken, expiresIn } = await p.refresh((JSON.parse(stored) as { refreshToken: string }).refreshToken);
-    cache.set(key, { token: accessToken, until: now() + Math.max(0, expiresIn - 60) * 1000 });
-    return accessToken;
+    const name = accountSecretName(orgId, provider);
+    const raw = await deps.vault.get(name);
+    if (!p || !raw) throw new AccountGone(provider);
+    const stored = JSON.parse(raw) as StoredGrant;
+    if (!stored.refreshToken) {
+      // No refresh token: the access token is all there is, until it expires.
+      if (stored.accessToken && (stored.expiresAt ?? 0) - 60_000 > now()) return stored.accessToken;
+      throw new AccountGone(provider);
+    }
+    const fresh = await p.refresh(stored.refreshToken);
+    const until = now() + Math.max(0, fresh.expiresIn - 60) * 1000;
+    if (fresh.refreshToken && fresh.refreshToken !== stored.refreshToken) {
+      // Rotated: the old one is dead now, so the new one is saved before anything else.
+      const next: StoredGrant = { refreshToken: fresh.refreshToken, accessToken: fresh.accessToken, expiresAt: until + 60_000 };
+      await deps.vault.put(name, JSON.stringify(next), { org_id: orgId, provider, kind: 'account' });
+    }
+    cache.set(key, { token: fresh.accessToken, until });
+    return fresh.accessToken;
   };
 }
-
-const PROVIDER_NAMES: Record<AccountProvider, string> = { google: 'Google' };
 
 /**
  * The tools an organisation's agents get in a run: those of its connected
@@ -309,12 +352,32 @@ const PROVIDER_NAMES: Record<AccountProvider, string> = { google: 'Google' };
 export async function toolsFor(deps: AccountDeps, token: ReturnType<typeof accessTokens>, orgId: string): Promise<AgentTools> {
   const connected = (await deps.accounts.accounts(orgId)).filter((a) => a.status === 'ok' && deps.providers[a.provider]);
   if (connected.length === 0) return NO_TOOLS;
-  const tools = deps.tools.filter((t) => connected.some((a) => a.provider === t.provider && a.scopes.includes(t.scope)));
+  const tools: Tool[] = [];
+  const reachable: AccountConnection[] = [];
+  for (const a of connected) {
+    const p = deps.providers[a.provider];
+    if (!p) continue;
+    if (!p.tools) {
+      const own = deps.tools.filter((t) => t.provider === a.provider && a.scopes.includes(t.scope));
+      tools.push(...own);
+      if (own.length) reachable.push(a);
+      continue;
+    }
+    try {
+      const listed = await p.tools(await token(orgId, a.provider));
+      tools.push(...listed);
+      if (listed.length) reachable.push(a);
+    } catch (e) {
+      // One account that cannot list its tools must not cost the agent the others.
+      if (e instanceof AccountGone) await deps.accounts.setStatus(orgId, a.provider, 'failing').catch(() => {});
+      else console.error('listing tools failed', a.provider, e instanceof Error ? e.name : typeof e);
+    }
+  }
   if (tools.length === 0) return NO_TOOLS;
   const byName = new Map(tools.map((t) => [t.name, t]));
   return {
     specs: tools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
-    accounts: connected.map((a) => `${PROVIDER_NAMES[a.provider]}, con la cuenta ${a.hint}`),
+    accounts: reachable.map((a) => `${connectorFor(a.provider).name}, con la cuenta ${a.hint}`),
     stepFor: (name) => byName.get(name)?.step ?? 'Trabajando',
     async run(name, input) {
       const tool = byName.get(name);
@@ -330,7 +393,7 @@ export async function toolsFor(deps: AccountDeps, token: ReturnType<typeof acces
         if (e instanceof AccountGone) {
           await deps.accounts.setStatus(orgId, tool.provider, 'failing').catch(() => {});
           return {
-            content: `La cuenta de ${PROVIDER_NAMES[tool.provider]} ya no nos da acceso. Quien es propietario tiene que volver a conectarla en Conexiones.`,
+            content: `La cuenta de ${connectorFor(tool.provider).name} ya no nos da acceso. Quien es propietario tiene que volver a conectarla en Conexiones.`,
             isError: true,
           };
         }

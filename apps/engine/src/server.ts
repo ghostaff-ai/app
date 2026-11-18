@@ -9,7 +9,9 @@ import { type AccountDeps, accessTokens, supabaseAccountStore, toolsFor } from '
 import { createApp } from './app';
 import { supabaseChatStore, writerFactory } from './chatStore';
 import { supabaseStore } from './connections';
+import { CONNECTORS } from '@ghostaff/shared';
 import { googleOAuth, googleTools } from './google';
+import { mcpOAuth } from './mcp';
 import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
 
@@ -39,12 +41,16 @@ if (process.env.VAULT === 'memory') {
 // the engine runs, and connecting Google answers «not configured».
 const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+const publicUrl = process.env.ENGINE_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8787}`;
 const accounts: AccountDeps = {
   accounts: supabaseAccountStore(admin),
   vault,
-  providers:
-    googleClientId && googleClientSecret ? { google: googleOAuth({ clientId: googleClientId, clientSecret: googleClientSecret }) } : {},
-  publicUrl: process.env.ENGINE_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8787}`,
+  providers: {
+    // The makers' MCP servers need nothing configured: the engine registers itself with each.
+    ...Object.fromEntries(CONNECTORS.flatMap((c) => (c.kind === 'mcp' ? [[c.id, mcpOAuth(c, { vault, publicUrl })]] : []))),
+    ...(googleClientId && googleClientSecret ? { google: googleOAuth({ clientId: googleClientId, clientSecret: googleClientSecret }) } : {}),
+  },
+  publicUrl,
   returnOrigins: (process.env.APP_RETURN_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
   tools: googleTools(),
 };

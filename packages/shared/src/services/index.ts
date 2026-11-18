@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { AccountProvider } from '../connectors';
 import type {
   AccountConnectResult,
-  AccountProvider,
   Agent,
   AgentAccess,
   AgentGhost,

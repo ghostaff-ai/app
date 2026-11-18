@@ -2,7 +2,7 @@
 -- its own, nobody writes them from the app. A connect in progress is invisible
 -- to everyone but the engine (invariants 1 and 3).
 begin;
-select plan(9);
+select plan(10);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'ana@example.com'),
@@ -25,8 +25,12 @@ insert into public.connection_attempts (state, org_id, user_id, provider, code_v
 
 select throws_ok(
   $$ insert into public.connections (org_id, kind, provider, method, hint, connected_by_name)
-     values ('10000000-0000-0000-0000-000000000001', 'account', 'dropbox', 'oauth', 'x', 'Ana') $$,
-  '23514', null, 'only known account providers');
+     values ('10000000-0000-0000-0000-000000000001', 'account', 'Drop box!', 'oauth', 'x', 'Ana') $$,
+  '23514', null, 'an account provider is a plain lowercase id');
+select throws_ok(
+  $$ insert into public.connections (org_id, kind, provider, method, hint, connected_by_name)
+     values ('10000000-0000-0000-0000-000000000001', 'ai', 'notion', 'api_key', 'x', 'Ana') $$,
+  '23514', null, '... and an AI provider is one of the known ones');
 
 set local role authenticated;
 

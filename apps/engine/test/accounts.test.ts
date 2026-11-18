@@ -63,10 +63,15 @@ function setup(opts: { grantScopes?: string[]; now?: () => Date; exchangeFails?:
   let refreshGone = false;
   const google: OAuthProvider = {
     id: 'google',
-    scopes: ['openid', 'email', CAL, FILES],
+    method: 'oauth',
     usefulScopes: [CAL, FILES],
-    authorizeUrl: ({ state, codeChallenge: ch, redirectUri }) =>
-      `https://accounts.example/auth?state=${state}&code_challenge=${ch}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+    begin: async ({ state, redirectUri }) => {
+      const codeVerifier = `verifier-${state}`.padEnd(43, 'v');
+      return {
+        url: `https://accounts.example/auth?state=${state}&code_challenge=${codeChallenge(codeVerifier)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+        codeVerifier,
+      };
+    },
     exchange: async (p) => {
       calls.exchanged.push(p);
       if (opts.exchangeFails) throw new Error('boom');
@@ -320,5 +325,94 @@ describe('an organisation\'s tools', () => {
     expect(out.content).toContain('volver a conectarla en Conexiones');
     expect(t.rows.get(`${ORG}/google`)?.status).toBe('failing');
     expect(await toolsFor(t.deps, accessTokens(t.deps), ORG)).toBe(NO_TOOLS);
+  });
+});
+
+describe('keeping a connection alive', () => {
+  const tool: Tool = {
+    name: 'acme_list',
+    description: 'd',
+    input_schema: { type: 'object', properties: {} },
+    provider: 'notion',
+    scope: '',
+    writes: false,
+    step: 's',
+    run: async (ctx) => `token:${ctx.accessToken}`,
+  };
+
+  function provider(over: Partial<OAuthProvider> = {}): OAuthProvider {
+    return {
+      id: 'notion',
+      method: 'mcp',
+      usefulScopes: null,
+      begin: async () => ({ url: 'https://x', codeVerifier: 'v'.repeat(43) }),
+      exchange: async () => ({ accessToken: 'a0', refreshToken: 'r0', expiresIn: 3600, scopes: null }),
+      refresh: async (r) => ({ accessToken: `a-from-${r}`, expiresIn: 3600, refreshToken: `${r}+` }),
+      identity: async () => null,
+      revoke: async () => {},
+      tools: async () => [tool],
+      ...over,
+    };
+  }
+
+  it('saves a rotated refresh token before using the new access token', async () => {
+    const vault = new MemoryVault();
+    await vault.put(accountSecretName(ORG, 'notion'), JSON.stringify({ refreshToken: 'r0' }), {});
+    const deps = { accounts: {} as AccountStore, vault, providers: { notion: provider() }, publicUrl: ENGINE, returnOrigins: [], tools: [] };
+    expect(await accessTokens(deps)(ORG, 'notion')).toBe('a-from-r0');
+    expect(JSON.parse((await vault.get(accountSecretName(ORG, 'notion'))) ?? '{}').refreshToken).toBe('r0+');
+  });
+
+  it('without a refresh token, the access token serves until it expires, then the account is gone', async () => {
+    let clock = new Date('2026-11-18T10:00:00Z');
+    const vault = new MemoryVault();
+    await vault.put(accountSecretName(ORG, 'notion'), JSON.stringify({ accessToken: 'only', expiresAt: clock.getTime() + 3600_000 }), {});
+    const deps = { accounts: {} as AccountStore, vault, providers: { notion: provider() }, publicUrl: ENGINE, returnOrigins: [], tools: [], now: () => clock };
+    const token = accessTokens(deps);
+    expect(await token(ORG, 'notion')).toBe('only');
+    clock = new Date(clock.getTime() + 3600_000);
+    await expect(token(ORG, 'notion')).rejects.toBeInstanceOf(AccountGone);
+  });
+
+  it('an MCP account brings its own tools, and an account that cannot list them does not cost the others', async () => {
+    const vault = new MemoryVault();
+    await vault.put(accountSecretName(ORG, 'notion'), JSON.stringify({ refreshToken: 'r0' }), {});
+    await vault.put(accountSecretName(ORG, 'stripe'), JSON.stringify({ refreshToken: 'r1' }), {});
+    const statuses: string[] = [];
+    const accounts = {
+      accounts: async () => [
+        { provider: 'notion', hint: 'Cuenta de Notion', scopes: [], status: 'ok' },
+        { provider: 'stripe', hint: 'Cuenta de Stripe', scopes: [], status: 'ok' },
+      ],
+      setStatus: async (_o: string, p: string, st: string) => {
+        statuses.push(`${p}:${st}`);
+      },
+    } as unknown as AccountStore;
+    const stripe = provider({ id: 'stripe', refresh: async () => {
+      throw new AccountGone('stripe');
+    } });
+    const deps = { accounts, vault, providers: { notion: provider(), stripe }, publicUrl: ENGINE, returnOrigins: [], tools: [] };
+    const tools = await toolsFor(deps, accessTokens(deps), ORG);
+    expect(tools.specs.map((t) => t.name)).toEqual(['acme_list']);
+    expect(tools.accounts).toEqual(['Notion, con la cuenta Cuenta de Notion']);
+    expect(statuses).toEqual(['stripe:failing']);
+  });
+});
+
+describe('a provider that cannot start a sign-in', () => {
+  it('answers provider_unavailable instead of a bare failure', async () => {
+    const t = setup();
+    t.deps.providers = {
+      google: {
+        ...(t.deps.providers.google as OAuthProvider),
+        begin: async () => {
+          throw new Error('server down');
+        },
+      },
+    };
+    const res = await t.start();
+    expect(res.status).toBe(502);
+    expect(((await res.json()) as { error: string }).error).toBe('provider_unavailable');
+    expect(t.attempts.size).toBe(0);
   });
 });

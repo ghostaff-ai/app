@@ -8,7 +8,9 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromProvider, startAccountConnect } from './accounts';
+import { CONNECTORS } from '@ghostaff/shared';
 import { agentHello, type ChatDeps, replyInThread } from './chat';
+import { clientMetadataDocument } from './mcp';
 import { connectAi, type Deps, disconnectAi, Refusal } from './connections';
 
 export interface AppDeps extends Deps {
@@ -31,6 +33,9 @@ export function createApp(deps: AppDeps) {
   app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'DELETE'], allowHeaders: ['Authorization', 'Content-Type'] }));
 
   app.get('/health', (c) => c.json({ ok: true }));
+
+  // Who Ghostaff is, for MCP servers that take a URL as the client id (CIMD). Public by design.
+  app.get('/oauth/client-metadata.json', (c) => c.json(clientMetadataDocument(deps.accounts.publicUrl, CONNECTORS)));
 
   // The provider sends the browser here after sign-in; no Supabase token on this one.
   app.get('/connections/oauth/:provider/callback', async (c) => {
