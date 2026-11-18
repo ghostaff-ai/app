@@ -6,7 +6,7 @@ import { DecisionCard } from '@/components/DecisionCard';
 import { Button, Loading, Notice } from '@/components/ui';
 import { useDecided } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
-import { TAB_SCREEN_TOP } from '@/lib/tabs';
+import { useTabScreenTop } from '@/lib/tabs';
 
 // Registro: what the organisation has decided, newest first, each with who
 // answered. The first piece of the record the app shows; the rest of it (the
@@ -14,6 +14,7 @@ import { TAB_SCREEN_TOP } from '@/lib/tabs';
 
 export default function Registro() {
   const { active } = useActiveOrg();
+  const top = useTabScreenTop();
   const { decisions, loading, error, reload } = useDecided(active?.id ?? null);
 
   useFocusEffect(useCallback(() => void reload(), [reload]));
@@ -24,7 +25,7 @@ export default function Registro() {
   return (
     <FlatList
       className="flex-1 bg-surface"
-      contentContainerStyle={{ padding: 16, paddingBottom: 40, paddingTop: 16 + TAB_SCREEN_TOP }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 40, paddingTop: 16 + top }}
       contentInsetAdjustmentBehavior="automatic"
       data={decisions}
       keyExtractor={(d) => d.id}

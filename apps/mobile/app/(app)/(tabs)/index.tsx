@@ -10,7 +10,7 @@ import { useInbox } from '@/lib/hooks/useDecisions';
 import { hello, waitingSentence } from '@/lib/hoy';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
-import { TAB_SCREEN_TOP } from '@/lib/tabs';
+import { useTabScreenTop } from '@/lib/tabs';
 
 // Hoy (app-design.md): Secretaría on top with one sentence, a soft halo behind
 // her (decision 21); under it only what waits for you, then what you answered
@@ -19,6 +19,7 @@ import { TAB_SCREEN_TOP } from '@/lib/tabs';
 // talks to Secretaría (decisions 1 and 2).
 
 export default function Hoy() {
+  const top = useTabScreenTop();
   const { active } = useActiveOrg();
   const { profile } = useProfile();
   const { decisions, loading, error, reload } = useInbox(active?.id ?? null);
@@ -45,7 +46,7 @@ export default function Hoy() {
   return (
     <SectionList
       className="flex-1 bg-surface"
-      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40, paddingTop: TAB_SCREEN_TOP }}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40, paddingTop: top }}
       contentInsetAdjustmentBehavior="automatic"
       sections={sections}
       keyExtractor={(d) => d.id}
