@@ -42,10 +42,39 @@ Every agent run gets the model, effort level and spending cap that its kind of t
    - **Phase 3, a learned classifier**, only once there are tens of thousands of runs labelled by outcome, and only if it beats the table on held-out real cases. It picks a tier per conversation from its first message, for open chat that fits no family.
 5. **What stays defensible is the evals and the outcome data, not the router.** The same data tells us when a new model generation is safe to adopt, and, if multi-provider ever comes, which subtasks could go elsewhere.
 
+## Where the models run: accounts and runners
+
+Jaime (2026-11-18): an organisation must be able to bring its provider subscription as well as an API key. What each provider allows, and what is built, is in [llm-connectors](../ongoing/llm-connectors.md). This section is how those accounts meet the policy above.
+
+**Each way in carries its own way of running the agent:**
+
+| Account | Status | Runs on | What routing saves |
+|---|---|---|---|
+| Ghostaff's own (default) | Works | Claude on Vertex AI in the EU, through the Agent SDK | Ghostaff's money |
+| The organisation's API key (Anthropic, OpenAI) or its own Vertex project | Built; not yet tried with a real key on the beta | The Agent SDK; the key comes from the vault | The organisation's money |
+| Claude subscription | Decided, grey zone, not built | Only the unmodified `claude` program, with the user signed in through Anthropic's flow; the Agent SDK is not allowed | The plan's usage limits, not money |
+| ChatGPT plan | On OpenAI's waitlist | The Responses API only; the Agent SDK cannot drive it | The plan's limits |
+| OpenRouter | Planned | One-click OAuth key, then like an API key | The organisation's money |
+
+**The shape:**
+
+1. **An account resolver per organisation.** It orders the accounts the organisation has: its subscription, then its own key, then Ghostaff's Vertex EU. When one is refused or runs out, it moves to the next and tells the owner, never silently. `aiAccount` in `apps/engine/src/chatStore.ts` already picks Vertex before an Anthropic key; it grows into this.
+2. **`ModelPolicy` resolves a tier on that account.** `light` / `standard` / `deep` become the model that account offers: Vertex EU ids, Anthropic ids, or, on a subscription, the `--model` and per-subagent model Claude Code takes.
+3. **Interchangeable runners behind one interface:**
+   - **Agent SDK runner** for Ghostaff's account, API keys and Vertex. Full control of model, effort and budget. This is the main path and the first to build.
+   - **Claude Code runner** for Claude subscriptions: the `claude` program in a job per organisation. Built when subscriptions are switched on, not before.
+   - **A Responses API runner** for ChatGPT plans, only if the engine goes multi-provider (that decision is still the product plan's).
+4. **Agent definitions stay neutral.** Prompts, tools as MCP servers, and skills work the same in the Agent SDK and in Claude Code, so every runner reads one definition of each agent instead of one per provider.
+
+**Data in Europe.** A Claude subscription or an Anthropic key sends the organisation's data to Anthropic, mostly in the US. The connect screen already says so; the resolver must not fall from an EU account to a non-EU one without the owner having chosen that account.
+
+**The tradeoff:** every runner is code to keep and test against the same agents. One runner (Agent SDK) until a subscription is actually switched on keeps that cost where it pays.
+
 ## Open questions
 
 1. **Is this the approach?** Routing by task family with abstract tiers, built in the engine, rather than renting a router or a learned per-prompt router from the start. Recommendation: yes; renting fails on EU residency, on organisations' own keys or on maturity, and a learned router needs data we do not have yet.
 2. **Organisations with their own key pay their own AI.** Do they get the same cost-driven policy, a quality-first one, or a setting (in plain words, never model names)? Recommendation: same policy by default, since it is meant to lose no quality.
 3. **Is Haiku 5.5 available on Vertex's EU multi-region?** Unconfirmed. Without it, `light` falls back to Sonnet for organisations on Vertex.
 4. **Do the old engine's 11 agents get the same review now?** They run on a subscription (limits, not money), so it matters less, but they are the cheapest place to try phase 1's method on real work.
-5. **Where do the evals live?** In this repo next to the engine, or with each organisation's record. Likely here for the families every organisation shares, since the test cases come from Ghostaff's own organisation first ("Ghostaff uses Ghostaff").
+5. **Which account goes first when an organisation has several?** The order above (subscription, own key, Ghostaff) spends what the organisation already pays for first. A subscription is the least reliable (Anthropic can cut it without warning) and leaves the EU, so the alternative is own key first and the subscription only when the owner asks for it.
+6. **Where do the evals live?** In this repo next to the engine, or with each organisation's record. Likely here for the families every organisation shares, since the test cases come from Ghostaff's own organisation first ("Ghostaff uses Ghostaff").
