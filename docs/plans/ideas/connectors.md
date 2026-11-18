@@ -2,7 +2,7 @@
 
 **Priority:** high — Jaime (2026-11-18): without connectors a non-technical person can use, the product is worthless; Álvaro (2026-11-14): connectors are a crucial part of the app
 **Gate:** decision:Álvaro takes this to ready/, since what gets built here is his call (Jaime's proposal, 2026-11-18)
-**Next:** give the engine's agents tools that act for one organisation (stage 0 below); it is needed whichever way open question 1 goes
+**Next:** give the engine's agents tools that act for one organisation (phase 0 below); it is needed whichever way open question 1 goes
 
 ## Goal
 
@@ -26,7 +26,7 @@ Not all «1,000 connectors» are alike. Each app falls into one of three kinds, 
 
 **The two flavours of kind B** (audit of official MCP servers, 2026-11-18, with a source for each: [the annex of ghostaff-conectores.md](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-conectores.md#anexo-servidores-mcp-oficiales)):
 
-- **B-open:** the server lets any MCP client register itself (dynamic client registration or a client metadata document), so the button works the day stage 0 is in. Documented as open: Notion (with an official guide for third-party clients), Airtable, Calendly, Factorial. Advertised as open and still to prove with a test account: Holded, Stripe, PayPal, Wix, WordPress.com, Linear, monday, Pipedrive, Typeform, Webflow, Squarespace, TikTok Ads.
+- **B-open:** the server lets any MCP client register itself (dynamic client registration or a client metadata document), so the button works the day phase 0 is in. Documented as open: Notion (with an official guide for third-party clients), Airtable, Calendly, Factorial. Advertised as open and still to prove with a test account: Holded, Stripe, PayPal, Wix, WordPress.com, Linear, monday, Pipedrive, Typeform, Webflow, Squarespace, TikTok Ads.
 - **B-app:** the maker's server, but only for clients registered with the maker: Google Workspace (Gmail, Calendar, Drive, Docs, Sheets), Microsoft 365, HubSpot, Asana, Zoom, Meta Ads, Salesforce, Dropbox. Some add a gate: Slack only for apps in its Marketplace; Canva, ClickUp and Square through an allow-list; Intercom allow-lists redirect addresses; Atlassian lets each customer's admin block us; Box needs each customer's admin to create credentials (no good for us). Google Analytics and Google Ads have official servers that Google does not host: we would run them ourselves.
 
 **Going through a maker's MCP does not lift the maker's own rules.** Gmail through Google's official MCP server still uses our OAuth client and Gmail's restricted scopes, so reading mail still needs the annual CASA assessment; Google's mail server is in developer preview too.
@@ -57,7 +57,7 @@ Kind B is the same flow with the maker's consent screen in step 2 and the maker'
 
 ## How we iterate
 
-**Stage 0, once: the foundation.** Agents get tools that act for one organisation; the generic connection model above; Conexiones lists every kind; health and the reconnect decision; the forwarding address (kind C). Nothing here waits on the gate except where the social tokens live.
+**[Phase 0](#phases) lays the foundation once.**
 
 **Then one connector at a time, each through the same four steps:**
 
@@ -68,15 +68,38 @@ Kind B is the same flow with the maker's consent screen in step 2 and the maker'
 
 A line in the checklist is ticked only after step 4.
 
-**What comes next is chosen by demand, not by catalogue size.** An organisation can ask for a connector it is missing («Conectar otra app» → name it); each request is counted, and the most requested kind-B or kind-C app goes next. Kind A is planned, since each review has its own lead time and needs the company (SL) first.
+**What comes next is chosen by demand, not by catalogue size.** An organisation can ask for a connector it is missing («Conectar otra app» → name it); each request is counted, and the most requested kind-B or kind-C app goes next. Kind A is planned ahead, since each platform's review takes its own time and only starts once there is a working product to film.
 
-**The order, as far as it is known today:**
+## Phases
 
-1. Stage 0, and the forwarding address, which already serves Finanzas (invoices, bank notices) for every organisation.
-2. Kind B-open for what Spanish small companies use, as soon as stage 0 is in: Holded and Factorial first, then Stripe, Notion, Calendly and the shop builders (Wix, WordPress.com). No review and no cost per app. Then the Google Workspace B-app connectors that need only a sensitive scope (Calendar, Drive files we are given), once our Google OAuth client is verified.
-3. Meta (Instagram and Facebook Pages, one review) and TikTok: what Órdago needs. Meta's test mode serves Órdago now if `@ordago.app` has a role in our app; TikTok without its audit only posts privately, which is not enough. Both reviews need the SL.
-4. Google Business Profile, WhatsApp, YouTube, LinkedIn.
-5. Reading Gmail directly (the annual CASA assessment, 499–5,400 USD) and the bank through an aggregator, when paying customers ask for them.
+Each phase says what we do and which connectors it opens. Phases 1 and 2 run side by side: phase 2 spends most of its life waiting on Meta's and TikTok's reviews, and phase 1 needs no review at all.
+
+**Phase 0: the foundation.** Opens no named app, but every organisation gets the general ways in.
+- Agents get tools that act for one organisation, with the organisation taken from the run and never from the model.
+- The engine becomes an MCP client (open question 3), and `connections` and the vault hold every kind of connection.
+- Conexiones lists every kind; each connection shows its health, and a failing one becomes a decision for an owner to reconnect.
+- Register our developer apps on Meta, TikTok and Google now, in test mode, so phase 2 starts from a running app.
+- *Opens:* the forwarding address (Finanzas gets invoices and bank notices from day one), uploading a file, asking for a connector we lack.
+
+**Phase 1: the makers' open connectors.** No platform review, no cost per app.
+- Each connector goes through the four steps, step 2 being a test with an account that is not ours.
+- Holded and Factorial first, since they are the Spanish small company's tools; then the rest by demand.
+- *Opens:* Holded, Factorial, Stripe, Notion, Calendly, Wix, WordPress.com. Then, as organisations ask: PayPal, Airtable, Pipedrive, monday.com, Linear, Typeform, Webflow, Squarespace.
+
+**Phase 2: Órdago's social networks, ours.** The first kind-A connectors, and what Marketing needs.
+- Decide first: whose name the apps go in (open question 4), and own vault or Zernio (open question 1).
+- Build publishing (reels, carousels, video), stats and comments for Instagram and Facebook Pages on our Meta app, and publishing and stats for TikTok with the consent screen TikTok's audit checks (the account's name, avatar and privacy options shown before posting).
+- Órdago uses it first in Meta's test mode (`@ordago.app` given a role in our app), which retires the hand-made `ordago-meta-token`. TikTok without its audit only posts privately, so Órdago keeps its current way there until the audit passes.
+- Film each permission working, verify the business with Meta, send Meta's App Review and TikTok's audit.
+- *Opens:* Instagram, Facebook Pages, TikTok. Read-only ad stats (Meta Ads, TikTok Ads) can ride on the same apps afterwards.
+
+**Phase 3: Google and Microsoft, without the restricted scopes.** One verification each opens several apps.
+- Verify our Google OAuth client for sensitive scopes. It needs a home page and a privacy policy on ghostaff.ai, the same ones Google sign-in already waits for ([build-first-version.md](../ongoing/build-first-version.md)).
+- Run Google's official Analytics MCP server ourselves; fill in Google Business Profile's access form; verify as a Microsoft publisher.
+- *Opens:* Google Calendar, Google Drive, Docs and Sheets (only files the person picks), Search Console, Google Analytics, Google Business Profile, Microsoft 365 (Outlook, calendar, OneDrive).
+
+**Phase 4: when paying organisations ask.** Each has a cost or a heavy review, so it waits for demand that pays for it.
+- *Opens:* reading Gmail (CASA every year, 499–5,400 USD), bank movements (an aggregator, price on request), WhatsApp conversations (Meta Tech Provider), YouTube (quota audit), LinkedIn pages (needs the SL), and the rest of kind B-app as asked (HubSpot, Shopify, Dropbox, Asana, Zoom, Slack through its Marketplace, Canva, Intercom, Atlassian, Salesforce). X only if someone asks, at 0.20 USD a post with a link.
 
 ## The checklist
 
@@ -84,7 +107,7 @@ A line in the checklist is ticked only after step 4.
 
 ### Kind A — ours
 
-- [ ] Instagram (publish, stats, comments) — Meta review, needs the SL
+- [ ] Instagram (publish, stats, comments) — Meta's App Review and business verification
 - [ ] Facebook Pages — same Meta review
 - [ ] TikTok (publish, stats) — Content Posting API audit
 - [ ] Google Business Profile (reviews, posts) — access form
@@ -145,4 +168,4 @@ A line in the checklist is ticked only after step 4.
 1. **Own vault or Zernio for social networks** (the gate). If invariant 2 covers social tokens, only our own apps and vault meet it. If it does not, Zernio with our own app ids (`oauthAppId`, where the platform allows it) is cheaper and covers video publishing for us. Before deciding, ask Zernio in writing where tokens live.
 2. **Nango or our own refresh code.** Self-hosted Nango (Elastic License 2.0) brings what Nango learnt the hard way about refresh and rate limits; our own code avoids running another service. `[unknown: what the free self-hosted Nango leaves out, and whether ELv2 allows our use]`
 3. **How the engine gives a maker's MCP tools to an agent.** The engine calls Claude through the Messages API today, not the Agent SDK the product plan names. Either way the engine registers as an MCP client the way the MCP authorisation spec (2026-07-28) asks: our pre-registered client where the maker requires one, otherwise a client metadata document at a Ghostaff URL, dynamic registration only as a last resort (the spec now deprecates it); PKCE, the `resource` parameter on every token request, and tokens kept per organisation and server. `[unknown: whether the Messages API's MCP connector works on Vertex AI in the EU, or whether the engine must be the MCP client itself]`
-4. **When the SL is constituted.** Every kind-A review waits for it (LinkedIn by rule, Meta in practice), so it sets the date of step 3 of the order.
+4. **Whose name the platform apps are in.** Only LinkedIn requires a registered company. Meta verifies the business, and by consultants' accounts a registered autónomo passes `[unknown: which documents Meta accepts from an autónomo in Spain]`; TikTok asks for no legal form in what was read. So one of the founders as autónomo could hold the Meta and TikTok apps now, or we wait for the SL and skip moving them later. It is in the product plan's «Por decidir entre los dos».
