@@ -24,6 +24,7 @@ git clone git@github.com:ghostaff-ai/app.git ~/githubs/ghostaff-ai/app
 
 - `ghostaff-ai/agents` is today's agent engine (Claude Code on Cloud Run Jobs), moved here from `ordago-app` on 2026-11-15 with Jaime's OK. It still runs Órdago's agents (`proyectos/ordago/`) unchanged; whether this repo's engine replaces it or grows from it is Álvaro's call. Read it, don't copy from it blindly. Clone it beside this one: `git clone git@github.com:ghostaff-ai/agents.git ~/githubs/ghostaff-ai/agents`.
 - `cultuvilla/app` is the reference for an Expo app with the store release pipeline already working. Reuse its patterns.
+- **Apple and Expo access:** the iOS app is on Álvaro's Apple team `8HWS4483VD`, where Jaime is Admin with his own Apple ID; each founder signs into Apple and Expo as himself and makes his own API key, never a copied `.p8`. Who holds what: `ordago-app/ordago-apps/docs/ops/apple-developer-access.md`.
 
 Start a session in the repo the work belongs to, never in the parent folder.
 
