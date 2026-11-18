@@ -52,7 +52,7 @@ Jaime (2026-11-18): an organisation must be able to bring its provider subscript
 |---|---|---|---|
 | Ghostaff's own (default) | Works | Claude on Vertex AI in the EU, through the Agent SDK | Ghostaff's money |
 | The organisation's API key (Anthropic, OpenAI) or its own Vertex project | Built; not yet tried with a real key on the beta | The Agent SDK; the key comes from the vault | The organisation's money |
-| Claude subscription | Decided, grey zone, not built | Only the unmodified `claude` program, with the user signed in through Anthropic's flow; the Agent SDK is not allowed | The plan's usage limits, not money |
+| Claude subscription | Decided, grey zone, not built | Only the Claude Code CLI (`claude -p`), never the Agent SDK: the same way Órdago's agents already run on a subscription in `ghostaff-ai/agents` | The plan's usage limits, not money |
 | ChatGPT plan | On OpenAI's waitlist | The Responses API only; the Agent SDK cannot drive it | The plan's limits |
 | OpenRouter | Planned | One-click OAuth key, then like an API key | The organisation's money |
 
@@ -62,7 +62,7 @@ Jaime (2026-11-18): an organisation must be able to bring its provider subscript
 2. **`ModelPolicy` resolves a tier on that account.** `light` / `standard` / `deep` become the model that account offers: Vertex EU ids, Anthropic ids, or, on a subscription, the `--model` and per-subagent model Claude Code takes.
 3. **Interchangeable runners behind one interface:**
    - **Agent SDK runner** for Ghostaff's account, API keys and Vertex. Full control of model, effort and budget. This is the main path and the first to build.
-   - **Claude Code runner** for Claude subscriptions: the `claude` program in a job per organisation. Built when subscriptions are switched on, not before.
+   - **Claude Code CLI runner** for Claude subscriptions, always through the CLI (Jaime, 2026-11-18). It reuses what `ghostaff-ai/agents` already does for Órdago: a Cloud Run Job runs `claude -p` with `CLAUDE_CODE_OAUTH_TOKEN` (made with `claude setup-token`, kept in Secret Manager) and refuses to start if `ANTHROPIC_API_KEY` is set, since that would win and bill per token. The model per agent and subagent goes in as `--model` and the subagents' own settings. Built when subscriptions are switched on, not before. Keeping a customer's token between runs is the grey part [llm-connectors](../ongoing/llm-connectors.md) already names.
    - **A Responses API runner** for ChatGPT plans, only if the engine goes multi-provider (that decision is still the product plan's).
 4. **Agent definitions stay neutral.** Prompts, tools as MCP servers, and skills work the same in the Agent SDK and in Claude Code, so every runner reads one definition of each agent instead of one per provider.
 
