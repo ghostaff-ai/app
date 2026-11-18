@@ -297,15 +297,16 @@ describe('an organisation\'s tools', () => {
     expect(await toolsFor(t.deps, accessTokens(t.deps), OTHER)).toBe(NO_TOOLS);
   });
 
-  it('runs a tool with a fresh access token, refreshed only when it is about to expire', async () => {
+  it('uses the token from the connect while it lasts, then refreshes once per expiry', async () => {
     const t = await connected();
     const token = accessTokens(t.deps);
     const tools = await toolsFor(t.deps, token, ORG);
+    expect(await tools.run('google_calendar_list_events', {})).toEqual({ content: 'token:access-1', isError: false });
+    expect(t.calls.refreshed).toBe(0);
+    t.advance(3600_000);
     expect(await tools.run('google_calendar_list_events', {})).toEqual({ content: 'token:access-2', isError: false });
     expect(await tools.run('google_calendar_list_events', {})).toEqual({ content: 'token:access-2', isError: false });
     expect(t.calls.refreshed).toBe(1);
-    t.advance(3600_000);
-    expect(await tools.run('google_calendar_list_events', {})).toEqual({ content: 'token:access-3', isError: false });
   });
 
   it('tells the model a tool\'s own failure, an unknown tool, and a bad input', async () => {
@@ -319,6 +320,7 @@ describe('an organisation\'s tools', () => {
   it('when Google no longer honours the grant, marks the connection failing and says to reconnect', async () => {
     const t = await connected();
     t.goneOnRefresh();
+    t.advance(3600_000);
     const tools = await toolsFor(t.deps, accessTokens(t.deps), ORG);
     const out = await tools.run('google_calendar_list_events', {});
     expect(out.isError).toBe(true);
@@ -414,5 +416,38 @@ describe('a provider that cannot start a sign-in', () => {
     expect(res.status).toBe(502);
     expect(((await res.json()) as { error: string }).error).toBe('provider_unavailable');
     expect(t.attempts.size).toBe(0);
+  });
+});
+
+describe('a provider whose tokens live long', () => {
+  it('renews only inside its window, and keeps the renewed token', async () => {
+    let clock = new Date('2026-11-18T10:00:00Z');
+    const vault = new MemoryVault();
+    const day = 86_400_000;
+    await vault.put(accountSecretName(ORG, 'instagram'), JSON.stringify({ refreshToken: 'long-1', accessToken: 'long-1', expiresAt: clock.getTime() + 60 * day }), {});
+    let refreshed = 0;
+    const ig: OAuthProvider = {
+      id: 'instagram',
+      method: 'oauth',
+      usefulScopes: null,
+      refreshWithin: 7 * day,
+      begin: async () => ({ url: '', codeVerifier: '' }),
+      exchange: async () => ({ accessToken: '', expiresIn: 0, scopes: null }),
+      refresh: async () => {
+        refreshed += 1;
+        return { accessToken: 'long-2', refreshToken: 'long-2', expiresIn: 60 * 86_400 };
+      },
+      identity: async () => null,
+      revoke: async () => {},
+    };
+    const deps = { accounts: {} as AccountStore, vault, providers: { instagram: ig }, publicUrl: ENGINE, returnOrigins: [], tools: [], now: () => clock };
+    expect(await accessTokens(deps)(ORG, 'instagram')).toBe('long-1');
+    clock = new Date(clock.getTime() + 50 * day);
+    expect(await accessTokens(deps)(ORG, 'instagram')).toBe('long-1');
+    expect(refreshed).toBe(0);
+    clock = new Date(clock.getTime() + 4 * day);
+    expect(await accessTokens(deps)(ORG, 'instagram')).toBe('long-2');
+    expect(refreshed).toBe(1);
+    expect(JSON.parse((await vault.get(accountSecretName(ORG, 'instagram'))) ?? '{}').refreshToken).toBe('long-2');
   });
 });

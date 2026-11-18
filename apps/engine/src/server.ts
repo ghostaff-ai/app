@@ -12,6 +12,8 @@ import { supabaseStore } from './connections';
 import { CONNECTORS } from '@ghostaff/shared';
 import { googleOAuth, googleTools } from './google';
 import { googleBusinessTools } from './googleBusiness';
+import { instagramOAuth, instagramTools } from './instagram';
+import { tiktokOAuth, tiktokTools } from './tiktok';
 import { mcpOAuth } from './mcp';
 import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
@@ -42,6 +44,11 @@ if (process.env.VAULT === 'memory') {
 // the engine runs, and connecting Google answers «not configured».
 const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+// Instagram and TikTok: our own apps on each platform. Same rule: IDs public, secrets from Secret Manager or .env.
+const instagramAppId = process.env.INSTAGRAM_APP_ID;
+const instagramAppSecret = process.env.INSTAGRAM_APP_SECRET;
+const tiktokClientKey = process.env.TIKTOK_CLIENT_KEY;
+const tiktokClientSecret = process.env.TIKTOK_CLIENT_SECRET;
 const publicUrl = process.env.ENGINE_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8787}`;
 const accounts: AccountDeps = {
   accounts: supabaseAccountStore(admin),
@@ -57,12 +64,20 @@ const accounts: AccountDeps = {
           ),
         )
       : {}),
+    ...(instagramAppId && instagramAppSecret ? { instagram: instagramOAuth({ appId: instagramAppId, appSecret: instagramAppSecret }) } : {}),
+    ...(tiktokClientKey && tiktokClientSecret ? { tiktok: tiktokOAuth({ clientKey: tiktokClientKey, clientSecret: tiktokClientSecret }) } : {}),
   },
   publicUrl,
   returnOrigins: (process.env.APP_RETURN_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
-  tools: [...googleTools(), ...googleBusinessTools()],
+  tools: [...googleTools(), ...googleBusinessTools(), ...instagramTools(), ...tiktokTools()],
 };
-if (!accounts.providers.google) console.warn('Google connector off: set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET.');
+for (const [id, vars] of [
+  ['google', 'GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET'],
+  ['instagram', 'INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET'],
+  ['tiktok', 'TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET'],
+] as const) {
+  if (!accounts.providers[id]) console.warn(`${id} connector off: set ${vars}.`);
+}
 const tokenFor = accessTokens(accounts);
 
 const app = createApp({

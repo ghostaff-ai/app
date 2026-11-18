@@ -105,9 +105,9 @@ Ordered by what Jaime put first (2026-11-18): Google (calendar, spreadsheets, re
 
 ### Kind A — ours
 
-- [ ] Instagram (publish, stats, comments) — Meta's App Review and business verification
+- [~] Instagram (publish photos, reels and carousels; stats; read, answer and hide comments) — built (`apps/engine/src/instagram.ts`, Instagram API with Instagram Login: a professional account, no Facebook page). Waits for our Meta app; until Meta's App Review, only accounts with a role in the app connect
 - [ ] Facebook Pages — same Meta review
-- [ ] TikTok (publish, stats) — Content Posting API audit
+- [~] TikTok (upload videos, list videos and stats) — built (`apps/engine/src/tiktok.ts`, the engine uploads the file itself, so no domain to verify). Waits for our TikTok app; until TikTok's audit, posts can only be private
 - [~] Google Business Profile reviews (read and answer) — built as its own card on our Google OAuth client (`business.manage`, `apps/engine/src/googleBusiness.ts`); Google answers 403 until our access request for the Business Profile APIs is approved
 - [ ] WhatsApp Business conversations — Meta Tech Provider, 10 new customers a week until verified
 - [ ] Google Search Console — our Google OAuth client

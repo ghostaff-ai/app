@@ -3,9 +3,11 @@
 // the app shows, what the engine connects to and which providers exist; the
 // database checks only their shape.
 //
-// Two kinds. `google` is ours: our own OAuth client and our own tools.
-// `mcp` is the maker's: an official remote MCP server that lets any client
-// register itself, so its button and its tools come with no per-app code.
+// Three kinds. `google` and `own` are ours: our own app on the platform and our
+// own tools in the engine (`google` cards share one OAuth client and differ
+// only in scopes). `mcp` is the maker's: an official remote MCP server that
+// lets any client register itself, so its button and its tools come with no
+// per-app code.
 
 interface ConnectorBase {
   /** Lowercase id: the provider in `connections` and in the engine's routes. */
@@ -26,6 +28,11 @@ export interface GoogleConnector extends ConnectorBase {
   scopes: readonly string[];
 }
 
+/** Ours with its own code in the engine: our app on the platform, behind its review (Instagram, TikTok). */
+export interface OwnConnector extends ConnectorBase {
+  kind: 'own';
+}
+
 export interface McpConnector extends ConnectorBase {
   kind: 'mcp';
   /** The maker's official remote MCP server. */
@@ -39,7 +46,7 @@ export interface McpConnector extends ConnectorBase {
   dropScopes?: readonly string[];
 }
 
-export type Connector = GoogleConnector | McpConnector;
+export type Connector = GoogleConnector | OwnConnector | McpConnector;
 
 /** In the order Conexiones shows them: Jaime's priorities first (2026-11-18). */
 export const CONNECTORS = [
@@ -60,6 +67,22 @@ export const CONNECTORS = [
     title: 'Google: tus reseñas',
     reach: 'Tus agentes podrán leer las reseñas de tu ficha de Google y contestarlas.',
     before: 'Entra con la cuenta de Google que gestiona la ficha de tu negocio.',
+  },
+  {
+    id: 'instagram',
+    kind: 'own',
+    name: 'Instagram',
+    title: 'Instagram: publicaciones y comentarios',
+    reach:
+      'Tus agentes podrán ver tus publicaciones y sus estadísticas, contestar y ocultar comentarios, y publicar las fotos, reels y carruseles que hayas aprobado.',
+    before: 'Tu cuenta de Instagram tiene que ser profesional (de empresa o de creador).',
+  },
+  {
+    id: 'tiktok',
+    kind: 'own',
+    name: 'TikTok',
+    title: 'TikTok: vídeos y estadísticas',
+    reach: 'Tus agentes podrán ver tus vídeos y sus estadísticas, y subir los vídeos que hayas aprobado.',
   },
   {
     id: 'holded',

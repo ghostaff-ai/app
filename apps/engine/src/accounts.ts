@@ -72,6 +72,12 @@ export interface OAuthProvider {
   revoke(token: string): Promise<void>;
   /** The account's own tools (an MCP server lists them). Absent: the engine's tools for this provider, by scope. */
   tools?(accessToken: string): Promise<Tool[]>;
+  /**
+   * How long before its expiry an access token is renewed, in milliseconds.
+   * One minute unless the provider's tokens live long and refresh slowly
+   * (Instagram's last 60 days and refuse a refresh in their first day).
+   */
+  refreshWithin?: number;
 }
 
 export interface Attempt {
@@ -328,19 +334,25 @@ export function accessTokens(deps: AccountDeps) {
     const raw = await deps.vault.get(name);
     if (!p || !raw) throw new AccountGone(provider);
     const stored = JSON.parse(raw) as StoredGrant;
+    // The stored access token while it has life left: no call to the provider at all.
+    const margin = p.refreshWithin ?? 60_000;
+    if (stored.accessToken && stored.expiresAt && stored.expiresAt - margin > now()) {
+      cache.set(key, { token: stored.accessToken, until: stored.expiresAt - margin });
+      return stored.accessToken;
+    }
     if (!stored.refreshToken) {
-      // No refresh token: the access token is all there is, until it expires.
+      // No refresh token: the access token was all there was.
       if (stored.accessToken && (stored.expiresAt ?? 0) - 60_000 > now()) return stored.accessToken;
       throw new AccountGone(provider);
     }
     const fresh = await p.refresh(stored.refreshToken);
-    const until = now() + Math.max(0, fresh.expiresIn - 60) * 1000;
+    const expiresAt = now() + fresh.expiresIn * 1000;
     if (fresh.refreshToken && fresh.refreshToken !== stored.refreshToken) {
       // Rotated: the old one is dead now, so the new one is saved before anything else.
-      const next: StoredGrant = { refreshToken: fresh.refreshToken, accessToken: fresh.accessToken, expiresAt: until + 60_000 };
+      const next: StoredGrant = { refreshToken: fresh.refreshToken, accessToken: fresh.accessToken, expiresAt };
       await deps.vault.put(name, JSON.stringify(next), { org_id: orgId, provider, kind: 'account' });
     }
-    cache.set(key, { token: fresh.accessToken, until });
+    cache.set(key, { token: fresh.accessToken, until: expiresAt - Math.min(margin, (fresh.expiresIn * 1000) / 2) });
     return fresh.accessToken;
   };
 }

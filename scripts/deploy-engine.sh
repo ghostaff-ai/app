@@ -23,8 +23,13 @@ PUBLIC_URL=https://engine-664656500315.europe-west1.run.app
 # Google connector (docs/plans/ongoing/connectors.md): OAuth client «Ghostaff
 # Conectores» in this project. The ID is public; the secret is put in Secret
 # Manager by hand, never through a file or a chat.
-GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_ID="664656500315-q4c4jl16qgq43r046qiujnf7b3oncsd9.apps.googleusercontent.com"
 GOOGLE_SECRET=google-oauth-connectors-secret
+# Instagram and TikTok: our own apps on each platform, the same way. Empty until they exist.
+INSTAGRAM_APP_ID=""
+INSTAGRAM_SECRET=instagram-app-secret
+TIKTOK_CLIENT_KEY=""
+TIKTOK_SECRET=tiktok-client-secret
 
 echo "== APIs"
 gcloud services enable --project "$P" \
@@ -56,6 +61,18 @@ if [ -n "$GOOGLE_CLIENT_ID" ] && gcloud secrets describe "$GOOGLE_SECRET" --proj
   SECRETS="$SECRETS,GOOGLE_OAUTH_CLIENT_SECRET=$GOOGLE_SECRET:latest"
 else
   echo "== Google connector off: set GOOGLE_CLIENT_ID above and create the secret $GOOGLE_SECRET"
+fi
+if [ -n "$INSTAGRAM_APP_ID" ] && gcloud secrets describe "$INSTAGRAM_SECRET" --project "$P" >/dev/null 2>&1; then
+  ENV_VARS="$ENV_VARS,INSTAGRAM_APP_ID=$INSTAGRAM_APP_ID"
+  SECRETS="$SECRETS,INSTAGRAM_APP_SECRET=$INSTAGRAM_SECRET:latest"
+else
+  echo "== Instagram connector off: set INSTAGRAM_APP_ID above and create the secret $INSTAGRAM_SECRET"
+fi
+if [ -n "$TIKTOK_CLIENT_KEY" ] && gcloud secrets describe "$TIKTOK_SECRET" --project "$P" >/dev/null 2>&1; then
+  ENV_VARS="$ENV_VARS,TIKTOK_CLIENT_KEY=$TIKTOK_CLIENT_KEY"
+  SECRETS="$SECRETS,TIKTOK_CLIENT_SECRET=$TIKTOK_SECRET:latest"
+else
+  echo "== TikTok connector off: set TIKTOK_CLIENT_KEY above and create the secret $TIKTOK_SECRET"
 fi
 
 echo "== Build and push $IMAGE"
