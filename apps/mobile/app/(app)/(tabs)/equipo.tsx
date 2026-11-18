@@ -9,7 +9,7 @@ import { vacancies } from '@/lib/chat';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useThreads } from '@/lib/hooks/useChat';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
-import { TAB_SCREEN_TOP } from '@/lib/tabs';
+import { useTabScreenTop } from '@/lib/tabs';
 import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
 // The organisation's team: its three departments and the agents in each, drawn
@@ -22,6 +22,7 @@ type View_ = 'equipo' | 'conversaciones';
 
 export default function Equipo() {
   const { active } = useActiveOrg();
+  const top = useTabScreenTop();
   const orgId = active?.id ?? null;
   const { items, loading, error, reload } = useAgents(orgId);
   const { threads, reload: reloadThreads } = useThreads(orgId);
@@ -41,7 +42,7 @@ export default function Equipo() {
   const byId = Object.fromEntries(items.map((a) => [a.id, a]));
 
   return (
-    <ScrollView className="flex-1 bg-surface" contentContainerStyle={{ padding: 16, paddingBottom: 64, paddingTop: 16 + TAB_SCREEN_TOP }} contentInsetAdjustmentBehavior="automatic">
+    <ScrollView className="flex-1 bg-surface" contentContainerStyle={{ padding: 16, paddingBottom: 64, paddingTop: 16 + top }} contentInsetAdjustmentBehavior="automatic">
       <View className="mb-4 flex-row items-center justify-between">
         <Text className="font-display text-2xl text-ink">Equipo</Text>
         <MicButton />

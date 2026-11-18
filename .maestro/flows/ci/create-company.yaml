@@ -1,0 +1,57 @@
+appId: ${APP_ID}
+name: A new person creates a company and walks its three tabs
+---
+# The first thing anyone does after signing up: create their company, land on
+# Hoy, and open Equipo and Registro. Then a vacancy is filled, which opens the
+# agent's page (no engine runs in e2e, so no first thread).
+- evalScript: ${output.email = 'e2e-co-' + Date.now() + '@ghostaff.test'}
+- runFlow:
+    file: ../subflows/sign-in-email.yaml
+    env:
+      EMAIL: ${output.email}
+- extendedWaitUntil:
+    visible: "Te damos la bienvenida"
+    timeout: 30000
+- tapOn: "Nombre y apellido"
+- inputText: "Ana E2E"
+- hideKeyboard
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "¿Cómo quieres empezar?"
+    timeout: 30000
+- tapOn: "Crear una empresa"
+- extendedWaitUntil:
+    visible: "Por ejemplo, Panadería Ana"
+    timeout: 15000
+- tapOn: "Por ejemplo, Panadería Ana"
+- inputText: "Panadería E2E"
+- hideKeyboard
+- tapOn: "Crear empresa"
+# Hoy: the company's name on top, the greeting under it.
+- extendedWaitUntil:
+    visible: "Panadería E2E"
+    timeout: 30000
+- assertVisible: ".*(Buenos días|Buenas tardes|Buenas noches), Ana.*"
+- tapOn: "Equipo"
+- extendedWaitUntil:
+    visible: "Vacante · .*"
+    timeout: 20000
+- tapOn: "Vacante · .*"
+- extendedWaitUntil:
+    visible: "Que empiece"
+    timeout: 15000
+- tapOn: "Que empiece"
+- extendedWaitUntil:
+    visible: "Conversaciones"
+    timeout: 20000
+- back
+- tapOn: "Registro"
+- extendedWaitUntil:
+    visible: "Lo decidido, lo último primero."
+    timeout: 20000
+# A cold relaunch keeps the session and comes back to the company, not a crash.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Panadería E2E"
+    timeout: 60000

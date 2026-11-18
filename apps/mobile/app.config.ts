@@ -122,9 +122,27 @@ const config: ExpoConfig = {
     favicon: './assets/icon/favicon.png',
   },
   plugins: [
-    // A dev build talks to the local Supabase over plain http (the e2e build:
-    // scripts/e2e/android-build.sh); beta and prod only ever speak https.
-    ['expo-build-properties', { android: { usesCleartextTraffic: env === 'dev' } }],
+    // Release builds shrink the Java/Kotlin code with R8 (on by default since SDK
+    // 58), and R8 drops or renames what is only reached by reflection or JNI.
+    // expo-gl ships no keep rules, so the 3D ghost on Hoy crashed every Android
+    // release launch once an organisation existed (2026-11-17): first GLView's
+    // constructor (Expo builds each module's view from its (Context, AppContext)
+    // constructor), then the methods its C++ calls back by name. Kept: all of
+    // expo-gl, and that constructor on every module's view.
+    [
+      'expo-build-properties',
+      {
+        android: {
+          // A dev build talks to the local Supabase over plain http (the e2e
+          // build: scripts/e2e/android.sh); beta and prod only ever speak https.
+          usesCleartextTraffic: env === 'dev',
+          extraProguardRules: [
+            '-keep class expo.modules.gl.** { *; }',
+            '-keepclassmembers class * { <init>(android.content.Context, expo.modules.kotlin.AppContext); }',
+          ].join('\n'),
+        },
+      },
+    ],
     'expo-apple-authentication',
     ...(googleIosUrlScheme ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }] as [string, object]] : []),
     'expo-router',
@@ -141,6 +159,8 @@ const config: ExpoConfig = {
     supabaseAnonKey,
     engineUrl,
     google: { webClientId: googleWebClientId, iosClientId: googleIosClientId },
+    // The end-to-end tests' build (scripts/e2e/android.sh sets E2E=1).
+    e2e: process.env.E2E === '1',
   },
 };
 

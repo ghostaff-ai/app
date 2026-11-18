@@ -63,7 +63,8 @@ Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm engine
 - `main` is what is released.
 - Markdown-only changes (plans, this file) may be committed straight to `develop`.
 - **The main checkout (`~/githubs/ghostaff-ai/app`) stays on `develop`, pulled** (Álvaro, 2026-11-17). Every session works on its own branch in its own worktree (`git worktree add .claude/worktrees/<name> -b <branch> origin/develop`) and never switches the main checkout's branch: Metro serves whatever branch that folder is on, and Álvaro runs it from there. Keep branches short-lived: a draft that lives for hours hides its work and everyone else's from what he sees.
-- **What Álvaro looks at is the beta app on his phone, not Metro.** Every push to `develop` reaches it on its own: GitHub publishes the change over the air, or starts a new beta build when the native side changed (`.github/workflows/beta.yml`). Metro and the dev build are for agents while they build.
+- **What Álvaro looks at is the beta app on his phone, not Metro.** Every push to `develop` reaches it on its own once CI passes, end-to-end tests included: GitHub publishes the change over the air, or starts a new beta build when the native side changed (`.github/workflows/beta.yml`).
+- **A main flow has an end-to-end test** in `.maestro/flows/ci/` (Maestro on an Android emulator, a release build against the local Supabase; [.maestro/README.md](.maestro/README.md)). A screen that changes one updates its flow in the same PR; run `pnpm e2e` before opening it. Metro and the dev build are for agents while they build.
 
 ## Plans
 

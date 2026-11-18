@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react';
 import { PanResponder, View } from 'react-native';
+import { isE2E } from '@/lib/env';
 import type { GhostId } from '@/lib/team';
 import { GhostCanvas } from './GhostCanvas';
 import { GhostScene } from './GhostScene';
@@ -8,7 +9,10 @@ import type { SpinState } from './stage';
 // A ghost on screen, live: drag sideways to spin it, tap it to make it hop.
 // `active` pauses drawing (and the battery cost) when the screen is not shown;
 // `zoom` brings the camera closer (2: twice as big), for a small box; `halo`
-// draws the soft glow behind it.
+// draws the soft glow behind it. In the end-to-end tests' build it draws only
+// when something changes: the GL surface is still made (where a release build
+// once crashed), but an emulator without a GPU isn't kept busy at 60 frames a
+// second, which stalls the test driver's reading of the screen.
 
 const RADIANS_PER_PIXEL = 0.012;
 
@@ -54,7 +58,7 @@ export function GhostViewer({
 
   return (
     <View style={{ flex: 1 }}>
-      <GhostCanvas frameloop={active ? 'always' : 'never'} camera={{ position: [0, 0.15, 6.2 / zoom], fov: 40 }}>
+      <GhostCanvas frameloop={!active ? 'never' : isE2E ? 'demand' : 'always'} camera={{ position: [0, 0.15, 6.2 / zoom], fov: 40 }}>
         <GhostScene spin={spin} ghost={ghost} halo={halo} />
       </GhostCanvas>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} {...responder.panHandlers} />
