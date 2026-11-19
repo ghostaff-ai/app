@@ -7,6 +7,7 @@ import {
   allowedReturn,
   type Attempt,
   codeChallenge,
+  NotConfigured,
   type OAuthProvider,
   toolsFor,
 } from '../src/accounts';
@@ -421,6 +422,22 @@ describe('a provider that cannot start a sign-in', () => {
     const res = await t.start();
     expect(res.status).toBe(502);
     expect(((await res.json()) as { error: string }).error).toBe('provider_unavailable');
+    expect(t.attempts.size).toBe(0);
+  });
+
+  it('answers provider_not_configured when our own app with the maker is not set up yet', async () => {
+    const t = setup();
+    t.deps.providers = {
+      google: {
+        ...(t.deps.providers.google as OAuthProvider),
+        begin: async () => {
+          throw new NotConfigured('google');
+        },
+      },
+    };
+    const res = await t.start();
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { error: string }).error).toBe('provider_not_configured');
     expect(t.attempts.size).toBe(0);
   });
 });

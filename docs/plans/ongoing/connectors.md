@@ -154,7 +154,7 @@ Added 2026-11-19, same checks (discovery and open registration seen on each real
 - [~] Gamma (presentations), Fireflies, Granola, tl;dv (meeting notes)
 - [~] Zapier, Make — a door to thousands of apps more; each call spends the organisation's Zapier tasks or Make operations
 
-Checked on 2026-11-19 and not added: Asana, HubSpot, Box, Xero, DocuSign, Smartsheet and GitHub register no client (B-app); Canva, Figma, Intercom and Atlassian register one but keep an allow-list of clients or redirects; Shopify, Zoom, Zoho and Freshworks have no remote server at the obvious address; Sentry, Cloudflare, Vercel, Netlify, Supabase and Plaid are for developers, not our customers; Wise moves money and Apollo sends mail, both left until someone asks.
+Checked on 2026-11-19 and not added here: Asana, HubSpot, Xero, DocuSign, Zoom and Canva take only a registered app (now under B-app, below); Box, Smartsheet and GitHub likewise, not added (below); Figma, Intercom and Atlassian keep an allow-list of clients or redirects; Shopify, Zoho and Freshworks have no remote server at the obvious address; Sentry, Cloudflare, Vercel, Netlify, Supabase and Plaid are for developers, not our customers; Wise moves money and Apollo sends mail, both left until someone asks.
 
 ### Kind B-app — the maker's, our app registered first
 
@@ -164,18 +164,24 @@ Checked on 2026-11-19 and not added: Asana, HubSpot, Box, Xero, DocuSign, Smarts
 - [ ] Google Drive, reading — reading every file is a restricted scope, so only files the person picks (Google Picker)
 - [ ] Gmail, reading (invoices, notices) — restricted scope: CASA every year, 499–5,400 USD
 - [~] Google Analytics (GA4 reports: visits, where they come from, pages) — its own read-only card (`analytics.readonly`), our own tools rather than Google's server; Admin and Data APIs enabled 2026-11-19
-- [ ] Microsoft 365 (Outlook, calendar, OneDrive) — our Entra app, publisher verification
-- [ ] HubSpot — our MCP auth app
+- [~] Microsoft 365 (Outlook mail and drafts, calendar, OneDrive and Excel) — our own tools over Graph (Microsoft's Work IQ server needs a Copilot licence and an admin); scopes a person consents to alone, never `Mail.Send`; waits for our Entra app
+- [~] HubSpot — `mcp.hubspot.com` (beta); waits for our MCP connector app
 - [ ] Meta Ads — read only; our Meta app
 - [ ] Google Ads — read only; Google's official server, run by us
 - [ ] Shopify — `[unknown: whether its store-admin MCP takes clients other than Claude and ChatGPT]`
-- [ ] Asana — our MCP app
-- [ ] Zoom — our Zoom app
-- [ ] Slack — needs our app listed in Slack's Marketplace
-- [ ] Canva — allow-list and app verification
+- [~] Asana — `mcp.asana.com/v2/mcp`; waits for our «MCP app», distributed to any workspace
+- [~] Zoom — `mcp.zoom.us`; waits for our General app (until Zoom reviews it, only our own account, or ~10 beta users)
+- [~] Canva — Canva Connect's server (`api.canva.com/connect/v1/mcp`), which takes our own app with «Canva MCP» on; its redirects take `127.0.0.1`, not `localhost`
+- [~] Xero — `api.xero.com/mcp/v1`; our app needs Xero's Core developer plan or above for the remote server; no payments or bank writes asked
+- [~] DocuSign — `mcp.docusign.com`; our integration key, DocuSign's production allow-list form, and each customer's admin turning MCP on
+- [ ] Slack — its MCP server is for Marketplace apps only (10 active workspaces, then a review of up to 10 weeks)
 - [ ] Intercom — allow-listed redirect; has an EU server
-- [ ] Atlassian (Jira, Confluence) — each customer's admin can block us
-- [ ] Salesforce — our External Client App
+- [ ] Atlassian (Jira, Confluence) — Developer Console apps do not work with its server (ROVO-870); only open registration plus each customer's admin allowing us
+- [ ] Salesforce — External Client App, but the server's address is per customer (My Domain), and one app across customers' orgs is unverified
+- [ ] Box — the server takes credentials each customer's admin creates; our own app unverified
+- [ ] GitHub, Smartsheet — GitHub publishes no authorization metadata and its OAuth tokens never expire (the engine assumes they do); Smartsheet's own-app use is undocumented
+
+The B-app cards above that use a maker's server (`app: true` in the catalogue) and Microsoft read our app from the vault, `engine-app-<id>`, put there by `scripts/connector-app.sh`: no env var, no deploy. Until it is there the card answers «todavía no está disponible».
 
 ### Kind C — the general ways in
 
@@ -185,14 +191,22 @@ Checked on 2026-11-19 and not added: Asana, HubSpot, Box, Xero, DocuSign, Smarts
 
 ## Handoff
 
-State on 2026-11-19 (branch `feat/connectors-google`, not merged): 47 cards built and unit-tested, grouped by area in Conexiones with a search box (5 Google cards, Instagram, TikTok, 40 makers' MCP servers); none yet connected with a real account. What each still needs, in the order to do it:
+State on 2026-11-19 (branch `feat/connectors-google`, not merged): 54 cards built and unit-tested, grouped by area in Conexiones with a search box (5 Google cards, Microsoft 365, Instagram, TikTok, 46 makers' MCP servers, 6 of them through our own app); none yet connected with a real account. What each still needs, in the order to do it:
 
 1. **Try the local ones (Jaime, no one else needed).** With the branch's engine and Metro running locally, open Conexiones (simulator or http://localhost:8083) and press Conectar on each card you have an account for: Google (calendar and sheets) first, then Holded, Stripe, Notion, Calendly and the rest. Each one: sign in there and accept. Google needs the account listed as a test user in the Google Auth Platform (`ghostaff-prod`, Audience). Squarespace, SumUp and Zendesk cannot connect locally (they need the https engine; locally their card answers «todavía no está disponible»). The new Google cards (Search Console, Analytics, YouTube) ask for scopes not yet listed in the Google Auth Platform's Data access: they work for test users with Google's «unverified» warning; list them there before verification.
 2. **An AI account for the agents**, or the chat cannot use any of it: enable Claude in Vertex AI Model Garden in `ghostaff-prod` (accept Anthropic's terms there), or connect an Anthropic key in Conexiones.
 3. **Google reviews:** request access to the Business Profile APIs for project `ghostaff-prod` (Google's access form, linked from developers.google.com/my-business/content/prereqs). Until it is granted every review call answers 403.
 4. **Our Meta app (Instagram):** in Meta for Developers create an app «Ghostaff», use case «Manage messaging and content on Instagram», business login with Instagram. Redirect URI: `https://engine-664656500315.europe-west1.run.app/connections/oauth/instagram/callback` (Meta takes https only, so it is tried on beta). Add `@ordago.app` as an Instagram tester. Put the Instagram app ID in `scripts/deploy-engine.sh` and its secret in Secret Manager as `instagram-app-secret`.
 5. **Our TikTok app:** in TikTok for Developers create an app «Ghostaff» with Login Kit and Content Posting API (Direct Post), scopes `user.info.basic`, `user.info.stats`, `video.list`, `video.publish`, redirect URI `https://engine-664656500315.europe-west1.run.app/connections/oauth/tiktok/callback`. Client key in `scripts/deploy-engine.sh`, secret in Secret Manager as `tiktok-client-secret`.
-6. **Beta (Álvaro, who holds the Supabase login):** `supabase db push --remote` for `20261119000000_account_connections.sql`, then `bash scripts/deploy-engine.sh`. Only then merge the PR: merging first would show the new cards in the beta app against an engine that cannot connect them.
+6. **Our apps with the B-app makers.** In each portal, an app named «Ghostaff» with two redirect URIs, beta `https://engine-664656500315.europe-west1.run.app/connections/oauth/<id>/callback` and local `http://localhost:8787/connections/oauth/<id>/callback` (Canva: `http://127.0.0.1:8787/…`, and run the local engine with `ENGINE_PUBLIC_URL=http://127.0.0.1:8787`). Then `CLOUDSDK_ACTIVE_CONFIG_NAME=ghostaff-prod bash scripts/connector-app.sh <id> <client-id>` and paste the secret at its hidden prompt.
+   - `microsoft`: entra.microsoft.com, App registrations, «Accounts in any organizational directory and personal Microsoft accounts», Web platform; delegated Graph permissions `User.Read Mail.ReadWrite Calendars.ReadWrite Files.ReadWrite offline_access`; a client secret. Publisher verification (a Microsoft Partner Network ID) before customers see it as verified.
+   - `hubspot`: developers.hubspot.com, Development, MCP Connectors, «Create MCP connector».
+   - `asana`: app.asana.com/0/my-apps, Create new app, type «MCP app»; Manage distribution, «Any workspace».
+   - `zoom`: marketplace.zoom.us, Develop, Build app, General app, user-managed; the scopes the card lists (no delete).
+   - `canva`: canva.com/developers, an integration, «Outside Canva», turn on «Canva MCP»; the scopes the card lists.
+   - `xero`: developer.xero.com/app/manage, a Web app; the Core plan for the remote MCP server.
+   - `docusign`: developers.docusign.com, Apps and Keys, an integration key with a secret; then the go-live and MCP allow-list form.
+7. **Beta (whoever holds the Supabase login: Álvaro, and Jaime since 2026-11-19):** `npx supabase link --project-ref rggvcvnstbitbdptiwtk`, `npx supabase db push` for `20261119000000_account_connections.sql`, then `CLOUDSDK_ACTIVE_CONFIG_NAME=ghostaff-prod bash scripts/deploy-engine.sh` (Colima running). Only then merge the PR: merging first would show the new cards in the beta app against an engine that cannot connect them.
 
 ## Known gaps
 

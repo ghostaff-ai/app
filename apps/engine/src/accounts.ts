@@ -35,6 +35,14 @@ export class AccountGone extends Error {
   }
 }
 
+/** Our own app with this provider is not set up on this engine yet: the person sees «not available yet». */
+export class NotConfigured extends Error {
+  constructor(readonly provider: string) {
+    super(`${provider} has no client configured on this engine`);
+    this.name = 'NotConfigured';
+  }
+}
+
 /** The OAuth client a grant was issued to, when it is not one fixed client (an MCP server's registration). */
 export interface GrantClient {
   clientId: string;
@@ -214,6 +222,7 @@ export async function startAccountConnect(deps: AccountDeps, userId: string, pro
   try {
     begun = await p.begin({ state, redirectUri: callbackUrl(deps.publicUrl, p.id) });
   } catch (e) {
+    if (e instanceof NotConfigured) throw new Refusal(503, 'provider_not_configured', `${p.id} is not configured on this engine`);
     // The provider's sign-in could not be prepared: its server is down, or it will not take this engine as a client.
     console.error('account connect could not start', p.id, e instanceof Error ? e.message.slice(0, 200) : typeof e);
     throw new Refusal(502, 'provider_unavailable', `${p.id} could not start a sign-in`);

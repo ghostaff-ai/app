@@ -5,9 +5,9 @@
 //
 // Three kinds. `google` and `own` are ours: our own app on the platform and our
 // own tools in the engine (`google` cards share one OAuth client and differ
-// only in scopes). `mcp` is the maker's: an official remote MCP server that
-// lets any client register itself, so its button and its tools come with no
-// per-app code.
+// only in scopes). `mcp` is the maker's: an official remote MCP server, so its
+// button and its tools come with no per-app code. Most let any client register
+// itself; the rest (`app: true`) take our own app, registered once by hand.
 
 interface ConnectorBase {
   /** Lowercase id: the provider in `connections` and in the engine's routes. */
@@ -33,6 +33,7 @@ interface ConnectorBase {
 /** The groups of Conexiones, in the order it shows them. */
 export const CONNECTOR_AREAS = [
   'Google',
+  'Microsoft 365',
   'Redes sociales',
   'Facturas, cobros y banco',
   'Correo y marketing',
@@ -52,7 +53,7 @@ export interface GoogleConnector extends ConnectorBase {
   scopes: readonly string[];
 }
 
-/** Ours with its own code in the engine: our app on the platform, behind its review (Instagram, TikTok). */
+/** Ours with its own code in the engine: our app on the platform (Microsoft 365), behind its review where it has one (Instagram, TikTok). */
 export interface OwnConnector extends ConnectorBase {
   kind: 'own';
 }
@@ -68,6 +69,13 @@ export interface McpConnector extends ConnectorBase {
   scopes?: readonly string[];
   /** Scopes of the server's list we never ask for (admin rights, sending mail). */
   dropScopes?: readonly string[];
+  /**
+   * The maker lets no client register itself, so we registered our own app in
+   * its developer portal (kind B-app). Its client ID and secret sit in the
+   * engine's vault, put there with scripts/connector-app.sh; until they do, the
+   * card answers «not available yet».
+   */
+  app?: true;
 }
 
 export type Connector = GoogleConnector | OwnConnector | McpConnector;
@@ -122,6 +130,15 @@ export const CONNECTORS = [
     reach: 'Tus agentes podrán ver los vídeos de tu canal, sus visitas y los comentarios que reciben.',
   },
   {
+    id: 'microsoft',
+    area: 'Microsoft 365',
+    kind: 'own',
+    name: 'Microsoft 365',
+    title: 'Microsoft 365: Outlook, calendario y OneDrive',
+    reach:
+      'Tus agentes podrán leer tu correo de Outlook y dejarte respuestas en borradores, ver y crear eventos en tu calendario, y buscar archivos y leer y rellenar tus Excel de OneDrive. Nunca envían correos ni borran nada.',
+  },
+  {
     id: 'instagram',
     area: 'Redes sociales',
     kind: 'own',
@@ -159,6 +176,30 @@ export const CONNECTORS = [
     title: 'Holded: facturas y contabilidad',
     reach: 'Tus agentes podrán consultar y preparar facturas, presupuestos, contactos y gastos en tu Holded.',
     before: 'En Holded, activa la API de tu cuenta (Configuración, Desarrolladores).',
+  },
+  {
+    id: 'xero',
+    area: 'Facturas, cobros y banco',
+    kind: 'mcp',
+    app: true,
+    name: 'Xero',
+    url: 'https://api.xero.com/mcp/v1',
+    // Contacts and invoices, the rest read-only: no payments, bank transactions or journals written.
+    scopes: [
+      'offline_access',
+      'accounting.contacts',
+      'accounting.invoices',
+      'accounting.settings.read',
+      'accounting.banktransactions.read',
+      'accounting.payments.read',
+      'accounting.reports.profitandloss.read',
+      'accounting.reports.balancesheet.read',
+      'accounting.reports.trialbalance.read',
+      'accounting.reports.aged.read',
+      'accounting.manualjournals.read',
+    ],
+    title: 'Xero: contabilidad y facturas',
+    reach: 'Tus agentes podrán consultar tus cuentas e informes y preparar contactos y facturas en Xero. No registran pagos.',
   },
   {
     id: 'stripe',
@@ -304,6 +345,16 @@ export const CONNECTORS = [
     reach: 'Tus agentes podrán ver tus formularios y sus respuestas, y preparar formularios nuevos.',
   },
   {
+    id: 'hubspot',
+    area: 'Ventas y clientes',
+    kind: 'mcp',
+    app: true,
+    name: 'HubSpot',
+    url: 'https://mcp.hubspot.com',
+    title: 'HubSpot: clientes y ventas',
+    reach: 'Tus agentes podrán consultar y actualizar contactos, empresas, negocios, tickets y notas de tu HubSpot.',
+  },
+  {
     id: 'pipedrive',
     area: 'Ventas y clientes',
     kind: 'mcp',
@@ -389,6 +440,16 @@ export const CONNECTORS = [
     reach: 'Tus agentes podrán consultar, crear y actualizar tareas y proyectos de Linear.',
   },
   {
+    id: 'asana',
+    area: 'Equipo y tareas',
+    kind: 'mcp',
+    app: true,
+    name: 'Asana',
+    url: 'https://mcp.asana.com/v2/mcp',
+    title: 'Asana: proyectos y tareas',
+    reach: 'Tus agentes podrán consultar proyectos y crear, asignar y comentar tareas de tu Asana.',
+  },
+  {
     id: 'clickup',
     area: 'Equipo y tareas',
     kind: 'mcp',
@@ -464,6 +525,30 @@ export const CONNECTORS = [
     reach: 'Tus agentes podrán buscar, leer y guardar archivos en tu Dropbox. No comparten nada con nadie.',
   },
   {
+    id: 'canva',
+    area: 'Documentos y reuniones',
+    kind: 'mcp',
+    app: true,
+    name: 'Canva',
+    // Canva Connect's server, which takes our own app (the other one, mcp.canva.com, only its listed clients).
+    url: 'https://api.canva.com/connect/v1/mcp',
+    dropScopes: ['brandtemplate:content:write', 'help:answers:write'],
+    title: 'Canva: diseños',
+    reach: 'Tus agentes podrán buscar tus diseños, crear otros nuevos con tu marca, subir imágenes y comentar en tu Canva.',
+  },
+  {
+    id: 'docusign',
+    area: 'Documentos y reuniones',
+    kind: 'mcp',
+    app: true,
+    name: 'DocuSign',
+    url: 'https://mcp.docusign.com/mcp',
+    dropScopes: ['aow_manage', 'spring_write', 'cors'],
+    title: 'DocuSign: firmas',
+    reach: 'Tus agentes podrán ver tus acuerdos y el estado de cada firma, y preparar sobres para firmar. Enviarlos lo apruebas tú.',
+    before: 'Quien administre tu cuenta de DocuSign tiene que permitir el acceso de asistentes (MCP).',
+  },
+  {
     id: 'gamma',
     area: 'Documentos y reuniones',
     kind: 'mcp',
@@ -471,6 +556,25 @@ export const CONNECTORS = [
     url: 'https://mcp.gamma.app/mcp',
     title: 'Gamma: presentaciones',
     reach: 'Tus agentes podrán crear presentaciones, documentos y webs sencillas con Gamma.',
+  },
+  {
+    id: 'zoom',
+    area: 'Documentos y reuniones',
+    kind: 'mcp',
+    app: true,
+    name: 'Zoom',
+    url: 'https://mcp.zoom.us/mcp/zoom/streamable',
+    dropScopes: [
+      'meeting:delete:meeting',
+      'meeting:update:in_meeting_controls',
+      'docs:write:collaborator',
+      'docs:update:collaborator',
+      'docs:delete:collaborator',
+      'hub:write:content',
+      'workflow:write:definition',
+    ],
+    title: 'Zoom: reuniones y grabaciones',
+    reach: 'Tus agentes podrán buscar tus reuniones, leer sus resúmenes y transcripciones, y programar reuniones nuevas.',
   },
   {
     id: 'fireflies',

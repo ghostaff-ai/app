@@ -1,6 +1,7 @@
 import type { McpConnector } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
-import { AccountGone, codeChallenge } from '../src/accounts';
+import { AccountGone, codeChallenge, NotConfigured } from '../src/accounts';
+import { appSecretName } from '../src/apps';
 import { clientMetadataDocument, mcpClientSecretName, mcpOAuth, type McpSession, scopesFor, toolName } from '../src/mcp';
 import { ToolError } from '../src/tools';
 import { MemoryVault } from '../src/vault';
@@ -142,6 +143,43 @@ describe('connecting a maker\'s MCP server', () => {
     expect(scopesFor(connector, { resource: MCP, scopes_supported: ['a', 'admin'] }, as)).toBe('a');
     expect(scopesFor({ ...connector, scopes: ['mcp'] }, { resource: MCP, scopes_supported: ['a'] }, as)).toBe('mcp');
     expect(scopesFor(connector, undefined, as)).toBeUndefined();
+  });
+});
+
+describe('a maker that takes only our own app', () => {
+  const appConnector: McpConnector = { ...connector, app: true };
+  const withApp = async (value: string | null) => {
+    const vault = new MemoryVault();
+    if (value !== null) await vault.put(appSecretName('acme'), value, {});
+    const server = fakeServer({ authMethods: ['client_secret_post'] });
+    return { server, p: mcpOAuth(appConnector, { vault, publicUrl: 'http://localhost:8787', fetch: server.f }) };
+  };
+
+  it('signs in with the app from the vault and never registers', async () => {
+    const { server, p } = await withApp(JSON.stringify({ client_id: 'our-app', client_secret: 'app-secret' }));
+    const begun = await p.begin({ state: 's', redirectUri: '' });
+    expect(server.to('/register')).toHaveLength(0);
+    expect(new URL(begun.url).searchParams.get('client_id')).toBe('our-app');
+    expect(new URL(begun.url).searchParams.get('resource')).toBe(MCP);
+  });
+
+  it('keeps the app\'s secret out of the grant, and refreshes with the vault\'s', async () => {
+    const { server, p } = await withApp(JSON.stringify({ client_id: 'our-app', client_secret: 'app-secret' }));
+    const grant = await p.exchange({ code: 'c', codeVerifier: 'v'.repeat(43), redirectUri: '' });
+    expect(grant.client).toBeUndefined();
+    expect(new URLSearchParams(server.to('/token')[0]?.body).get('client_secret')).toBe('app-secret');
+    await p.refresh('refresh-1', grant.client);
+    const form = new URLSearchParams(server.to('/token')[1]?.body);
+    expect(form.get('client_id')).toBe('our-app');
+    expect(form.get('client_secret')).toBe('app-secret');
+  });
+
+  it('without the app in the vault, or with a broken one, it is not configured, before asking the maker anything', async () => {
+    for (const value of [null, 'not json', JSON.stringify({ client_secret: 'x' })]) {
+      const { server, p } = await withApp(value);
+      await expect(p.begin({ state: 's', redirectUri: '' })).rejects.toBeInstanceOf(NotConfigured);
+      expect(server.calls).toHaveLength(0);
+    }
   });
 });
 

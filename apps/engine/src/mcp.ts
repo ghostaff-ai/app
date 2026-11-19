@@ -9,6 +9,8 @@
 // - It identifies itself with a client metadata document at a Ghostaff URL when
 //   the server takes those and the engine is on https; otherwise it registers a
 //   client once per server (dynamic registration) and keeps it in the vault.
+//   A maker that takes neither gets our own app, registered by hand in its
+//   portal (`app: true`, see apps.ts).
 // - PKCE, and the `resource` parameter on every authorisation and token request,
 //   so a token is good for that server only.
 //
@@ -32,6 +34,7 @@ import type {
   OAuthProtectedResourceMetadata,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { AccountGone, callbackUrl, type GrantClient, type OAuthProvider, TOOL_CALL_TIMEOUT_MS, timedFetch } from './accounts';
+import { appClient } from './apps';
 import { clip, type Tool, type ToolInputSchema, ToolError } from './tools';
 import type { Vault } from './vault';
 
@@ -78,6 +81,7 @@ export function clientMetadataDocument(publicUrl: string, connectors: readonly {
 
 /** The vault's name for the client the engine registered with one server. */
 export const mcpClientSecretName = (provider: string) => `engine-mcp-client-${provider}`;
+
 
 async function connectOverHttp(url: string, accessToken: string, f?: typeof fetch): Promise<McpSession> {
   const client = new Client({ name: 'ghostaff', version: '1.0.0' });
@@ -147,10 +151,18 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
     return discovered;
   };
 
-  /** Our client with this server: a metadata-document URL, or one registered once and kept in the vault. */
+  /** Our own app with this maker, from the vault. Missing: the connector is not set up here yet. */
+  const ourApp = appClient(deps.vault, c.id, now);
+  const appInformation = async (): Promise<OAuthClientInformationMixed> => {
+    const a = await ourApp();
+    return { client_id: a.clientId, ...(a.clientSecret ? { client_secret: a.clientSecret } : {}) };
+  };
+
+  /** Our client with this server: our own app, a metadata-document URL, or one registered once and kept in the vault. */
   let registering: Promise<OAuthClientInformationMixed> | null = null;
   const clientFor = async (): Promise<OAuthClientInformationMixed> => {
-    const { as, metadata, scope } = await info();
+    if (c.app) return appInformation();
+    const { metadata } = await info();
     if (deps.publicUrl.startsWith('https://') && metadata.client_id_metadata_document_supported) {
       return { client_id: clientMetadataUrl(deps.publicUrl) };
     }
@@ -228,8 +240,9 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
     method: 'mcp',
     usefulScopes: null,
     async begin({ state }) {
-      const { as, metadata, resource, scope } = await info();
+      // Our app first: a connector not set up here should say so before any call to the maker.
       const clientInformation = await clientFor();
+      const { as, metadata, resource, scope } = await info();
       const { authorizationUrl, codeVerifier } = await startAuthorization(as, {
         metadata,
         clientInformation,
@@ -257,7 +270,8 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
         accessToken: tokens.access_token,
         expiresIn: tokens.expires_in ?? 3600,
         scopes: tokens.scope ? tokens.scope.split(' ').filter(Boolean) : null,
-        client: asClient(clientInformation),
+        // A registered client is kept with the grant; our own app is not, so its secret lives in one place and rotates there.
+        ...(c.app ? {} : { client: asClient(clientInformation) }),
       };
     },
     async refresh(refreshToken, client) {

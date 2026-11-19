@@ -17,6 +17,8 @@ import { googleInsightsTools } from './googleInsights';
 import { instagramOAuth, instagramTools } from './instagram';
 import { tiktokOAuth, tiktokTools } from './tiktok';
 import { mcpOAuth } from './mcp';
+import { appClient } from './apps';
+import { microsoftOAuth, microsoftTools } from './microsoft';
 import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
 
@@ -56,8 +58,9 @@ const accounts: AccountDeps = {
   accounts: supabaseAccountStore(admin),
   vault,
   providers: {
-    // The makers' MCP servers need nothing configured: the engine registers itself with each. A server
-    // that takes only a client metadata document needs the engine on https, so a local engine leaves it off.
+    // The makers' MCP servers need nothing configured: the engine registers itself with each, or uses our own
+    // app from the vault (`app: true`). A server that takes only a client metadata document needs the engine
+    // on https, so a local engine leaves it off.
     ...Object.fromEntries(
       CONNECTORS.flatMap((c) =>
         c.kind === 'mcp' && (!('httpsOnly' in c) || publicUrl.startsWith('https://')) ? [[c.id, mcpOAuth(c, { vault, publicUrl })]] : [],
@@ -71,12 +74,14 @@ const accounts: AccountDeps = {
           ),
         )
       : {}),
+    // Our Entra app, from the vault (scripts/connector-app.sh): until it is there, the card says «not available yet».
+    microsoft: microsoftOAuth(appClient(vault, 'microsoft')),
     ...(instagramAppId && instagramAppSecret ? { instagram: instagramOAuth({ appId: instagramAppId, appSecret: instagramAppSecret }) } : {}),
     ...(tiktokClientKey && tiktokClientSecret ? { tiktok: tiktokOAuth({ clientKey: tiktokClientKey, clientSecret: tiktokClientSecret }) } : {}),
   },
   publicUrl,
   returnOrigins: (process.env.APP_RETURN_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
-  tools: [...googleTools(), ...googleBusinessTools(), ...googleInsightsTools(), ...instagramTools(), ...tiktokTools()],
+  tools: [...googleTools(), ...googleBusinessTools(), ...googleInsightsTools(), ...microsoftTools(), ...instagramTools(), ...tiktokTools()],
 };
 for (const [id, vars] of [
   ['google', 'GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET'],
