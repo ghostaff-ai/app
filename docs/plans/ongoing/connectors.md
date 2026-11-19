@@ -1,8 +1,8 @@
 # Connectors: every outside account behind one button
 
 **Priority:** high — Jaime (2026-11-18): without connectors a non-technical person can use, the product is worthless; Álvaro (2026-11-14): connectors are a crucial part of the app
-**Gate:** blocked:Jaime connects real accounts locally (Handoff, step 1) (recheck 2026-11-20)
-**Next:** connect a real Google account locally, have an agent list and create a calendar event and a spreadsheet, then land `feat/connectors-google`
+**Gate:** none to land `feat/connectors-google` (Google connected for real on 2026-11-19, beta ready); the rest of the Handoff waits on Jaime's accounts and secrets
+**Next:** land `feat/connectors-google` once its end-to-end check is green; then #21 and #22 (each needs its migration pushed to beta first); an AI account to try an agent using a connected account
 
 ## Goal
 
@@ -192,6 +192,14 @@ The B-app cards above that use a maker's server (`app: true` in the catalogue) a
 ## Handoff
 
 State on 2026-11-19 (branch `feat/connectors-google`, not merged): 54 cards built and unit-tested, grouped by area in Conexiones with a search box (5 Google cards, Microsoft 365, Instagram, TikTok, 46 makers' MCP servers, 6 of them through our own app); none yet connected with a real account. What each still needs, in the order to do it:
+
+**Night of 2026-11-19 (Claude with Jaime's OK):**
+- **Step 1:** Google (calendar, sheets, docs) connected for real with ghostaff.ai@gmail.com from the local web app; the web's connect popup never finished until `maybeCompleteAuthSession` (fixed on the branch). Notion and Stripe reach their makers' sign-in (discovery and registration work); not connected, as Jaime's Chrome has no session there. Not yet tried: an agent using the connected account (no AI account locally; step 2).
+- **Step 6, apps created with ghostaff.ai@gmail.com** (client IDs are public; the secrets are in each portal, to be put in the vault by hand with `scripts/connector-app.sh`):
+  - `hubspot`: MCP connector «Ghostaff» in HubSpot's EU portal 149819111, client ID `9f8f1436-6f3f-440b-9fd4-fb48bbb038ee`, both redirect URIs. The EU portal authorises at `mcp-eu1.hubspot.com`, the catalogue points at `mcp.hubspot.com`: check which one the connect lands on.
+  - `asana`: MCP app «Ghostaff», client ID `1220721839539578`, both redirect URIs, distribution «any workspace». Press «Restablecer» on its secret before copying it: the one shown that night passed through a tool's output.
+  - Not created: TikTok (developer accounts take email and password only), Meta (needs a Facebook account), Microsoft (needs a Microsoft account), Zoom (asks a birth year at sign-up), Canva, Xero, DocuSign (phase 4 anyway). Google Business Profile's access form not sent: Ghostaff has no Business Profile to ask with.
+- **Step 7 was already done** by another session: the migration is on ghostaff-beta and the engine at the branch's commit is on Cloud Run.
 
 1. **Try the local ones (Jaime, no one else needed).** With the branch's engine and Metro running locally, open Conexiones (simulator or http://localhost:8083) and press Conectar on each card you have an account for: Google (calendar and sheets) first, then Holded, Stripe, Notion, Calendly and the rest. Each one: sign in there and accept. Google needs the account listed as a test user in the Google Auth Platform (`ghostaff-prod`, Audience). Squarespace, SumUp and Zendesk cannot connect locally (they need the https engine; locally their card answers «todavía no está disponible»). The new Google cards (Search Console, Analytics, YouTube) ask for scopes not yet listed in the Google Auth Platform's Data access: they work for test users with Google's «unverified» warning; list them there before verification.
 2. **An AI account for the agents**, or the chat cannot use any of it: enable Claude in Vertex AI Model Garden in `ghostaff-prod` (accept Anthropic's terms there), or connect an Anthropic key in Conexiones.
