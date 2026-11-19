@@ -55,17 +55,19 @@ describe('TikTok tools', () => {
     const video = new Uint8Array(1000);
     const { f, calls } = fakeFetch([
       { json: { data: { privacy_level_options: ['PUBLIC_TO_EVERYONE', 'SELF_ONLY'] }, error: { code: 'ok' } } },
-      { bytes: video },
       { json: { data: { publish_id: 'p1', upload_url: 'https://upload.tiktok.example/u' }, error: { code: 'ok' } } },
       { json: {} },
     ]);
-    const out = JSON.parse(await tool('tiktok_publish_video').run({ accessToken: 'tok', fetch: f }, { video: 'https://cdn.example/v.mp4', caption: 'Mus' }));
+    const pub = fakeFetch([{ bytes: video }]);
+    const out = JSON.parse(
+      await tool('tiktok_publish_video').run({ accessToken: 'tok', fetch: f, fetchPublic: pub.f }, { video: 'https://cdn.example/v.mp4', caption: 'Mus' }),
+    );
     expect(out).toEqual({ uploaded: true, publish_id: 'p1', privacy: 'PUBLIC_TO_EVERYONE' });
-    const init = JSON.parse(String(calls[2]?.body));
+    const init = JSON.parse(String(calls[1]?.body));
     expect(init.source_info).toEqual({ source: 'FILE_UPLOAD', video_size: 1000, chunk_size: 1000, total_chunk_count: 1 });
     expect(init.post_info).toMatchObject({ title: 'Mus', privacy_level: 'PUBLIC_TO_EVERYONE' });
-    expect(calls[3]).toMatchObject({ url: 'https://upload.tiktok.example/u', method: 'PUT' });
-    expect(calls[3]?.headers.get('content-range')).toBe('bytes 0-999/1000');
+    expect(calls[2]).toMatchObject({ url: 'https://upload.tiktok.example/u', method: 'PUT' });
+    expect(calls[2]?.headers.get('content-range')).toBe('bytes 0-999/1000');
     expect(calls[0]?.headers.get('authorization')).toBe('Bearer tok');
   });
 
@@ -73,6 +75,18 @@ describe('TikTok tools', () => {
     const { f, calls } = fakeFetch([{ json: { data: { privacy_level_options: ['SELF_ONLY'] }, error: { code: 'ok' } } }]);
     await expect(tool('tiktok_publish_video').run({ accessToken: 't', fetch: f }, { video: 'https://cdn.example/v.mp4' })).rejects.toThrow('solo deja publicar en privado');
     expect(calls).toHaveLength(1);
+  });
+
+  it('downloads the video only through the fetch that reaches public addresses alone', async () => {
+    const api = fakeFetch([
+      { json: { data: { privacy_level_options: ['PUBLIC_TO_EVERYONE'] }, error: { code: 'ok' } } },
+      { json: { data: { publish_id: 'p1', upload_url: 'https://upload.tiktok.example/u' }, error: { code: 'ok' } } },
+      { json: {} },
+    ]);
+    const pub = fakeFetch([{ bytes: new Uint8Array(10) }]);
+    await tool('tiktok_publish_video').run({ accessToken: 't', fetch: api.f, fetchPublic: pub.f }, { video: 'https://cdn.example/v.mp4' });
+    expect(pub.calls.map((c) => c.url)).toEqual(['https://cdn.example/v.mp4']);
+    expect(api.calls.map((c) => c.url)).not.toContain('https://cdn.example/v.mp4');
   });
 
   it('never fetches an internal or non-https address', () => {
@@ -85,11 +99,11 @@ describe('TikTok tools', () => {
   it('splits big videos into chunks as TikTok asks, and refuses oversized ones', async () => {
     expect(chunking(5 * 1024 * 1024)).toEqual({ chunkSize: 5 * 1024 * 1024, count: 1 });
     expect(chunking(100 * 1024 * 1024)).toEqual({ chunkSize: 10 * 1024 * 1024, count: 10 });
-    const { f } = fakeFetch([
-      { json: { data: { privacy_level_options: ['PUBLIC_TO_EVERYONE'] }, error: { code: 'ok' } } },
-      { bytes: new Uint8Array(1), headers: { 'content-length': String(MAX_VIDEO_BYTES + 1) } },
-    ]);
-    await expect(tool('tiktok_publish_video').run({ accessToken: 't', fetch: f }, { video: 'https://cdn.example/v.mp4' })).rejects.toThrow('demasiado grande');
+    const { f } = fakeFetch([{ json: { data: { privacy_level_options: ['PUBLIC_TO_EVERYONE'] }, error: { code: 'ok' } } }]);
+    const pub = fakeFetch([{ bytes: new Uint8Array(1), headers: { 'content-length': String(MAX_VIDEO_BYTES + 1) } }]);
+    await expect(tool('tiktok_publish_video').run({ accessToken: 't', fetch: f, fetchPublic: pub.f }, { video: 'https://cdn.example/v.mp4' })).rejects.toThrow(
+      'demasiado grande',
+    );
   });
 
   it('passes on TikTok\'s refusals in words', async () => {
