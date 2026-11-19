@@ -76,7 +76,8 @@ else
 fi
 
 echo "== Build and push $IMAGE"
-docker build -f apps/engine/Dockerfile -t "$IMAGE" .
+# Cloud Run runs amd64: built for it even on an Apple Silicon Mac (emulated, slower).
+docker build --platform linux/amd64 -f apps/engine/Dockerfile -t "$IMAGE" .
 gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin "https://$REGISTRY"
 docker push "$IMAGE"
 docker logout "https://$REGISTRY" >/dev/null # the token was only for this push
