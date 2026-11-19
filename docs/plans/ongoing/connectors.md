@@ -185,9 +185,9 @@ The B-app cards above that use a maker's server (`app: true` in the catalogue) a
 
 ### Kind C — the general ways in
 
-- [ ] Forwarding address per organisation
-- [ ] Upload a file (a bank export, a spreadsheet)
-- [ ] Ask for a connector we lack (and count the requests)
+- [ ] Forwarding address per organisation — to decide first: the domain (`<org>@in.ghostaff.ai`?) and an inbound mail service that keeps mail in the EU and calls the engine (Postmark's EU servers, Mailgun EU, or our own MX on Cloud Run); where attachments are stored (open question of the upload below)
+- [ ] Upload a file (a bank export, a spreadsheet) — to decide first: storage per organisation in the EU (Supabase Storage in Frankfurt with a bucket policy per `org_id`, or Cloud Storage in `europe-west1`), and how an agent reads it (a tool that lists and reads the organisation's files)
+- [~] Ask for a connector we lack (and count the requests) — step 3 on `feat/connector-requests` (2026-11-20): «Pedir X» when the search finds nothing and «¿Falta alguna?» at the end of the list, any member, once per organisation and app (`connector_requests`, `request_connector`). Count them with the service role: `select lower(name), count(*) from public.connector_requests group by 1 order by 2 desc`
 
 ## Handoff
 

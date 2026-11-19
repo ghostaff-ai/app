@@ -5,17 +5,22 @@ import {
   disconnectAi,
   finishAccountConnect,
   getEngineIdentity,
+  listConnectorRequests,
+  requestConnector,
   startAccountConnect,
+  type ConnectorRequest,
 } from '@ghostaff/shared/services';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import { AskForConnector } from '@/components/connections/AskForConnector';
 import { Button, Chips, ErrorText, Field } from '@/components/ui';
 import { accountErrorMessage, accountResultMessage, connectErrorMessage, connectorSections, PROVIDERS, REGION_NAMES } from '@/lib/connections';
 import { shortDate } from '@/lib/format';
 import { useConnections, useEngine } from '@/lib/hooks/useConnections';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { supabase } from '@/lib/supabase';
 
 // The organisation's connections. Its accounts on outside services (Google…),
 // connected by signing in there: the engine keeps the token in the vault and
@@ -35,6 +40,21 @@ export default function Connections() {
     () => connectorSections(new Set(items.filter((c) => c.kind === 'account').map((c) => c.provider)), search),
     [items, search],
   );
+  const orgId = active?.id ?? null;
+  const [asked, setAsked] = useState<ConnectorRequest[]>([]);
+  const loadAsked = useCallback(async () => {
+    if (!orgId) return;
+    // What was asked is a nicety: if it cannot be read, the screen goes on without it.
+    setAsked(await listConnectorRequests(supabase, orgId).catch(() => []));
+  }, [orgId]);
+  useEffect(() => {
+    void loadAsked();
+  }, [loadAsked]);
+  const ask = async (name: string) => {
+    if (!orgId) return;
+    await requestConnector(supabase, orgId, name);
+    await loadAsked();
+  };
   if (!active) return null;
   const isOwner = active.role === 'owner';
 
@@ -53,9 +73,7 @@ export default function Connections() {
         autoCapitalize="none"
         autoCorrect={false}
       />
-      {sections.length === 0 ? (
-        <Text className="mt-4 text-sm text-muted">Aún no tenemos esa. Escríbenos y la añadimos.</Text>
-      ) : null}
+      {sections.length === 0 ? <AskForConnector searched={search} asked={asked} onAsk={ask} /> : null}
       {sections.map((section) => (
         <View key={section.title}>
           <Text className="mt-6 text-sm font-semibold uppercase text-muted">{section.title}</Text>
@@ -71,6 +89,7 @@ export default function Connections() {
           ))}
         </View>
       ))}
+      {sections.length > 0 ? <AskForConnector searched="" asked={asked} onAsk={ask} /> : null}
 
       <Text className="mt-8 text-lg font-semibold text-ink">IA</Text>
       <Text className="mt-1 text-sm text-muted">
