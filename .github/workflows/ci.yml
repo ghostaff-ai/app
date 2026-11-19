@@ -91,6 +91,11 @@ jobs:
           rm -rf apps/mobile/android/app/build/intermediates apps/mobile/android/app/.cxx apps/mobile/android/build
           find node_modules/.pnpm -path '*/android/build' -type d -prune -exec rm -rf {} + 2>/dev/null || true
           df -h /
+          # The build's daemons stay alive holding gigabytes the emulator needs: a private
+          # repo's runner has about 7 GB, and running out kills the runner mid-boot.
+          (cd apps/mobile/android && ./gradlew --stop) || true
+          pkill -f KotlinCompileDaemon || true
+          free -m
 
       - name: Install Maestro
         run: |
