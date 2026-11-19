@@ -9,6 +9,7 @@ import {
   codeChallenge,
   NotConfigured,
   type OAuthProvider,
+  type RefreshLeases,
   toolsFor,
 } from '../src/accounts';
 import { createApp } from '../src/app';
@@ -370,6 +371,71 @@ describe('keeping a connection alive', () => {
     const deps = { accounts: {} as AccountStore, vault, providers: { notion: provider() }, publicUrl: ENGINE, returnOrigins: [], tools: [] };
     expect(await accessTokens(deps)(ORG, 'notion')).toBe('a-from-r0');
     expect(JSON.parse((await vault.get(accountSecretName(ORG, 'notion'))) ?? '{}').refreshToken).toBe('r0+');
+  });
+
+  describe('across engine instances', () => {
+    const NAME = accountSecretName(ORG, 'notion');
+    const fresh = (accessToken: string) => JSON.stringify({ refreshToken: 'r0+', accessToken, expiresAt: Date.now() + 3600_000 });
+
+    function leases(answers: boolean[]) {
+      const log: string[] = [];
+      const store: RefreshLeases = {
+        take: async (org, p, holder) => {
+          log.push(`take ${org}/${p} ${holder ? 'by-holder' : ''}`);
+          return answers.length > 1 ? (answers.shift() as boolean) : (answers[0] ?? false);
+        },
+        release: async (org, p) => {
+          log.push(`release ${org}/${p}`);
+        },
+      };
+      return { store, log };
+    }
+
+    it('takes the account lease before refreshing and gives it back once the new token is saved', async () => {
+      const vault = new MemoryVault();
+      await vault.put(NAME, JSON.stringify({ refreshToken: 'r0' }), {});
+      const l = leases([true]);
+      const saving = vault.put.bind(vault);
+      vault.put = async (...args: Parameters<MemoryVault['put']>) => {
+        l.log.push('save');
+        return saving(...args);
+      };
+      const p = provider({ refresh: async (r) => (l.log.push('refresh'), { accessToken: `a-from-${r}`, expiresIn: 3600, refreshToken: `${r}+` }) });
+      const deps = { accounts: {} as AccountStore, vault, providers: { notion: p }, publicUrl: ENGINE, returnOrigins: [], tools: [], leases: l.store };
+      expect(await accessTokens(deps)(ORG, 'notion')).toBe('a-from-r0');
+      expect(l.log).toEqual([`take ${ORG}/notion by-holder`, 'refresh', 'save', `release ${ORG}/notion`]);
+    });
+
+    it('while another instance holds the lease, waits for the token it saves and never refreshes', async () => {
+      const vault = new MemoryVault();
+      await vault.put(NAME, JSON.stringify({ refreshToken: 'r0' }), {});
+      let refreshed = 0;
+      const p = provider({ refresh: async () => (refreshed++, { accessToken: 'mine', expiresIn: 3600, refreshToken: 'r1' }) });
+      const sleep = async () => {
+        await vault.put(NAME, fresh('a-other'), {});
+      };
+      const deps = { accounts: {} as AccountStore, vault, providers: { notion: p }, publicUrl: ENGINE, returnOrigins: [], tools: [], leases: leases([false]).store, sleep };
+      expect(await accessTokens(deps)(ORG, 'notion')).toBe('a-other');
+      expect(refreshed).toBe(0);
+    });
+
+    it('when the holder goes away without saving, refreshes once the lease is free', async () => {
+      const vault = new MemoryVault();
+      await vault.put(NAME, JSON.stringify({ refreshToken: 'r0' }), {});
+      const l = leases([false, false, true]);
+      const deps = { accounts: {} as AccountStore, vault, providers: { notion: provider() }, publicUrl: ENGINE, returnOrigins: [], tools: [], leases: l.store, sleep: async () => {} };
+      expect(await accessTokens(deps)(ORG, 'notion')).toBe('a-from-r0');
+      expect(l.log.filter((x) => x.startsWith('release'))).toHaveLength(1);
+    });
+
+    it('gives up after waiting, without calling the account gone', async () => {
+      const vault = new MemoryVault();
+      await vault.put(NAME, JSON.stringify({ refreshToken: 'r0' }), {});
+      const deps = { accounts: {} as AccountStore, vault, providers: { notion: provider() }, publicUrl: ENGINE, returnOrigins: [], tools: [], leases: leases([false]).store, sleep: async () => {} };
+      const err = await accessTokens(deps)(ORG, 'notion').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect(err).not.toBeInstanceOf(AccountGone);
+    });
   });
 
   it('without a refresh token, the access token serves until it expires, then the account is gone', async () => {

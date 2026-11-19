@@ -48,7 +48,7 @@ select throws_ok(
   '42501', null, '... nor delete one');
 
 reset role;
-select is((select count(*) from public.connections), 2::bigint, 'both connections still there');
+select is((select count(*) from public.connections where org_id in ('10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002')), 2::bigint, 'both connections still there');
 
 select * from finish();
 rollback;

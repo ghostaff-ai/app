@@ -5,7 +5,7 @@
 import { serve } from '@hono/node-server';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleAuth } from 'google-auth-library';
-import { type AccountDeps, accessTokens, supabaseAccountStore, toolsFor } from './accounts';
+import { type AccountDeps, accessTokens, supabaseAccountStore, supabaseRefreshLeases, toolsFor } from './accounts';
 import { supabaseActionStore } from './actions';
 import { createApp } from './app';
 import { supabaseChatStore, writerFactory } from './chatStore';
@@ -56,6 +56,7 @@ const tiktokClientSecret = process.env.TIKTOK_CLIENT_SECRET;
 const publicUrl = process.env.ENGINE_PUBLIC_URL ?? `http://localhost:${process.env.PORT ?? 8787}`;
 const accounts: AccountDeps = {
   accounts: supabaseAccountStore(admin),
+  leases: supabaseRefreshLeases(admin),
   vault,
   providers: {
     // The makers' MCP servers need nothing configured: the engine registers itself with each, or uses our own
