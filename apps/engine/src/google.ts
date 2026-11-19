@@ -17,6 +17,9 @@ export const GOOGLE_SCOPES = {
   calendar: 'https://www.googleapis.com/auth/calendar.events',
   driveFile: 'https://www.googleapis.com/auth/drive.file',
   business: 'https://www.googleapis.com/auth/business.manage',
+  searchConsole: 'https://www.googleapis.com/auth/webmasters.readonly',
+  analytics: 'https://www.googleapis.com/auth/analytics.readonly',
+  youtube: 'https://www.googleapis.com/auth/youtube.readonly',
 } as const;
 
 const AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -278,6 +281,47 @@ export function googleTools(now: () => Date = () => new Date()): Tool[] {
           body: JSON.stringify({ values }),
         });
         return JSON.stringify({ created: true, title, rows: values.length, link: sheet.spreadsheetUrl });
+      },
+    },
+    {
+      name: 'google_docs_create',
+      description:
+        'Crea un documento de Google Docs en el Drive de la organización y devuelve su enlace. El contenido va en HTML sencillo ' +
+        '(h1, h2, p, b, i, ul, ol, li, table, a), que Google convierte en un documento con formato. ' +
+        'Es la forma de entregar un Word: desde el documento se descarga como .docx o PDF.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Nombre del archivo.' },
+          html: { type: 'string', description: 'El contenido, en HTML sencillo.' },
+        },
+        required: ['title', 'html'],
+      },
+      provider: 'google',
+      scope: GOOGLE_SCOPES.driveFile,
+      writes: true,
+      step: 'Creando el documento',
+      action: 'Crear un documento en Google Drive',
+      async run(ctx, input) {
+        const title = str(input.title, 200);
+        if (!title) throw new ToolError('Falta el nombre del documento.');
+        const html = typeof input.html === 'string' ? input.html : '';
+        if (!html.trim()) throw new ToolError('Falta el contenido del documento.');
+        if (html.length > 1_000_000) throw new ToolError('Demasiado largo: como mucho un millón de caracteres.');
+        // A multipart upload that Drive converts to a Google Doc; drive.file reaches only what we create.
+        const boundary = `ghostaff-${crypto.randomUUID()}`;
+        const body =
+          `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+          JSON.stringify({ name: title, mimeType: 'application/vnd.google-apps.document' }) +
+          `\r\n--${boundary}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n` +
+          `<html><head><meta charset="utf-8"></head><body>${html}</body></html>` +
+          `\r\n--${boundary}--`;
+        const doc = await google(ctx, 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
+          method: 'POST',
+          headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+          body,
+        });
+        return JSON.stringify({ created: true, title, link: doc.webViewLink });
       },
     },
   ];

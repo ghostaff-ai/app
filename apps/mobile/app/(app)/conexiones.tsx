@@ -1,4 +1,4 @@
-import { type AiProvider, type CatalogueConnector, CONNECTORS, type Connection, VERTEX_EU_REGIONS } from '@ghostaff/shared';
+import { type AiProvider, type CatalogueConnector, type Connection, VERTEX_EU_REGIONS } from '@ghostaff/shared';
 import {
   connectAi,
   disconnectAccount,
@@ -9,10 +9,10 @@ import {
 } from '@ghostaff/shared/services';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { Button, Chips, ErrorText, Field } from '@/components/ui';
-import { accountErrorMessage, accountResultMessage, connectErrorMessage, PROVIDERS, REGION_NAMES } from '@/lib/connections';
+import { accountErrorMessage, accountResultMessage, connectErrorMessage, connectorSections, PROVIDERS, REGION_NAMES } from '@/lib/connections';
 import { shortDate } from '@/lib/format';
 import { useConnections, useEngine } from '@/lib/hooks/useConnections';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -30,6 +30,11 @@ const regionFromLabel = (label: string | null) => VERTEX_EU_REGIONS.find((r) => 
 export default function Connections() {
   const { active } = useActiveOrg();
   const { items, reload } = useConnections(active?.id ?? null);
+  const [search, setSearch] = useState('');
+  const sections = useMemo(
+    () => connectorSections(new Set(items.filter((c) => c.kind === 'account').map((c) => c.provider)), search),
+    [items, search],
+  );
   if (!active) return null;
   const isOwner = active.role === 'owner';
 
@@ -40,15 +45,31 @@ export default function Connections() {
         Conecta las cuentas que ya usas para que tus agentes trabajen con ellas. Entras en tu cuenta y aceptas; nunca nos das tu contraseña.
         {isOwner ? '' : ' Solo quien es propietario de la empresa puede cambiarlas.'}
       </Text>
-      {(CONNECTORS as readonly CatalogueConnector[]).map((connector) => (
-        <AccountCard
-          key={connector.id}
-          orgId={active.id}
-          connector={connector}
-          connection={items.find((c) => c.kind === 'account' && c.provider === connector.id) ?? null}
-          canEdit={isOwner}
-          onChanged={reload}
-        />
+      <Field
+        label="Buscar"
+        placeholder="Instagram, facturas, citas…"
+        value={search}
+        onChangeText={setSearch}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      {sections.length === 0 ? (
+        <Text className="mt-4 text-sm text-muted">Aún no tenemos esa. Escríbenos y la añadimos.</Text>
+      ) : null}
+      {sections.map((section) => (
+        <View key={section.title}>
+          <Text className="mt-6 text-sm font-semibold uppercase text-muted">{section.title}</Text>
+          {section.connectors.map((connector) => (
+            <AccountCard
+              key={connector.id}
+              orgId={active.id}
+              connector={connector}
+              connection={items.find((c) => c.kind === 'account' && c.provider === connector.id) ?? null}
+              canEdit={isOwner}
+              onChanged={reload}
+            />
+          ))}
+        </View>
       ))}
 
       <Text className="mt-8 text-lg font-semibold text-ink">IA</Text>

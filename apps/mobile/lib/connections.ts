@@ -1,4 +1,4 @@
-import type { AccountConnectResult, AiProvider } from '@ghostaff/shared';
+import { type AccountConnectResult, type AiProvider, type CatalogueConnector, CONNECTOR_AREAS, CONNECTORS } from '@ghostaff/shared';
 import { EngineError } from '@ghostaff/shared/services';
 
 // What the connections screen says, in Spanish. One place, so the engine's
@@ -107,4 +107,31 @@ export function accountErrorMessage(e: unknown): string {
     default:
       return 'Algo ha fallado. Inténtalo de nuevo.';
   }
+}
+
+/** Lowercase, without accents, so «busqueda» finds «búsqueda». */
+const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+export interface ConnectorSection {
+  title: string;
+  connectors: CatalogueConnector[];
+}
+
+/**
+ * The account cards of Conexiones, in sections: the ones already connected
+ * first, then each area of the catalogue. A search keeps only the cards whose
+ * name, title or reach has every word typed.
+ */
+export function connectorSections(connected: ReadonlySet<string>, search = ''): ConnectorSection[] {
+  const words = fold(search).split(/\s+/).filter(Boolean);
+  const matches = (c: CatalogueConnector) => {
+    const text = fold(`${c.name} ${c.title} ${c.reach} ${c.area}`);
+    return words.every((w) => text.includes(w));
+  };
+  const all = (CONNECTORS as readonly CatalogueConnector[]).filter(matches);
+  const sections: ConnectorSection[] = [{ title: 'Conectadas', connectors: all.filter((c) => connected.has(c.id)) }];
+  for (const area of CONNECTOR_AREAS) {
+    sections.push({ title: area, connectors: all.filter((c) => c.area === area && !connected.has(c.id)) });
+  }
+  return sections.filter((s) => s.connectors.length > 0);
 }

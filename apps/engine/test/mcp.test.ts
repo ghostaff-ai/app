@@ -9,6 +9,7 @@ const MCP = 'https://mcp.example/mcp';
 const AS = 'https://auth.example';
 const connector: McpConnector = {
   id: 'acme',
+  area: 'Automatizaciones',
   kind: 'mcp',
   name: 'Acme',
   url: MCP,

@@ -1,7 +1,7 @@
 # Connectors: every outside account behind one button
 
 **Priority:** high — Jaime (2026-11-18): without connectors a non-technical person can use, the product is worthless; Álvaro (2026-11-14): connectors are a crucial part of the app
-**Gate:** blocked:Jaime creates the OAuth client «Ghostaff Conectores» in ghostaff-prod and puts its secret in Secret Manager (recheck 2026-11-19)
+**Gate:** blocked:Jaime connects real accounts locally (Handoff, step 1) (recheck 2026-11-20)
 **Next:** connect a real Google account locally, have an agent list and create a calendar event and a spreadsheet, then land `feat/connectors-google`
 
 ## Goal
@@ -110,8 +110,8 @@ Ordered by what Jaime put first (2026-11-18): Google (calendar, spreadsheets, re
 - [~] TikTok (upload videos, list videos and stats) — built (`apps/engine/src/tiktok.ts`, the engine uploads the file itself, so no domain to verify). Waits for our TikTok app; until TikTok's audit, posts can only be private
 - [~] Google Business Profile reviews (read and answer) — built as its own card on our Google OAuth client (`business.manage`, `apps/engine/src/googleBusiness.ts`); Google answers 403 until our access request for the Business Profile APIs is approved
 - [ ] WhatsApp Business conversations — Meta Tech Provider, 10 new customers a week until verified
-- [ ] Google Search Console — our Google OAuth client
-- [ ] YouTube — quota audit past 10,000 units a day
+- [~] Google Search Console (searches, clicks, position) — built as its own read-only card (`webmasters.readonly`, `apps/engine/src/googleInsights.ts`); API enabled in `ghostaff-prod` 2026-11-19
+- [~] YouTube (channel, videos and their numbers, comments; reading only) — same file, `youtube.readonly`; answering comments needs `youtube.force-ssl`, left out until asked. Quota audit past 10,000 units a day
 - [ ] LinkedIn pages — needs a registered company; a rejection kills the app
 - [ ] Bank movements (PSD2) — an aggregator, price on request
 - [ ] X — pay per use (0.20 USD a post with a link); only if someone asks
@@ -137,19 +137,38 @@ All built on `feat/connectors-google` through one generic MCP connector (`apps/e
 - [~] Squarespace — takes only a client metadata document, so it connects from an https engine (beta), never from localhost
 - [ ] TikTok Ads — read only, Marketing never pays for ads
 
+Added 2026-11-19, same checks (discovery and open registration seen on each real server, nothing registered):
+
+- [~] Buffer (schedule posts on Facebook, LinkedIn, X, Pinterest, Threads…) — the way to Facebook and LinkedIn without our own Meta or LinkedIn review
+- [~] Qonto (business bank: movements, client and supplier invoices, payment links) — asks for no transfer, card or bank-account scope
+- [~] Square (sales, payments, catalogue, appointments)
+- [~] SumUp (card payments) — client metadata document only: beta, never localhost
+- [~] Mailchimp — asks for no send, delete or account scope
+- [~] Brevo, MailerLite, Klaviyo (mail marketing)
+- [~] Semrush (SEO) — the organisation's plan must include API access
+- [~] Cal.com, Jotform, Tally (bookings and forms)
+- [~] Attio, Close (CRM; Close without its destructive scope)
+- [~] Zendesk (support) — client metadata document only: beta, never localhost
+- [~] ClickUp, Todoist, Miro
+- [~] Dropbox — moved from B-app: it now registers any client; asks for no sharing scope
+- [~] Gamma (presentations), Fireflies, Granola, tl;dv (meeting notes)
+- [~] Zapier, Make — a door to thousands of apps more; each call spends the organisation's Zapier tasks or Make operations
+
+Checked on 2026-11-19 and not added: Asana, HubSpot, Box, Xero, DocuSign, Smartsheet and GitHub register no client (B-app); Canva, Figma, Intercom and Atlassian register one but keep an allow-list of clients or redirects; Shopify, Zoom, Zoho and Freshworks have no remote server at the obvious address; Sentry, Cloudflare, Vercel, Netlify, Supabase and Plaid are for developers, not our customers; Wise moves money and Apollo sends mail, both left until someone asks.
+
 ### Kind B-app — the maker's, our app registered first
 
 - [~] Google Calendar (see and create events) — step 1: built, waiting for the OAuth client to try it with a real account
 - [~] Google Sheets (create a spreadsheet: the Excel) — step 1, same
-- [ ] Google Drive, Docs — same client; reading every file is a restricted scope, so only files the person picks
+- [~] Google Docs (create a document from HTML: the Word) — on the Google card, `drive.file`, no new consent
+- [ ] Google Drive, reading — reading every file is a restricted scope, so only files the person picks (Google Picker)
 - [ ] Gmail, reading (invoices, notices) — restricted scope: CASA every year, 499–5,400 USD
-- [ ] Google Analytics — Google's official server, run by us
+- [~] Google Analytics (GA4 reports: visits, where they come from, pages) — its own read-only card (`analytics.readonly`), our own tools rather than Google's server; Admin and Data APIs enabled 2026-11-19
 - [ ] Microsoft 365 (Outlook, calendar, OneDrive) — our Entra app, publisher verification
 - [ ] HubSpot — our MCP auth app
 - [ ] Meta Ads — read only; our Meta app
 - [ ] Google Ads — read only; Google's official server, run by us
 - [ ] Shopify — `[unknown: whether its store-admin MCP takes clients other than Claude and ChatGPT]`
-- [ ] Dropbox — our Dropbox app
 - [ ] Asana — our MCP app
 - [ ] Zoom — our Zoom app
 - [ ] Slack — needs our app listed in Slack's Marketplace
@@ -166,9 +185,9 @@ All built on `feat/connectors-google` through one generic MCP connector (`apps/e
 
 ## Handoff
 
-State on 2026-11-19 (branch `feat/connectors-google`, not merged): 18 connectors built and unit-tested (Google calendar and sheets, Google reviews, Instagram, TikTok, 15 makers' MCP servers); none yet connected with a real account. What each still needs, in the order to do it:
+State on 2026-11-19 (branch `feat/connectors-google`, not merged): 47 cards built and unit-tested, grouped by area in Conexiones with a search box (5 Google cards, Instagram, TikTok, 40 makers' MCP servers); none yet connected with a real account. What each still needs, in the order to do it:
 
-1. **Try the local ones (Jaime, no one else needed).** With the branch's engine and Metro running locally, open Conexiones (simulator or http://localhost:8083) and press Conectar on each card you have an account for: Google (calendar and sheets) first, then Holded, Stripe, Notion, Calendly and the rest. Each one: sign in there and accept. Google needs the account listed as a test user in the Google Auth Platform (`ghostaff-prod`, Audience). Squarespace cannot connect locally (it needs the https engine).
+1. **Try the local ones (Jaime, no one else needed).** With the branch's engine and Metro running locally, open Conexiones (simulator or http://localhost:8083) and press Conectar on each card you have an account for: Google (calendar and sheets) first, then Holded, Stripe, Notion, Calendly and the rest. Each one: sign in there and accept. Google needs the account listed as a test user in the Google Auth Platform (`ghostaff-prod`, Audience). Squarespace, SumUp and Zendesk cannot connect locally (they need the https engine; locally their card answers «todavía no está disponible»). The new Google cards (Search Console, Analytics, YouTube) ask for scopes not yet listed in the Google Auth Platform's Data access: they work for test users with Google's «unverified» warning; list them there before verification.
 2. **An AI account for the agents**, or the chat cannot use any of it: enable Claude in Vertex AI Model Garden in `ghostaff-prod` (accept Anthropic's terms there), or connect an Anthropic key in Conexiones.
 3. **Google reviews:** request access to the Business Profile APIs for project `ghostaff-prod` (Google's access form, linked from developers.google.com/my-business/content/prereqs). Until it is granted every review call answers 403.
 4. **Our Meta app (Instagram):** in Meta for Developers create an app «Ghostaff», use case «Manage messaging and content on Instagram», business login with Instagram. Redirect URI: `https://engine-664656500315.europe-west1.run.app/connections/oauth/instagram/callback` (Meta takes https only, so it is tried on beta). Add `@ordago.app` as an Instagram tester. Put the Instagram app ID in `scripts/deploy-engine.sh` and its secret in Secret Manager as `instagram-app-secret`.

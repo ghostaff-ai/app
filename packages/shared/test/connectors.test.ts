@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACCOUNT_PROVIDERS, CONNECTORS } from '../src/connectors';
+import { ACCOUNT_PROVIDERS, CONNECTOR_AREAS, CONNECTORS } from '../src/connectors';
 
 describe('the connector catalogue', () => {
   it('ids fit the database check and are unique', () => {
@@ -18,5 +18,11 @@ describe('the connector catalogue', () => {
 
   it('Google comes first: the order Conexiones shows is the order of priority', () => {
     expect(CONNECTORS[0]?.id).toBe('google');
+  });
+
+  it('every area has cards, and the catalogue is in area order', () => {
+    for (const area of CONNECTOR_AREAS) expect(CONNECTORS.some((c) => c.area === area)).toBe(true);
+    const order = CONNECTORS.map((c) => CONNECTOR_AREAS.indexOf(c.area));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 });

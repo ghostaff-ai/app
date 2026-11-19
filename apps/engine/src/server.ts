@@ -13,6 +13,7 @@ import { supabaseStore } from './connections';
 import { CONNECTORS } from '@ghostaff/shared';
 import { googleOAuth, googleTools } from './google';
 import { googleBusinessTools } from './googleBusiness';
+import { googleInsightsTools } from './googleInsights';
 import { instagramOAuth, instagramTools } from './instagram';
 import { tiktokOAuth, tiktokTools } from './tiktok';
 import { mcpOAuth } from './mcp';
@@ -55,8 +56,13 @@ const accounts: AccountDeps = {
   accounts: supabaseAccountStore(admin),
   vault,
   providers: {
-    // The makers' MCP servers need nothing configured: the engine registers itself with each.
-    ...Object.fromEntries(CONNECTORS.flatMap((c) => (c.kind === 'mcp' ? [[c.id, mcpOAuth(c, { vault, publicUrl })]] : []))),
+    // The makers' MCP servers need nothing configured: the engine registers itself with each. A server
+    // that takes only a client metadata document needs the engine on https, so a local engine leaves it off.
+    ...Object.fromEntries(
+      CONNECTORS.flatMap((c) =>
+        c.kind === 'mcp' && (!('httpsOnly' in c) || publicUrl.startsWith('https://')) ? [[c.id, mcpOAuth(c, { vault, publicUrl })]] : [],
+      ),
+    ),
     // Every Google card of the catalogue, through our one OAuth client.
     ...(googleClientId && googleClientSecret
       ? Object.fromEntries(
@@ -70,7 +76,7 @@ const accounts: AccountDeps = {
   },
   publicUrl,
   returnOrigins: (process.env.APP_RETURN_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
-  tools: [...googleTools(), ...googleBusinessTools(), ...instagramTools(), ...tiktokTools()],
+  tools: [...googleTools(), ...googleBusinessTools(), ...googleInsightsTools(), ...instagramTools(), ...tiktokTools()],
 };
 for (const [id, vars] of [
   ['google', 'GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET'],
