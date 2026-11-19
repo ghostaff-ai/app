@@ -2,6 +2,7 @@ import '../global.css';
 import { Rubik_500Medium, Rubik_600SemiBold, useFonts } from '@expo-google-fonts/rubik';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as WebBrowser from 'expo-web-browser';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Loading, Notice } from '@/components/ui';
@@ -11,6 +12,12 @@ import { ActiveOrgProvider } from '@/lib/org/ActiveOrgContext';
 import { ProfileProvider } from '@/lib/profile/ProfileContext';
 import { isConfigured } from '@/lib/supabase';
 import { colorVars, PALETTES, useScheme } from '@/lib/theme';
+
+// On the web, openAuthSessionAsync (Conexiones' «Conectar», the browser sign-in)
+// opens a popup that lands back on the app. This hands that address to the tab
+// that opened it and closes the popup; it must run when the module loads, before
+// the router redirects and drops the query. On a phone it does nothing.
+WebBrowser.maybeCompleteAuthSession();
 
 export default function RootLayout() {
   // Headings are Rubik; until it loads (or if it fails) nothing is drawn, so
