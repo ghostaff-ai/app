@@ -3,12 +3,14 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useMemo } from 'react';
 import { Image, Platform, Text, View } from 'react-native';
+import { decideAction } from '@ghostaff/shared/services';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
 import { Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { showAuthors } from '@/lib/chat';
 import { useAgents } from '@/lib/hooks/useAgents';
+import { useEngine } from '@/lib/hooks/useConnections';
 import { useMembers, useMyLevels, useThread } from '@/lib/hooks/useChat';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -28,6 +30,7 @@ export default function Conversacion() {
   const { members } = useMembers(orgId);
   const { levels } = useMyLevels(orgId);
   const headerHeight = useHeaderHeight();
+  const engine = useEngine();
 
   const me = session?.user.id;
   const agent = agents.find((a) => a.id === head?.agentId);
@@ -35,6 +38,15 @@ export default function Conversacion() {
   const authors = useMemo(() => showAuthors(messages), [messages]);
   const ghostOf = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a.ghost])), [agents]);
   const owner = members.find((m) => m.role === 'owner' && m.userId !== me)?.displayName ?? null;
+  const isOwner = active?.role === 'owner';
+  // The card updates itself when the engine rewrites the message.
+  const decide = useMemo(
+    () => async (actionId: string, decision: 'approve' | 'reject') => {
+      if (!engine) throw new Error('not signed in');
+      await decideAction(engine, actionId, decision);
+    },
+    [engine],
+  );
 
   if (head === undefined) return <Loading />;
   if (!head) return <Notice title="No encontramos esta conversación" body={error ?? 'Puede que ya no tengas acceso a este agente.'} />;
@@ -69,6 +81,8 @@ export default function Conversacion() {
               ghost={item.authorAgentId ? ghostOf[item.authorAgentId] : undefined}
               showAuthor={authors[index] ?? true}
               names={names}
+              canDecide={isOwner}
+              onDecide={decide}
             />
           )}
           estimatedItemSize={64}

@@ -63,7 +63,7 @@ select lives_ok(
   'an owner removes her own agent');
 
 reset role;
-select is((select count(*) from public.agents), 1::bigint, 'only the bakery''s agent is left');
+select is((select count(*) from public.agents where org_id in ('10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002')), 1::bigint, 'only the bakery''s agent is left');
 
 select * from finish();
 rollback;

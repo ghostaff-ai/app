@@ -1,4 +1,4 @@
-import type { AiProvider } from '@ghostaff/shared';
+import { type AccountConnectResult, type AiProvider, type CatalogueConnector, CONNECTOR_AREAS, CONNECTORS } from '@ghostaff/shared';
 import { EngineError } from '@ghostaff/shared/services';
 
 // What the connections screen says, in Spanish. One place, so the engine's
@@ -66,4 +66,72 @@ export function connectErrorMessage(e: unknown, provider: AiProvider): string {
     default:
       return 'Algo ha fallado. Inténtalo de nuevo.';
   }
+}
+
+// Outside accounts, connected by signing in there (docs/plans/ongoing/connectors.md).
+// Their titles and what they reach live in the catalogue (@ghostaff/shared, CONNECTORS).
+
+/** What the screen says when the person comes back from the provider's sign-in. */
+export function accountResultMessage(result: AccountConnectResult | string | null): { text: string; ok: boolean } {
+  switch (result) {
+    case 'ok':
+      return { text: 'Conectada. Ya puedes pedírselo a tus agentes en el chat.', ok: true };
+    case 'denied':
+      return { text: 'No has dado permiso, así que no hemos conectado nada.', ok: false };
+    case 'missing_scopes':
+      return { text: 'Hace falta marcar al menos el calendario o las hojas de cálculo en la pantalla de permisos. Vuelve a intentarlo.', ok: false };
+    case 'expired':
+      return { text: 'Ha pasado demasiado tiempo. Vuelve a intentarlo.', ok: false };
+    default:
+      return { text: 'No hemos podido conectarla. Vuelve a intentarlo.', ok: false };
+  }
+}
+
+export function accountErrorMessage(e: unknown): string {
+  const code = e instanceof EngineError ? e.code : 'failed';
+  switch (code) {
+    case 'provider_not_configured':
+      return 'Esta conexión todavía no está disponible.';
+    case 'provider_unavailable':
+      return 'Ahora mismo no podemos conectar con ese servicio. Inténtalo más tarde; si sigue, avísanos.';
+    case 'not_yours':
+    case 'not_found':
+      return 'Esa conexión la empezó otra persona o ya terminó. Pulsa Conectar para empezar de nuevo.';
+    case 'not_owner':
+      return 'Solo quien es propietario de la empresa puede cambiar las conexiones.';
+    case 'unauthorized':
+      return 'Tu sesión ha caducado. Sal y vuelve a entrar.';
+    case 'not_configured':
+    case 'unreachable':
+      return 'No hemos podido hablar con Ghostaff. Revisa tu conexión e inténtalo de nuevo.';
+    default:
+      return 'Algo ha fallado. Inténtalo de nuevo.';
+  }
+}
+
+/** Lowercase, without accents, so «busqueda» finds «búsqueda». */
+const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+export interface ConnectorSection {
+  title: string;
+  connectors: CatalogueConnector[];
+}
+
+/**
+ * The account cards of Conexiones, in sections: the ones already connected
+ * first, then each area of the catalogue. A search keeps only the cards whose
+ * name, title or reach has every word typed.
+ */
+export function connectorSections(connected: ReadonlySet<string>, search = ''): ConnectorSection[] {
+  const words = fold(search).split(/\s+/).filter(Boolean);
+  const matches = (c: CatalogueConnector) => {
+    const text = fold(`${c.name} ${c.title} ${c.reach} ${c.area}`);
+    return words.every((w) => text.includes(w));
+  };
+  const all = (CONNECTORS as readonly CatalogueConnector[]).filter(matches);
+  const sections: ConnectorSection[] = [{ title: 'Conectadas', connectors: all.filter((c) => connected.has(c.id)) }];
+  for (const area of CONNECTOR_AREAS) {
+    sections.push({ title: area, connectors: all.filter((c) => c.area === area && !connected.has(c.id)) });
+  }
+  return sections.filter((s) => s.connectors.length > 0);
 }

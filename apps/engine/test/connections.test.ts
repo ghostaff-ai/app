@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import type { Checks, ConnectionRecord, Membership, Store } from '../src/connections';
 import { checkAnthropicKey, checkVertexProject } from '../src/providers';
+import { NO_TOOLS } from '../src/tools';
 import { MemoryVault, secretName } from '../src/vault';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
@@ -37,7 +38,9 @@ function setup(checks: Partial<Checks> = {}) {
     userFromToken: async (t) => (t.startsWith('token-') ? t.slice(6) : null),
     serviceAccount: 'engine@ghostaff-prod.iam.gserviceaccount.com',
     now: () => new Date('2026-11-14T10:00:00Z'),
-    chat: { chat: {} as never, writerFor: async () => async () => {} },
+    chat: { chat: {} as never, writerFor: async () => async () => {}, toolsFor: async () => NO_TOOLS },
+    accounts: {} as never,
+    actions: {} as never,
   });
   const call = (user: string | null, method: string, path: string, body?: unknown) =>
     app.request(path, {
