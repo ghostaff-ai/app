@@ -5,6 +5,10 @@ import { EngineError } from '@ghostaff/shared/services';
 // refusal codes and the provider cards stay in step.
 
 export interface ProviderCopy {
+  /** Its row in Conexiones. */
+  name: string;
+  /** Under the name: where the data goes, in a few words. */
+  short: string;
   title: string;
   /** Where the organisation's data goes with this option (invariant 2: say it plainly). */
   dataNote: string;
@@ -15,22 +19,31 @@ export interface ProviderCopy {
 
 export const PROVIDERS: Record<AiProvider, ProviderCopy> = {
   anthropic: {
+    name: 'Claude con tu clave',
+    short: 'Anthropic, en Estados Unidos',
     title: 'Claude, con tu clave de Anthropic',
     dataNote: 'Lo que hagan los agentes pasa por Anthropic, en Estados Unidos. La factura de la IA llega a tu nombre.',
     keyHelp: 'Créala en console.anthropic.com, en API Keys. Empieza por sk-ant-.',
     keyPlaceholder: 'sk-ant-…',
   },
   openai: {
+    name: 'OpenAI con tu clave',
+    short: 'OpenAI, en Estados Unidos',
     title: 'OpenAI, con tu clave',
     dataNote: 'Lo que hagan los agentes pasa por OpenAI, en Estados Unidos. La factura de la IA llega a tu nombre.',
     keyHelp: 'Créala en platform.openai.com, en API keys. Empieza por sk-.',
     keyPlaceholder: 'sk-…',
   },
   vertex: {
+    name: 'Claude en tu Google Cloud',
+    short: 'En Europa, dentro de tu proyecto',
     title: 'Claude en tu Google Cloud, en Europa',
     dataNote: 'Los datos se quedan en la región europea que elijas, dentro de tu propio proyecto. La factura la pasa Google.',
   },
 };
+
+/** The AI accounts in the order Conexiones lists them: the one that keeps data in Europe first. */
+export const AI_ORDER: readonly AiProvider[] = ['vertex', 'anthropic', 'openai'];
 
 export const REGION_NAMES: Record<string, string> = {
   'europe-west1': 'Bélgica (europe-west1)',
@@ -134,4 +147,14 @@ export function connectorSections(connected: ReadonlySet<string>, search = ''): 
     sections.push({ title: area, connectors: all.filter((c) => c.area === area && !connected.has(c.id)) });
   }
   return sections.filter((s) => s.connectors.length > 0);
+}
+
+/**
+ * What a connector is for, in a few words, under its name in a list: its
+ * title without the name, «Google: tus reseñas» → «Tus reseñas».
+ */
+export function connectorWhat(c: Pick<CatalogueConnector, 'title'>): string {
+  const i = c.title.indexOf(': ');
+  const what = i < 0 ? c.title : c.title.slice(i + 2);
+  return what.charAt(0).toUpperCase() + what.slice(1);
 }

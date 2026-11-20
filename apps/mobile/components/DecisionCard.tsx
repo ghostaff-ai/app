@@ -14,31 +14,31 @@ export function DecisionCard({ decision, onPress }: { decision: Decision; onPres
       accessibilityRole="button"
       accessibilityLabel={decision.question}
       onPress={onPress}
-      className="mb-2 flex-row items-center rounded-2xl bg-card p-3"
+      className="mb-2.5 flex-row items-center rounded-2xl bg-card px-3.5 py-3.5 active:opacity-80"
     >
       <Image
         testID="agent-ghost"
         source={GHOSTS[ghostFor(decision.proposedBy)].picture}
-        style={{ width: 48, height: 48, marginRight: 12 }}
+        style={{ width: 48, height: 48, marginRight: 14 }}
         resizeMode="contain"
       />
       <View className="flex-1">
-        <Text className={`text-base leading-5 ${waiting ? 'font-semibold text-ink' : 'text-muted'}`} numberOfLines={3}>
+        <Text className={`text-base leading-[21px] ${waiting ? 'font-semibold text-ink' : 'text-muted'}`} numberOfLines={3}>
           {decision.question}
         </Text>
-        <View className="mt-1 flex-row flex-wrap items-center">
+        <View className="mt-1.5 flex-row flex-wrap items-center">
           {waiting ? <View testID="waiting-dot" className="mr-1.5 h-2 w-2 rounded-full bg-waiting" /> : null}
-          <Text className="text-sm text-muted">
+          <Text className="text-footnote text-muted">
             {agentLabel(decision.proposedBy)}
             {' · '}
           </Text>
           {due ? (
-            <Text className={`text-sm ${due.urgent ? 'font-semibold text-waiting' : 'text-muted'}`}>{due.text}</Text>
+            <Text className={`text-footnote ${due.urgent ? 'font-semibold text-waiting' : 'text-muted'}`}>{due.text}</Text>
           ) : (
-            <Text className="text-sm text-muted">{shortDate(decision.createdOn)}</Text>
+            <Text className="text-footnote text-muted">{shortDate(decision.createdOn)}</Text>
           )}
         </View>
-        {decision.answer ? <Text className="mt-1 text-sm text-muted">{answerLabel(decision.answer)}</Text> : null}
+        {decision.answer ? <Text className="mt-1 text-footnote text-muted">{answerLabel(decision.answer)}</Text> : null}
       </View>
     </Pressable>
   );
