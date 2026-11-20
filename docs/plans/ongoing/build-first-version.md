@@ -2,7 +2,7 @@
 
 **Priority:** high
 **Gate:** none
-**Next:** Jaime into the TestFlight group once he accepts the team invitation; then the sync on a schedule
+**Next:** the sync on a schedule (a Cloud Run Job in the engine's project, reading Órdago's record from GitHub and committing write-backs); Jaime joins the TestFlight group "Team (Expo)" once he accepts the Apple team invitation (invited 2026-11-13)
 
 Covers phases 1 to 3 of [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#por-fases). We need them for our own projects whether or not Ghostaff becomes a business.
 

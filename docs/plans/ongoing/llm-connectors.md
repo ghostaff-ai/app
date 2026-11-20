@@ -1,8 +1,8 @@
 # AI connectors: an organisation brings its own AI account
 
 **Priority:** high — Álvaro (2026-11-14): connectors are a crucial part of the app, and AI accounts come first
-**Gate:** none for API keys; OpenAI's acceptance for ChatGPT plans
-**Next:** Álvaro tries a real key on the beta; then a beta build
+**Gate:** blocked:Álvaro tries a real AI key (Anthropic, OpenAI or Google Cloud) in Conexiones on the beta (recheck 2026-11-27)
+**Next:** Álvaro tries a real key on the beta; then a beta build. Sign in with ChatGPT waits on OpenAI accepting us from the interest form
 
 ## Goal
 
