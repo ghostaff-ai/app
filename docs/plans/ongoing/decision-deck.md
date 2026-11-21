@@ -35,7 +35,7 @@ Round 1, first 6 cards: **he never swiped.** On all three swipe cards he pressed
 
 Cards 7–9 (Álvaro, 2026-11-21, in chat): keep testing swipe against buttons; keep measuring; and round 2 uses the research's rules. The skill now hides the pick on `stakes: high` cards until he has chosen, then lets him keep his or switch, and decks are seeded shuffled (agent-skills `807e8b1`).
 
-Round 2 ([deck](https://claude.ai/artifact/Nj1j5ogFDJcEogCZy9gtyb)): again **no swipe** (computer). Slower than round 1 (31 s against 10): real decisions take longer than confirmations. On the high-stakes card he chose our pick blind. He went against the pick once (Secretaría starts by herself) and used «Something else…» once, to ask a question rather than answer: a card should make room for «I need to know X first».
+Round 2 ([deck](https://claude.ai/artifact/Nj1j5ogFDJcEogCZy9gtyb)): again **no swipe** (computer). Slower than round 1 (31 s against 10): real decisions take longer than confirmations. On the high-stakes card he chose our pick blind. He went against the pick once (Secretaría starts by herself) and used «Something else…» once, to ask a question rather than answer: a card should make room for «I need to know X first». Every card now offers it by name (agent-skills `a393b99`); it records `choice: "question"`, and the agent answers it in the card's context for the next round.
 
 ## Open questions an experiment should answer
 
