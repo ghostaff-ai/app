@@ -33,7 +33,9 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
       return r?.runner === 'ordago_job' ? { project: r.job_project, region: r.job_region, name: r.job_name, identity: r.job_identity } : null;
     },
     async agentByIdentity(email) {
-      const r = check(await admin.from('agents').select(AGENT).eq('job_identity', email.toLowerCase()).maybeSingle());
+      const r = check(
+        await admin.from('agents').select(AGENT).eq('job_identity', email.toLowerCase()).eq('runner', 'ordago_job').maybeSingle(),
+      );
       return r ? toAgent(r) : null;
     },
     async startRun(x) {
@@ -62,12 +64,15 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
         : null;
     },
     async finishRun(id, p) {
-      check(
+      const rows = check(
         await admin
           .from('agent_runs')
           .update({ state: p.state, summary: p.summary?.slice(0, 20_000) ?? null, noteworthy: p.noteworthy, decisions_opened: p.decisionsOpened, finished_at: new Date().toISOString() })
-          .eq('id', id),
+          .eq('id', id)
+          .eq('state', 'running')
+          .select('id'),
       );
+      return (rows ?? []).length > 0;
     },
     async staleRuns(before) {
       const rows = check(
@@ -81,14 +86,20 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
       return rows.map((r) => ({ id: r.id, orgId: r.org_id, agentId: r.agent_id, origin: r.origin, state: r.state, threadId: r.thread_id, messageId: r.message_id }));
     },
     async noticesThread(agent) {
-      const found = check(
-        await admin.from('threads').select('id').eq('agent_id', agent.id).eq('title', NOTICES_TITLE).is('created_by', null).limit(1).maybeSingle(),
-      );
-      const id =
-        (found as { id: string } | null)?.id ??
-        (check(await admin.from('threads').insert({ org_id: agent.orgId, agent_id: agent.id, title: NOTICES_TITLE, created_by: null }).select('id').single()) as {
-          id: string;
-        }).id;
+      const find = async () =>
+        (check(await admin.from('threads').select('id').eq('agent_id', agent.id).eq('notices', true).maybeSingle()) as { id: string } | null)?.id;
+      let id = await find();
+      if (!id) {
+        const made = await admin
+          .from('threads')
+          .insert({ org_id: agent.orgId, agent_id: agent.id, title: NOTICES_TITLE, created_by: null, notices: true })
+          .select('id')
+          .single();
+        // 23505: another report made it at the same moment (one «Avisos» per agent, an index says so).
+        if (made.error && (made.error as { code?: string }).code !== '23505') throw made.error;
+        id = (made.data as { id: string } | null)?.id ?? (await find());
+      }
+      if (!id) throw new Error('no notices thread');
       return { id, orgId: agent.orgId, agentId: agent.id, title: NOTICES_TITLE };
     },
     async postAgentMessage(thread, agent, text) {

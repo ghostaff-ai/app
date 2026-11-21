@@ -29,7 +29,7 @@
 1. **Record connector and the sync on a schedule.** Organisation fields, the GitHub App (a script that creates it from a manifest and puts its key straight into Secret Manager), `/cron`, Cloud Scheduler.
 2. **The twelve agents in Equipo**, five departments, runner fields; `org add-agents` imports them from `proyectos/ordago/agentes/`. Writing to one starts its job; the reply comes back to the thread. In `ghostaff-ai/agents`: the arranque reports to the engine, the engine's service account goes in `lanzan`.
 3. **Reports, «Avisos» and «Hecho sin ti».** Then Telegram off.
-4. **Claude subscription in Conexiones.** Then ChatGPT if allowed.
+4. **Claude subscription in Conexiones.** ChatGPT is not built (2026-11-21): OpenAI lets a person use Codex with their own plan, but a hosted service running it for others needs OpenAI's approval through the «Sign in with ChatGPT» waitlist. Revisit once OpenAI approves Ghostaff ([OpenAI help](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan), [Codex discussion](https://github.com/openai/codex/discussions/8338)).
 5. **Legal moves**: our runner, its timetable and task in its agent row, run on Órdago's subscription, the old job deleted.
 6. **Ghostaff's own record store** with organisation Ghostaff in it; then the rest move one at a time, and Órdago's master flips last.
 
@@ -43,7 +43,7 @@
 
 - [x] Step 1, built (#25): `organizations.record_repo`/`record_installation`, `apps/engine/src/githubApp.ts`, `recordSync.ts`, `POST /cron`, Cloud Scheduler `tick` in `scripts/deploy-engine.sh`, `scripts/github-app-registro.mjs`. Waits on the App and a deploy.
 - [x] Step 2, built: five departments and runner fields (`20261121100000_agent_runners.sql`), `org add-agents`, `apps/engine/src/jobs.ts` (a message starts the job; `POST /runs/report` answers in the thread). In `ghostaff-ai/agents`: `arranque/ghostaff.py`, the engine in `lanzan`. Waits on both deploys.
-- [ ] Step 3: reports, «Avisos» and «Hecho sin ti» built with step 2 (`agent_runs`, a run that dies without reporting closed after three hours on the tick); Telegram off once checked on the beta.
+- [ ] Step 3: reports, «Avisos» and «Hecho sin ti» built with step 2 (`agent_runs`, a run that dies without reporting closed after eight hours on the tick); Telegram off once checked on the beta.
 - [ ] Step 4
 - [ ] Step 5
 - [ ] Step 6

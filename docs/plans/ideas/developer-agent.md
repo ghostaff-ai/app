@@ -1,10 +1,16 @@
 # A developer agent: Desarrollo
 
 **Priority:** medium — Ghostaff's own agents build Ghostaff, and today they run outside the platform
-**Gate:** decision:Álvaro on the open questions below; a ghost of its own (Álvaro's picture → Tripo, the pipeline in gamification.md)
-**Next:** Álvaro answers the open questions and draws the ghost; then a plan for its first job on Ghostaff's own repo
+**Gate:** none — the ghost of its own (Álvaro's picture → Tripo, the pipeline in gamification.md) is still his, but does not hold up the build
+**Next:** an agent writes the plan for its first job on Ghostaff's own repo, on Álvaro's Ghostaff Premium seat, and promotes this file to ready/
 
-Álvaro's idea (2026-11-20): add a developer agent to the team. Written down loosely; nothing here is decided.
+Álvaro's idea (2026-11-20): add a developer agent to the team.
+
+**Decided — Álvaro, 2026-11-21: the four proposals below, as written.** A fourth department,
+«Tecnología»; organisation Ghostaff first, on this repo; it opens pull requests alone and merges
+only on a «sí» in Hoy; it grows from `ghostaff-ai/agents`. It is also how Álvaro's Ghostaff
+Premium seat gets used while he is away (workspace plan `spend-claude-credits`, decision 4), so it
+runs on that seat's subscription.
 
 ## Why
 
@@ -18,7 +24,7 @@ For customers, the same agent looks after what a small organisation has in code:
 - **Runs on Claude Code**, as `ghostaff-ai/agents` already does on Cloud Run Jobs, with the organisation's own AI account where it has one (llm-connectors.md).
 - **Works through GitHub:** a connector to the organisation's repos; it opens pull requests, and merging or publishing is a decision in Hoy unless the owner lets it merge on green checks.
 
-## Open questions (with a proposed answer)
+## The questions, and the answers taken
 
 1. **Its department.** Today there are three (Dirección, Finanzas, Marketing; a check in `supabase/migrations/20261117000000_agents.sql`). Proposed: a fourth, «Tecnología», rather than putting it under Dirección.
 2. **Who gets it first.** Proposed: only organisation Ghostaff, on this repo, until it works for us; then the website job for customers.

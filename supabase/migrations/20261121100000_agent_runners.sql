@@ -68,3 +68,8 @@ create policy "members read the runs of agents they may see"
   using (public.is_member(org_id) and public.agent_level(agent_id) <> 'none');
 
 revoke insert, update, delete, truncate on public.agent_runs from anon, authenticated;
+
+-- The agent's «Avisos» thread: where what it did on its own and has to tell
+-- people lands. One per agent; the engine creates it with the first notice.
+alter table public.threads add column notices boolean not null default false;
+create unique index threads_one_notices_per_agent on public.threads (agent_id) where notices;
