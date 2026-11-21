@@ -10,8 +10,9 @@ import { vacancies } from '@/lib/chat';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useThreads } from '@/lib/hooks/useChat';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useTabScreenTop } from '@/lib/tabs';
-import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
+import { CORE_DEPARTMENTS, DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
 // The organisation's team: its three departments and the agents in each, drawn
 // as their ghosts, an orange dot on an agent with a message you haven't read.
@@ -24,6 +25,7 @@ type View_ = 'equipo' | 'conversaciones';
 export default function Equipo() {
   const { active } = useActiveOrg();
   const top = useTabScreenTop();
+  const desktop = useIsDesktop();
   const orgId = active?.id ?? null;
   const { items, loading, error, reload } = useAgents(orgId);
   const { threads, reload: reloadThreads } = useThreads(orgId);
@@ -43,8 +45,20 @@ export default function Equipo() {
   const byId = Object.fromEntries(items.map((a) => [a.id, a]));
 
   return (
-    <ScrollView className="flex-1 bg-surface" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 64, paddingTop: 12 + top }} contentInsetAdjustmentBehavior="automatic">
-      <ScreenTitle right={<MicButton />}>Equipo</ScreenTitle>
+    <ScrollView
+      className="flex-1 bg-surface"
+      contentContainerStyle={{
+        paddingHorizontal: desktop ? 40 : 20,
+        paddingBottom: 64,
+        paddingTop: (desktop ? 40 : 12) + top,
+        maxWidth: DESKTOP_CONTENT_MAX_WIDTH,
+        width: '100%',
+        alignSelf: 'center',
+      }}
+      contentInsetAdjustmentBehavior="automatic"
+    >
+      {/* On a desktop the mic is in the sidebar. */}
+      <ScreenTitle right={desktop ? undefined : <MicButton />}>Equipo</ScreenTitle>
       <View className="mt-2">
         <Segmented
           label="Ver"
@@ -73,6 +87,7 @@ export default function Equipo() {
           {DEPARTMENTS.map((d) => {
             const agents = items.filter((a) => a.department === d);
             const jobs = owner ? open.filter((g) => GHOSTS[g].department === d) : [];
+            if (agents.length === 0 && jobs.length === 0 && !CORE_DEPARTMENTS.includes(d)) return null;
             return (
               <ListSection key={d} header={DEPARTMENT_NAMES[d]}>
                 {agents.length === 0 && jobs.length === 0 ? <ListRow title="Nadie todavía" subtitle="Quien es propietario de la empresa incorpora a sus agentes." /> : null}
@@ -82,7 +97,7 @@ export default function Equipo() {
                     accessibilityLabel={`${a.name}${unreadBy.has(a.id) ? ', mensajes sin leer' : ''}`}
                     leading={<Image source={GHOSTS[a.ghost].picture} style={{ width: 52, height: 52 }} resizeMode="contain" />}
                     title={a.name}
-                    subtitle={GHOSTS[a.ghost].job}
+                    subtitle={a.description ?? GHOSTS[a.ghost].job}
                     trailing={unreadBy.has(a.id) ? <View testID="agent-unread" className="h-2.5 w-2.5 rounded-full bg-waiting" /> : undefined}
                     chevron
                     onPress={() => router.push(`/agente/${a.id}`)}

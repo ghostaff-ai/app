@@ -10,6 +10,7 @@ import { supabaseActionStore } from './actions';
 import { createApp } from './app';
 import { supabaseChatStore, writerFactory } from './chatStore';
 import { supabaseStore } from './connections';
+import { spawnSetupToken } from './claudeCode';
 import { CONNECTORS } from '@ghostaff/shared';
 import { googleOAuth, googleTools } from './google';
 import { googleBusinessTools } from './googleBusiness';
@@ -21,6 +22,14 @@ import { appClient } from './apps';
 import { microsoftOAuth, microsoftTools } from './microsoft';
 import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
+import { freshRepoToken, repoTokens } from './githubApp';
+import { googleCaller } from './googleCaller';
+import { supabaseRecordStore } from './recordStore';
+import { syncAll, syncOrg } from './recordSync';
+import { expireRuns } from './jobs';
+import type { ChatDeps } from './chat';
+import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
+import { type RunnerDeps, startScheduled } from './runner';
 
 function required(name: string): string {
   const v = process.env[name];
@@ -92,6 +101,57 @@ for (const [id, vars] of [
 }
 const tokenFor = accessTokens(accounts);
 
+// The record connector: our GitHub App «Ghostaff Registro» (scripts/github-app-registro.mjs). Its ID is public;
+// its key comes from Secret Manager on Cloud Run and from .env locally. Without them nothing syncs.
+const githubAppId = process.env.GITHUB_APP_ID;
+const githubAppKey = process.env.GITHUB_APP_KEY?.replace(/\\n/g, '\n');
+if (!githubAppId || !githubAppKey) console.warn('record connector off: set GITHUB_APP_ID and GITHUB_APP_KEY.');
+const recordSync = {
+  store: supabaseRecordStore(admin),
+  tokens: repoTokens(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
+};
+const caller = googleCaller();
+// Ghostaff's own runner (runner.ts, apps/runner): the Cloud Run job `agent-runner` beside the engine, running as
+// RUNNER_IDENTITY (scripts/deploy-runner.sh). Without it, an agent on our runner says it cannot start.
+const runnerIdentity = process.env.RUNNER_IDENTITY?.trim().toLowerCase();
+if (!runnerIdentity) console.warn('our agent runner off: set RUNNER_IDENTITY.');
+const runner: RunnerDeps | undefined = runnerIdentity
+  ? {
+      store: supabaseRunnerStore(admin),
+      job: {
+        project: process.env.GCP_PROJECT ?? 'ghostaff-prod',
+        region: process.env.RUNNER_REGION ?? 'europe-west1',
+        name: process.env.RUNNER_JOB ?? 'agent-runner',
+        identity: runnerIdentity,
+      },
+      engineUrl: publicUrl,
+      vault,
+      async record(orgId) {
+        const org = await recordSync.store.orgWithRecord(orgId);
+        return org ? { repo: org.repo, installation: org.installation } : null;
+      },
+      freshToken: freshRepoToken(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
+      commitEmail: process.env.RECORD_COMMIT_EMAIL ?? 'ghostaff-registro[bot]@users.noreply.github.com',
+    }
+  : undefined;
+const jobs = {
+  runner,
+  jobs: supabaseJobStore(admin),
+  launch: cloudRunLauncher(auth),
+  async syncOrg(orgId: string) {
+    if (!githubAppId || !githubAppKey) return;
+    const org = await recordSync.store.orgWithRecord(orgId);
+    if (org) console.log((await syncOrg(recordSync, org)).summary);
+  },
+};
+const chatDeps: ChatDeps = {
+  chat: supabaseChatStore(admin),
+  writerFor: writerFactory(vault, auth),
+  toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
+  jobs,
+};
+const cronCallers = (process.env.CRON_CALLERS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+
 const app = createApp({
   store: supabaseStore(admin),
   vault,
@@ -110,14 +170,25 @@ const app = createApp({
     return error ? null : (data.user?.id ?? null);
   },
   serviceAccount: process.env.ENGINE_SERVICE_ACCOUNT ?? '',
-  chat: {
-    chat: supabaseChatStore(admin),
-    writerFor: writerFactory(vault, auth),
-    toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
-  },
+  chat: chatDeps,
+  reports: { callerFromToken: caller, audience: publicUrl },
+  claudeSignIn: { spawn: spawnSetupToken },
   accounts,
   actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId) },
+  cron: {
+    callerFromToken: caller,
+    audience: publicUrl,
+    callers: cronCallers,
+    async tick() {
+      const synced = githubAppId && githubAppKey ? await syncAll(recordSync) : [];
+      for (const s of synced) console.log(s.summary);
+      const expired = await expireRuns(chatDeps, jobs);
+      const started = await startScheduled(chatDeps, jobs);
+      return { synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, started };
+    },
+  },
 });
 
 const port = Number(process.env.PORT ?? 8787);
-serve({ fetch: app.fetch, port }, () => console.log(`engine listening on :${port}`));
+const server = serve({ fetch: app.fetch, port }, () => console.log(`engine listening on :${port}`));
+app.injectWebSocket(server);

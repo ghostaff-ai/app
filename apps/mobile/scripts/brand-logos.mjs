@@ -47,8 +47,9 @@ const SLUGS = {
   zoom: 'zoom',
   zapier: 'zapier',
   make: 'make',
-  // The AI accounts (ia/[provider]): Claude through Anthropic, Claude in Google Cloud.
+  // The AI accounts (ia/[provider]): Claude through Anthropic (a key or a subscription), Claude in Google Cloud.
   'ai-anthropic': 'claude',
+  'ai-claude': 'claude',
   'ai-vertex': 'googlecloud',
 };
 

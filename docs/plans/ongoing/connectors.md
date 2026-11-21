@@ -1,8 +1,8 @@
 # Connectors: every outside account behind one button
 
 **Priority:** high — Jaime (2026-11-18): without connectors a non-technical person can use, the product is worthless; Álvaro (2026-11-14): connectors are a crucial part of the app
-**Gate:** none to land `feat/connectors-google` (Google connected for real on 2026-11-19, beta ready); the rest of the Handoff waits on Jaime's accounts and secrets
-**Next:** land `feat/connectors-google` once its end-to-end check is green; then #21 and #22 (each needs its migration pushed to beta first); an AI account to try an agent using a connected account
+**Gate:** none for the code; trying each maker for real waits on Jaime signing in to it (his Chrome has no session with any of them)
+**Next:** Jaime connects Search Console, Analytics and YouTube on the local web (the shared Google callback is fixed); then #21 and #22 (each needs its migration pushed to beta first); an AI account to try an agent using a connected account
 
 ## Goal
 
@@ -150,8 +150,8 @@ Added 2026-11-19, same checks (discovery and open registration seen on each real
 - [~] Attio, Close (CRM; Close without its destructive scope)
 - [~] Zendesk (support) — client metadata document only: beta, never localhost
 - [~] ClickUp, Todoist, Miro
-- [~] Dropbox — moved from B-app: it now registers any client; asks for no sharing scope
-- [~] Gamma (presentations), Fireflies, Granola, tl;dv (meeting notes)
+- [~] Gamma (presentations) — refuses a localhost redirect URI: beta only (`httpsOnly`)
+- [~] Fireflies, Granola, tl;dv (meeting notes)
 - [~] Zapier, Make — a door to thousands of apps more; each call spends the organisation's Zapier tasks or Make operations
 
 Checked on 2026-11-19 and not added here: Asana, HubSpot, Xero, DocuSign, Zoom and Canva take only a registered app (now under B-app, below); Box, Smartsheet and GitHub likewise, not added (below); Figma, Intercom and Atlassian keep an allow-list of clients or redirects; Shopify, Zoho and Freshworks have no remote server at the obvious address; Sentry, Cloudflare, Vercel, Netlify, Supabase and Plaid are for developers, not our customers; Wise moves money and Apollo sends mail, both left until someone asks.
@@ -179,6 +179,7 @@ Checked on 2026-11-19 and not added here: Asana, HubSpot, Xero, DocuSign, Zoom a
 - [ ] Atlassian (Jira, Confluence) — Developer Console apps do not work with its server (ROVO-870); only open registration plus each customer's admin allowing us
 - [ ] Salesforce — External Client App, but the server's address is per customer (My Domain), and one app across customers' orgs is unverified
 - [ ] Box — the server takes credentials each customer's admin creates; our own app unverified
+- [ ] Dropbox — back from B-open: its registration answers «Only pre-registered MCP trusted partners» (2026-11-21); `app: true` until we are one
 - [ ] GitHub, Smartsheet — GitHub publishes no authorization metadata and its OAuth tokens never expire (the engine assumes they do); Smartsheet's own-app use is undocumented
 
 The B-app cards above that use a maker's server (`app: true` in the catalogue) and Microsoft read our app from the vault, `engine-app-<id>`, put there by `scripts/connector-app.sh`: no env var, no deploy. Until it is there the card answers «todavía no está disponible».
@@ -192,6 +193,11 @@ The B-app cards above that use a maker's server (`app: true` in the catalogue) a
 ## Handoff
 
 State on 2026-11-19 (branch `feat/connectors-google`, not merged): 54 cards built and unit-tested, grouped by area in Conexiones with a search box (5 Google cards, Microsoft 365, Instagram, TikTok, 46 makers' MCP servers, 6 of them through our own app); none yet connected with a real account. What each still needs, in the order to do it:
+
+**2026-11-21, every card pressed in Jaime's Chrome on the local stack (a subagent, Jaime's OK):**
+- **Reach the maker's sign-in** (discovery and registration work; nobody signed in, so not connected): Stripe, PayPal, Qonto, Buffer, Square, Mailchimp, Brevo, MailerLite, Klaviyo, Semrush, Calendly, Cal.com, Typeform, Jotform, Pipedrive, Attio, Close, Factorial, Notion, Airtable, monday, Linear, ClickUp, Todoist, Miro, Wix, WordPress.com, Webflow, Fireflies, Granola, tl;dv, Zapier, Make; and, after the fixes below, Holded and Tally.
+- **Fixed on `fix/connector-callbacks`:** the four new Google cards asked Google for their own callback (`/searchconsole/callback`…), which the OAuth client doesn't list (`redirect_uri_mismatch`): every Google card now returns to `/google/callback` and the attempt says which card it was. Holded answers its registration with `software_id: null`, which the SDK refused: our own registration reads nulls as absent and keeps the server's reason when it refuses. Tally's server moved to `api.tally.so/mcp`. Dropbox takes only partners (now B-app); Gamma refuses localhost (beta only).
+- **Not available, as expected:** Squarespace, SumUp, Zendesk, Gamma (locally); HubSpot, Asana, Zoom, Canva, Xero, DocuSign, Dropbox, Microsoft 365, Instagram, TikTok (our app missing).
 
 **Night of 2026-11-19 (Claude with Jaime's OK):**
 - **Step 1:** Google (calendar, sheets, docs) connected for real with ghostaff.ai@gmail.com from the local web app; the web's connect popup never finished until `maybeCompleteAuthSession` (fixed on the branch). Notion and Stripe reach their makers' sign-in (discovery and registration work); not connected, as Jaime's Chrome has no session there. Not yet tried: an agent using the connected account (no AI account locally; step 2).

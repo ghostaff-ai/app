@@ -109,8 +109,9 @@ export const RULE_KIND = 'regla';
 // 20261114000000_connections.sql). Never a key: keys stay in the engine's vault.
 
 export type ConnectionKind = 'ai' | 'account';
-export type AiProvider = 'anthropic' | 'openai' | 'vertex';
-export type ConnectionMethod = 'api_key' | 'cloud_project' | 'oauth' | 'mcp';
+/** `claude` is a Claude subscription, signed in through the unmodified Claude Code the engine hosts. */
+export type AiProvider = 'anthropic' | 'openai' | 'vertex' | 'claude';
+export type ConnectionMethod = 'api_key' | 'cloud_project' | 'oauth' | 'mcp' | 'subscription';
 
 export interface Connection {
   id: string;
@@ -134,6 +135,18 @@ export type ConnectAiInput =
   | { orgId: string; provider: 'vertex'; project: string; region: string };
 
 /**
+ * Connecting a Claude subscription, one WebSocket from start to end (the engine
+ * runs Claude Code's own sign-in for the owner). What the screen hears:
+ * Anthropic's sign-in link, then that the code is being checked, then the
+ * connection or a refusal code.
+ */
+export type ClaudeSessionEvent =
+  | { type: 'url'; url: string }
+  | { type: 'working' }
+  | { type: 'done'; connection: Connection }
+  | { type: 'error'; code: string };
+
+/**
  * How a connect by sign-in ended, as the engine sends the person back to the
  * app (`?connected=<provider>&result=<result>`).
  */
@@ -143,9 +156,9 @@ export type AccountConnectResult = 'ok' | 'denied' | 'missing_scopes' | 'expired
 export const VERTEX_EU_REGIONS = ['europe-west1', 'europe-west4'] as const;
 
 // Agents: an organisation's team, by department (supabase/migrations/
-// 20261117000000_agents.sql). For now only how the app shows them.
+// 20261117000000_agents.sql, 20261121100000_agent_runners.sql).
 
-export const DEPARTMENTS = ['direccion', 'finanzas', 'marketing'] as const;
+export const DEPARTMENTS = ['direccion', 'finanzas', 'legal', 'producto', 'marketing'] as const;
 export type Department = (typeof DEPARTMENTS)[number];
 
 export const AGENT_GHOSTS = ['base', 'secretaria', 'incorporacion', 'finanzas', 'redes', 'productor'] as const;
@@ -172,7 +185,30 @@ export interface Agent {
   department: Department;
   /** The level a member has on it until an owner chooses one: talk for Secretaría, read for the rest. */
   memberDefault: AgentLevel;
+  /** How it runs: only in chat, as one of Órdago's jobs while they migrate, or on Ghostaff's own runner. */
+  runner: AgentRunner;
+  /** Its own one-line job, when it has one (Órdago's agents); else its ghost's. */
+  description: string | null;
+  /** When it works on its own (cron, Madrid time), or null when only when asked. */
+  schedule: string | null;
   createdAt: string;
+}
+
+export const AGENT_RUNNERS = ['chat', 'ordago_job', 'ghostaff'] as const;
+export type AgentRunner = (typeof AGENT_RUNNERS)[number];
+
+/** One run of an agent (supabase/migrations/20261121100000_agent_runners.sql): what it did, on its own or when asked. */
+export interface AgentRun {
+  id: string;
+  orgId: string;
+  agentId: string;
+  origin: 'person' | 'schedule';
+  state: 'running' | 'done' | 'failed';
+  summary: string | null;
+  noteworthy: boolean;
+  decisionsOpened: number;
+  startedAt: string;
+  finishedAt: string | null;
 }
 
 // Who may use each agent (supabase/migrations/20261118000000_team_chat.sql):

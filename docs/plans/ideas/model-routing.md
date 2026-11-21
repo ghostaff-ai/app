@@ -1,8 +1,8 @@
 # Model routing: the engine picks the model for each task, the customer never does
 
 **Priority:** medium — AI is the biggest variable cost of the product, and today everything runs on the strongest model; nothing is at scale yet, so there is room to do it right
-**Gate:** decision:Álvaro accepts routing by task with abstract tiers (open question 1)
-**Next:** Álvaro answers the open questions; then phase 0 (cost and outcome per run) joins the engine's agent runs as they are built
+**Gate:** decision:Álvaro on open questions 2–6 (question 1 decided 2026-11-21)
+**Next:** Álvaro answers open questions 2–6; then phase 0 (cost and outcome per run) joins the engine's agent runs as they are built
 
 Jaime's concern (2026-11-18), researched the same day. A small company does not know what Sonnet or Opus are and should never choose one. Something in the engine has to choose for it: the cheapest model that does the task well, never the strongest for everything.
 
@@ -72,7 +72,7 @@ Jaime (2026-11-18): an organisation must be able to bring its provider subscript
 
 ## Open questions
 
-1. **Is this the approach?** Routing by task family with abstract tiers, built in the engine, rather than renting a router or a learned per-prompt router from the start. Recommendation: yes; renting fails on EU residency, on organisations' own keys or on maturity, and a learned router needs data we do not have yet.
+1. **Decided (Álvaro, 2026-11-21, in the decision deck): yes, our own**, chosen before he saw the recommendation. **Is this the approach?** Routing by task family with abstract tiers, built in the engine, rather than renting a router or a learned per-prompt router from the start. Recommendation: yes; renting fails on EU residency, on organisations' own keys or on maturity, and a learned router needs data we do not have yet.
 2. **Organisations with their own key pay their own AI.** Do they get the same cost-driven policy, a quality-first one, or a setting (in plain words, never model names)? Recommendation: same policy by default, since it is meant to lose no quality.
 3. **Is Haiku 5.5 available on Vertex's EU multi-region?** Unconfirmed. Without it, `light` falls back to Sonnet for organisations on Vertex.
 4. **Do the old engine's 11 agents get the same review now?** They run on a subscription (limits, not money), so it matters less, but they are the cheapest place to try phase 1's method on real work.

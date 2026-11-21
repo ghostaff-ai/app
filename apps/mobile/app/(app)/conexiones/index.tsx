@@ -1,12 +1,13 @@
 import { type AiProvider, CONNECTOR_AREAS, type ConnectorArea } from '@ghostaff/shared';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { type ReactElement, useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
 import { LockSimple, MagnifyingGlass, Icon } from '@/components/icons';
-import { Chip, EmptyState, ListRow, ListSection, SearchField } from '@/components/ui';
+import { Chip, EmptyState, ListRow, ListSection, ScreenTitle, SearchField } from '@/components/ui';
 import { AI_ORDER, connectorSections, connectorWhat, PROVIDERS } from '@/lib/connections';
 import { useConnections } from '@/lib/hooks/useConnections';
+import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { usePalette } from '@/lib/theme';
 
@@ -15,6 +16,8 @@ import { usePalette } from '@/lib/theme';
 // connection's page (conexiones/[id], conexiones/ia/[provider]), where it is connected,
 // checked or removed. The engine keeps every token and key in the vault; this
 // screen only ever sees an account's email or a key's last 4 characters.
+// On a desktop it is a page of the sidebar (docs/plans/ideas/desktop-web.md):
+// its own title, and each section's connections in a grid of three.
 
 type Filter = 'all' | 'connected' | ConnectorArea;
 
@@ -22,6 +25,7 @@ export default function Connections() {
   const c = usePalette();
   const { active } = useActiveOrg();
   const { items } = useConnections(active?.id ?? null);
+  const desktop = useIsDesktop();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const connected = useMemo(() => new Set(items.filter((i) => i.kind === 'account').map((i) => i.provider)), [items]);
@@ -38,12 +42,14 @@ export default function Connections() {
   return (
     <ScrollView
       className="flex-1 bg-surface"
-      contentContainerClassName="pb-16"
+      contentContainerClassName={desktop ? 'px-5 pb-16 pt-8' : 'pb-16'}
+      contentContainerStyle={desktop ? { maxWidth: DESKTOP_CONTENT_MAX_WIDTH, width: '100%', alignSelf: 'center' } : undefined}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       contentInsetAdjustmentBehavior="automatic"
     >
       <View className="px-5 pt-3">
+        {desktop ? <ScreenTitle>Conexiones</ScreenTitle> : null}
         <View className="flex-row items-start">
           <View className="mt-0.5">
             <Icon icon={LockSimple} size={16} color={c.muted} weight="regular" />
@@ -80,7 +86,7 @@ export default function Connections() {
           />
         ) : null}
         {(search ? sections : shown).map((section) => (
-          <ListSection key={section.title} header={section.title}>
+          <Group key={section.title} desktop={desktop} header={section.title}>
             {section.connectors.map((connector) => {
               const conn = items.find((i) => i.kind === 'account' && i.provider === connector.id);
               const failing = conn?.status === 'failing';
@@ -103,11 +109,11 @@ export default function Connections() {
                 />
               );
             })}
-          </ListSection>
+          </Group>
         ))}
 
         {!search && (filter === 'all' || filter === 'connected') ? (
-          <ListSection header="IA" footer="Si no conectas nada, Ghostaff pone la IA. Conecta la tuya si quieres su factura a tu nombre.">
+          <Group desktop={desktop} header="IA" footer="Si no conectas nada, Ghostaff pone la IA. Conecta la tuya si quieres su factura a tu nombre.">
             {AI_ORDER.filter((p) => filter === 'all' || items.some((i) => i.kind === 'ai' && i.provider === p)).map((p: AiProvider) => {
               const conn = items.find((i) => i.kind === 'ai' && i.provider === p);
               return (
@@ -122,9 +128,34 @@ export default function Connections() {
                 />
               );
             })}
-          </ListSection>
+          </Group>
         ) : null}
       </View>
     </ScrollView>
+  );
+}
+
+/** A section of rows: one grouped list on a phone, a grid of three cards on a desktop. */
+function Group({ desktop, header, footer, children }: { desktop: boolean; header: string; footer?: string; children: ReactElement[] }) {
+  if (!desktop)
+    return (
+      <ListSection header={header} footer={footer}>
+        {children}
+      </ListSection>
+    );
+  return (
+    <View className="mt-7">
+      <Text accessibilityRole="header" className="mb-2 px-4 text-footnote font-medium text-muted">
+        {header}
+      </Text>
+      <View className="-mx-1.5 flex-row flex-wrap">
+        {children.map((row) => (
+          <View key={row.key} style={{ width: '33.333%' }} className="p-1.5">
+            <View className="overflow-hidden rounded-2xl bg-card">{row}</View>
+          </View>
+        ))}
+      </View>
+      {footer ? <Text className="mt-2 px-4 text-footnote text-muted">{footer}</Text> : null}
+    </View>
   );
 }

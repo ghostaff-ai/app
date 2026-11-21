@@ -30,11 +30,22 @@ INSTAGRAM_APP_ID=""
 INSTAGRAM_SECRET=instagram-app-secret
 TIKTOK_CLIENT_KEY=""
 TIKTOK_SECRET=tiktok-client-secret
+# The record connector: our GitHub App «Ghostaff Registro», made by
+# scripts/github-app-registro.mjs, which stores its key in Secret Manager. The
+# App id is public (created 2026-11-21, installed on ordago-app/business).
+GITHUB_APP_ID="5864166"
+GITHUB_KEY_SECRET=github-app-registro-key
+# Cloud Scheduler calls the engine's /cron as this account every five minutes
+# (record sync, agents due); the engine checks its Google ID token.
+SCHEDULER_SA="scheduler@$P.iam.gserviceaccount.com"
+# Our agent runner (scripts/deploy-runner.sh): the account its runs prove they are, with each run's nonce.
+RUNNER_SA="runner@$P.iam.gserviceaccount.com"
 
 echo "== APIs"
 gcloud services enable --project "$P" \
   run.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
-  cloudresourcemanager.googleapis.com iam.googleapis.com aiplatform.googleapis.com
+  cloudresourcemanager.googleapis.com iam.googleapis.com aiplatform.googleapis.com \
+  cloudscheduler.googleapis.com
 
 echo "== The engine's identity"
 gcloud iam service-accounts describe "$SA" --project "$P" >/dev/null 2>&1 ||
@@ -54,7 +65,7 @@ if ! gcloud secrets describe "$SERVICE_ROLE_SECRET" --project "$P" >/dev/null 2>
       --replication-policy user-managed --locations "$R" --data-file=-
 fi
 
-ENV_VARS="SUPABASE_URL=$SUPABASE_URL,GCP_PROJECT=$P,SECRETS_LOCATION=$R,ENGINE_SERVICE_ACCOUNT=$SA,ENGINE_PUBLIC_URL=$PUBLIC_URL"
+ENV_VARS="SUPABASE_URL=$SUPABASE_URL,GCP_PROJECT=$P,SECRETS_LOCATION=$R,ENGINE_SERVICE_ACCOUNT=$SA,ENGINE_PUBLIC_URL=$PUBLIC_URL,CRON_CALLERS=$SCHEDULER_SA,RUNNER_IDENTITY=$RUNNER_SA"
 SECRETS="SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_SECRET:latest"
 if [ -n "$GOOGLE_CLIENT_ID" ] && gcloud secrets describe "$GOOGLE_SECRET" --project "$P" >/dev/null 2>&1; then
   ENV_VARS="$ENV_VARS,GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_CLIENT_ID"
@@ -75,6 +86,13 @@ else
   echo "== TikTok connector off: set TIKTOK_CLIENT_KEY above and create the secret $TIKTOK_SECRET"
 fi
 
+if [ -n "$GITHUB_APP_ID" ] && gcloud secrets describe "$GITHUB_KEY_SECRET" --project "$P" >/dev/null 2>&1; then
+  ENV_VARS="$ENV_VARS,GITHUB_APP_ID=$GITHUB_APP_ID"
+  SECRETS="$SECRETS,GITHUB_APP_KEY=$GITHUB_KEY_SECRET:latest"
+else
+  echo "== Record connector off: run node scripts/github-app-registro.mjs and set GITHUB_APP_ID above"
+fi
+
 echo "== Build and push $IMAGE"
 # Cloud Run runs amd64: built for it even on an Apple Silicon Mac (emulated, slower).
 docker build --platform linux/amd64 -f apps/engine/Dockerfile -t "$IMAGE" .
@@ -84,11 +102,24 @@ docker logout "https://$REGISTRY" >/dev/null # the token was only for this push
 
 echo "== Deploy"
 # Public URL on purpose: the app calls it, and every call but /health needs a
-# Supabase sign-in token, checked by the engine itself.
+# Supabase sign-in token, checked by the engine itself. A 15-minute timeout: a
+# Claude subscription's sign-in is one WebSocket of up to 10 minutes. 2 GiB: the
+# engine runs Claude Code processes (a few hundred MB each, at most
+# ENGINE_CLAUDE_SLOTS at once, 4 by default).
 gcloud run deploy engine --project "$P" --region "$R" --image "$IMAGE" \
   --service-account "$SA" --allow-unauthenticated --min-instances 0 --max-instances 3 \
+  --timeout 900 --memory 2Gi \
   --set-env-vars "$ENV_VARS" \
   --set-secrets "$SECRETS"
+
+echo "== The tick: Cloud Scheduler calls /cron every five minutes"
+gcloud iam service-accounts describe "$SCHEDULER_SA" --project "$P" >/dev/null 2>&1 ||
+  gcloud iam service-accounts create scheduler --project "$P" --display-name "Ghostaff tick"
+if gcloud scheduler jobs describe tick --location "$R" --project "$P" >/dev/null 2>&1; then VERB=update; else VERB=create; fi
+gcloud scheduler jobs "$VERB" http tick --location "$R" --project "$P" \
+  --schedule "*/5 * * * *" --time-zone "Europe/Madrid" --http-method POST --uri "$PUBLIC_URL/cron" \
+  --oidc-service-account-email "$SCHEDULER_SA" --oidc-token-audience "$PUBLIC_URL" \
+  --attempt-deadline 300s >/dev/null
 
 URL=$(gcloud run services describe engine --project "$P" --region "$R" --format 'value(status.url)')
 curl -fsS "$URL/health" && echo

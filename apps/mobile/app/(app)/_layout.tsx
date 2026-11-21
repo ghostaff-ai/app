@@ -1,8 +1,11 @@
 import { Stack } from 'expo-router';
+import { View } from 'react-native';
+import { Sidebar } from '@/components/Sidebar';
 import { Button, Loading, Notice } from '@/components/ui';
+import { useIsDesktop } from '@/lib/layout';
+import { headerFor } from '@/lib/header';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
-import { headerFor } from '@/lib/header';
 import { usePalette } from '@/lib/theme';
 
 // Signed in. The way in has three steps, each a guard: a profile first
@@ -15,6 +18,7 @@ export default function AppLayout() {
   const org = useActiveOrg();
   const me = useProfile();
   const header = headerFor(usePalette());
+  const desktop = useIsDesktop();
 
   if (org.loading || me.loading) return <Loading />;
   const error = me.error ?? org.error;
@@ -32,7 +36,7 @@ export default function AppLayout() {
   // Where each step sends someone who isn't there yet (or is past it).
   const step = !hasProfile ? '/bienvenida' : !org.active ? '/empezar' : '/';
 
-  return (
+  const stack = (
     <Stack screenOptions={header}>
       <Stack.Protected guard={inOrg} redirectTo={step}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false, title: org.active?.name ?? '' }} />
@@ -51,7 +55,9 @@ export default function AppLayout() {
           options={{ title: 'Organizaciones', presentation: 'formSheet', sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: false }}
         />
         <Stack.Screen name="invitar" options={{ title: 'Invitar', presentation: 'modal' }} />
-        <Stack.Screen name="conexiones" options={{ presentation: 'modal', headerShown: false }} />
+        {/* Conexiones has its own stack (conexiones/_layout). On a phone it opens as a
+            sheet; on a desktop it is a page of its own, reached from the sidebar. */}
+        <Stack.Screen name="conexiones" options={desktop ? { headerShown: false } : { presentation: 'modal', headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={!hasProfile} redirectTo={step}>
         <Stack.Screen name="bienvenida" options={{ headerShown: false }} />
@@ -64,5 +70,15 @@ export default function AppLayout() {
         <Stack.Screen name="unirme" options={{ title: 'Unirme a una empresa', presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>
+  );
+
+  // On a desktop, once inside an organisation, the sidebar stands beside every
+  // screen (docs/plans/ideas/desktop-web.md); the way in keeps the whole window.
+  if (!desktop || !inOrg) return stack;
+  return (
+    <View className="flex-1 flex-row bg-surface">
+      <Sidebar />
+      <View className="flex-1">{stack}</View>
+    </View>
   );
 }

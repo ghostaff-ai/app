@@ -110,6 +110,19 @@ describe('connecting an AI key', () => {
     expect(vault.secrets.size).toBe(0);
   });
 
+  it('a Claude subscription cannot be pasted in, only signed into; disconnecting it deletes its token', async () => {
+    const { rows, vault, call } = setup();
+    const res = await call(ANA, 'POST', '/connections/ai', { orgId: ORG, provider: 'claude', apiKey: ANTHROPIC_KEY });
+    expect(res.status).toBe(400);
+    expect(vault.secrets.size).toBe(0);
+    await vault.put(secretName(ORG, 'claude'), 'sk-ant-oat01-x', {});
+    rows.set(`${ORG}/claude`, {} as ConnectionRecord);
+    expect((await call(BEA, 'DELETE', `/connections/ai/claude?org=${ORG}`)).status).toBe(403);
+    expect((await call(ANA, 'DELETE', `/connections/ai/claude?org=${ORG}`)).status).toBe(200);
+    expect(rows.size).toBe(0);
+    expect(vault.secrets.size).toBe(0);
+  });
+
   it('an unexpected failure never echoes the request', async () => {
     const { app } = setup({
       anthropic: async () => {

@@ -60,7 +60,8 @@ Decisions (Álvaro, 2026-11-14: "pick the best option long term"):
 - [ ] A beta build.
 - [ ] Tried with a real key on the beta.
 - [ ] The engine reads the organisation's connection when it runs an agent (once the engine runs agents).
-- [ ] Then: OpenRouter's one-click connect; ChatGPT plans once OpenAI accepts us; Claude subscriptions.
+- [x] «Claude · tu suscripción» built (2026-11-21, not deployed): the owner taps Conectar, the engine runs the unmodified Claude Code's own `claude setup-token` (pinned 2.1.330 in the engine image) over one WebSocket (`/connections/ai/claude/session`), relays Anthropic's sign-in link, types back the code the owner pastes, and keeps the 1-year token in the vault (`org-<uuid>-ai-claude`; the row keeps its last 4). Chat answers on it with `claude -p`, no tools yet: an agent with connected apps answers with the Anthropic key when there is one (the card says so); the key also answers when the subscription fails before writing or all Claude Code slots (4 per instance) are busy. The card warns that Anthropic can cut it off without notice. Checked up to Anthropic refusing a made-up code, in the engine image; a real sign-in is still untried. Deploying needs Cloud Run's `--timeout 900 --memory 2Gi` (in `scripts/deploy-engine.sh`).
+- [ ] Then: OpenRouter's one-click connect; ChatGPT plans once OpenAI accepts us.
 
 ## Data in Europe
 

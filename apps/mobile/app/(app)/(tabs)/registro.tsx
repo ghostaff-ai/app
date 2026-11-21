@@ -7,6 +7,7 @@ import { Tray, WarningCircle } from '@/components/icons';
 import { Button, EmptyState, Loading, Notice, ScreenTitle } from '@/components/ui';
 import { useDecided } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useTabScreenTop } from '@/lib/tabs';
 
 // Registro: what the organisation has decided, newest first, each with who
@@ -16,6 +17,7 @@ import { useTabScreenTop } from '@/lib/tabs';
 export default function Registro() {
   const { active } = useActiveOrg();
   const top = useTabScreenTop();
+  const desktop = useIsDesktop();
   const { decisions, loading, error, reload } = useDecided(active?.id ?? null);
 
   useFocusEffect(useCallback(() => void reload(), [reload]));
@@ -26,14 +28,22 @@ export default function Registro() {
   return (
     <FlatList
       className="flex-1 bg-surface"
-      contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40, paddingTop: 12 + top }}
+      contentContainerStyle={{
+        paddingHorizontal: desktop ? 40 : 20,
+        paddingBottom: 40,
+        paddingTop: (desktop ? 40 : 12) + top,
+        maxWidth: DESKTOP_CONTENT_MAX_WIDTH,
+        width: '100%',
+        alignSelf: 'center',
+      }}
       contentInsetAdjustmentBehavior="automatic"
       data={decisions}
       keyExtractor={(d) => d.id}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
       ListHeaderComponent={
         <View className="mb-3">
-          <ScreenTitle right={<MicButton />} subtitle="Lo decidido, lo último primero.">
+          {/* On a desktop the mic is in the sidebar. */}
+          <ScreenTitle right={desktop ? undefined : <MicButton />} subtitle="Lo decidido, lo último primero.">
             Registro
           </ScreenTitle>
         </View>
