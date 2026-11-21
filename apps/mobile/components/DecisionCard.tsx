@@ -6,15 +6,17 @@ import { GHOSTS, agentLabel, ghostFor } from '@/lib/team';
 // A decision in the inbox: the ghost of the agent that asks, the question, and
 // who asks with when it is due. The orange dot means it waits for you.
 
-export function DecisionCard({ decision, onPress }: { decision: Decision; onPress: () => void }) {
+/** `selected`: the one open beside the list on a desktop's Hoy. */
+export function DecisionCard({ decision, onPress, selected }: { decision: Decision; onPress: () => void; selected?: boolean }) {
   const waiting = !decision.answer;
   const due = waiting && decision.dueOn ? dueLabel(decision.dueOn) : null;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={decision.question}
+      accessibilityState={selected ? { selected: true } : undefined}
       onPress={onPress}
-      className="mb-2 flex-row items-center rounded-2xl bg-card p-3"
+      className={`mb-2 flex-row items-center rounded-2xl border-2 bg-card p-3 ${selected ? 'border-ink' : 'border-transparent'}`}
     >
       <Image
         testID="agent-ghost"

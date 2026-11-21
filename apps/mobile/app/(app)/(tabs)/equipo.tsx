@@ -9,6 +9,7 @@ import { vacancies } from '@/lib/chat';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useThreads } from '@/lib/hooks/useChat';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useTabScreenTop } from '@/lib/tabs';
 import { CORE_DEPARTMENTS, DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
@@ -23,6 +24,7 @@ type View_ = 'equipo' | 'conversaciones';
 export default function Equipo() {
   const { active } = useActiveOrg();
   const top = useTabScreenTop();
+  const desktop = useIsDesktop();
   const orgId = active?.id ?? null;
   const { items, loading, error, reload } = useAgents(orgId);
   const { threads, reload: reloadThreads } = useThreads(orgId);
@@ -42,10 +44,10 @@ export default function Equipo() {
   const byId = Object.fromEntries(items.map((a) => [a.id, a]));
 
   return (
-    <ScrollView className="flex-1 bg-surface" contentContainerStyle={{ padding: 16, paddingBottom: 64, paddingTop: 16 + top }} contentInsetAdjustmentBehavior="automatic">
+    <ScrollView className="flex-1 bg-surface" contentContainerStyle={{ padding: desktop ? 40 : 16, paddingBottom: 64, paddingTop: 16 + top, maxWidth: DESKTOP_CONTENT_MAX_WIDTH, width: '100%', alignSelf: 'center' }} contentInsetAdjustmentBehavior="automatic">
       <View className="mb-4 flex-row items-center justify-between">
         <Text className="font-display text-2xl text-ink">Equipo</Text>
-        <MicButton />
+        {desktop ? null : <MicButton />}
       </View>
 
       <View accessibilityRole="tablist" className="mb-5 flex-row self-start rounded-full border border-line bg-card p-0.5">

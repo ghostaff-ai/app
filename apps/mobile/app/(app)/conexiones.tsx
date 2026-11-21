@@ -25,6 +25,7 @@ import {
 } from '@/lib/connections';
 import { shortDate } from '@/lib/format';
 import { useConnections, useEngine } from '@/lib/hooks/useConnections';
+import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 
 // The organisation's connections. Its accounts on outside services (Google…),
@@ -43,6 +44,7 @@ export default function Connections() {
   const { active } = useActiveOrg();
   const { items, reload } = useConnections(active?.id ?? null);
   const [search, setSearch] = useState('');
+  const desktop = useIsDesktop();
   const sections = useMemo(
     () => connectorSections(new Set(items.filter((c) => c.kind === 'account').map((c) => c.provider)), search),
     [items, search],
@@ -51,7 +53,14 @@ export default function Connections() {
   const isOwner = active.role === 'owner';
 
   return (
-    <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-5 pt-2 pb-16" keyboardShouldPersistTaps="handled">
+    <ScrollView
+      className="flex-1 bg-surface"
+      contentContainerClassName={desktop ? 'px-10 pt-8 pb-16' : 'px-5 pt-2 pb-16'}
+      contentContainerStyle={desktop ? { maxWidth: DESKTOP_CONTENT_MAX_WIDTH, width: '100%', alignSelf: 'center' } : undefined}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* On a desktop this is a page of the sidebar, with no header above it. */}
+      {desktop ? <Text className="mb-4 font-display text-2xl text-ink">Conexiones</Text> : null}
       <Text className="text-lg font-semibold text-ink">Cuentas</Text>
       <Text className="mt-1 text-sm text-muted">
         Conecta las cuentas que ya usas para que tus agentes trabajen con ellas. Entras en tu cuenta y aceptas; nunca nos das tu contraseña.
@@ -71,16 +80,20 @@ export default function Connections() {
       {sections.map((section) => (
         <View key={section.title}>
           <Text className="mt-6 text-sm font-semibold uppercase text-muted">{section.title}</Text>
-          {section.connectors.map((connector) => (
-            <AccountCard
-              key={connector.id}
-              orgId={active.id}
-              connector={connector}
-              connection={items.find((c) => c.kind === 'account' && c.provider === connector.id) ?? null}
-              canEdit={isOwner}
-              onChanged={reload}
-            />
-          ))}
+          {/* A desktop lays a section's cards out in a grid of three. */}
+          <View className={desktop ? '-mx-2 flex-row flex-wrap' : undefined}>
+            {section.connectors.map((connector) => (
+              <View key={connector.id} style={desktop ? { width: '33.333%', paddingHorizontal: 8 } : undefined}>
+                <AccountCard
+                  orgId={active.id}
+                  connector={connector}
+                  connection={items.find((c) => c.kind === 'account' && c.provider === connector.id) ?? null}
+                  canEdit={isOwner}
+                  onChanged={reload}
+                />
+              </View>
+            ))}
+          </View>
         </View>
       ))}
 

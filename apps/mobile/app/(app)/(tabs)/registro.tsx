@@ -6,6 +6,7 @@ import { DecisionCard } from '@/components/DecisionCard';
 import { Button, Loading, Notice } from '@/components/ui';
 import { useDecided } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useTabScreenTop } from '@/lib/tabs';
 
 // Registro: what the organisation has decided, newest first, each with who
@@ -15,6 +16,7 @@ import { useTabScreenTop } from '@/lib/tabs';
 export default function Registro() {
   const { active } = useActiveOrg();
   const top = useTabScreenTop();
+  const desktop = useIsDesktop();
   const { decisions, loading, error, reload } = useDecided(active?.id ?? null);
 
   useFocusEffect(useCallback(() => void reload(), [reload]));
@@ -25,7 +27,7 @@ export default function Registro() {
   return (
     <FlatList
       className="flex-1 bg-surface"
-      contentContainerStyle={{ padding: 16, paddingBottom: 40, paddingTop: 16 + top }}
+      contentContainerStyle={{ padding: desktop ? 40 : 16, paddingBottom: 40, paddingTop: 16 + top, maxWidth: DESKTOP_CONTENT_MAX_WIDTH, width: '100%', alignSelf: 'center' }}
       contentInsetAdjustmentBehavior="automatic"
       data={decisions}
       keyExtractor={(d) => d.id}
@@ -34,7 +36,7 @@ export default function Registro() {
         <View className="mb-4">
           <View className="flex-row items-center justify-between">
             <Text className="font-display text-2xl text-ink">Registro</Text>
-            <MicButton />
+            {desktop ? null : <MicButton />}
           </View>
           <Text className="mt-1 text-base text-muted">Lo decidido, lo último primero.</Text>
         </View>
