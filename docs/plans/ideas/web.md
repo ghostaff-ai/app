@@ -1,10 +1,21 @@
 # The website: ghostaff.ai, what it is, and the pages the platforms ask for
 
 **Priority:** medium, with one urgent part — Google's OAuth verification and Meta's and TikTok's app reviews need a home page, a privacy policy and terms on our own domain ([connectors.md](../ongoing/connectors.md), phases 2 and 3), and none exists yet
-**Gate:** decision:Álvaro — where the site lives (a repo of its own?) and whether the legal pages can go up before the SL exists (Open questions)
-**Next:** the three legal-and-home pages first, plain, at ghostaff.ai; the full marketing site after
+**Gate:** Álvaro — a paid Higgsfield account connected to Claude Code; who the data controller is before the legal pages go up
+**Next:** the page is built (ghostaff-ai/web #1) with a placeholder film; with Higgsfield connected, two or three takes of the opening shot for him to judge
 
-Jaime's request (2026-11-19), with foundable.com/es as a loose visual reference («salvando las distancias»). Research of the same night below; nothing here is decided.
+Jaime's request (2026-11-19), with foundable.com/es as a loose visual reference («salvando las distancias»). Research of the same night below. Álvaro's decisions of 2026-11-21 are in «Decisions».
+
+## Decisions (Álvaro, 2026-11-21)
+
+1. **A repo of its own, `ghostaff-ai/web`** (created 2026-11-21: Astro, static), copying the brand's tokens and ghost models.
+2. **The 3D look: a mix.** An AI-made film (Higgsfield), played by the scroll like Apple's product pages, carries the opening: cinematic versions of our ghosts working in a night office, their paperwork folding into one decision card. The app's own six ghosts appear live in 3D where the page shows the team, and beside each founder. Chosen over a fully hand-built 3D world (igloo.inc, Lusion, Immersive Garden: slower, needs top 3D modelling) and over film alone (less interactive). A paid Higgsfield plan paid by Ghostaff (no watermark); Higgsfield's terms (2026-10-23) leave us the outputs and commercial use, but may train on them, so only our own ghost pictures go in. Shot list: `ghostaff-ai/web`, `docs/film.md`.
+3. **The story:** a night office where ghosts do the company's work; the camera moves desk to desk (Finanzas files invoices, Redes writes a post, Secretaría sorts mail); the paperwork flies into one decision card that lands on a phone («Solo te traen lo que es tuyo»); then data in Europe, FAQ, **the founders, Álvaro and Jaime**, «Pedir acceso».
+4. **Astro on Firebase Hosting** in `ghostaff-prod`, as proposed below.
+5. **Founders:** a real photo, name, role and one line each, with their own ghost beside them; placeholders until they send them.
+6. **Legal pages built in the site, not published** until the controller is decided (open question 2).
+7. **Spanish and English from the first day** (`/` and `/en/`).
+8. **Two or three hero tries first**, as previews he judges, then the rest of the page.
 
 ## Goal
 
@@ -26,6 +37,14 @@ Its home, in order: a hero with its mascot floating in a sky, a line and a call 
 1. A wall of borrowed logos: we have no such credibility yet, and should not pretend to.
 2. A 14-item mega-menu and dozens of languages: four links (Producto, Seguridad, Precios, Entrar) and ES, later EN.
 3. A prompt box in the hero that collects text before sign-up: it means storing data from strangers and clashes with the calm tone.
+
+## Paid tools and their credits
+
+Subscription credits are lost when unused, so each month is planned to spend them (Álvaro, 2026-11-21).
+
+- **Higgsfield**: paid by Álvaro on 2026-11-21 for the film. Subscription credits do not roll over: unused ones expire at the end of each billing month, and after cancelling they stay usable until the paid period ends (Higgsfield help center). Bought credit packs last 90 days.
+- **Tripo** (made the app's ghosts): €18 on 2026-11-14 through Link/Stripe. **Cancelled by Álvaro on 2026-11-21; 1,985 credits left, lost on 2026-12-14.** Monthly credits reset on the billing date and do not carry over; bought extra credits never expire (Tripo help). Web-app credits only work in Tripo Studio, not the API. A full model costs about 60 (generate 25, Ultra +15, texture +10, HD texture +10), 80 rigged. Spend plan: the founders as ghosts (~500), sharper ghosts for the web (~600), the film's office props as live 3D (~500), the rest for retries and Órdago or Cultuvilla.
+- Higgsfield credits may also go to videos for Órdago or Cultuvilla (Álvaro, 2026-11-21) once the film's takes are done.
 
 ## Where it lives and how it is served
 
@@ -49,6 +68,5 @@ Research of 2026-11-19 (sources in the conversation of that night; prices are li
 
 ## Open questions
 
-1. **A repo of its own** (`ghostaff-ai/web`) or a folder in this one? A repo of its own keeps the app's CI and release pipeline free of the site; a folder keeps one place for the brand's tokens. Proposal: its own repo, copying the tokens.
-2. **Who is the controller** in the privacy policy before the SL exists: one founder as autónomo, as in connectors.md's open question 4, or wait for the SL. The platforms check the policy names someone real.
-3. **Web app at app.ghostaff.ai**: the app already builds for the web (`expo export --platform web`). Serving it too is a separate decision; this plan is only the public site.
+1. **Who is the controller** in the privacy policy before the SL exists: one founder as autónomo, as in connectors.md's open question 4, or wait for the SL. The platforms check the policy names someone real.
+2. **Web app at app.ghostaff.ai**: the app already builds for the web (`expo export --platform web`). Serving it too is a separate decision; this plan is only the public site.
