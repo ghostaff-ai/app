@@ -38,6 +38,8 @@ GITHUB_KEY_SECRET=github-app-registro-key
 # Cloud Scheduler calls the engine's /cron as this account every five minutes
 # (record sync, agents due); the engine checks its Google ID token.
 SCHEDULER_SA="scheduler@$P.iam.gserviceaccount.com"
+# Our agent runner (scripts/deploy-runner.sh): the account its runs prove they are, with each run's nonce.
+RUNNER_SA="runner@$P.iam.gserviceaccount.com"
 
 echo "== APIs"
 gcloud services enable --project "$P" \
@@ -63,7 +65,7 @@ if ! gcloud secrets describe "$SERVICE_ROLE_SECRET" --project "$P" >/dev/null 2>
       --replication-policy user-managed --locations "$R" --data-file=-
 fi
 
-ENV_VARS="SUPABASE_URL=$SUPABASE_URL,GCP_PROJECT=$P,SECRETS_LOCATION=$R,ENGINE_SERVICE_ACCOUNT=$SA,ENGINE_PUBLIC_URL=$PUBLIC_URL,CRON_CALLERS=$SCHEDULER_SA"
+ENV_VARS="SUPABASE_URL=$SUPABASE_URL,GCP_PROJECT=$P,SECRETS_LOCATION=$R,ENGINE_SERVICE_ACCOUNT=$SA,ENGINE_PUBLIC_URL=$PUBLIC_URL,CRON_CALLERS=$SCHEDULER_SA,RUNNER_IDENTITY=$RUNNER_SA"
 SECRETS="SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_SECRET:latest"
 if [ -n "$GOOGLE_CLIENT_ID" ] && gcloud secrets describe "$GOOGLE_SECRET" --project "$P" >/dev/null 2>&1; then
   ENV_VARS="$ENV_VARS,GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_CLIENT_ID"

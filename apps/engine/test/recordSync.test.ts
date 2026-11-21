@@ -3,7 +3,7 @@ import type { SyncPlan } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { appJwt, repoTokens } from '../src/githubApp';
+import { appJwt, freshRepoToken, repoTokens } from '../src/githubApp';
 import { type RecordOrg, type RecordSyncStore, syncOrg } from '../src/recordSync';
 
 const ORG: RecordOrg = { id: 'org-1', slug: 'ordago', repo: 'ordago-app/business', installation: 7 };
@@ -185,6 +185,17 @@ describe('the GitHub App', () => {
     now = Date.parse('2026-11-21T10:56:00Z');
     expect(await tokens(7, 'ordago-app/business')).toBe('t2');
     expect(asked[0]).toEqual({ repositories: ['business'], permissions: { contents: 'write', metadata: 'read' } });
+  });
+
+  it('mints a new token every time for an agent run, with when it expires', async () => {
+    let n = 0;
+    const f = (async () => {
+      n += 1;
+      return new Response(JSON.stringify({ token: `t${n}`, expires_at: '2026-11-21T11:00:00Z' }), { status: 201 });
+    }) as typeof fetch;
+    const fresh = freshRepoToken(async () => ({ appId: '42', privateKey: pem }), f);
+    expect(await fresh(7, 'ordago-app/business')).toEqual({ token: 't1', expiresAt: '2026-11-21T11:00:00Z' });
+    expect((await fresh(7, 'ordago-app/business')).token).toBe('t2');
   });
 });
 

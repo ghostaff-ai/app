@@ -28,6 +28,8 @@ import { projectUrlFromKey } from './projectUrl';
 //     (the record connector: from then on the engine syncs it every five minutes)
 //   pnpm --filter @ghostaff/sync org add-agents --org ordago --from ~/githubs/ghostaff-ai/agents/proyectos/ordago
 //     (Órdago's agents in Equipo, each running as its job; again to refresh them)
+//   pnpm --filter @ghostaff/sync org add-agents --org ordago --from … --runner ghostaff --only legal
+//     (those agents move to Ghostaff's own runner: task, model, tools, turns and timetable from their yaml)
 //
 // It writes with the service-role key, which bypasses row-level security, so it
 // runs only on our machines and in the engine, never in the app. The key comes
@@ -126,20 +128,34 @@ async function setRecord(opts: { org: string; repo: string; installation: string
   console.log(`${opts.org}'s record is ${opts.repo} (installation ${installation}); the engine syncs it on its next tick`);
 }
 
-async function addAgents(opts: { org: string; from: string }) {
+async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff'; only?: string[] }) {
   const db = admin();
   const orgId = await orgBySlug(db, opts.org);
-  const agents = readProjectAgents(opts.from);
+  const agents = readProjectAgents(opts.from, { runner: opts.runner, only: opts.only });
+  if (agents.length === 0) throw new Error('No agent to import: check --from and --only');
   // Upsert by (org, slug): running it again refreshes the job and the text, and keeps the agent's
   // threads, runs and access levels. The partial unique index needs the conflict target spelled out.
   for (const a of agents) {
-    const { data: found, error: e1 } = await db.from('agents').select('id').eq('org_id', orgId).eq('slug', a.slug).maybeSingle<{ id: string }>();
+    const { data: found, error: e1 } = await db
+      .from('agents')
+      .select('id, runner')
+      .eq('org_id', orgId)
+      .eq('slug', a.slug)
+      .maybeSingle<{ id: string; runner: string }>();
     if (e1) throw e1;
+    // A refresh of every agent never moves one back off our runner: that takes saying so (and its job turned back on).
+    if (found?.runner === 'ghostaff' && a.runner !== 'ghostaff') {
+      console.log(`kept    ${a.name.padEnd(11)} on our runner (move it back only by hand)`);
+      continue;
+    }
+    // Moving onto our runner, its timetable counts from now: the tick starts it at its next fire time, never a missed one.
+    const row = a.runner === 'ghostaff' ? { ...a, last_scheduled_at: new Date().toISOString() } : a;
     const { error } = found
-      ? await db.from('agents').update(a).eq('id', found.id)
-      : await db.from('agents').insert({ ...a, org_id: orgId, member_default: 'read' });
+      ? await db.from('agents').update(row).eq('id', found.id)
+      : await db.from('agents').insert({ ...row, org_id: orgId, member_default: 'read' });
     if (error) throw error;
-    console.log(`${found ? 'updated' : 'added  '} ${a.name.padEnd(11)} ${a.department.padEnd(10)} ${a.job_name}`);
+    const where = a.runner === 'ghostaff' ? `our runner, ${a.model}` : a.job_name;
+    console.log(`${found ? 'updated' : 'added  '} ${a.name.padEnd(11)} ${a.department.padEnd(10)} ${where}`);
   }
 }
 
@@ -186,6 +202,8 @@ async function main() {
       repo: { type: 'string' },
       installation: { type: 'string' },
       from: { type: 'string' },
+      runner: { type: 'string' },
+      only: { type: 'string' },
     },
   });
   const need = (k: keyof typeof values) => {
@@ -198,8 +216,12 @@ async function main() {
       return syncPorDecidir({ org: need('org'), record: need('record'), writeBack: !!values['write-back'] });
     case 'add-org':
       return addOrg({ slug: need('slug'), name: need('name') });
-    case 'add-agents':
-      return addAgents({ org: need('org'), from: need('from') });
+    case 'add-agents': {
+      const runner = values.runner;
+      if (runner !== undefined && runner !== 'ghostaff') throw new Error('--runner is ghostaff (or left out: each agent runs as its job)');
+      const only = values.only?.split(',').map((s) => s.trim()).filter(Boolean);
+      return addAgents({ org: need('org'), from: need('from'), runner, only });
+    }
     case 'set-record':
       return setRecord({ org: need('org'), repo: need('repo'), installation: need('installation') });
     case 'add-member': {

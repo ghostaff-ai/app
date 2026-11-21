@@ -40,13 +40,18 @@ export const isRepo = (s: unknown): s is string => typeof s === 'string' && /^[A
 
 export type RepoTokens = (installation: number, repo: string) => Promise<string>;
 
-/** Installation tokens for one repo each, with contents write, cached until near expiry. */
-export function repoTokens(loadConfig: () => Promise<GithubAppConfig | null>, f: Fetch = fetch, now = () => Date.now()): RepoTokens {
-  const cache = new Map<string, { token: string; expires: number }>();
+/** A token with when it stops working. */
+export interface MintedToken {
+  token: string;
+  /** ISO time GitHub gave. */
+  expiresAt: string;
+}
+
+/** A new installation token for one repo, with contents write; never cached. */
+export type FreshRepoToken = (installation: number, repo: string) => Promise<MintedToken>;
+
+export function freshRepoToken(loadConfig: () => Promise<GithubAppConfig | null>, f: Fetch = fetch, now = () => Date.now()): FreshRepoToken {
   return async (installation, repo) => {
-    const key = `${installation}:${repo}`;
-    const hit = cache.get(key);
-    if (hit && hit.expires - 5 * 60_000 > now()) return hit.token;
     const cfg = await loadConfig();
     if (!cfg) throw new Error('the GitHub record connector is not configured (GITHUB_APP_ID and its key)');
     const res = await f(`${GITHUB_API}/app/installations/${installation}/access_tokens`, {
@@ -56,7 +61,24 @@ export function repoTokens(loadConfig: () => Promise<GithubAppConfig | null>, f:
     });
     if (!res.ok) throw new Error(`GitHub refused an installation token for ${repo}: ${res.status}`);
     const body = (await res.json()) as { token: string; expires_at: string };
-    cache.set(key, { token: body.token, expires: Date.parse(body.expires_at) });
-    return body.token;
+    return { token: body.token, expiresAt: body.expires_at };
+  };
+}
+
+/**
+ * Installation tokens for one repo each, cached until near expiry: for the
+ * engine's own sync only. A token handed to an agent run is always fresh
+ * (freshRepoToken), so no run holds the token the sync or another run uses.
+ */
+export function repoTokens(loadConfig: () => Promise<GithubAppConfig | null>, f: Fetch = fetch, now = () => Date.now()): RepoTokens {
+  const mint = freshRepoToken(loadConfig, f, now);
+  const cache = new Map<string, { token: string; expires: number }>();
+  return async (installation, repo) => {
+    const key = `${installation}:${repo}`;
+    const hit = cache.get(key);
+    if (hit && hit.expires - 5 * 60_000 > now()) return hit.token;
+    const t = await mint(installation, repo);
+    cache.set(key, { token: t.token, expires: Date.parse(t.expiresAt) });
+    return t.token;
   };
 }

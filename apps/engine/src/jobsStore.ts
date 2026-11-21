@@ -5,7 +5,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GoogleAuth } from 'google-auth-library';
 import type { ChatAgent } from './chat';
-import type { JobStore, LaunchJob } from './jobs';
+import type { JobStore, LaunchJob, RunRecord } from './jobs';
+import type { RunnerAgent, RunnerStore } from './runner';
 
 function check<T>(r: { data: T; error: unknown }): T {
   if (r.error) throw r.error;
@@ -20,6 +21,20 @@ const toAgent = (r: Record<string, string>): ChatAgent => ({
   ghost: r.ghost as ChatAgent['ghost'],
   department: r.department!,
   runner: r.runner as ChatAgent['runner'],
+});
+
+const RUN = 'id, org_id, agent_id, origin, state, thread_id, message_id, requested_by, nonce_hash, spec_fetched_at';
+const toRun = (r: Record<string, string | null>): RunRecord => ({
+  id: r.id!,
+  orgId: r.org_id!,
+  agentId: r.agent_id!,
+  origin: r.origin as RunRecord['origin'],
+  state: r.state as RunRecord['state'],
+  threadId: r.thread_id ?? null,
+  messageId: r.message_id ?? null,
+  requestedBy: r.requested_by ?? null,
+  nonceHash: r.nonce_hash ?? null,
+  specFetched: !!r.spec_fetched_at,
 });
 
 export const NOTICES_TITLE = 'Avisos';
@@ -49,6 +64,7 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
             requested_by: x.requestedBy,
             thread_id: x.threadId,
             message_id: x.messageId,
+            nonce_hash: x.nonceHash ?? null,
           })
           .select('id')
           .single(),
@@ -56,12 +72,8 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
       return (r as { id: string }).id;
     },
     async run(id) {
-      const r = check(
-        await admin.from('agent_runs').select('id, org_id, agent_id, origin, state, thread_id, message_id').eq('id', id).maybeSingle(),
-      );
-      return r
-        ? { id: r.id, orgId: r.org_id, agentId: r.agent_id, origin: r.origin, state: r.state, threadId: r.thread_id, messageId: r.message_id }
-        : null;
+      const r = check(await admin.from('agent_runs').select(RUN).eq('id', id).maybeSingle());
+      return r ? toRun(r) : null;
     },
     async finishRun(id, p) {
       const rows = check(
@@ -116,6 +128,70 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
           finished_at: new Date().toISOString(),
         }),
       );
+    },
+  };
+}
+
+const RUNNER_AGENT = 'id, org_id, slug, name, description, task, model, tools, max_turns, schedule, last_scheduled_at';
+type RunnerAgentRow = {
+  id: string;
+  org_id: string;
+  slug: string | null;
+  name: string;
+  description: string | null;
+  task: string;
+  model: string;
+  tools: string[];
+  max_turns: number;
+  schedule: string | null;
+  last_scheduled_at: string | null;
+};
+const toRunnerAgent = (r: RunnerAgentRow): RunnerAgent => ({
+  id: r.id,
+  orgId: r.org_id,
+  slug: r.slug ?? r.id,
+  name: r.name,
+  description: r.description,
+  task: r.task,
+  model: r.model,
+  tools: r.tools ?? [],
+  maxTurns: r.max_turns,
+  schedule: r.schedule,
+  lastScheduledAt: r.last_scheduled_at,
+});
+
+/** Our runner's database side (runner.ts), with the service role. */
+export function supabaseRunnerStore(admin: SupabaseClient): RunnerStore {
+  return {
+    async runnerAgent(agentId) {
+      const r = check(await admin.from('agents').select(RUNNER_AGENT).eq('id', agentId).eq('runner', 'ghostaff').maybeSingle<RunnerAgentRow>());
+      return r ? toRunnerAgent(r) : null;
+    },
+    async scheduledAgents() {
+      const rows = check(
+        await admin.from('agents').select(RUNNER_AGENT).eq('runner', 'ghostaff').not('schedule', 'is', null).returns<RunnerAgentRow[]>(),
+      );
+      return (rows ?? []).map(toRunnerAgent);
+    },
+    async claimSchedule(agentId, prev, to) {
+      // Compare-and-set: only the tick that still sees `prev` moves it.
+      const q = admin.from('agents').update({ last_scheduled_at: to.toISOString() }).eq('id', agentId).eq('runner', 'ghostaff');
+      const rows = check(await (prev === null ? q.is('last_scheduled_at', null) : q.eq('last_scheduled_at', prev)).select('id'));
+      return (rows ?? []).length > 0;
+    },
+    async claimSpec(runId, nonceHash) {
+      const r = check(
+        await admin
+          .from('agent_runs')
+          .update({ spec_fetched_at: new Date().toISOString() })
+          .eq('id', runId)
+          .eq('nonce_hash', nonceHash)
+          .eq('state', 'running')
+          .is('spec_fetched_at', null)
+          .select(RUN)
+          .maybeSingle(),
+      );
+      return r ? toRun(r) : null;
     },
   };
 }

@@ -34,11 +34,12 @@ Start a session in the repo the work belongs to, never in the parent folder.
 apps/mobile/       the app: Expo + expo-router + NativeWind, iPhone, Android and web
 apps/sync/         record → database job (run by hand today, Cloud Run Jobs later)
 apps/engine/       the engine's HTTP service on Cloud Run: an organisation's AI keys, Claude subscription (through the unmodified Claude Code) and connected accounts (Google, the makers' MCP servers) into the vault, agents answering in the team chat with their tools
+apps/runner/       our agent runner: the unmodified Claude Code in a container, one Cloud Run job execution per agent run, started by the engine
 packages/shared/   models, the record's file formats (por-decidir/), the data services
 supabase/          migrations, row-level-security tests (pgTAP), local config
 ```
 
-Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh` (the engine to Cloud Run), `pnpm db:start` / `pnpm db:test`
+Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh` (the engine to Cloud Run), `bash scripts/deploy-runner.sh` (the runner's job), `pnpm db:start` / `pnpm db:test`
 (Postgres and the policy tests), `pnpm app:start` / `pnpm app:web` (Metro on the first free port of 8083, 8093 … 8173, from
 `scripts/metro-port.sh`; never a bare `expo start`). Setup is in the [README](README.md#setup).
 

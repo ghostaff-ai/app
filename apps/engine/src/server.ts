@@ -22,13 +22,14 @@ import { appClient } from './apps';
 import { microsoftOAuth, microsoftTools } from './microsoft';
 import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
-import { repoTokens } from './githubApp';
+import { freshRepoToken, repoTokens } from './githubApp';
 import { googleCaller } from './googleCaller';
 import { supabaseRecordStore } from './recordStore';
 import { syncAll, syncOrg } from './recordSync';
 import { expireRuns } from './jobs';
 import type { ChatDeps } from './chat';
-import { cloudRunLauncher, supabaseJobStore } from './jobsStore';
+import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
+import { type RunnerDeps, startScheduled } from './runner';
 
 function required(name: string): string {
   const v = process.env[name];
@@ -110,7 +111,31 @@ const recordSync = {
   tokens: repoTokens(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
 };
 const caller = googleCaller();
+// Ghostaff's own runner (runner.ts, apps/runner): the Cloud Run job `agent-runner` beside the engine, running as
+// RUNNER_IDENTITY (scripts/deploy-runner.sh). Without it, an agent on our runner says it cannot start.
+const runnerIdentity = process.env.RUNNER_IDENTITY?.trim().toLowerCase();
+if (!runnerIdentity) console.warn('our agent runner off: set RUNNER_IDENTITY.');
+const runner: RunnerDeps | undefined = runnerIdentity
+  ? {
+      store: supabaseRunnerStore(admin),
+      job: {
+        project: process.env.GCP_PROJECT ?? 'ghostaff-prod',
+        region: process.env.RUNNER_REGION ?? 'europe-west1',
+        name: process.env.RUNNER_JOB ?? 'agent-runner',
+        identity: runnerIdentity,
+      },
+      engineUrl: publicUrl,
+      vault,
+      async record(orgId) {
+        const org = await recordSync.store.orgWithRecord(orgId);
+        return org ? { repo: org.repo, installation: org.installation } : null;
+      },
+      freshToken: freshRepoToken(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
+      commitEmail: process.env.RECORD_COMMIT_EMAIL ?? 'ghostaff-registro[bot]@users.noreply.github.com',
+    }
+  : undefined;
 const jobs = {
+  runner,
   jobs: supabaseJobStore(admin),
   launch: cloudRunLauncher(auth),
   async syncOrg(orgId: string) {
@@ -158,7 +183,8 @@ const app = createApp({
       const synced = githubAppId && githubAppKey ? await syncAll(recordSync) : [];
       for (const s of synced) console.log(s.summary);
       const expired = await expireRuns(chatDeps, jobs);
-      return { synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired };
+      const started = await startScheduled(chatDeps, jobs);
+      return { synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, started };
     },
   },
 });

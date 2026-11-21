@@ -15,6 +15,7 @@ import type { ActionPart } from '@ghostaff/shared';
 import { previewOf } from './actions';
 import { Refusal } from './connections';
 import { askJob, type JobDeps } from './jobs';
+import { askRunner } from './runner';
 import type { AgentTools } from './tools';
 
 export type Level = 'none' | 'read' | 'talk';
@@ -354,6 +355,12 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
       if (who.runner === 'ordago_job' && deps.jobs) {
         // Its job answers when it ends (POST /runs/report); the message stays «working» until then.
         await askJob(deps, deps.jobs, thread, who, replyId, i === 0 ? messages : await deps.chat.recentMessages(thread.id, 40), userId);
+        replied = true;
+        continue;
+      }
+      if (who.runner === 'ghostaff' && deps.jobs) {
+        // Our own runner (runner.ts): the same, with the run in Ghostaff's project.
+        await askRunner(deps, deps.jobs, thread, who, replyId, userId);
         replied = true;
         continue;
       }
