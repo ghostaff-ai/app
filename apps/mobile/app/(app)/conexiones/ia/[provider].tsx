@@ -11,6 +11,7 @@ import { AI_ORDER, claudeSignInMessage, connectErrorMessage, PROVIDERS, REGION_N
 import { shortDate } from '@/lib/format';
 import { success } from '@/lib/haptics';
 import { useConnections, useEngine } from '@/lib/hooks/useConnections';
+import { DESKTOP_PAGE, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { usePalette } from '@/lib/theme';
 
@@ -35,6 +36,7 @@ export default function AiPage() {
   const { provider } = useLocalSearchParams<{ provider: string }>();
   const { active } = useActiveOrg();
   const { items, reload } = useConnections(active?.id ?? null);
+  const desktop = useIsDesktop();
   const engine = useEngine();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -65,7 +67,13 @@ export default function AiPage() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-5 pb-16" keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="automatic">
+    <ScrollView
+      className="flex-1 bg-surface"
+      contentContainerClassName="px-5 pb-16"
+      contentContainerStyle={desktop ? DESKTOP_PAGE : undefined}
+      keyboardShouldPersistTaps="handled"
+      contentInsetAdjustmentBehavior="automatic"
+    >
       <Stack.Screen options={{ title: copy.name }} />
       <View className="items-center pt-6">
         <ConnectorLogo id={`ai-${provider}`} name={copy.name} size={72} />

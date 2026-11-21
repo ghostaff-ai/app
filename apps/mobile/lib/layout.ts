@@ -17,5 +17,8 @@ export function useIsDesktop(): boolean {
   return isDesktopWidth(Platform.OS, width);
 }
 
+/** A page that is one thing to read and act on (a connection): a phone's measure, centred. */
+export const DESKTOP_PAGE = { maxWidth: 640, width: '100%', alignSelf: 'center' } as const;
+
 /** A list's column when its detail opens beside it (Hoy, Equipo). */
 export const DESKTOP_LIST_WIDTH = 440;

@@ -12,6 +12,7 @@ import { accountErrorMessage, accountResultMessage, connectorWhat } from '@/lib/
 import { shortDate } from '@/lib/format';
 import { success } from '@/lib/haptics';
 import { useConnections, useEngine } from '@/lib/hooks/useConnections';
+import { DESKTOP_PAGE, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { usePalette } from '@/lib/theme';
 
@@ -25,6 +26,7 @@ export default function ConnectionPage() {
   const connector = (CONNECTORS as readonly CatalogueConnector[]).find((c) => c.id === id);
   const { active } = useActiveOrg();
   const { items, reload } = useConnections(active?.id ?? null);
+  const desktop = useIsDesktop();
   const engine = useEngine();
   const c = usePalette();
   const [busy, setBusy] = useState<'connect' | 'remove' | null>(null);
@@ -78,7 +80,12 @@ export default function ConnectionPage() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-5 pb-16" contentInsetAdjustmentBehavior="automatic">
+    <ScrollView
+      className="flex-1 bg-surface"
+      contentContainerClassName="px-5 pb-16"
+      contentContainerStyle={desktop ? DESKTOP_PAGE : undefined}
+      contentInsetAdjustmentBehavior="automatic"
+    >
       <Stack.Screen options={{ title: connector.name }} />
       <View className="items-center pt-6">
         <ConnectorLogo id={connector.id} name={connector.name} size={72} />
