@@ -22,16 +22,17 @@ import {
   discoverOAuthServerInfo,
   exchangeAuthorization,
   refreshAuthorization,
-  registerClient,
   startAuthorization,
 } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { InvalidClientError, InvalidGrantError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
-import type {
-  AuthorizationServerMetadata,
-  OAuthClientInformationMixed,
-  OAuthProtectedResourceMetadata,
+import {
+  type AuthorizationServerMetadata,
+  OAuthClientInformationFullSchema,
+  type OAuthClientInformationMixed,
+  type OAuthClientMetadata,
+  type OAuthProtectedResourceMetadata,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { AccountGone, callbackUrl, type GrantClient, type OAuthProvider, TOOL_CALL_TIMEOUT_MS, timedFetch } from './accounts';
 import { appClient } from './apps';
@@ -180,22 +181,18 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
     return registering;
   };
   const register = async (name: string): Promise<OAuthClientInformationMixed> => {
-    const { as, metadata, scope } = await info();
+    const { metadata, scope } = await info();
     if (!metadata.registration_endpoint) throw new Error(`${c.id}: the server takes no client registration`);
     const methods = metadata.token_endpoint_auth_methods_supported ?? ['client_secret_basic'];
     const method = methods.includes('none') ? 'none' : methods.includes('client_secret_post') ? 'client_secret_post' : 'client_secret_basic';
-    const registered = await registerClient(as, {
-      metadata,
-      clientMetadata: {
-        client_name: 'Ghostaff',
-        client_uri: 'https://ghostaff.ai',
-        redirect_uris: [redirectUri],
-        grant_types: ['authorization_code', 'refresh_token'],
-        response_types: ['code'],
-        token_endpoint_auth_method: method,
-        ...(scope ? { scope } : {}),
-      },
-      ...(f ? { fetchFn: f } : {}),
+    const registered = await registerClientLenient(metadata.registration_endpoint, f ?? fetch, {
+      client_name: 'Ghostaff',
+      client_uri: 'https://ghostaff.ai',
+      redirect_uris: [redirectUri],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: method,
+      ...(scope ? { scope } : {}),
     });
     await deps.vault.put(name, JSON.stringify({ ...registered, redirect_uri: redirectUri }), { kind: 'mcp-client', provider: c.id });
     return registered;
@@ -330,4 +327,23 @@ export function mcpOAuth(c: McpConnector, deps: McpDeps): OAuthProvider {
       return tools;
     },
   };
+}
+
+/**
+ * Dynamic client registration (RFC 7591), more forgiving than the SDK's `registerClient` in two ways
+ * that real servers need: a field sent as `null` is read as absent (Holded answers `software_id: null`,
+ * which the SDK's schema refuses), and a refusal keeps the server's own error, which the SDK loses
+ * («Invalid OAuth error response … [object Response]»).
+ */
+export async function registerClientLenient(endpoint: string, f: typeof fetch, clientMetadata: OAuthClientMetadata) {
+  const res = await f(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(clientMetadata),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`client registration refused (${res.status}): ${text.slice(0, 300)}`);
+  const body = JSON.parse(text) as Record<string, unknown>;
+  const present = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== null));
+  return OAuthClientInformationFullSchema.parse(present);
 }
