@@ -1,6 +1,9 @@
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { blockReason, onlyWhatRuns, type PushContext } from '../src/guard';
-import { agentEnv, claudeArgs, crashText, newDecisions, noteworthy, passwdIds, readSpec, redact, resultOf } from '../src/lib';
+import { agentEnv, claudeArgs, crashText, decisionFiles, engineClosedRun, newDecisions, tokenNearExpiry, noteworthy, passwdIds, readSpec, redact, resultOf } from '../src/lib';
 
 const SPEC = {
   run: '40000000-0000-0000-0000-000000000001',
@@ -9,7 +12,7 @@ const SPEC = {
   model: 'claude-opus-5-5',
   tools: ['Bash', 'Read', 'WebSearch'],
   maxTurns: 200,
-  record: { repo: 'ordago-app/business', token: 'ghs_secret_token' },
+  record: { repo: 'ordago-app/business', token: 'ghs_secret_token', expiresAt: '2026-11-21T11:00:00Z' },
   author: { name: 'Legal (Ghostaff)', email: 'bot@example.com' },
   claudeToken: 'sk-ant-oat01-secret',
   decisionsDir: 'por-decidir',
@@ -65,6 +68,39 @@ describe('the end of a run', () => {
       { id: 'legal-murcia', question: '¿Avisamos a Murcia?' },
       { id: 'legal-sin-pregunta', question: 'legal-sin-pregunta' },
     ]);
+  });
+
+  it('reads only regular decision files, never through a symlink the agent left', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'decisiones-'));
+    writeFileSync(join(dir, 'legal-murcia.yaml'), 'propone: legal\npregunta: ¿Murcia?\n');
+    const outside = join(mkdtempSync(join(tmpdir(), 'fuera-')), 'secreto.yaml');
+    writeFileSync(outside, 'propone: legal\npregunta: contenido de root\n');
+    symlinkSync(outside, join(dir, 'legal-enlace.yaml'));
+    mkdirSync(join(dir, 'carpeta.yaml'));
+    expect(decisionFiles(dir).map((f) => f.name)).toEqual(['legal-murcia.yaml']);
+    const linkedDir = join(mkdtempSync(join(tmpdir(), 'enlace-')), 'por-decidir');
+    symlinkSync(dir, linkedDir);
+    expect(decisionFiles(linkedDir)).toEqual([]);
+    expect(decisionFiles(join(dir, 'no-existe'))).toEqual([]);
+  });
+
+  it('a decision’s question never carries a secret', () => {
+    const files = [{ name: 'legal-x.yaml', content: 'propone: legal\npregunta: el token es ghs_secret_token\n' }];
+    expect(newDecisions(files, new Set(), 'legal', [SPEC.record.token])).toEqual([{ id: 'legal-x', question: 'el token es [secreto]' }]);
+  });
+
+  it('renews the record token five minutes before it ends', () => {
+    expect(tokenNearExpiry('2026-11-21T11:00:00Z', Date.parse('2026-11-21T10:54:00Z'))).toBe(false);
+    expect(tokenNearExpiry('2026-11-21T11:00:00Z', Date.parse('2026-11-21T10:56:00Z'))).toBe(true);
+  });
+
+  it('skips its report only when the engine closed the run itself', () => {
+    expect(engineClosedRun(409, { error: 'no_subscription' })).toBe(true);
+    expect(engineClosedRun(409, { error: 'no_record' })).toBe(true);
+    expect(engineClosedRun(409, { error: 'already_taken' })).toBe(false);
+    expect(engineClosedRun(409, { error: 'gone' })).toBe(false);
+    expect(engineClosedRun(409, null)).toBe(false);
+    expect(engineClosedRun(403, { error: 'no_subscription' })).toBe(false);
   });
 
   it('never prints or reports a secret', () => {

@@ -68,6 +68,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
   }
   let now = opts.now ?? new Date('2026-11-21T10:00:00Z');
   let working: string | null = null;
+  let minted = 0;
   const chat: ChatStore = {
     levelFor: async () => 'talk',
     thread: async (id) => (id === THREAD ? thread : null),
@@ -141,7 +142,10 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
       engineUrl: 'https://engine',
       vault,
       record: async (orgId) => (orgId === ORG ? { repo: 'ordago-app/business', installation: 7 } : { repo: 'taller/registro', installation: 8 }),
-      tokens: async (inst, repo) => `ghs_${inst}_${repo}_${now.getTime()}`,
+      freshToken: async (inst, repo) => {
+        minted += 1;
+        return { token: `ghs_${inst}_${repo}_${now.getTime()}_${minted}`, expiresAt: new Date(now.getTime() + 3600_000).toISOString() };
+      },
       commitEmail: 'bot@example.com',
       now: () => now,
     },
@@ -243,6 +247,7 @@ describe('POST /runs/:id/spec', () => {
       decisionsDir: 'por-decidir',
     });
     expect(s.record.token).toMatch(/^ghs_7_ordago-app\/business_/);
+    expect(s.record.expiresAt).toBe('2026-11-21T11:00:00.000Z');
     expect(s.prompt).toContain('Eres el agente «Legal» de Órdago: Dice qué dice la ley.');
     expect(s.prompt).toContain('agentes/legal/');
     expect(s.prompt).toContain('Esta ejecución la ha lanzado Ana');
@@ -286,6 +291,18 @@ describe('POST /runs/:id/spec', () => {
     expect(t.updates.at(-1)).toMatchObject({ id: 'reply-1', state: 'failed', text: NO_SUBSCRIPTION });
   });
 
+  it('an agent moved off our runner meanwhile closes the run, and its message says so', async () => {
+    const t = setup();
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    t.agents.delete(LEGAL);
+    const res = await t.fetchSpec(run!, nonce!);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('gone');
+    expect(t.runs.get(run!)!.state).toBe('failed');
+    expect(t.updates.at(-1)).toMatchObject({ id: 'reply-1', state: 'failed' });
+  });
+
   it('a fresh record token only for a run that has its spec, with its nonce', async () => {
     const t = setup();
     await t.ask();
@@ -295,7 +312,10 @@ describe('POST /runs/:id/spec', () => {
     t.setNow(new Date('2026-11-21T11:00:00Z'));
     const res = await t.post(`/runs/${run}/record-token`, RUNNER, { nonce });
     expect(res.status).toBe(200);
-    expect((await res.json()).token).toBe(`ghs_7_ordago-app/business_${Date.parse('2026-11-21T11:00:00Z')}`);
+    const fresh = await res.json();
+    // A new token each time, never the one the spec gave nor a cached one.
+    expect(fresh.token).toBe(`ghs_7_ordago-app/business_${Date.parse('2026-11-21T11:00:00Z')}_2`);
+    expect(fresh.expiresAt).toBe('2026-11-21T12:00:00.000Z');
     expect((await t.post(`/runs/${run}/record-token`, RUNNER, { nonce: 'y'.repeat(43) })).status).toBe(403);
   });
 });

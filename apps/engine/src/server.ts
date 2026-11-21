@@ -21,7 +21,7 @@ import { appClient } from './apps';
 import { microsoftOAuth, microsoftTools } from './microsoft';
 import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
-import { repoTokens } from './githubApp';
+import { freshRepoToken, repoTokens } from './githubApp';
 import { googleCaller } from './googleCaller';
 import { supabaseRecordStore } from './recordStore';
 import { syncAll, syncOrg } from './recordSync';
@@ -129,7 +129,7 @@ const runner: RunnerDeps | undefined = runnerIdentity
         const org = await recordSync.store.orgWithRecord(orgId);
         return org ? { repo: org.repo, installation: org.installation } : null;
       },
-      tokens: recordSync.tokens,
+      freshToken: freshRepoToken(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
       commitEmail: process.env.RECORD_COMMIT_EMAIL ?? 'ghostaff-registro[bot]@users.noreply.github.com',
     }
   : undefined;

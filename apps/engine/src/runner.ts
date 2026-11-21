@@ -21,7 +21,7 @@ import { Cron } from 'croner';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { madridNow } from './chat';
 import { Refusal } from './connections';
-import type { RepoTokens } from './githubApp';
+import type { FreshRepoToken } from './githubApp';
 import { type AgentJob, indication, type JobDeps, type RunRecord } from './jobs';
 import { secretName, type Vault } from './vault';
 
@@ -67,7 +67,8 @@ export interface RunnerDeps {
   vault: Pick<Vault, 'get'>;
   /** The organisation's record repo, through the record connector; null without one. */
   record(orgId: string): Promise<{ repo: string; installation: number } | null>;
-  tokens: RepoTokens;
+  /** A new, uncached record token per call: a run never shares one with the sync or another run. */
+  freshToken: FreshRepoToken;
   /** Who the agent's commits are by: `<agent> (Ghostaff)` and this address. */
   commitEmail: string;
   now?: () => Date;
@@ -81,7 +82,7 @@ export interface RunSpec {
   model: string;
   tools: string[];
   maxTurns: number;
-  record: { repo: string; token: string };
+  record: { repo: string; token: string; expiresAt: string };
   author: { name: string; email: string };
   claudeToken: string;
   decisionsDir: string;
@@ -97,6 +98,7 @@ export const NO_SUBSCRIPTION =
   'Quien sea propietario puede conectarla en Conexiones, en «Claude · tu suscripción».';
 const NO_RECORD =
   'No puedo ponerme a trabajar: esta organización no tiene conectado su registro. Quien sea propietario puede conectarlo en Conexiones.';
+const GONE = 'No he podido ponerme con ello: ya no trabajo desde aquí. Pregunta a quien sea propietario.';
 const NOT_STARTED = 'No he podido ponerme con ello. Vuelve a escribirme en un rato.';
 
 export const hashNonce = (nonce: string) => createHash('sha256').update(nonce, 'utf8').digest('hex');
@@ -300,7 +302,13 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
   if (!run) throw new Refusal(409, 'already_taken', 'this run’s spec was already fetched, or the run is over');
 
   const [agent, chatAgent] = await Promise.all([runner.store.runnerAgent(run.agentId), chat.chat.agent(run.agentId)]);
-  if (!agent || !chatAgent || agent.orgId !== run.orgId) throw new Refusal(409, 'gone', 'the agent no longer runs here');
+  if (!agent || !chatAgent || agent.orgId !== run.orgId) {
+    if (chatAgent) await failRun(chat, deps, run, chatAgent, GONE);
+    else if (await deps.jobs.finishRun(run.id, { state: 'failed', summary: GONE, noteworthy: false, decisionsOpened: 0 }).catch(() => false)) {
+      if (run.messageId) await chat.chat.updateReply(run.messageId, { text: GONE, state: 'failed' }).catch(() => {});
+    }
+    throw new Refusal(409, 'gone', 'the agent no longer runs here');
+  }
   const [claudeToken, record] = await Promise.all([runner.vault.get(secretName(run.orgId, 'claude')), runner.record(run.orgId)]);
   if (!claudeToken || !record) {
     await failRun(chat, deps, run, chatAgent, claudeToken ? NO_RECORD : NO_SUBSCRIPTION);
@@ -312,7 +320,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
     const thread = await chat.chat.thread(run.threadId);
     if (thread) request = requestOf(await chat.chat.recentMessages(thread.id, 40), thread, run);
   }
-  const token = await runner.tokens(record.installation, record.repo);
+  const token = await runner.freshToken(record.installation, record.repo);
   return {
     run: run.id,
     slug: agent.slug,
@@ -326,7 +334,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
     model: agent.model,
     tools: agent.tools,
     maxTurns: agent.maxTurns,
-    record: { repo: record.repo, token },
+    record: { repo: record.repo, token: token.token, expiresAt: token.expiresAt },
     author: { name: `${agent.name} (Ghostaff)`, email: runner.commitEmail },
     claudeToken,
     decisionsDir: DECISIONS_DIR,
@@ -337,14 +345,14 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
  * POST /runs/:id/record-token: a fresh record token for a run that has its
  * spec and still works (a record token lasts an hour; a run up to three).
  */
-export async function runRecordToken(deps: JobDeps, caller: string | null, runId: string, body: unknown): Promise<{ token: string }> {
+export async function runRecordToken(deps: JobDeps, caller: string | null, runId: string, body: unknown): Promise<{ token: string; expiresAt: string }> {
   const runner = checkRunner(deps, caller);
   const nonce = (body as { nonce?: unknown } | null)?.nonce;
   const run = /^[0-9a-f-]{36}$/i.test(runId) ? await deps.jobs.run(runId) : null;
   if (!run || !nonceMatches(nonce, run.nonceHash) || run.state !== 'running' || !run.specFetched) throw new Refusal(403, 'not_allowed', 'not this run');
   const record = await runner.record(run.orgId);
   if (!record) throw new Refusal(409, 'no_record', 'the organisation has no record');
-  return { token: await runner.tokens(record.installation, record.repo) };
+  return runner.freshToken(record.installation, record.repo);
 }
 
 /** For reportRun: the agent of a run our runner reports for, checked by its nonce; a Refusal when it does not match. */

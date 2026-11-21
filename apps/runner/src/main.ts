@@ -27,6 +27,8 @@ import {
   agentEnv,
   claudeArgs,
   crashText,
+  decisionFiles,
+  engineClosedRun,
   failureText,
   gitEnv,
   newDecisions,
@@ -37,13 +39,12 @@ import {
   type Report,
   resultOf,
   type RunSpec,
+  tokenNearExpiry,
 } from './lib';
 
 const METADATA_IDENTITY = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity';
 const HELPER = '/opt/runner/apps/runner/src/credential-helper.mjs';
 const AGENT_USER = 'agente';
-/** A record token lasts an hour; a fresh one is asked for after this. */
-const TOKEN_FRESH_MS = 40 * 60_000;
 
 const run = process.env.GHOSTAFF_RUN ?? '';
 const nonce = process.env.GHOSTAFF_NONCE ?? '';
@@ -89,18 +90,16 @@ async function report(r: Omit<Report, 'run' | 'nonce'>): Promise<void> {
 }
 
 /** The record token for git, on 127.0.0.1 only, renewed through the engine before it expires. */
-async function serveRecordToken(first: string): Promise<{ port: number; close(): void }> {
-  let token = first;
-  let since = Date.now();
+async function serveRecordToken(first: { token: string; expiresAt: string }): Promise<{ port: number; close(): void }> {
+  let { token, expiresAt } = first;
   const server = createServer(async (req, res) => {
     if (req.url !== '/token') return res.writeHead(404).end();
     try {
-      if (Date.now() - since > TOKEN_FRESH_MS) {
+      if (tokenNearExpiry(expiresAt, Date.now())) {
         const r = await callEngine(`/runs/${run}/record-token`, { nonce });
         if (r.ok) {
-          token = ((await r.json()) as { token: string }).token;
+          ({ token, expiresAt } = (await r.json()) as { token: string; expiresAt: string });
           secrets.push(token);
-          since = Date.now();
         }
       }
     } catch (e) {
@@ -149,15 +148,16 @@ async function main(): Promise<number> {
   }
   const res = await callEngine(`/runs/${run}/spec`, { nonce });
   if (!res.ok) {
-    // 409: the engine closed the run itself (no subscription, no record) and said why in Ghostaff.
-    reported = res.status === 409;
+    // The engine closed the run itself (no subscription, no record) and said why in Ghostaff;
+    // any other refusal leaves the run open, and the failure report below closes it.
+    reported = engineClosedRun(res.status, await res.json().catch(() => null));
     throw new Error(`the engine refused the spec: ${res.status}`);
   }
   const spec = readSpec(await res.json());
   secrets.push(spec.claudeToken, spec.record.token);
 
   const ids = passwdIds(readFileSync('/etc/passwd', 'utf8'), AGENT_USER);
-  const tokens = await serveRecordToken(spec.record.token);
+  const tokens = await serveRecordToken(spec.record);
   try {
     const env = gitEnv(ids.home);
     const git = asAgent(ids, env);
@@ -174,11 +174,7 @@ async function main(): Promise<number> {
     const { code, last } = await runClaude(spec, ids, record);
     const result = resultOf(last);
     const ok = code === 0 && result.ok;
-    const opened = newDecisions(
-      yamlNames(decisions).map((name) => ({ name, content: readFileSync(join(decisions, name), 'utf8') })),
-      before,
-      spec.slug,
-    );
+    const opened = newDecisions(decisionFiles(decisions), before, spec.slug, secrets);
     await report({
       ok,
       text: ok ? result.text : failureText(code, result.text),
