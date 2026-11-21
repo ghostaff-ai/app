@@ -143,9 +143,9 @@ export type AccountConnectResult = 'ok' | 'denied' | 'missing_scopes' | 'expired
 export const VERTEX_EU_REGIONS = ['europe-west1', 'europe-west4'] as const;
 
 // Agents: an organisation's team, by department (supabase/migrations/
-// 20261117000000_agents.sql). For now only how the app shows them.
+// 20261117000000_agents.sql, 20261121100000_agent_runners.sql).
 
-export const DEPARTMENTS = ['direccion', 'finanzas', 'marketing'] as const;
+export const DEPARTMENTS = ['direccion', 'finanzas', 'legal', 'producto', 'marketing'] as const;
 export type Department = (typeof DEPARTMENTS)[number];
 
 export const AGENT_GHOSTS = ['base', 'secretaria', 'incorporacion', 'finanzas', 'redes', 'productor'] as const;
@@ -172,7 +172,30 @@ export interface Agent {
   department: Department;
   /** The level a member has on it until an owner chooses one: talk for Secretaría, read for the rest. */
   memberDefault: AgentLevel;
+  /** How it runs: only in chat, as one of Órdago's jobs while they migrate, or on Ghostaff's own runner. */
+  runner: AgentRunner;
+  /** Its own one-line job, when it has one (Órdago's agents); else its ghost's. */
+  description: string | null;
+  /** When it works on its own (cron, Madrid time), or null when only when asked. */
+  schedule: string | null;
   createdAt: string;
+}
+
+export const AGENT_RUNNERS = ['chat', 'ordago_job', 'ghostaff'] as const;
+export type AgentRunner = (typeof AGENT_RUNNERS)[number];
+
+/** One run of an agent (supabase/migrations/20261121100000_agent_runners.sql): what it did, on its own or when asked. */
+export interface AgentRun {
+  id: string;
+  orgId: string;
+  agentId: string;
+  origin: 'person' | 'schedule';
+  state: 'running' | 'done' | 'failed';
+  summary: string | null;
+  noteworthy: boolean;
+  decisionsOpened: number;
+  startedAt: string;
+  finishedAt: string | null;
 }
 
 // Who may use each agent (supabase/migrations/20261118000000_team_chat.sql):

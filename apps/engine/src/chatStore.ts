@@ -28,12 +28,12 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
       return r ? { id: r.id, orgId: r.org_id, agentId: r.agent_id, title: r.title } : null;
     },
     async agent(id) {
-      const r = check(await admin.from('agents').select('id, org_id, name, ghost, department').eq('id', id).maybeSingle());
-      return r ? { id: r.id, orgId: r.org_id, name: r.name, ghost: r.ghost, department: r.department } : null;
+      const r = check(await admin.from('agents').select('id, org_id, name, ghost, department, runner').eq('id', id).maybeSingle());
+      return r ? { id: r.id, orgId: r.org_id, name: r.name, ghost: r.ghost, department: r.department, runner: r.runner } : null;
     },
     async orgAgents(orgId) {
-      const rows = check(await admin.from('agents').select('id, org_id, name, ghost, department').eq('org_id', orgId)) ?? [];
-      return rows.map((r) => ({ id: r.id, orgId: r.org_id, name: r.name, ghost: r.ghost, department: r.department }));
+      const rows = check(await admin.from('agents').select('id, org_id, name, ghost, department, runner').eq('org_id', orgId)) ?? [];
+      return rows.map((r) => ({ id: r.id, orgId: r.org_id, name: r.name, ghost: r.ghost, department: r.department, runner: r.runner }));
     },
     async orgName(orgId) {
       const r = check(await admin.from('organizations').select('name').eq('id', orgId).single());

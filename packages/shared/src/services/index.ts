@@ -6,6 +6,8 @@ import type {
   AgentAccess,
   AgentGhost,
   AgentLevel,
+  AgentRun,
+  AgentRunner,
   AiProvider,
   Answer,
   ConnectAiInput,
@@ -526,6 +528,9 @@ interface AgentRow {
   ghost: AgentGhost;
   department: Department;
   member_default: AgentLevel;
+  runner: AgentRunner;
+  description: string | null;
+  schedule: string | null;
   created_at: string;
 }
 
@@ -537,11 +542,14 @@ export function agentFromRow(r: AgentRow): Agent {
     ghost: r.ghost,
     department: r.department,
     memberDefault: r.member_default,
+    runner: r.runner ?? 'chat',
+    description: r.description ?? null,
+    schedule: r.schedule ?? null,
     createdAt: r.created_at,
   };
 }
 
-const AGENT_COLUMNS = 'id, org_id, name, ghost, department, member_default, created_at';
+const AGENT_COLUMNS = 'id, org_id, name, ghost, department, member_default, runner, description, schedule, created_at';
 
 /** The organisation's agents, oldest first. */
 export async function listAgents(client: SupabaseClient, orgId: string): Promise<Agent[]> {
@@ -771,4 +779,51 @@ export async function askAgent(engine: EngineAccess, threadId: string): Promise<
 /** A newly added agent introduces itself in a thread of its own; returns that thread. */
 export async function agentHello(engine: EngineAccess, agentId: string): Promise<{ threadId: string }> {
   return callEngine(engine, 'POST', `/agents/${agentId}/hello`);
+}
+
+// Agent runs: what the agents did, on their own or when asked
+// (supabase/migrations/20261121100000_agent_runners.sql). Read only: the engine records them.
+
+interface AgentRunRow {
+  id: string;
+  org_id: string;
+  agent_id: string;
+  origin: 'person' | 'schedule';
+  state: 'running' | 'done' | 'failed';
+  summary: string | null;
+  noteworthy: boolean;
+  decisions_opened: number;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export function agentRunFromRow(r: AgentRunRow): AgentRun {
+  return {
+    id: r.id,
+    orgId: r.org_id,
+    agentId: r.agent_id,
+    origin: r.origin,
+    state: r.state,
+    summary: r.summary,
+    noteworthy: r.noteworthy,
+    decisionsOpened: r.decisions_opened,
+    startedAt: r.started_at,
+    finishedAt: r.finished_at,
+  };
+}
+
+/** What the agents finished on their own since `since`, newest first: «Hecho sin ti» (app-design.md #11). */
+export async function listDoneWithoutYou(client: SupabaseClient, orgId: string, since: Date): Promise<AgentRun[]> {
+  const { data, error } = await client
+    .from('agent_runs')
+    .select('id, org_id, agent_id, origin, state, summary, noteworthy, decisions_opened, started_at, finished_at')
+    .eq('org_id', orgId)
+    .eq('origin', 'schedule')
+    .eq('state', 'done')
+    .gte('started_at', since.toISOString())
+    .order('started_at', { ascending: false })
+    .limit(50)
+    .returns<AgentRunRow[]>();
+  if (error) throw error;
+  return (data ?? []).map(agentRunFromRow);
 }

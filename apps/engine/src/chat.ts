@@ -14,6 +14,7 @@ import { AGENT_JOBS, type AgentGhost, type ChatMessage, messageText, splitMentio
 import type { ActionPart } from '@ghostaff/shared';
 import { previewOf } from './actions';
 import { Refusal } from './connections';
+import { askJob, type JobDeps } from './jobs';
 import type { AgentTools } from './tools';
 
 export type Level = 'none' | 'read' | 'talk';
@@ -24,6 +25,8 @@ export interface ChatAgent {
   name: string;
   ghost: AgentGhost;
   department: string;
+  /** How it runs (supabase/migrations/20261121100000_agent_runners.sql); a job agent answers through its job. */
+  runner?: 'chat' | 'ordago_job' | 'ghostaff';
 }
 
 export interface ChatThreadHead {
@@ -93,6 +96,8 @@ export interface ChatDeps {
   writerFor(orgId: string, account: AiAccount): Promise<Writer>;
   /** The tools of the organisation's connected accounts. */
   toolsFor(orgId: string): Promise<AgentTools>;
+  /** Agents that run as jobs (jobs.ts); without it every agent answers with the model. */
+  jobs?: JobDeps;
   /** How often the growing text is written to the database. */
   flushMs?: number;
   now?: () => number;
@@ -342,6 +347,12 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
       if (who.id !== agent.id && (await deps.chat.levelFor(who.id, userId)) !== 'talk') continue;
       const replyId = await deps.chat.startReply(thread, who, ['Leyendo la conversación']);
       if (!replyId) return { replied }; // a reply is already being written; it will pick this up
+      if (who.runner === 'ordago_job' && deps.jobs) {
+        // Its job answers when it ends (POST /runs/report); the message stays «working» until then.
+        await askJob(deps, deps.jobs, thread, who, replyId, i === 0 ? messages : await deps.chat.recentMessages(thread.id, 40), userId);
+        replied = true;
+        continue;
+      }
       // A second agent reads the first one's answer too.
       const history = i === 0 ? messages : await deps.chat.recentMessages(thread.id, 40);
       const system = systemPrompt(who, orgName, {

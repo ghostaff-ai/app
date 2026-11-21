@@ -15,6 +15,7 @@ import {
   writeAnswer,
 } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
+import { readProjectAgents } from './agents';
 import { planSync, type RecordFile } from './plan';
 import { projectUrlFromKey } from './projectUrl';
 
@@ -25,6 +26,8 @@ import { projectUrlFromKey } from './projectUrl';
 //   pnpm --filter @ghostaff/sync org add-member --org ordago --email a@b.c --name Álvaro [--role owner]
 //   pnpm --filter @ghostaff/sync org set-record --org ordago --repo ordago-app/business --installation 123
 //     (the record connector: from then on the engine syncs it every five minutes)
+//   pnpm --filter @ghostaff/sync org add-agents --org ordago --from ~/githubs/ghostaff-ai/agents/proyectos/ordago
+//     (Órdago's agents in Equipo, each running as its job; again to refresh them)
 //
 // It writes with the service-role key, which bypasses row-level security, so it
 // runs only on our machines and in the engine, never in the app. The key comes
@@ -123,6 +126,23 @@ async function setRecord(opts: { org: string; repo: string; installation: string
   console.log(`${opts.org}'s record is ${opts.repo} (installation ${installation}); the engine syncs it on its next tick`);
 }
 
+async function addAgents(opts: { org: string; from: string }) {
+  const db = admin();
+  const orgId = await orgBySlug(db, opts.org);
+  const agents = readProjectAgents(opts.from);
+  // Upsert by (org, slug): running it again refreshes the job and the text, and keeps the agent's
+  // threads, runs and access levels. The partial unique index needs the conflict target spelled out.
+  for (const a of agents) {
+    const { data: found, error: e1 } = await db.from('agents').select('id').eq('org_id', orgId).eq('slug', a.slug).maybeSingle<{ id: string }>();
+    if (e1) throw e1;
+    const { error } = found
+      ? await db.from('agents').update(a).eq('id', found.id)
+      : await db.from('agents').insert({ ...a, org_id: orgId, member_default: 'read' });
+    if (error) throw error;
+    console.log(`${found ? 'updated' : 'added  '} ${a.name.padEnd(11)} ${a.department.padEnd(10)} ${a.job_name}`);
+  }
+}
+
 async function addMember(opts: { org: string; email: string; name: string; role: string }) {
   const db = admin();
   const orgId = await orgBySlug(db, opts.org);
@@ -165,6 +185,7 @@ async function main() {
       role: { type: 'string', default: 'member' },
       repo: { type: 'string' },
       installation: { type: 'string' },
+      from: { type: 'string' },
     },
   });
   const need = (k: keyof typeof values) => {
@@ -177,6 +198,8 @@ async function main() {
       return syncPorDecidir({ org: need('org'), record: need('record'), writeBack: !!values['write-back'] });
     case 'add-org':
       return addOrg({ slug: need('slug'), name: need('name') });
+    case 'add-agents':
+      return addAgents({ org: need('org'), from: need('from') });
     case 'set-record':
       return setRecord({ org: need('org'), repo: need('repo'), installation: need('installation') });
     case 'add-member': {
@@ -185,7 +208,7 @@ async function main() {
       return addMember({ org: need('org'), email: need('email'), name: need('name'), role });
     }
     default:
-      throw new Error('Commands: por-decidir, add-org, add-member, set-record');
+      throw new Error('Commands: por-decidir, add-org, add-member, set-record, add-agents');
   }
 }
 
