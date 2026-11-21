@@ -1,8 +1,8 @@
 # Voice: speak, and it's transcribed into the message
 
 **Priority:** medium — people on the go, and many small-business owners, would rather speak than type
-**Gate:** decision:who transcribes (see Open questions; the research of 2026-11-19 proposes an answer)
-**Next:** try the proposal below with 5–10 real notes recorded in a bar and in a car before deciding
+**Gate:** blocked:5–10 real voice notes, recorded in a bar and in a car, for the trial
+**Next:** run the trial on Gemini 3.5 Transcribe in `eu` with those notes (Chirp 3 as the fallback if it fails); then open questions 2–4
 
 Jaime's idea (2026-11-18), written down loosely. Don't treat any detail here as decided.
 
@@ -40,7 +40,7 @@ What matters: Spanish from Spain, notes of 2–5 minutes, noise (a bar, a car), 
 
 ## Open questions
 
-1. **Who transcribes:** on the phone (the system's speech recognition), the organisation's own AI provider ([llm-connectors.md](../ongoing/llm-connectors.md)), or a dedicated speech service. What matters: good Spanish, long notes, background noise, and cost. Proposal above: Gemini 3.5 Transcribe on Vertex AI in the EU, run by the engine; whether it is billed to Ghostaff or to the organisation's own AI account follows llm-connectors.md.
+1. **Decided (Álvaro, 2026-11-21): Gemini 3.5 Transcribe on Vertex AI in the EU, after the trial.** He asked first in the deck (2026-11-21) whether, with the phone's own recogniser, leaving the EU would be the user's responsibility rather than ours. Answer given in the session: when our button starts the recogniser, choosing it is ours, so it counts as our processing (the web sends audio to Google with no EU guarantee); only the keyboard's own dictation, which a person turns on themselves, is their tool. **Who transcribes:** on the phone (the system's speech recognition), the organisation's own AI provider ([llm-connectors.md](../ongoing/llm-connectors.md)), or a dedicated speech service. What matters: good Spanish, long notes, background noise, and cost. Proposal above: Gemini 3.5 Transcribe on Vertex AI in the EU, run by the engine; whether it is billed to Ghostaff or to the organisation's own AI account follows llm-connectors.md.
 2. **Long notes:** the maximum length, and whether the text appears as you speak or all at once at the end.
 3. **The mic on Hoy, Equipo and Registro:** whether it switches to this too, opening the thread with the transcript already in the box.
 4. **Tidying the text:** whether the transcript is sent as spoken, or lightly cleaned up first (punctuation, filler words) without changing what was said.

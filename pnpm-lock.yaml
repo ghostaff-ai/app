@@ -38,12 +38,18 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.8
         version: 2.1.8(hono@4.13.18)
+      '@hono/node-ws':
+        specifier: ^1.3.2
+        version: 1.3.2(@hono/node-server@2.1.8(hono@4.13.18))(hono@4.13.18)
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.2
         version: 1.32.2(zod@4.6.7)
       '@supabase/supabase-js':
         specifier: ^2.58.0
         version: 2.119.0(@opentelemetry/api@1.10.0)
+      croner:
+        specifier: 11.0.0
+        version: 11.0.0
       google-auth-library:
         specifier: ^11.3.4
         version: 11.3.4
@@ -224,6 +230,25 @@ importers:
         specifier: ~6.0.3
         version: 6.0.3
 
+  apps/runner:
+    dependencies:
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.5
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.0.15
+        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(jsdom@26.1.0)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+
   apps/sync:
     dependencies:
       '@ghostaff/shared':
@@ -232,6 +257,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.58.0
         version: 2.119.0(@opentelemetry/api@1.10.0)
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
@@ -1248,6 +1276,13 @@ packages:
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4 || ^5.0.0-0
+
+  '@hono/node-ws@1.3.2':
+    resolution: {integrity: sha512-+AmbA68lcspwOTzqTTZlehv0uT5Uc0CPKzTjEOa57LFDz2uyj77Tof1DKu1Eiri2WO1ig4WA1vayExdYDtu5Lg==}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      '@hono/node-server': ^2.1.6
+      hono: ^4.6.0
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -2809,6 +2844,10 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  croner@11.0.0:
+    resolution: {integrity: sha512-T17ADjdttrVToyzLpLq9Xb9xzcMwpQ/M3Qs9szhh0MVNTbv6NWQ9OFYa2qlzPYXFMn+uoDlnW1IpIv6cAvFtyA==}
+    engines: {node: '>=18.0'}
 
   cross-fetch@3.2.0:
     resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
@@ -6947,6 +6986,15 @@ snapshots:
     dependencies:
       hono: 4.13.18
 
+  '@hono/node-ws@1.3.2(@hono/node-server@2.1.8(hono@4.13.18))(hono@4.13.18)':
+    dependencies:
+      '@hono/node-server': 2.1.8(hono@4.13.18)
+      hono: 4.13.18
+      ws: 8.22.2
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
   '@isaacs/cliui@8.0.2':
     dependencies:
       string-width: 5.1.2
@@ -8624,6 +8672,8 @@ snapshots:
       parse-json: 5.2.0
     optionalDependencies:
       typescript: 6.0.3
+
+  croner@11.0.0: {}
 
   cross-fetch@3.2.0:
     dependencies:

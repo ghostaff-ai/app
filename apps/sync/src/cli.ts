@@ -5,6 +5,8 @@ import { parseArgs } from 'node:util';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   appendHistoryRow,
+  applySync,
+  markWrittenBack,
   DECISIONS_DIR,
   HISTORY_PATH,
   historyRow,
@@ -13,6 +15,7 @@ import {
   writeAnswer,
 } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
+import { readProjectAgents } from './agents';
 import { planSync, type RecordFile } from './plan';
 import { projectUrlFromKey } from './projectUrl';
 
@@ -21,6 +24,12 @@ import { projectUrlFromKey } from './projectUrl';
 //   pnpm sync:por-decidir --org ordago --record ~/githubs/ordago-app/business [--write-back]
 //   pnpm --filter @ghostaff/sync org add-org --slug ordago --name Órdago
 //   pnpm --filter @ghostaff/sync org add-member --org ordago --email a@b.c --name Álvaro [--role owner]
+//   pnpm --filter @ghostaff/sync org set-record --org ordago --repo ordago-app/business --installation 123
+//     (the record connector: from then on the engine syncs it every five minutes)
+//   pnpm --filter @ghostaff/sync org add-agents --org ordago --from ~/githubs/ghostaff-ai/agents/proyectos/ordago
+//     (Órdago's agents in Equipo, each running as its job; again to refresh them)
+//   pnpm --filter @ghostaff/sync org add-agents --org ordago --from … --runner ghostaff --only legal
+//     (those agents move to Ghostaff's own runner: task, model, tools, turns and timetable from their yaml)
 //
 // It writes with the service-role key, which bypasses row-level security, so it
 // runs only on our machines and in the engine, never in the app. The key comes
@@ -70,20 +79,7 @@ async function syncPorDecidir(opts: { org: string; record: string; writeBack: bo
 
   const plan = planSync({ orgId, files, existing: existing ?? [], commit, now: new Date() });
 
-  // Two batches, each with the same columns: in a mixed batch PostgREST would
-  // write NULL into the answer columns of the rows that do not carry one, and
-  // wipe an app answer that has not been written back yet.
-  const withAnswer = plan.upserts.filter((u) => u.answer);
-  const withoutAnswer = plan.upserts.filter((u) => !u.answer);
-  for (const batch of [withAnswer, withoutAnswer]) {
-    if (!batch.length) continue;
-    const { error: e } = await db.from('decisions').upsert(batch, { onConflict: 'org_id,record_id' });
-    if (e) throw e;
-  }
-  if (plan.close.length) {
-    const { error: e } = await db.from('decisions').update({ closed_at: new Date().toISOString() }).in('id', plan.close);
-    if (e) throw e;
-  }
+  await applySync(db, plan);
 
   for (const w of plan.writeBacks) {
     if (!opts.writeBack) continue;
@@ -93,8 +89,7 @@ async function syncPorDecidir(opts: { org: string; record: string; writeBack: bo
     const historyFile = join(opts.record, HISTORY_PATH);
     const csv = existsSync(historyFile) ? readFileSync(historyFile, 'utf8') : null;
     writeFileSync(historyFile, appendHistoryRow(csv, historyRow(readDecision(w.recordId, yaml), w.answer)));
-    const { error: e } = await db.from('decisions').update({ written_back_at: new Date().toISOString() }).eq('id', w.rowId);
-    if (e) throw e;
+    await markWrittenBack(db, [w.rowId]);
   }
 
   console.log(
@@ -117,6 +112,51 @@ async function addOrg(opts: { slug: string; name: string }) {
   const { error } = await admin().from('organizations').upsert({ slug: opts.slug, name: opts.name }, { onConflict: 'slug' });
   if (error) throw error;
   console.log(`organisation ${opts.slug} ready`);
+}
+
+async function setRecord(opts: { org: string; repo: string; installation: string }) {
+  const installation = Number(opts.installation);
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(opts.repo)) throw new Error('--repo is owner/name');
+  if (!Number.isInteger(installation) || installation <= 0) throw new Error('--installation is the GitHub App installation id');
+  const { data, error } = await admin()
+    .from('organizations')
+    .update({ record_repo: opts.repo, record_installation: installation, record_sync_error: null })
+    .eq('slug', opts.org)
+    .select('slug');
+  if (error) throw error;
+  if (!data?.length) throw new Error(`No organisation «${opts.org}»`);
+  console.log(`${opts.org}'s record is ${opts.repo} (installation ${installation}); the engine syncs it on its next tick`);
+}
+
+async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff'; only?: string[] }) {
+  const db = admin();
+  const orgId = await orgBySlug(db, opts.org);
+  const agents = readProjectAgents(opts.from, { runner: opts.runner, only: opts.only });
+  if (agents.length === 0) throw new Error('No agent to import: check --from and --only');
+  // Upsert by (org, slug): running it again refreshes the job and the text, and keeps the agent's
+  // threads, runs and access levels. The partial unique index needs the conflict target spelled out.
+  for (const a of agents) {
+    const { data: found, error: e1 } = await db
+      .from('agents')
+      .select('id, runner')
+      .eq('org_id', orgId)
+      .eq('slug', a.slug)
+      .maybeSingle<{ id: string; runner: string }>();
+    if (e1) throw e1;
+    // A refresh of every agent never moves one back off our runner: that takes saying so (and its job turned back on).
+    if (found?.runner === 'ghostaff' && a.runner !== 'ghostaff') {
+      console.log(`kept    ${a.name.padEnd(11)} on our runner (move it back only by hand)`);
+      continue;
+    }
+    // Moving onto our runner, its timetable counts from now: the tick starts it at its next fire time, never a missed one.
+    const row = a.runner === 'ghostaff' ? { ...a, last_scheduled_at: new Date().toISOString() } : a;
+    const { error } = found
+      ? await db.from('agents').update(row).eq('id', found.id)
+      : await db.from('agents').insert({ ...row, org_id: orgId, member_default: 'read' });
+    if (error) throw error;
+    const where = a.runner === 'ghostaff' ? `our runner, ${a.model}` : a.job_name;
+    console.log(`${found ? 'updated' : 'added  '} ${a.name.padEnd(11)} ${a.department.padEnd(10)} ${where}`);
+  }
 }
 
 async function addMember(opts: { org: string; email: string; name: string; role: string }) {
@@ -159,6 +199,11 @@ async function main() {
       name: { type: 'string' },
       email: { type: 'string' },
       role: { type: 'string', default: 'member' },
+      repo: { type: 'string' },
+      installation: { type: 'string' },
+      from: { type: 'string' },
+      runner: { type: 'string' },
+      only: { type: 'string' },
     },
   });
   const need = (k: keyof typeof values) => {
@@ -171,13 +216,21 @@ async function main() {
       return syncPorDecidir({ org: need('org'), record: need('record'), writeBack: !!values['write-back'] });
     case 'add-org':
       return addOrg({ slug: need('slug'), name: need('name') });
+    case 'add-agents': {
+      const runner = values.runner;
+      if (runner !== undefined && runner !== 'ghostaff') throw new Error('--runner is ghostaff (or left out: each agent runs as its job)');
+      const only = values.only?.split(',').map((s) => s.trim()).filter(Boolean);
+      return addAgents({ org: need('org'), from: need('from'), runner, only });
+    }
+    case 'set-record':
+      return setRecord({ org: need('org'), repo: need('repo'), installation: need('installation') });
     case 'add-member': {
       const role = need('role');
       if (role !== 'owner' && role !== 'member') throw new Error('--role is owner or member');
       return addMember({ org: need('org'), email: need('email'), name: need('name'), role });
     }
     default:
-      throw new Error('Commands: por-decidir, add-org, add-member');
+      throw new Error('Commands: por-decidir, add-org, add-member, set-record, add-agents');
   }
 }
 

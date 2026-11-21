@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { MyOrganization } from '@ghostaff/shared';
 import { listMyOrganizations } from '@ghostaff/shared/services';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { supabase } from '../supabase';
 
@@ -28,36 +28,36 @@ export function ActiveOrgProvider({ children }: { children: ReactNode }) {
   const userId = session?.user.id ?? null;
   const [organizations, setOrganizations] = useState<MyOrganization[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-
-  // `loading` is only the first load for a person. A reload (after creating or
-  // joining an organisation) keeps the old list on screen meanwhile: the app's
-  // layout swaps its navigator for a spinner while loading, and swapping it out
-  // mid-navigation loses the navigation (SDK 58 reports it as an error).
-  const loadedFor = useRef<string | null>(null);
+  // Whose list is on screen: loading is "signed in, and not settled for this
+  // person yet", worked out at render time. A flag set by the effect would be
+  // a render late: when the session arrives there is one render with a person
+  // and no organisation yet, which flips the layout's guards to Empezar and
+  // loses the link that was opened. A reload (after creating or joining an
+  // organisation) keeps the old list on screen meanwhile: the layout swaps its
+  // navigator for a spinner while loading, and swapping it out mid-navigation
+  // loses the navigation (SDK 58 reports it as an error).
+  const [settledFor, setSettledFor] = useState<string | null>(null);
+  const loading = userId !== null && settledFor !== userId;
 
   useEffect(() => {
     if (!userId) {
-      loadedFor.current = null;
       setOrganizations([]);
       setActiveId(null);
-      setLoading(false);
+      setSettledFor(null);
       return;
     }
     let alive = true;
-    if (loadedFor.current !== userId) setLoading(true);
     Promise.all([listMyOrganizations(supabase, userId), AsyncStorage.getItem(STORAGE_KEY)])
       .then(([orgs, stored]) => {
         if (!alive) return;
         setOrganizations(orgs);
         setActiveId(orgs.some((o) => o.id === stored) ? stored : (orgs[0]?.id ?? null));
         setError(null);
-        loadedFor.current = userId;
       })
       .catch((e: unknown) => alive && setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => alive && setLoading(false));
+      .finally(() => alive && setSettledFor(userId));
     return () => {
       alive = false;
     };

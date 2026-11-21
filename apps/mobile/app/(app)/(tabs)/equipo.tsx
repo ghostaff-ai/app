@@ -10,7 +10,7 @@ import { useAgents } from '@/lib/hooks/useAgents';
 import { useThreads } from '@/lib/hooks/useChat';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useTabScreenTop } from '@/lib/tabs';
-import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
+import { CORE_DEPARTMENTS, DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
 // The organisation's team: its three departments and the agents in each, drawn
 // as their ghosts, an orange dot on an agent with a message you haven't read.
@@ -88,6 +88,7 @@ export default function Equipo() {
           {DEPARTMENTS.map((d) => {
             const agents = items.filter((a) => a.department === d);
             const jobs = owner ? open.filter((g) => GHOSTS[g].department === d) : [];
+            if (agents.length === 0 && jobs.length === 0 && !CORE_DEPARTMENTS.includes(d)) return null;
             return (
               <View key={d} className="mb-6">
                 <Text className="mb-2 text-xs uppercase tracking-wide text-muted">{DEPARTMENT_NAMES[d]}</Text>
@@ -107,7 +108,7 @@ export default function Equipo() {
                     <Image source={GHOSTS[a.ghost].picture} style={{ width: 80, height: 80 }} resizeMode="contain" />
                     <View className="ml-3 flex-1">
                       <Text className="text-base font-semibold text-ink">{a.name}</Text>
-                      <Text className="mt-1 text-sm text-muted">{GHOSTS[a.ghost].job}</Text>
+                      <Text className="mt-1 text-sm text-muted" numberOfLines={2}>{a.description ?? GHOSTS[a.ghost].job}</Text>
                     </View>
                     {unreadBy.has(a.id) ? <View testID="agent-unread" className="ml-2 h-2.5 w-2.5 rounded-full bg-waiting" /> : null}
                   </Pressable>

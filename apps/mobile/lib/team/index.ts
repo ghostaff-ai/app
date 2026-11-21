@@ -25,8 +25,13 @@ export const GHOST_ORDER: GhostId[] = ['secretaria', 'incorporacion', 'finanzas'
 export const DEPARTMENT_NAMES: Record<Department, string> = {
   direccion: 'Dirección',
   finanzas: 'Finanzas',
+  legal: 'Legal',
+  producto: 'Producto',
   marketing: 'Marketing',
 };
+
+/** Departments every team shows, even empty (a vacancy); the others only once they have someone. */
+export const CORE_DEPARTMENTS: readonly Department[] = ['direccion', 'finanzas', 'marketing'];
 
 // Decisions say which agent opened them (`propone`). Órdago's agents have their
 // own names; each is drawn as the ghost of the job it does, any other as the

@@ -21,7 +21,7 @@
 // Tokens never reach the database, the app or a log.
 
 import { createHash, randomBytes } from 'node:crypto';
-import { ACCOUNT_PROVIDERS, type AccountConnectResult, type AccountProvider, connectorFor } from '@ghostaff/shared';
+import { ACCOUNT_PROVIDERS, type AccountConnectResult, type AccountProvider, CONNECTORS, connectorFor } from '@ghostaff/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type Membership, Refusal, requireOwner } from './connections';
 import { type AgentTools, NO_TOOLS, type Tool, ToolError } from './tools';
@@ -187,8 +187,16 @@ export const codeChallenge = (verifier: string) => base64url(createHash('sha256'
 
 export const isAccountProvider = (p: unknown): p is AccountProvider => ACCOUNT_PROVIDERS.includes(p as AccountProvider);
 
+/**
+ * The path segment a provider returns to. Every Google card shares one OAuth client, so they share
+ * `google`: one redirect URI registered with Google, whatever cards we add. The attempt, found by its
+ * state, says which card it was.
+ */
+export const callbackKey = (provider: AccountProvider): string =>
+  CONNECTORS.find((c) => c.id === provider)?.kind === 'google' ? 'google' : provider;
+
 export const callbackUrl = (publicUrl: string, provider: AccountProvider) =>
-  `${publicUrl.replace(/\/$/, '')}/connections/oauth/${provider}/callback`;
+  `${publicUrl.replace(/\/$/, '')}/connections/oauth/${callbackKey(provider)}/callback`;
 
 /** A local engine (http://localhost…): development, where dev builds, Expo Go and a local web app come back too. */
 export const isLocalEngine = (publicUrl: string) => /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(publicUrl);
@@ -270,9 +278,10 @@ export async function returnFromProvider(
   provider: unknown,
   query: { state?: string; code?: string; error?: string },
 ): Promise<string | null> {
-  if (!isAccountProvider(provider) || typeof query.state !== 'string' || query.state.length > 128) return null;
+  // `provider` is the callback's path segment: the card itself, or `google` for every Google card.
+  if (typeof provider !== 'string' || typeof query.state !== 'string' || query.state.length > 128) return null;
   const attempt = await deps.accounts.findAttempt(query.state);
-  if (!attempt || attempt.provider !== provider) return null;
+  if (!attempt || callbackKey(attempt.provider) !== provider) return null;
   if (query.error || typeof query.code !== 'string' || !query.code) {
     await deps.accounts.takeAttempt(query.state);
     return backTo(attempt.returnTo, attempt.provider, query.error === 'access_denied' ? 'denied' : 'failed');

@@ -12,7 +12,7 @@ This repo is the product code: the app (iPhone, Android and web from one codebas
 
 **The product decisions live outside this repo**, in the private Órdago business repo: [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md) (what we build and why) and [`ghostaff.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff.md) (the company). Until Ghostaff is a company of its own, that stays the source of truth for the *why*; this repo holds the *how*. Read it before planning anything here.
 
-**Álvaro decides alone what gets built here and when** (2026-11-12). Jaime is a co-founder, not a gate: never hold work waiting for his review. Only things that are his too (using his subscription) wait for him.
+**Álvaro and Jaime decide together what gets built here and when** (Jaime, 2026-11-21; it replaces «Álvaro decides alone» of 2026-11-12). A product decision needs both. Once something is decided, building it waits for neither's review: open the PR and merge it when its checks are green (Branches).
 
 ## Sibling repos
 
@@ -22,7 +22,7 @@ Checked out side by side under `~/githubs/ghostaff-ai/`:
 git clone git@github.com:ghostaff-ai/app.git ~/githubs/ghostaff-ai/app
 ```
 
-- `ghostaff-ai/agents` is today's agent engine (Claude Code on Cloud Run Jobs), moved here from `ordago-app` on 2026-11-15 with Jaime's OK. It still runs Órdago's agents (`proyectos/ordago/`) unchanged; whether this repo's engine replaces it or grows from it is Álvaro's call. Read it, don't copy from it blindly. Clone it beside this one: `git clone git@github.com:ghostaff-ai/agents.git ~/githubs/ghostaff-ai/agents`.
+- `ghostaff-ai/agents` is today's agent engine (Claude Code on Cloud Run Jobs), moved here from `ordago-app` on 2026-11-15 with Jaime's OK. It still runs Órdago's agents (`proyectos/ordago/`) unchanged; whether this repo's engine replaces it or grows from it is for both founders to decide. Read it, don't copy from it blindly. Clone it beside this one: `git clone git@github.com:ghostaff-ai/agents.git ~/githubs/ghostaff-ai/agents`.
 - `cultuvilla/app` is the reference for an Expo app with the store release pipeline already working. Reuse its patterns.
 - **Apple and Expo access:** the iOS app is on Álvaro's Apple team `8HWS4483VD`, where Jaime is Admin with his own Apple ID; each founder signs into Apple and Expo as himself and makes his own API key, never a copied `.p8`. Who holds what: `ordago-app/ordago-apps/docs/ops/apple-developer-access.md`.
 
@@ -33,12 +33,13 @@ Start a session in the repo the work belongs to, never in the parent folder.
 ```
 apps/mobile/       the app: Expo + expo-router + NativeWind, iPhone, Android and web
 apps/sync/         record → database job (run by hand today, Cloud Run Jobs later)
-apps/engine/       the engine's HTTP service on Cloud Run: an organisation's AI keys and connected accounts (Google, the makers' MCP servers) into the vault, agents answering in the team chat with their tools
+apps/engine/       the engine's HTTP service on Cloud Run: an organisation's AI keys, Claude subscription (through the unmodified Claude Code) and connected accounts (Google, the makers' MCP servers) into the vault, agents answering in the team chat with their tools
+apps/runner/       our agent runner: the unmodified Claude Code in a container, one Cloud Run job execution per agent run, started by the engine
 packages/shared/   models, the record's file formats (por-decidir/), the data services
 supabase/          migrations, row-level-security tests (pgTAP), local config
 ```
 
-Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh` (the engine to Cloud Run), `pnpm db:start` / `pnpm db:test`
+Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh` (the engine to Cloud Run), `bash scripts/deploy-runner.sh` (the runner's job), `pnpm db:start` / `pnpm db:test`
 (Postgres and the policy tests), `pnpm app:start` / `pnpm app:web` (Metro on the first free port of 8083, 8093 … 8173, from
 `scripts/metro-port.sh`; never a bare `expo start`). Setup is in the [README](README.md#setup).
 

@@ -8,6 +8,9 @@ const agent = (id: string, ghost: Agent['ghost']): Agent => ({
   name: id,
   ghost,
   department: 'direccion',
+  runner: 'chat',
+  description: null,
+  schedule: null,
   memberDefault: 'read',
   createdAt: '2026-11-17T00:00:00Z',
 });
