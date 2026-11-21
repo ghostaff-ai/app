@@ -11,6 +11,7 @@ import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromPr
 import { type ActionDeps, approveAction, rejectAction } from './actions';
 import { CONNECTORS } from '@ghostaff/shared';
 import { agentHello, type ChatDeps, replyInThread } from './chat';
+import { reportRun } from './jobs';
 import { clientMetadataDocument } from './mcp';
 import { connectAi, type Deps, disconnectAi, Refusal } from './connections';
 import { bearer, type CallerFromToken } from './googleCaller';
@@ -39,6 +40,8 @@ export interface AppDeps extends Deps {
   actions: ActionDeps;
   /** The scheduler's tick; off when not configured. */
   cron?: CronDeps;
+  /** Checks the Google ID token of a job reporting its run (jobs.ts); off when not configured. */
+  reports?: { callerFromToken: CallerFromToken; audience: string };
 }
 
 type Env = { Variables: { userId: string } };
@@ -74,6 +77,24 @@ export function createApp(deps: AppDeps) {
     const caller = cron && token ? await cron.callerFromToken(token, cron.audience) : null;
     if (!cron || !caller || !cron.callers.includes(caller)) return c.json({ error: 'unauthorized' }, 401);
     return c.json({ ok: true, did: await cron.tick() });
+  });
+
+  // An agent's job at the end of a run, as its own service account (jobs.ts); no Supabase token on this one.
+  app.post('/runs/report', async (c) => {
+    const reports = deps.reports;
+    const token = bearer(c.req.header('Authorization'));
+    const caller = reports && token ? await reports.callerFromToken(token, reports.audience) : null;
+    if (!reports || !caller || !deps.chat.jobs) return c.json({ error: 'unauthorized' }, 401);
+    const body = await c.req.json().catch(() => null);
+    const done = await reportRun(deps.chat, deps.chat.jobs, caller, body);
+    // Someone wrote while the job worked: their message gets its answer now, with their rights.
+    if (done.threadId) {
+      const [last] = (await deps.chat.chat.recentMessages(done.threadId, 1)).slice(-1);
+      if (last?.authorKind === 'person' && last.authorUserId) {
+        await replyInThread(deps.chat, last.authorUserId, done.threadId).catch(() => {});
+      }
+    }
+    return c.json({ ok: true, run: done.run });
   });
 
   app.use('*', async (c, next) => {

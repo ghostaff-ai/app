@@ -24,7 +24,10 @@ import { MemoryVault, SecretManagerVault, type Vault } from './vault';
 import { repoTokens } from './githubApp';
 import { googleCaller } from './googleCaller';
 import { supabaseRecordStore } from './recordStore';
-import { syncAll } from './recordSync';
+import { syncAll, syncOrg } from './recordSync';
+import { expireRuns } from './jobs';
+import type { ChatDeps } from './chat';
+import { cloudRunLauncher, supabaseJobStore } from './jobsStore';
 
 function required(name: string): string {
   const v = process.env[name];
@@ -105,6 +108,22 @@ const recordSync = {
   store: supabaseRecordStore(admin),
   tokens: repoTokens(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
 };
+const caller = googleCaller();
+const jobs = {
+  jobs: supabaseJobStore(admin),
+  launch: cloudRunLauncher(auth),
+  async syncOrg(orgId: string) {
+    if (!githubAppId || !githubAppKey) return;
+    const org = await recordSync.store.orgWithRecord(orgId);
+    if (org) console.log((await syncOrg(recordSync, org)).summary);
+  },
+};
+const chatDeps: ChatDeps = {
+  chat: supabaseChatStore(admin),
+  writerFor: writerFactory(vault, auth),
+  toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
+  jobs,
+};
 const cronCallers = (process.env.CRON_CALLERS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
 
 const app = createApp({
@@ -125,21 +144,19 @@ const app = createApp({
     return error ? null : (data.user?.id ?? null);
   },
   serviceAccount: process.env.ENGINE_SERVICE_ACCOUNT ?? '',
-  chat: {
-    chat: supabaseChatStore(admin),
-    writerFor: writerFactory(vault, auth),
-    toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
-  },
+  chat: chatDeps,
+  reports: { callerFromToken: caller, audience: publicUrl },
   accounts,
   actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId) },
   cron: {
-    callerFromToken: googleCaller(),
+    callerFromToken: caller,
     audience: publicUrl,
     callers: cronCallers,
     async tick() {
       const synced = githubAppId && githubAppKey ? await syncAll(recordSync) : [];
       for (const s of synced) console.log(s.summary);
-      return { synced: synced.map((s) => ({ org: s.org, ok: s.ok })) };
+      const expired = await expireRuns(chatDeps, jobs);
+      return { synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired };
     },
   },
 });
