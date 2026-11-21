@@ -1,4 +1,4 @@
--- Ghostaff's own runner (20261121200000_ghostaff_runner.sql): what an agent
+-- Ghostaff's own runner (20261121300000_ghostaff_runner.sql): what an agent
 -- runs with is set only by the service role, a run's nonce hash is read by
 -- nobody from the app, and nothing crosses organisations (invariant 1).
 begin;
