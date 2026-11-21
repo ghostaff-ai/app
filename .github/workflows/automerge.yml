@@ -1,0 +1,59 @@
+name: Automerge
+
+# «Merge your own pull request as soon as its checks are green» (AGENTS.md,
+# «Branches»), done by GitHub: a pull request labelled `automerge` is merged
+# once the whole CI workflow, end-to-end tests included, has passed on its
+# latest commit. GitHub's own auto-merge can't wait for a check here: required
+# checks need a paid plan on a private repository (2026-11-21).
+#
+# A merge made with this workflow's token starts no workflow of its own, so CI
+# would never run on the merged develop and the beta (beta.yml, which waits for
+# CI on develop) would never ship it. Dispatching CI on the base branch is the
+# one event that token may start; beta.yml accepts that run like a push.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: automerge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    name: Merge when green
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Find the labelled pull request for this commit
+        id: pr
+        run: |
+          pr=$(gh pr list --head "$HEAD_BRANCH" --state open --label automerge \
+                 --json number,headRefOid,baseRefName \
+                 --jq "map(select(.headRefOid == \"$HEAD_SHA\")) | first // empty")
+          if [ -z "$pr" ]; then
+            echo "No open pull request labelled automerge at $HEAD_SHA; nothing to do."
+            exit 0
+          fi
+          echo "number=$(jq -r .number <<<"$pr")" >> "$GITHUB_OUTPUT"
+          echo "base=$(jq -r .baseRefName <<<"$pr")" >> "$GITHUB_OUTPUT"
+
+      - name: Merge it, only if it is still at the commit CI passed on
+        if: steps.pr.outputs.number
+        run: gh pr merge "${{ steps.pr.outputs.number }}" --merge --match-head-commit "$HEAD_SHA"
+
+      - name: Run CI on the merged base branch
+        if: steps.pr.outputs.number
+        run: gh workflow run ci.yml --ref "${{ steps.pr.outputs.base }}"

@@ -9,6 +9,8 @@ on:
   pull_request:
     branches: [develop, main]
     paths-ignore: ['**/*.md', 'docs/**']
+  # automerge.yml runs CI on the merged branch this way: its merge starts no push run.
+  workflow_dispatch:
 
 permissions:
   contents: read
