@@ -2,8 +2,8 @@ import type { AddressInfo } from 'node:net';
 import { serve } from '@hono/node-server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
-import type { SignInProcess } from '../src/claudeCode';
-import { claudeSession, type ClaudeSessionDeps } from '../src/claudeSession';
+import { type SignInProcess, Slots } from '../src/claudeCode';
+import { claudeSession, type ClaudeSessionDeps, MAX_MESSAGE } from '../src/claudeSession';
 import type { ConnectionRecord, Membership, Store } from '../src/connections';
 import { NO_TOOLS } from '../src/tools';
 import { MemoryVault, secretName } from '../src/vault';
@@ -67,6 +67,7 @@ function setup(over: Partial<ClaudeSessionDeps> = {}) {
       return { path: '/tmp/fake-home', remove: async () => void homes.removed++ };
     },
     now: () => new Date('2026-11-21T10:00:00Z'),
+    slots: new Slots(4),
     ...over,
   };
   const session = claudeSession(deps, { send: (m) => sent.push(m), close: () => void closed++ });
@@ -212,6 +213,114 @@ describe('connecting a Claude subscription', () => {
   });
 });
 
+describe('the sign-in, against what can go wrong', () => {
+  const toCode = async (t: ReturnType<typeof setup>) => {
+    t.say({ type: 'start', token: 'token-ana', orgId: ORG });
+    await flush();
+    t.claude.print(`\x1b]8;id=x;${URL}\x07`);
+    t.say({ type: 'code', code: CODE });
+  };
+
+  it('takes a token that is the very last thing Claude Code printed before ending', async () => {
+    const t = setup();
+    await toCode(t);
+    t.claude.print(`\r\n${TOKEN}`); // nothing after it yet: not taken while it runs
+    await flush();
+    expect(t.vault.secrets.size).toBe(0);
+    t.claude.end(0);
+    await flush();
+    expect(await t.vault.get(secretName(ORG, 'claude'))).toBe(TOKEN);
+    expect(t.sent.at(-1)).toMatchObject({ type: 'done' });
+  });
+
+  it('ending without a token after the code is a refused code', async () => {
+    const t = setup();
+    await toCode(t);
+    t.claude.end(1);
+    expect(t.sent.at(-1)).toEqual({ type: 'error', code: 'bad_code' });
+  });
+
+  it('never takes something printed before the code for the token', async () => {
+    const t = setup();
+    t.say({ type: 'start', token: 'token-ana', orgId: ORG });
+    await flush();
+    t.claude.print(`\x1b]8;id=x;${URL}\x07 ${TOKEN}\r\n`);
+    t.say({ type: 'code', code: CODE });
+    t.claude.print(`${CODE}\r\n`); // the terminal's echo
+    await flush();
+    expect(t.vault.secrets.size).toBe(0);
+    expect(t.sent.at(-1)).toEqual({ type: 'working' });
+  });
+
+  it('refuses a pasted Anthropic key or token as the code', async () => {
+    const t = setup();
+    t.say({ type: 'start', token: 'token-ana', orgId: ORG });
+    await flush();
+    t.claude.print(`\x1b]8;id=x;${URL}\x07`);
+    t.say({ type: 'code', code: TOKEN });
+    expect(t.claude.written).toEqual([]);
+    expect(t.sent.at(-1)).toEqual({ type: 'error', code: 'bad_code' });
+  });
+
+  it('an open socket that never says who it is, is closed', async () => {
+    vi.useFakeTimers();
+    const t = setup({ startTimeoutMs: 10_000 });
+    await vi.advanceTimersByTimeAsync(10_001);
+    expect(t.sent).toEqual([{ type: 'error', code: 'unauthorized' }]);
+    expect(t.closed()).toBe(1);
+  });
+
+  it('an oversized message is not even read', async () => {
+    const t = setup();
+    t.session.onMessage(`{"type":"start","token":"${'x'.repeat(MAX_MESSAGE)}"}`);
+    expect(t.sent).toEqual([{ type: 'error', code: 'bad_request' }]);
+    expect(t.deps.spawn).not.toHaveBeenCalled();
+  });
+
+  it('a save that hangs ends as a failure', async () => {
+    vi.useFakeTimers();
+    const vault = new MemoryVault();
+    vault.put = () => new Promise(() => {});
+    const t = setup({ vault, saveTimeoutMs: 20_000 });
+    t.say({ type: 'start', token: 'token-ana', orgId: ORG });
+    await vi.advanceTimersByTimeAsync(0);
+    t.claude.print(`\x1b]8;id=x;${URL}\x07`);
+    t.say({ type: 'code', code: CODE });
+    t.claude.print(`\r\n${TOKEN}\r\n`);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await vi.advanceTimersByTimeAsync(20_001);
+    expect(t.sent.at(-1)).toEqual({ type: 'error', code: 'failed' });
+    expect(t.closed()).toBe(1);
+  });
+
+  it('waits for a free Claude Code slot, and gives it back at the end', async () => {
+    vi.useFakeTimers();
+    const slots = new Slots(1);
+    const busy = slots.tryTake();
+    const t = setup({ slots });
+    t.say({ type: 'start', token: 'token-ana', orgId: ORG });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(t.deps.spawn).not.toHaveBeenCalled();
+    busy?.();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.deps.spawn).toHaveBeenCalled();
+    t.session.onClose();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(slots.tryTake()).not.toBeNull();
+  });
+
+  it('says Claude Code is unavailable when no slot frees up', async () => {
+    vi.useFakeTimers();
+    const slots = new Slots(1);
+    slots.tryTake();
+    const t = setup({ slots });
+    t.say({ type: 'start', token: 'token-ana', orgId: ORG });
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect(t.sent).toEqual([{ type: 'error', code: 'claude_unavailable' }]);
+    expect(t.deps.spawn).not.toHaveBeenCalled();
+  });
+});
+
 describe('the sign-in over a real WebSocket', () => {
   it('runs through the engine route, the Supabase token in the first message', async () => {
     const claude = new FakeClaude();
@@ -243,6 +352,13 @@ describe('the sign-in over a real WebSocket', () => {
     await new Promise((r) => server.once('listening', r));
     const port = (server.address() as AddressInfo).port;
     try {
+      // A message over the size limit closes the socket before anything is read.
+      const big = new WebSocket(`ws://127.0.0.1:${port}/connections/ai/claude/session`);
+      await new Promise((r) => big.addEventListener('open', r));
+      const bigClosed = new Promise<number>((r) => big.addEventListener('close', (e) => r(e.code)));
+      big.send('x'.repeat(MAX_MESSAGE + 1));
+      expect(await bigClosed).toBe(1009);
+
       const ws = new WebSocket(`ws://127.0.0.1:${port}/connections/ai/claude/session`);
       const heard: Record<string, unknown>[] = [];
       const closed = new Promise<void>((r) => ws.addEventListener('close', () => r()));

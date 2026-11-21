@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import type { Writer } from '../src/chat';
-import type { PrintRunner } from '../src/claudeCode';
+import { type PrintRunner, Slots } from '../src/claudeCode';
 import { supabaseChatStore } from '../src/chatStore';
-import { subscriptionWriter, transcript, withFallback } from '../src/claudeWriter';
+import { claudeAccountWriter, subscriptionWriter, transcript, withFallback } from '../src/claudeWriter';
 import { NO_TOOLS } from '../src/tools';
 
 const TOKEN = `sk-ant-oat01-${'t'.repeat(90)}`;
@@ -107,6 +107,50 @@ describe('falling back to the Anthropic key', () => {
       throw new Error('refused');
     };
     await expect(ask(withFallback(primary, null))).rejects.toThrow('refused');
+  });
+});
+
+describe('an organisation with a Claude subscription', () => {
+  const TOOLS = { ...NO_TOOLS, specs: [{ name: 'calendar_list' }] as never };
+  const keyWriter = () => vi.fn(async (): Promise<Writer> => async ({ onText }) => onText('Con la clave.'));
+
+  it('an agent with connected apps answers with the key, which has the tools', async () => {
+    const r = fakeRunner([delta('Suscripción'), result()]);
+    const fallback = keyWriter();
+    expect(await ask(claudeAccountWriter(TOKEN, r.run, 'm', fallback, { slots: new Slots(2) }), TOOLS)).toBe('Con la clave.');
+    expect(r.calls).toHaveLength(0);
+  });
+
+  it('without a key, it answers on the subscription even then', async () => {
+    const r = fakeRunner([delta('Suscripción'), result()]);
+    expect(await ask(claudeAccountWriter(TOKEN, r.run, 'm', null, { slots: new Slots(2) }), TOOLS)).toBe('Suscripción');
+  });
+
+  it('an agent without tools answers on the subscription, and gives its slot back', async () => {
+    const slots = new Slots(1);
+    const r = fakeRunner([delta('Suscripción'), result()]);
+    expect(await ask(claudeAccountWriter(TOKEN, r.run, 'm', keyWriter(), { slots }))).toBe('Suscripción');
+    expect(slots.tryTake()).not.toBeNull();
+  });
+
+  it('every Claude Code slot busy: the key answers at once', async () => {
+    const slots = new Slots(1);
+    slots.tryTake();
+    const r = fakeRunner([delta('Suscripción'), result()]);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await ask(claudeAccountWriter(TOKEN, r.run, 'm', keyWriter(), { slots }))).toBe('Con la clave.');
+    expect(r.calls).toHaveLength(0);
+  });
+
+  it('every slot busy and no key: it waits its turn', async () => {
+    const slots = new Slots(1);
+    const busy = slots.tryTake();
+    const r = fakeRunner([delta('Suscripción'), result()]);
+    const answer = ask(claudeAccountWriter(TOKEN, r.run, 'm', null, { slots }));
+    await new Promise((res) => setTimeout(res, 20));
+    expect(r.calls).toHaveLength(0);
+    busy?.();
+    expect(await answer).toBe('Suscripción');
   });
 });
 

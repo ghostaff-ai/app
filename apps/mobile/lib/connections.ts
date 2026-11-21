@@ -13,6 +13,8 @@ export interface ProviderCopy {
   keyPlaceholder?: string;
   /** What the person risks with this option, said before they connect. */
   warning?: string;
+  /** What this option cannot do yet. */
+  limit?: string;
 }
 
 export const PROVIDERS: Record<AiProvider, ProviderCopy> = {
@@ -38,6 +40,8 @@ export const PROVIDERS: Record<AiProvider, ProviderCopy> = {
       'Tus agentes usan tu plan de Claude (Pro, Max…) a través de Claude Code, el programa de Anthropic. Lo que hagan pasa por Anthropic, en Estados Unidos, y cuenta en los límites de tu plan.',
     warning:
       'Anthropic puede cortar sin aviso una suscripción usada así. Si pasa, tus agentes siguen con tu clave de Anthropic si has conectado una; si no, dejan de contestar hasta que conectes otra cuenta.',
+    limit:
+      'Por ahora, con la suscripción tus agentes no pueden usar las apps conectadas (Google, Instagram…). Si conectas también tu clave de Anthropic, la usan cuando hace falta una app.',
   },
 };
 

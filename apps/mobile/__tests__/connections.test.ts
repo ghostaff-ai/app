@@ -22,6 +22,7 @@ describe('the Claude subscription card', () => {
     expect(PROVIDERS.claude.title).toBe('Claude · tu suscripción');
     expect(PROVIDERS.claude.warning).toContain('sin aviso');
     expect(PROVIDERS.claude.warning).toContain('clave de Anthropic');
+    expect(PROVIDERS.claude.limit).toContain('apps conectadas');
   });
 
   it('says in Spanish why a sign-in did not work, never the raw code', () => {

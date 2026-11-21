@@ -279,6 +279,7 @@ function ClaudeCard({
       <Text className="text-base font-semibold text-ink">{copy.title}</Text>
       <Text className="mt-1 text-sm text-muted">{copy.dataNote}</Text>
       <Text className="mt-3 rounded-lg border border-line bg-sunk px-3 py-2 text-sm text-waiting">Aviso: {copy.warning}</Text>
+      <Text className="mt-2 text-sm text-muted">{copy.limit}</Text>
       {connection ? (
         <Text className="mt-3 text-sm text-ok">
           {`Conectada · ${connection.connectedByName}, ${shortDate(connection.updatedAt)}`}

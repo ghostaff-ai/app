@@ -10,6 +10,7 @@
 // engine's own secrets (the service-role key…), never ANTHROPIC_API_KEY.
 
 import { type ChildProcess, spawn } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,10 +18,12 @@ import { createInterface } from 'node:readline';
 
 /**
  * Claude Code's long-lived sign-in token, as `claude setup-token` prints it.
- * Only once something follows it: output arrives in pieces, and a token cut at
- * the end of a piece must not be taken for the whole one.
+ * While it runs, only once something follows it: output arrives in pieces, and
+ * a token cut at the end of a piece must not be taken for the whole one. Once
+ * it has ended (`final`), the token may be the last thing it printed.
  */
 const TOKEN = /sk-ant-oat01-[A-Za-z0-9_-]{20,}(?=[^A-Za-z0-9_-])/;
+const FINAL_TOKEN = /sk-ant-oat01-[A-Za-z0-9_-]{20,}(?=[^A-Za-z0-9_-]|$)/;
 /** Where Claude Code sends the person to sign in. Only these hosts are passed on to the app. */
 const SIGN_IN_HOSTS = ['claude.com', 'claude.ai', 'anthropic.com', 'console.anthropic.com', 'platform.claude.com'];
 
@@ -61,8 +64,8 @@ export interface SignInOutput {
   badCode: boolean;
 }
 
-/** Reads what `claude setup-token` has printed so far. */
-export function parseSignInOutput(raw: string): SignInOutput {
+/** Reads what `claude setup-token` has printed so far; `final` once it has ended. */
+export function parseSignInOutput(raw: string, opts: { final?: boolean } = {}): SignInOutput {
   // The link is printed as an OSC 8 hyperlink: its target is the whole URL, never wrapped.
   let url: string | null = null;
   for (const m of raw.matchAll(/\x1b\]8;[^;\x07\x1b]*;(https:\/\/[^\x07\x1b]+)(?:\x07|\x1b\\)/g)) {
@@ -78,7 +81,7 @@ export function parseSignInOutput(raw: string): SignInOutput {
   }
   return {
     url,
-    token: text.match(TOKEN)?.[0] ?? null,
+    token: text.match(opts.final ? FINAL_TOKEN : TOKEN)?.[0] ?? null,
     badCode: /OAuth\s*error/i.test(text) || /invalid\s+code/i.test(text),
   };
 }
@@ -86,6 +89,7 @@ export function parseSignInOutput(raw: string): SignInOutput {
 /** The bits of a child process the engine uses; tests give a fake. */
 export interface SignInProcess {
   onOutput(cb: (chunk: string) => void): void;
+  /** It ended and all its output has been read. */
   onExit(cb: (code: number | null) => void): void;
   write(s: string): void;
   /** Kills it; resolves once it has exited, so its HOME can go. */
@@ -110,14 +114,56 @@ export function childEnv(home: string, extra: Record<string, string> = {}): Node
   };
 }
 
+/** Parent and session of a process, from /proc (Linux); null once it is gone. */
+function procStat(pid: number): { ppid: number; sid: number } | null {
+  try {
+    // The command name (field 2) may hold spaces: read after its closing parenthesis.
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const f = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return { ppid: Number(f[1]), sid: Number(f[3]) };
+  } catch {
+    return null;
+  }
+}
+
+function allPids(): number[] {
+  try {
+    return readdirSync('/proc')
+      .filter((d) => /^\d+$/.test(d))
+      .map(Number);
+  } catch {
+    return [];
+  }
+}
+
+/** Kills every process in these sessions; resolves when none is left (or after 2 s). */
+async function killSessions(sids: number[]): Promise<void> {
+  if (sids.length === 0) return;
+  const left = () => allPids().filter((p) => sids.includes(procStat(p)?.sid ?? -1));
+  for (let i = 0; i < 20; i++) {
+    const pids = left();
+    if (pids.length === 0) return;
+    for (const p of pids) {
+      try {
+        process.kill(p, 'SIGKILL');
+      } catch {
+        // gone already
+      }
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
 /**
- * Stops the child and resolves once it has exited. SIGTERM first: `script`
- * passes it on to Claude Code in its terminal and waits for it, so nothing is
- * written to its HOME afterwards. SIGKILL to the group if it lingers.
+ * Stops the child and resolves once it and everything under it have exited, so
+ * its HOME can go. SIGTERM to its group first, SIGKILL if it lingers. `script`
+ * runs Claude Code in a session of its own (the terminal's), out of reach of
+ * the group: those sessions, noted before the signal, are killed afterwards.
  */
 function stop(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null || !child.pid) return Promise.resolve();
   const pid = child.pid;
+  const sessions = allPids().filter((p) => procStat(p)?.ppid === pid && procStat(p)?.sid === p);
   const signal = (s: NodeJS.Signals) => {
     try {
       process.kill(-pid, s);
@@ -125,7 +171,7 @@ function stop(child: ChildProcess): Promise<void> {
       child.kill(s);
     }
   };
-  return new Promise<void>((resolve) => {
+  const exited = new Promise<void>((resolve) => {
     const hard = setTimeout(() => signal('SIGKILL'), 3_000);
     const giveUp = setTimeout(resolve, 6_000);
     child.once('exit', () => {
@@ -135,15 +181,65 @@ function stop(child: ChildProcess): Promise<void> {
     });
     signal('SIGTERM');
   });
+  return exited.then(() => killSessions(sessions));
 }
+
+/**
+ * At most this many Claude Code processes at once on one instance (each takes
+ * a few hundred MB). A reply that finds them all busy uses the Anthropic key
+ * if it can, or waits its turn a little; a sign-in waits its turn.
+ */
+export class Slots {
+  private used = 0;
+  private queue: (() => void)[] = [];
+  constructor(readonly size: number) {}
+
+  /** A slot now, or null when all are busy. Call the returned function to give it back. */
+  tryTake(): (() => void) | null {
+    if (this.used >= this.size) return null;
+    this.used++;
+    let given = false;
+    return () => {
+      if (given) return;
+      given = true;
+      this.used--;
+      this.queue.shift()?.();
+    };
+  }
+
+  /** Waits up to `ms` for a slot; rejects with `busy` after that. */
+  take(ms: number): Promise<() => void> {
+    const now = this.tryTake();
+    if (now) return Promise.resolve(now);
+    return new Promise((resolve, reject) => {
+      const turn = () => {
+        clearTimeout(timer);
+        const slot = this.tryTake();
+        if (slot) resolve(slot);
+        else this.queue.unshift(turn);
+      };
+      const timer = setTimeout(() => {
+        this.queue = this.queue.filter((t) => t !== turn);
+        reject(new Error('busy'));
+      }, ms);
+      this.queue.push(turn);
+    });
+  }
+}
+
+/** The engine's Claude Code processes: sign-ins and replies together. */
+export const CLAUDE_SLOTS = new Slots(Number(process.env.ENGINE_CLAUDE_SLOTS) || 4);
 
 /**
  * The real sign-in: Claude Code needs a terminal, so it runs under `script`
  * (util-linux), which gives it one and passes our stdin through. The terminal
  * is 2000 columns wide so the token is printed on one line.
  */
-export const spawnSetupToken: SignInSpawner = (home) => {
-  const child = spawn('script', ['-qfc', 'stty cols 2000 rows 50; exec claude setup-token', '/dev/null'], {
+export const spawnSetupToken: SignInSpawner = (home) => spawnInTerminal(home, 'claude setup-token');
+
+/** Runs `command` in a terminal under `script`, 2000 columns wide. Exported for tests. */
+export function spawnInTerminal(home: string, command: string): SignInProcess {
+  const child = spawn('script', ['-qfc', `stty cols 2000 rows 50; exec ${command}`, '/dev/null'], {
     cwd: home,
     env: childEnv(home),
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -156,7 +252,8 @@ export const spawnSetupToken: SignInSpawner = (home) => {
       child.stderr?.setEncoding('utf8').on('data', cb);
     },
     onExit(cb) {
-      child.on('exit', (code) => cb(code));
+      // 'close', not 'exit': only after its output has all been read.
+      child.on('close', (code) => cb(code));
       child.on('error', () => cb(null));
     },
     write(s) {
@@ -164,7 +261,7 @@ export const spawnSetupToken: SignInSpawner = (home) => {
     },
     kill: () => stop(child),
   };
-};
+}
 
 /** A throwaway HOME for one run of Claude Code. */
 export async function makeHome(): Promise<{ path: string; remove: () => Promise<void> }> {

@@ -17,7 +17,7 @@
 
 import type { Store } from './connections';
 import { Refusal, requireOwner } from './connections';
-import { type SignInProcess, type SignInSpawner, makeHome, parseSignInOutput } from './claudeCode';
+import { CLAUDE_SLOTS, makeHome, parseSignInOutput, type SignInProcess, type SignInSpawner, type Slots } from './claudeCode';
 import { keyHint } from './providers';
 import { secretName, type Vault } from './vault';
 
@@ -35,6 +35,12 @@ export interface ClaudeSessionDeps {
   tokenTimeoutMs?: number;
   /** The whole session, sign-in at Anthropic included. */
   sessionTimeoutMs?: number;
+  /** How long the socket may stay open without its `start` message. */
+  startTimeoutMs?: number;
+  /** How long writing the token and the row may take. */
+  saveTimeoutMs?: number;
+  /** The engine's Claude Code processes (claudeCode.ts). */
+  slots?: Slots;
 }
 
 /** The socket as the session sees it. */
@@ -50,10 +56,16 @@ export interface ClaudeSession {
 }
 
 const isUuid = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f-]{36}$/i.test(s);
-/** The code Anthropic shows: printable, no spaces, reasonable length. */
-const looksLikeCode = (s: string) => /^[A-Za-z0-9_\-#.~]{10,600}$/.test(s);
+/**
+ * The code Anthropic shows: printable, no spaces, reasonable length. Never an
+ * Anthropic key or token pasted by mistake: it would be echoed back and could
+ * be taken for the token.
+ */
+const looksLikeCode = (s: string) => /^[A-Za-z0-9_\-#.~]{10,600}$/.test(s) && !s.startsWith('sk-ant-');
 /** Kept of Claude Code's output, from the end: enough for the link and the token. */
 const MAX_OUTPUT = 64 * 1024;
+/** The largest message the app sends (a code); anything bigger is not read. */
+export const MAX_MESSAGE = 16 * 1024;
 
 type Phase = 'new' | 'starting' | 'url' | 'exchanging' | 'saving' | 'over';
 
@@ -64,16 +76,29 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
   let child: SignInProcess | null = null;
   let home: { path: string; remove: () => Promise<void> } | null = null;
   let output = '';
+  /** What Claude Code printed after the code was typed in: the only place the token or a refusal is looked for. */
+  let afterCode = '';
+  let code = '';
+  let releaseSlot: (() => void) | null = null;
+  const slots = deps.slots ?? CLAUDE_SLOTS;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let orgId = '';
   let userId = '';
   let ownerName = '';
-  const whole = setTimeout(() => {
-    if (phase !== 'saving') fail('timeout');
-  }, deps.sessionTimeoutMs ?? 10 * 60_000);
+  const whole = setTimeout(
+    () => {
+      if (phase !== 'saving') fail('timeout');
+    },
+    deps.sessionTimeoutMs ?? 10 * 60_000,
+  );
+  // An unsigned socket does not get to sit there.
+  const noStart = setTimeout(() => {
+    if (phase === 'new') fail('unauthorized');
+  }, deps.startTimeoutMs ?? 10_000);
 
   const cleanUp = () => {
     clearTimeout(whole);
+    clearTimeout(noStart);
     if (timer) clearTimeout(timer);
     timer = null;
     const dying = child?.kill() ?? Promise.resolve();
@@ -81,7 +106,12 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
     const h = home;
     home = null;
     // Its HOME goes once Claude Code has exited, so nothing is written there after.
-    if (h) void dying.then(() => h.remove()).catch(() => {});
+    const release = releaseSlot;
+    releaseSlot = null;
+    void dying
+      .then(() => h?.remove())
+      .catch(() => {})
+      .finally(() => release?.());
   };
 
   const finish = (message: Record<string, unknown>) => {
@@ -107,44 +137,66 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
     if (timer) clearTimeout(timer);
     timer = null;
     void child?.kill();
+    let stalled: ReturnType<typeof setTimeout> | undefined;
+    const tooLong = new Promise<never>((_, reject) => {
+      stalled = setTimeout(() => reject(new Error('save timed out')), deps.saveTimeoutMs ?? 20_000);
+    });
     try {
-      await deps.vault.put(secretName(orgId, 'claude'), token, { org_id: orgId, provider: 'claude', kind: 'ai' });
-      const now = (deps.now ?? (() => new Date()))().toISOString();
-      const connection = await deps.store.upsert({
-        org_id: orgId,
-        kind: 'ai',
-        provider: 'claude',
-        method: 'subscription',
-        hint: keyHint(token),
-        settings: {},
-        status: 'ok',
-        checked_at: now,
-        connected_by: userId,
-        connected_by_name: ownerName,
-        updated_at: now,
-      });
-      finish({ type: 'done', connection });
+      await Promise.race([persist(token), tooLong]).then((connection) => finish({ type: 'done', connection }));
     } catch (e) {
-      console.error('claude sign-in: saving failed', e instanceof Error ? e.name : typeof e);
+      console.error('claude sign-in: saving failed', e instanceof Error ? e.name : typeof e); // never the message: it could quote the token
       fail('failed');
+    } finally {
+      clearTimeout(stalled);
     }
+  };
+
+  /** The token to the vault, then the row. */
+  const persist = async (token: string) => {
+    await deps.vault.put(secretName(orgId, 'claude'), token, {
+      org_id: orgId,
+      provider: 'claude',
+      kind: 'ai',
+    });
+    const now = (deps.now ?? (() => new Date()))().toISOString();
+    const connection = await deps.store.upsert({
+      org_id: orgId,
+      kind: 'ai',
+      provider: 'claude',
+      method: 'subscription',
+      hint: keyHint(token),
+      settings: {},
+      status: 'ok',
+      checked_at: now,
+      connected_by: userId,
+      connected_by_name: ownerName,
+      updated_at: now,
+    });
+    return connection;
   };
 
   const onOutput = (chunk: string) => {
     if (phase !== 'starting' && phase !== 'url' && phase !== 'exchanging') return;
+    if (phase === 'exchanging') {
+      afterCode = (afterCode + chunk).slice(-MAX_OUTPUT);
+      return readAfterCode(false);
+    }
     output = (output + chunk).slice(-MAX_OUTPUT);
     const seen = parseSignInOutput(output);
-    if (seen.token && phase === 'exchanging') {
-      void save(seen.token);
-      return;
-    }
-    if (seen.badCode && phase === 'exchanging') return fail('bad_code');
     if (seen.url && phase === 'starting') {
       phase = 'url';
       if (timer) clearTimeout(timer);
       timer = null; // the person takes their time at Anthropic; the whole session's limit still holds
       socket.send({ type: 'url', url: seen.url });
     }
+  };
+
+  /** Looks for the token, or a refusal, in what came after the code; `final` once Claude Code has ended. */
+  const readAfterCode = (final: boolean) => {
+    const seen = parseSignInOutput(afterCode, { final });
+    // The pasted code echoed back is never the token.
+    if (seen.token && seen.token !== code) return void save(seen.token);
+    if (seen.badCode || final) fail('bad_code');
   };
 
   const start = async (msg: { token?: unknown; orgId?: unknown }) => {
@@ -164,13 +216,19 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
         home = null;
         return;
       }
+      // One Claude Code process per slot; a sign-in waits its turn a little.
+      const slot = await slots.take(30_000).catch(() => null);
+      if (!slot) return fail('claude_unavailable');
+      if (phase !== 'starting') return slot();
+      releaseSlot = slot;
       deadline(urlTimeout, 'claude_unavailable');
       child = deps.spawn(home.path);
       child.onOutput(onOutput);
       child.onExit(() => {
         child = null;
         if (phase === 'starting' || phase === 'url') fail('claude_unavailable');
-        else if (phase === 'exchanging') fail('bad_code');
+        // Its last words may hold the token, printed right before it ended.
+        else if (phase === 'exchanging') readAfterCode(true);
       });
     } catch (e) {
       if (e instanceof Refusal) return fail(e.code);
@@ -182,7 +240,13 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
   return {
     onMessage(data) {
       if (phase === 'over' || phase === 'saving') return;
-      let msg: { type?: unknown; token?: unknown; orgId?: unknown; code?: unknown };
+      if (data.length > MAX_MESSAGE) return fail('bad_request');
+      let msg: {
+        type?: unknown;
+        token?: unknown;
+        orgId?: unknown;
+        code?: unknown;
+      };
       try {
         msg = JSON.parse(data);
       } catch {
@@ -193,9 +257,10 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
         return;
       }
       if (msg.type === 'code' && phase === 'url') {
-        const code = typeof msg.code === 'string' ? msg.code.trim() : '';
+        code = typeof msg.code === 'string' ? msg.code.trim() : '';
         if (!looksLikeCode(code)) return fail('bad_code');
         phase = 'exchanging';
+        afterCode = '';
         deadline(tokenTimeout, 'timeout');
         child?.write(`${code}\r`);
         socket.send({ type: 'working' });

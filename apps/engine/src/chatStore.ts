@@ -11,7 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GoogleAuth } from 'google-auth-library';
 import type { AiAccount, ChatAgent, ChatStore, ChatThreadHead, Level, Writer } from './chat';
 import { type PrintRunner, runClaudePrint } from './claudeCode';
-import { subscriptionWriter, withFallback } from './claudeWriter';
+import { claudeAccountWriter } from './claudeWriter';
 import { secretName, type Vault } from './vault';
 
 function check<T>(r: { data: T; error: unknown }): T {
@@ -195,7 +195,7 @@ export function writerFactory(vault: Vault, auth: GoogleAuth, runClaude: PrintRu
         if (fallback) return fallback();
         throw new Error('the organisation has no Claude subscription token in the vault');
       }
-      return withFallback(subscriptionWriter(token, runClaude, CHAT_MODEL), fallback);
+      return claudeAccountWriter(token, runClaude, CHAT_MODEL, fallback);
     }
     if (account.provider === 'vertex') {
       // A fresh token per reply (the SDK pins its own google-auth-library version).

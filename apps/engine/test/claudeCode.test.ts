@@ -1,7 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { childEnv, parseSignInOutput, stripTerminal } from '../src/claudeCode';
+import { childEnv, parseSignInOutput, Slots, spawnInTerminal, stripTerminal } from '../src/claudeCode';
 
 // What `claude setup-token` 2.1.317 printed in a pty on this machine, up to a
 // wrong code pasted in (the PKCE challenge and state replaced).
@@ -69,5 +71,84 @@ describe("Claude Code's environment", () => {
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     delete process.env.ANTHROPIC_API_KEY;
+  });
+});
+
+describe('a token at the very end', () => {
+  it('is taken once Claude Code has ended, not while it runs', () => {
+    expect(parseSignInOutput(`token:\r\n${TOKEN}`).token).toBeNull();
+    expect(parseSignInOutput(`token:\r\n${TOKEN}`, { final: true }).token).toBe(TOKEN);
+  });
+});
+
+const hasScript = (() => {
+  try {
+    execFileSync('script', ['--version'], { stdio: 'ignore' });
+    return process.platform === 'linux';
+  } catch {
+    return false;
+  }
+})();
+
+describe.runIf(hasScript)('a program in a terminal under script (the real thing, without Claude Code)', () => {
+  it('hands over all its output, the last bytes included, before saying it ended', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'claude-test-'));
+    try {
+      const p = spawnInTerminal(home, `printf 'Your token:\\r\\n${TOKEN}'`);
+      let out = '';
+      p.onOutput((c) => (out += c));
+      await new Promise<void>((r) => p.onExit(() => r()));
+      expect(parseSignInOutput(out, { final: true }).token).toBe(TOKEN);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('stopping it leaves nothing running in its terminal', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'claude-test-'));
+    const marker = `${Math.floor(Math.random() * 1e6) + 1000}`;
+    const running = () =>
+      readdirSync('/proc')
+        .filter((d) => /^\d+$/.test(d))
+        .filter((d) => {
+          try {
+            return readFileSync(`/proc/${d}/cmdline`, 'utf8').includes(marker);
+          } catch {
+            return false;
+          }
+        });
+    try {
+      // A child that ignores the polite signal and lives in the terminal's own session.
+      const p = spawnInTerminal(home, `sh -c 'trap "" TERM HUP; sleep ${marker} & trap "" TERM HUP; sleep ${marker}'`);
+      p.onOutput(() => {});
+      await new Promise((r) => setTimeout(r, 500));
+      expect(running().length).toBeGreaterThan(0);
+      await p.kill();
+      expect(running()).toEqual([]);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 15_000);
+});
+
+describe('slots for Claude Code', () => {
+  it('gives out at most its size, and the next in line gets one when it is given back', async () => {
+    const slots = new Slots(1);
+    const first = slots.tryTake();
+    expect(first).not.toBeNull();
+    expect(slots.tryTake()).toBeNull();
+    const waiting = slots.take(1_000);
+    first?.();
+    first?.(); // giving it back twice frees it once
+    const second = await waiting;
+    expect(slots.tryTake()).toBeNull();
+    second();
+    expect(slots.tryTake()).not.toBeNull();
+  });
+
+  it('a wait that runs out says busy', async () => {
+    const slots = new Slots(1);
+    slots.tryTake();
+    await expect(slots.take(10)).rejects.toThrow('busy');
   });
 });

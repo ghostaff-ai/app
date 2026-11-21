@@ -8,7 +8,7 @@
 import { createNodeWebSocket } from '@hono/node-ws';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { type ClaudeSession, type ClaudeSessionDeps, claudeSession } from './claudeSession';
+import { type ClaudeSession, type ClaudeSessionDeps, claudeSession, MAX_MESSAGE } from './claudeSession';
 import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromProvider, startAccountConnect } from './accounts';
 import { type ActionDeps, approveAction, rejectAction } from './actions';
 import { CONNECTORS } from '@ghostaff/shared';
@@ -53,7 +53,10 @@ type Env = { Variables: { userId: string } };
 /** The engine's routes; `injectWebSocket` hooks the WebSocket route into the Node server. */
 export function createApp(deps: AppDeps) {
   const app = new Hono<Env>();
-  const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
+  const { upgradeWebSocket, injectWebSocket, wss } = createNodeWebSocket({ app });
+  // The only socket is the Claude sign-in, whose messages are tiny: ws would
+  // otherwise buffer up to 100 MiB from anyone, signed in or not.
+  (wss.options as { maxPayload?: number }).maxPayload = MAX_MESSAGE;
 
   // Bearer tokens, no cookies: any origin may call, the token is the guard.
   app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'DELETE'], allowHeaders: ['Authorization', 'Content-Type'] }));
