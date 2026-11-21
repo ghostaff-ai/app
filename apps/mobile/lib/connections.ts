@@ -11,6 +11,10 @@ export interface ProviderCopy {
   /** Where to find a key, for the key providers. */
   keyHelp?: string;
   keyPlaceholder?: string;
+  /** What the person risks with this option, said before they connect. */
+  warning?: string;
+  /** What this option cannot do yet. */
+  limit?: string;
 }
 
 export const PROVIDERS: Record<AiProvider, ProviderCopy> = {
@@ -29,6 +33,15 @@ export const PROVIDERS: Record<AiProvider, ProviderCopy> = {
   vertex: {
     title: 'Claude en tu Google Cloud, en Europa',
     dataNote: 'Los datos se quedan en la región europea que elijas, dentro de tu propio proyecto. La factura la pasa Google.',
+  },
+  claude: {
+    title: 'Claude · tu suscripción',
+    dataNote:
+      'Tus agentes usan tu plan de Claude (Pro, Max…) a través de Claude Code, el programa de Anthropic. Lo que hagan pasa por Anthropic, en Estados Unidos, y cuenta en los límites de tu plan.',
+    warning:
+      'Anthropic puede cortar sin aviso una suscripción usada así. Si pasa, tus agentes siguen con tu clave de Anthropic si has conectado una; si no, dejan de contestar hasta que conectes otra cuenta.',
+    limit:
+      'Por ahora, con la suscripción tus agentes no pueden usar las apps conectadas (Google, Instagram…). Si conectas también tu clave de Anthropic, la usan cuando hace falta una app.',
   },
 };
 
@@ -104,6 +117,27 @@ export function accountErrorMessage(e: unknown): string {
     case 'not_configured':
     case 'unreachable':
       return 'No hemos podido hablar con Ghostaff. Revisa tu conexión e inténtalo de nuevo.';
+    default:
+      return 'Algo ha fallado. Inténtalo de nuevo.';
+  }
+}
+
+/** What the Claude subscription card says when its sign-in is refused or fails. */
+export function claudeSignInMessage(code: string): string {
+  switch (code) {
+    case 'bad_code':
+      return 'Anthropic no ha aceptado ese código. Pulsa Conectar y vuelve a empezar; copia el código entero.';
+    case 'timeout':
+      return 'Ha pasado demasiado tiempo. Pulsa Conectar y vuelve a empezar.';
+    case 'claude_unavailable':
+      return 'Ahora mismo no podemos abrir el inicio de sesión de Claude. Inténtalo en un momento.';
+    case 'not_owner':
+      return 'Solo quien es propietario de la empresa puede cambiar las conexiones.';
+    case 'unauthorized':
+      return 'Tu sesión ha caducado. Sal y vuelve a entrar.';
+    case 'not_configured':
+    case 'unreachable':
+      return 'Se ha cortado la conexión con Ghostaff. Revisa tu conexión y vuelve a empezar.';
     default:
       return 'Algo ha fallado. Inténtalo de nuevo.';
   }

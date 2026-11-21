@@ -109,8 +109,9 @@ export const RULE_KIND = 'regla';
 // 20261114000000_connections.sql). Never a key: keys stay in the engine's vault.
 
 export type ConnectionKind = 'ai' | 'account';
-export type AiProvider = 'anthropic' | 'openai' | 'vertex';
-export type ConnectionMethod = 'api_key' | 'cloud_project' | 'oauth' | 'mcp';
+/** `claude` is a Claude subscription, signed in through the unmodified Claude Code the engine hosts. */
+export type AiProvider = 'anthropic' | 'openai' | 'vertex' | 'claude';
+export type ConnectionMethod = 'api_key' | 'cloud_project' | 'oauth' | 'mcp' | 'subscription';
 
 export interface Connection {
   id: string;
@@ -132,6 +133,18 @@ export interface Connection {
 export type ConnectAiInput =
   | { orgId: string; provider: 'anthropic' | 'openai'; apiKey: string }
   | { orgId: string; provider: 'vertex'; project: string; region: string };
+
+/**
+ * Connecting a Claude subscription, one WebSocket from start to end (the engine
+ * runs Claude Code's own sign-in for the owner). What the screen hears:
+ * Anthropic's sign-in link, then that the code is being checked, then the
+ * connection or a refusal code.
+ */
+export type ClaudeSessionEvent =
+  | { type: 'url'; url: string }
+  | { type: 'working' }
+  | { type: 'done'; connection: Connection }
+  | { type: 'error'; code: string };
 
 /**
  * How a connect by sign-in ended, as the engine sends the person back to the

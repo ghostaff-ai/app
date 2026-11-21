@@ -24,7 +24,7 @@ export interface ConnectionRecord {
   org_id: string;
   kind: 'ai';
   provider: AiProvider;
-  method: 'api_key' | 'cloud_project';
+  method: 'api_key' | 'cloud_project' | 'subscription';
   hint: string;
   settings: Record<string, string>;
   status: 'ok';
@@ -66,7 +66,7 @@ export class Refusal extends Error {
   }
 }
 
-const PROVIDERS: readonly AiProvider[] = ['anthropic', 'openai', 'vertex'];
+const PROVIDERS: readonly AiProvider[] = ['anthropic', 'openai', 'vertex', 'claude'];
 export const isProvider = (p: unknown): p is AiProvider => PROVIDERS.includes(p as AiProvider);
 const isUuid = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f-]{36}$/i.test(s);
 
@@ -88,6 +88,8 @@ function refuseFailedCheck(check: CheckResult) {
 export async function connectAi(deps: Deps, userId: string, body: unknown): Promise<Record<string, unknown>> {
   const input = (body ?? {}) as Partial<ConnectAiInput> & { apiKey?: unknown; project?: unknown; region?: unknown };
   if (!isProvider(input.provider)) throw new Refusal(400, 'bad_request', 'unknown provider');
+  // A Claude subscription is connected by signing in through Claude Code (claudeSession.ts), never pasted.
+  if ((input.provider as AiProvider) === 'claude') throw new Refusal(400, 'bad_request', 'connect a Claude subscription by signing in');
   const owner = await requireOwner(deps.store, input.orgId, userId);
   const orgId = input.orgId as string;
   const now = (deps.now ?? (() => new Date()))().toISOString();
@@ -121,7 +123,7 @@ export async function connectAi(deps: Deps, userId: string, body: unknown): Prom
 export async function disconnectAi(deps: Deps, userId: string, orgId: unknown, provider: unknown): Promise<void> {
   if (!isProvider(provider)) throw new Refusal(400, 'bad_request', 'unknown provider');
   await requireOwner(deps.store, orgId, userId);
-  // The key goes first: if that fails, the row stays and the owner can retry.
+  // The key (or a subscription's token) goes first: if that fails, the row stays and the owner can retry.
   if (provider !== 'vertex') await deps.vault.remove(secretName(orgId as string, provider));
   await deps.store.remove(orgId as string, provider);
 }

@@ -9,6 +9,7 @@ import type {
   AgentRun,
   AgentRunner,
   AiProvider,
+  ClaudeSessionEvent,
   Answer,
   ConnectAiInput,
   Connection,
@@ -468,6 +469,65 @@ export async function connectAi(engine: EngineAccess, input: ConnectAiInput): Pr
 /** Removes the connection and deletes its key from the vault. */
 export async function disconnectAi(engine: EngineAccess, orgId: string, provider: AiProvider): Promise<void> {
   await callEngine(engine, 'DELETE', `/connections/ai/${provider}?org=${encodeURIComponent(orgId)}`);
+}
+
+/** A Claude subscription being connected: the code goes in, or the person gives up. */
+export interface ClaudeSignIn {
+  /** The code Anthropic showed after signing in. */
+  sendCode(code: string): void;
+  cancel(): void;
+}
+
+/**
+ * Connects the organisation's Claude subscription through Claude Code's own
+ * sign-in, which the engine runs (apps/engine/src/claudeSession.ts). One
+ * WebSocket for the whole flow; the person's token goes in its first message,
+ * never in the URL. `onEvent` hears the sign-in link, that the code is being
+ * checked, then the connection or a refusal code; after either the socket closes.
+ */
+export function connectClaudeSubscription(
+  engine: EngineAccess,
+  orgId: string,
+  onEvent: (e: ClaudeSessionEvent) => void,
+  opts: { WebSocket?: typeof WebSocket } = {},
+): ClaudeSignIn {
+  let over = false;
+  const end = (e: ClaudeSessionEvent) => {
+    if (over) return;
+    over = true;
+    onEvent(e);
+  };
+  if (!engine.url) {
+    queueMicrotask(() => end({ type: 'error', code: 'not_configured' }));
+    return { sendCode() {}, cancel() {} };
+  }
+  const Socket = opts.WebSocket ?? WebSocket;
+  const url = `${engine.url.replace(/\/$/, '').replace(/^http/, 'ws')}/connections/ai/claude/session`;
+  const ws = new Socket(url);
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'start', token: engine.token, orgId }));
+  ws.onmessage = (m) => {
+    let e: { type?: string; url?: string; code?: string; connection?: ConnectionRow };
+    try {
+      e = JSON.parse(String(m.data));
+    } catch {
+      return;
+    }
+    if (e.type === 'url' && typeof e.url === 'string') onEvent({ type: 'url', url: e.url });
+    else if (e.type === 'working') onEvent({ type: 'working' });
+    else if (e.type === 'done' && e.connection) end({ type: 'done', connection: connectionFromRow(e.connection) });
+    else if (e.type === 'error') end({ type: 'error', code: typeof e.code === 'string' ? e.code : 'failed' });
+  };
+  ws.onerror = () => end({ type: 'error', code: 'unreachable' });
+  ws.onclose = () => end({ type: 'error', code: 'unreachable' });
+  return {
+    sendCode(code) {
+      if (!over && ws.readyState === Socket.OPEN) ws.send(JSON.stringify({ type: 'code', code: code.trim() }));
+    },
+    cancel() {
+      over = true;
+      ws.close();
+    },
+  };
 }
 
 /**
