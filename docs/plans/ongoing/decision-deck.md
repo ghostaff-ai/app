@@ -1,8 +1,8 @@
 # Decision deck: find the card that frees the most attention, before Hoy ships it
 
 **Priority:** medium — the decision card is what Hoy is made of (app-design.md, decisions 5–13), and it has not been tested on a person yet
-**Gate:** blocked:Álvaro answers round 1 ([deck](https://claude.ai/artifact/TmAXYZULsg4dYPhyvSSnrx))
-**Next:** read round 1's answers, write the swipe-to-hire ones into swipe-to-hire.md, log the numbers below, and shape round 2 from his decisions on the rules
+**Gate:** blocked:Álvaro answers round 1's last 3 cards ([deck](https://claude.ai/artifact/TmAXYZULsg4dYPhyvSSnrx))
+**Next:** once cards 7–9 are answered, finish round 1's row and shape round 2 from card 9 (the research rules)
 
 Álvaro asked (2026-11-21) for a way to take decisions that leaves him the most attention: things he can see (a picture when it helps), always a choice with the preferred option pointed out, and in Ghostaff something as easy as swiping. We test it now, on his real decisions, with agent-skills' `decision-deck` skill (a claude.ai page with the cards in a store), and Ghostaff takes the shape that wins. The cards use the same fields as Hoy's card and Órdago's `por-decidir`, so nothing has to be rebuilt.
 
@@ -28,7 +28,9 @@ Per card: seconds to answer, whether the context was opened, whether the pick wa
 
 | Round | Date | Cards | Shape | Median s | Picks taken | Context opened | Taken back |
 |---|---|---|---|---|---|---|---|
-| 1 | 2026-11-21 | 9 | swipe on odd cards, buttons on even; swipe-to-hire's 4 questions and the deck's own 5 | | | | |
+| 1 | 2026-11-21 | 6 of 9 so far | swipe on odd cards, buttons on even; swipe-to-hire's 4 questions and the deck's own 5 | 10 (first card 237, reading the page) | 6 of 6 | 0 | 0 |
+
+Round 1, first 6 cards: **he never swiped.** On all three swipe cards he pressed «Take my pick →». On the computer with a mouse, the button beside the card won; swipe has to be tried on the phone before it counts. Every pick taken, no context opened: either the cards were clear or the pick was rubber-stamped (open question 1).
 
 ## Open questions an experiment should answer
 
