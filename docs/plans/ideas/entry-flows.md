@@ -32,4 +32,4 @@ Each step is a guard in the layout: no profile sends you to Bienvenida, no organ
 ## Open questions
 
 1. **Skipping Bienvenida** when the provider gave a name: the optional answers (what you do, how you heard of us) feed nothing yet; is losing some of them acceptable?
-2. **Secretaría starting by itself** on a new company: the product plan's rule is that agents work only when a person says so; a first run on creation may count as that «yes», or not.
+2. **Decided (Álvaro, 2026-11-21, in the decision deck): creating the company counts as the «yes»;** Secretaría starts reading the moment the company exists. He chose this over the recommendation (she asks with one tap on the first Hoy). **Secretaría starting by itself** on a new company: the product plan's rule is that agents work only when a person says so.
