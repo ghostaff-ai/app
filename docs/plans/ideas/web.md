@@ -1,15 +1,15 @@
 # The website: ghostaff.ai, what it is, and the pages the platforms ask for
 
 **Priority:** medium, with one urgent part — Google's OAuth verification and Meta's and TikTok's app reviews need a home page, a privacy policy and terms on our own domain ([connectors.md](../ongoing/connectors.md), phases 2 and 3), and none exists yet
-**Gate:** decision:Álvaro — how the cinematic look is made (decision 2 below); who the data controller is before the legal pages go up
-**Next:** Álvaro picks the cinematic approach from the research; then two or three hero tries, as previews, for him to judge
+**Gate:** Álvaro — a paid Higgsfield account connected to Claude Code; who the data controller is before the legal pages go up
+**Next:** the page is built (ghostaff-ai/web #1) with a placeholder film; with Higgsfield connected, two or three takes of the opening shot for him to judge
 
 Jaime's request (2026-11-19), with foundable.com/es as a loose visual reference («salvando las distancias»). Research of the same night below. Álvaro's decisions of 2026-11-21 are in «Decisions».
 
 ## Decisions (Álvaro, 2026-11-21)
 
 1. **A repo of its own, `ghostaff-ai/web`** (created 2026-11-21: Astro, static), copying the brand's tokens and ghost models.
-2. **The 3D look: open.** He wants it really visual and cinematic, like the scroll-driven 3D sites of top studios, maybe more cinematic than the app's ghosts, with those used somewhere. Research of 2026-11-21 in the session; his pick goes here.
+2. **The 3D look: a mix.** An AI-made film (Higgsfield), played by the scroll like Apple's product pages, carries the opening: cinematic versions of our ghosts working in a night office, their paperwork folding into one decision card. The app's own six ghosts appear live in 3D where the page shows the team, and beside each founder. Chosen over a fully hand-built 3D world (igloo.inc, Lusion, Immersive Garden: slower, needs top 3D modelling) and over film alone (less interactive). A paid Higgsfield plan paid by Ghostaff (no watermark); Higgsfield's terms (2026-10-23) leave us the outputs and commercial use, but may train on them, so only our own ghost pictures go in. Shot list: `ghostaff-ai/web`, `docs/film.md`.
 3. **The story:** a night office where ghosts do the company's work; the camera moves desk to desk (Finanzas files invoices, Redes writes a post, Secretaría sorts mail); the paperwork flies into one decision card that lands on a phone («Solo te traen lo que es tuyo»); then data in Europe, FAQ, **the founders, Álvaro and Jaime**, «Pedir acceso».
 4. **Astro on Firebase Hosting** in `ghostaff-prod`, as proposed below.
 5. **Founders:** a real photo, name, role and one line each, with their own ghost beside them; placeholders until they send them.
