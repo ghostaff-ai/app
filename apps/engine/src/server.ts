@@ -21,6 +21,10 @@ import { appClient } from './apps';
 import { microsoftOAuth, microsoftTools } from './microsoft';
 import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
+import { repoTokens } from './githubApp';
+import { googleCaller } from './googleCaller';
+import { supabaseRecordStore } from './recordStore';
+import { syncAll } from './recordSync';
 
 function required(name: string): string {
   const v = process.env[name];
@@ -92,6 +96,17 @@ for (const [id, vars] of [
 }
 const tokenFor = accessTokens(accounts);
 
+// The record connector: our GitHub App «Ghostaff Registro» (scripts/github-app-registro.mjs). Its ID is public;
+// its key comes from Secret Manager on Cloud Run and from .env locally. Without them nothing syncs.
+const githubAppId = process.env.GITHUB_APP_ID;
+const githubAppKey = process.env.GITHUB_APP_KEY?.replace(/\\n/g, '\n');
+if (!githubAppId || !githubAppKey) console.warn('record connector off: set GITHUB_APP_ID and GITHUB_APP_KEY.');
+const recordSync = {
+  store: supabaseRecordStore(admin),
+  tokens: repoTokens(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
+};
+const cronCallers = (process.env.CRON_CALLERS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+
 const app = createApp({
   store: supabaseStore(admin),
   vault,
@@ -117,6 +132,16 @@ const app = createApp({
   },
   accounts,
   actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId) },
+  cron: {
+    callerFromToken: googleCaller(),
+    audience: publicUrl,
+    callers: cronCallers,
+    async tick() {
+      const synced = githubAppId && githubAppKey ? await syncAll(recordSync) : [];
+      for (const s of synced) console.log(s.summary);
+      return { synced: synced.map((s) => ({ org: s.org, ok: s.ok })) };
+    },
+  },
 });
 
 const port = Number(process.env.PORT ?? 8787);

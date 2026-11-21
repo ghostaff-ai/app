@@ -13,6 +13,18 @@ import { CONNECTORS } from '@ghostaff/shared';
 import { agentHello, type ChatDeps, replyInThread } from './chat';
 import { clientMetadataDocument } from './mcp';
 import { connectAi, type Deps, disconnectAi, Refusal } from './connections';
+import { bearer, type CallerFromToken } from './googleCaller';
+
+/** Calls from Google service accounts, not people: the scheduler's tick (ordago-agents-in-ghostaff.md). */
+export interface CronDeps {
+  callerFromToken: CallerFromToken;
+  /** The audience the ID tokens are issued for: the engine's public URL. */
+  audience: string;
+  /** The service accounts allowed to tick. */
+  callers: string[];
+  /** One tick: sync every record, start what is due. Answers with what it did. */
+  tick(): Promise<unknown>;
+}
 
 export interface AppDeps extends Deps {
   /** The signed-in person behind a Supabase access token, or null. */
@@ -25,6 +37,8 @@ export interface AppDeps extends Deps {
   accounts: AccountDeps;
   /** What agents propose to do with those accounts, for an owner to approve. */
   actions: ActionDeps;
+  /** The scheduler's tick; off when not configured. */
+  cron?: CronDeps;
 }
 
 type Env = { Variables: { userId: string } };
@@ -51,6 +65,15 @@ export function createApp(deps: AppDeps) {
     c.header('Referrer-Policy', 'no-referrer');
     if (!to) return c.text('Este enlace ya no sirve. Vuelve a Ghostaff y conecta la cuenta otra vez.', 400);
     return c.redirect(to, 302);
+  });
+
+  // Cloud Scheduler, as its own service account; no Supabase token on this one.
+  app.post('/cron', async (c) => {
+    const cron = deps.cron;
+    const token = bearer(c.req.header('Authorization'));
+    const caller = cron && token ? await cron.callerFromToken(token, cron.audience) : null;
+    if (!cron || !caller || !cron.callers.includes(caller)) return c.json({ error: 'unauthorized' }, 401);
+    return c.json({ ok: true, did: await cron.tick() });
   });
 
   app.use('*', async (c, next) => {

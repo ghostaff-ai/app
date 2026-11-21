@@ -5,6 +5,8 @@ import { parseArgs } from 'node:util';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   appendHistoryRow,
+  applySync,
+  markWrittenBack,
   DECISIONS_DIR,
   HISTORY_PATH,
   historyRow,
@@ -21,6 +23,8 @@ import { projectUrlFromKey } from './projectUrl';
 //   pnpm sync:por-decidir --org ordago --record ~/githubs/ordago-app/business [--write-back]
 //   pnpm --filter @ghostaff/sync org add-org --slug ordago --name Órdago
 //   pnpm --filter @ghostaff/sync org add-member --org ordago --email a@b.c --name Álvaro [--role owner]
+//   pnpm --filter @ghostaff/sync org set-record --org ordago --repo ordago-app/business --installation 123
+//     (the record connector: from then on the engine syncs it every five minutes)
 //
 // It writes with the service-role key, which bypasses row-level security, so it
 // runs only on our machines and in the engine, never in the app. The key comes
@@ -70,20 +74,7 @@ async function syncPorDecidir(opts: { org: string; record: string; writeBack: bo
 
   const plan = planSync({ orgId, files, existing: existing ?? [], commit, now: new Date() });
 
-  // Two batches, each with the same columns: in a mixed batch PostgREST would
-  // write NULL into the answer columns of the rows that do not carry one, and
-  // wipe an app answer that has not been written back yet.
-  const withAnswer = plan.upserts.filter((u) => u.answer);
-  const withoutAnswer = plan.upserts.filter((u) => !u.answer);
-  for (const batch of [withAnswer, withoutAnswer]) {
-    if (!batch.length) continue;
-    const { error: e } = await db.from('decisions').upsert(batch, { onConflict: 'org_id,record_id' });
-    if (e) throw e;
-  }
-  if (plan.close.length) {
-    const { error: e } = await db.from('decisions').update({ closed_at: new Date().toISOString() }).in('id', plan.close);
-    if (e) throw e;
-  }
+  await applySync(db, plan);
 
   for (const w of plan.writeBacks) {
     if (!opts.writeBack) continue;
@@ -93,8 +84,7 @@ async function syncPorDecidir(opts: { org: string; record: string; writeBack: bo
     const historyFile = join(opts.record, HISTORY_PATH);
     const csv = existsSync(historyFile) ? readFileSync(historyFile, 'utf8') : null;
     writeFileSync(historyFile, appendHistoryRow(csv, historyRow(readDecision(w.recordId, yaml), w.answer)));
-    const { error: e } = await db.from('decisions').update({ written_back_at: new Date().toISOString() }).eq('id', w.rowId);
-    if (e) throw e;
+    await markWrittenBack(db, [w.rowId]);
   }
 
   console.log(
@@ -117,6 +107,20 @@ async function addOrg(opts: { slug: string; name: string }) {
   const { error } = await admin().from('organizations').upsert({ slug: opts.slug, name: opts.name }, { onConflict: 'slug' });
   if (error) throw error;
   console.log(`organisation ${opts.slug} ready`);
+}
+
+async function setRecord(opts: { org: string; repo: string; installation: string }) {
+  const installation = Number(opts.installation);
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(opts.repo)) throw new Error('--repo is owner/name');
+  if (!Number.isInteger(installation) || installation <= 0) throw new Error('--installation is the GitHub App installation id');
+  const { data, error } = await admin()
+    .from('organizations')
+    .update({ record_repo: opts.repo, record_installation: installation, record_sync_error: null })
+    .eq('slug', opts.org)
+    .select('slug');
+  if (error) throw error;
+  if (!data?.length) throw new Error(`No organisation «${opts.org}»`);
+  console.log(`${opts.org}'s record is ${opts.repo} (installation ${installation}); the engine syncs it on its next tick`);
 }
 
 async function addMember(opts: { org: string; email: string; name: string; role: string }) {
@@ -159,6 +163,8 @@ async function main() {
       name: { type: 'string' },
       email: { type: 'string' },
       role: { type: 'string', default: 'member' },
+      repo: { type: 'string' },
+      installation: { type: 'string' },
     },
   });
   const need = (k: keyof typeof values) => {
@@ -171,13 +177,15 @@ async function main() {
       return syncPorDecidir({ org: need('org'), record: need('record'), writeBack: !!values['write-back'] });
     case 'add-org':
       return addOrg({ slug: need('slug'), name: need('name') });
+    case 'set-record':
+      return setRecord({ org: need('org'), repo: need('repo'), installation: need('installation') });
     case 'add-member': {
       const role = need('role');
       if (role !== 'owner' && role !== 'member') throw new Error('--role is owner or member');
       return addMember({ org: need('org'), email: need('email'), name: need('name'), role });
     }
     default:
-      throw new Error('Commands: por-decidir, add-org, add-member');
+      throw new Error('Commands: por-decidir, add-org, add-member, set-record');
   }
 }
 
