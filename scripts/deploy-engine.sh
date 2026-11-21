@@ -100,9 +100,11 @@ docker logout "https://$REGISTRY" >/dev/null # the token was only for this push
 
 echo "== Deploy"
 # Public URL on purpose: the app calls it, and every call but /health needs a
-# Supabase sign-in token, checked by the engine itself.
+# Supabase sign-in token, checked by the engine itself. A 15-minute timeout: a
+# Claude subscription's sign-in is one WebSocket of up to 10 minutes.
 gcloud run deploy engine --project "$P" --region "$R" --image "$IMAGE" \
   --service-account "$SA" --allow-unauthenticated --min-instances 0 --max-instances 3 \
+  --timeout 900 \
   --set-env-vars "$ENV_VARS" \
   --set-secrets "$SECRETS"
 

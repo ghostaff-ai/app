@@ -1,6 +1,7 @@
 // The team chat's database and model access for the engine: Supabase with the
-// service role, and Claude through the organisation's own AI account (its API
-// key from the vault, or Vertex AI in its own Google Cloud project, EU region).
+// service role, and Claude through the organisation's own AI account (Vertex AI
+// in its own Google Cloud project, EU region; its Claude subscription through
+// Claude Code; or its API key from the vault).
 
 import Anthropic from '@anthropic-ai/sdk';
 import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
@@ -9,6 +10,8 @@ import { messageFromRow } from '@ghostaff/shared/services';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GoogleAuth } from 'google-auth-library';
 import type { AiAccount, ChatAgent, ChatStore, ChatThreadHead, Level, Writer } from './chat';
+import { type PrintRunner, runClaudePrint } from './claudeCode';
+import { subscriptionWriter, withFallback } from './claudeWriter';
 import { secretName, type Vault } from './vault';
 
 function check<T>(r: { data: T; error: unknown }): T {
@@ -116,7 +119,10 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
       // Vertex first: it keeps the model calls in the EU (invariant 2).
       const vertex = rows.find((r) => r.provider === 'vertex');
       if (vertex) return { provider: 'vertex', project: vertex.settings.project, region: vertex.settings.region };
-      if (rows.some((r) => r.provider === 'anthropic')) return { provider: 'anthropic' };
+      // Then the organisation's Claude subscription, with its Anthropic key behind it if it has one.
+      const key = rows.some((r) => r.provider === 'anthropic');
+      if (rows.some((r) => r.provider === 'claude')) return { provider: 'claude', keyFallback: key };
+      if (key) return { provider: 'anthropic' };
       return null;
     },
   };
@@ -175,16 +181,28 @@ export function streamWith(client: Anthropic | AnthropicVertex): Writer {
   };
 }
 
-export function writerFactory(vault: Vault, auth: GoogleAuth) {
+export function writerFactory(vault: Vault, auth: GoogleAuth, runClaude: PrintRunner = runClaudePrint) {
+  const keyWriter = async (orgId: string): Promise<Writer> => {
+    const key = await vault.get(secretName(orgId, 'anthropic'));
+    if (!key) throw new Error('the organisation has no Anthropic key in the vault');
+    return streamWith(new Anthropic({ apiKey: key }));
+  };
   return async (orgId: string, account: AiAccount): Promise<Writer> => {
+    if (account.provider === 'claude') {
+      const fallback = account.keyFallback ? () => keyWriter(orgId) : null;
+      const token = await vault.get(secretName(orgId, 'claude'));
+      if (!token) {
+        if (fallback) return fallback();
+        throw new Error('the organisation has no Claude subscription token in the vault');
+      }
+      return withFallback(subscriptionWriter(token, runClaude, CHAT_MODEL), fallback);
+    }
     if (account.provider === 'vertex') {
       // A fresh token per reply (the SDK pins its own google-auth-library version).
       const accessToken = await auth.getAccessToken();
       if (!accessToken) throw new Error('no Google access token');
       return streamWith(new AnthropicVertex({ projectId: account.project, region: account.region, accessToken }));
     }
-    const key = await vault.get(secretName(orgId, 'anthropic'));
-    if (!key) throw new Error('the organisation has no Anthropic key in the vault');
-    return streamWith(new Anthropic({ apiKey: key }));
+    return keyWriter(orgId);
   };
 }

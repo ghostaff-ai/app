@@ -1,5 +1,5 @@
 import { EngineError } from '@ghostaff/shared/services';
-import { accountErrorMessage, accountResultMessage, connectErrorMessage, connectorSections } from '@/lib/connections';
+import { accountErrorMessage, accountResultMessage, claudeSignInMessage, connectErrorMessage, connectorSections, PROVIDERS } from '@/lib/connections';
 
 describe('what the connections screen says when the engine refuses', () => {
   it('names the right key prefix for each provider', () => {
@@ -14,6 +14,21 @@ describe('what the connections screen says when the engine refuses', () => {
 
   it('never shows the raw error', () => {
     expect(connectErrorMessage(new Error('sk-ant-secret'), 'anthropic')).toBe('Algo ha fallado. Inténtalo de nuevo.');
+  });
+});
+
+describe('the Claude subscription card', () => {
+  it('warns that Anthropic can cut it off, and what happens then', () => {
+    expect(PROVIDERS.claude.title).toBe('Claude · tu suscripción');
+    expect(PROVIDERS.claude.warning).toContain('sin aviso');
+    expect(PROVIDERS.claude.warning).toContain('clave de Anthropic');
+  });
+
+  it('says in Spanish why a sign-in did not work, never the raw code', () => {
+    expect(claudeSignInMessage('bad_code')).toContain('código');
+    expect(claudeSignInMessage('timeout')).toContain('demasiado tiempo');
+    expect(claudeSignInMessage('not_owner')).toContain('propietario');
+    expect(claudeSignInMessage('weird_internal_code')).toBe('Algo ha fallado. Inténtalo de nuevo.');
   });
 });
 

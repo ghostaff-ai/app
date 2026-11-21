@@ -1,6 +1,8 @@
 import { type AiProvider, type CatalogueConnector, type Connection, VERTEX_EU_REGIONS } from '@ghostaff/shared';
 import {
+  type ClaudeSignIn,
   connectAi,
+  connectClaudeSubscription,
   disconnectAccount,
   disconnectAi,
   finishAccountConnect,
@@ -9,10 +11,18 @@ import {
 } from '@ghostaff/shared/services';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { Button, Chips, ErrorText, Field } from '@/components/ui';
-import { accountErrorMessage, accountResultMessage, connectErrorMessage, connectorSections, PROVIDERS, REGION_NAMES } from '@/lib/connections';
+import {
+  accountErrorMessage,
+  accountResultMessage,
+  claudeSignInMessage,
+  connectErrorMessage,
+  connectorSections,
+  PROVIDERS,
+  REGION_NAMES,
+} from '@/lib/connections';
 import { shortDate } from '@/lib/format';
 import { useConnections, useEngine } from '@/lib/hooks/useConnections';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -21,9 +31,11 @@ import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 // connected by signing in there: the engine keeps the token in the vault and
 // this screen only ever sees the account's email. And its own AI account: a key
 // is sent once to the engine, which checks it and keeps it in the vault; this
-// screen never sees it again, only its last 4 characters.
+// screen never sees it again, only its last 4 characters. A Claude subscription
+// is connected by signing in through Claude Code, which the engine runs: this
+// screen only relays Anthropic's link and the code the person pastes back.
 
-const ORDER: AiProvider[] = ['vertex', 'anthropic', 'openai'];
+const ORDER: AiProvider[] = ['vertex', 'claude', 'anthropic', 'openai'];
 const regionLabels = VERTEX_EU_REGIONS.map((r) => REGION_NAMES[r] ?? r);
 const regionFromLabel = (label: string | null) => VERTEX_EU_REGIONS.find((r) => (REGION_NAMES[r] ?? r) === label) ?? null;
 
@@ -77,16 +89,26 @@ export default function Connections() {
         Si no conectas nada, Ghostaff pone la IA. Conecta tu propia cuenta si quieres la factura de la IA a tu nombre.
         {isOwner ? '' : ' Solo quien es propietario de la empresa puede cambiarlo.'}
       </Text>
-      {ORDER.map((p) => (
-        <ProviderCard
-          key={p}
-          orgId={active.id}
-          provider={p}
-          connection={items.find((c) => c.kind === 'ai' && c.provider === p) ?? null}
-          canEdit={isOwner}
-          onChanged={reload}
-        />
-      ))}
+      {ORDER.map((p) =>
+        p === 'claude' ? (
+          <ClaudeCard
+            key={p}
+            orgId={active.id}
+            connection={items.find((c) => c.kind === 'ai' && c.provider === p) ?? null}
+            canEdit={isOwner}
+            onChanged={reload}
+          />
+        ) : (
+          <ProviderCard
+            key={p}
+            orgId={active.id}
+            provider={p}
+            connection={items.find((c) => c.kind === 'ai' && c.provider === p) ?? null}
+            canEdit={isOwner}
+            onChanged={reload}
+          />
+        ),
+      )}
     </ScrollView>
   );
 }
@@ -178,6 +200,151 @@ function AccountCard({
   );
 }
 
+/**
+ * «Claude · tu suscripción». Conectar opens the sign-in at the engine: it sends
+ * Anthropic's link, the person signs in there, copies the code Anthropic shows
+ * and pastes it here; the engine hands it to Claude Code and keeps the token.
+ */
+function ClaudeCard({
+  orgId,
+  connection,
+  canEdit,
+  onChanged,
+}: {
+  orgId: string;
+  connection: Connection | null;
+  canEdit: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const engine = useEngine();
+  const copy = PROVIDERS.claude;
+  const [phase, setPhase] = useState<'idle' | 'starting' | 'url' | 'working'>('idle');
+  const [url, setUrl] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const signIn = useRef<ClaudeSignIn | null>(null);
+
+  // Leaving the screen ends the sign-in: the engine stops Claude Code.
+  useEffect(() => () => signIn.current?.cancel(), []);
+
+  const reset = () => {
+    signIn.current = null;
+    setPhase('idle');
+    setUrl(null);
+    setCode('');
+  };
+
+  const start = () => {
+    if (!engine) return;
+    setError(null);
+    setPhase('starting');
+    signIn.current = connectClaudeSubscription(engine, orgId, (e) => {
+      if (e.type === 'url') {
+        setUrl(e.url);
+        setPhase('url');
+      } else if (e.type === 'working') {
+        setPhase('working');
+      } else if (e.type === 'done') {
+        reset();
+        void onChanged();
+      } else {
+        reset();
+        setError(claudeSignInMessage(e.code));
+      }
+    });
+  };
+
+  const cancel = () => {
+    signIn.current?.cancel();
+    reset();
+  };
+
+  const remove = async () => {
+    if (!engine) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await disconnectAi(engine, orgId, 'claude');
+      await onChanged();
+    } catch (e) {
+      setError(connectErrorMessage(e, 'claude'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View className="mt-4 rounded-2xl border border-line bg-card p-4">
+      <Text className="text-base font-semibold text-ink">{copy.title}</Text>
+      <Text className="mt-1 text-sm text-muted">{copy.dataNote}</Text>
+      <Text className="mt-3 rounded-lg border border-line bg-sunk px-3 py-2 text-sm text-waiting">Aviso: {copy.warning}</Text>
+      {connection ? (
+        <Text className="mt-3 text-sm text-ok">
+          {`Conectada · ${connection.connectedByName}, ${shortDate(connection.updatedAt)}`}
+        </Text>
+      ) : null}
+
+      {canEdit && phase === 'idle' ? (
+        <View className="mt-4 flex-row gap-3">
+          <View className="flex-1">
+            <Button label={connection ? 'Volver a conectar' : 'Conectar'} tone="plain" onPress={start} />
+          </View>
+          {connection ? (
+            <View className="flex-1">
+              <Button label="Quitar" tone="plain" busy={busy} onPress={() => void remove()} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {canEdit && phase === 'starting' ? (
+        <View className="mt-4">
+          <Text className="text-sm text-muted">Preparando el inicio de sesión de Claude…</Text>
+          <View className="mt-3">
+            <Button label="Cancelar" tone="plain" onPress={cancel} />
+          </View>
+        </View>
+      ) : null}
+
+      {canEdit && (phase === 'url' || phase === 'working') ? (
+        <View>
+          <Text className="mt-4 text-sm text-ink">1. Abre Anthropic y entra con la cuenta de Claude de la empresa.</Text>
+          <View className="mt-3">
+            <Button label="Abrir Anthropic" tone="plain" onPress={() => url && void WebBrowser.openBrowserAsync(url)} />
+          </View>
+          <Text className="mt-4 text-sm text-ink">2. Al terminar, Anthropic te enseña un código. Cópialo y pégalo aquí.</Text>
+          <Field
+            label="Código"
+            placeholder="Pega aquí el código de Anthropic"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="off"
+            value={code}
+            onChangeText={setCode}
+            editable={phase === 'url'}
+          />
+          {phase === 'working' ? <Text className="mt-3 text-sm text-muted">Comprobando el código con Anthropic…</Text> : null}
+          <View className="mt-4 flex-row gap-3">
+            <View className="flex-1">
+              <Button label="Cancelar" tone="plain" onPress={cancel} />
+            </View>
+            <View className="flex-1">
+              <Button
+                label="Conectar"
+                disabled={code.trim().length < 10}
+                busy={phase === 'working'}
+                onPress={() => signIn.current?.sendCode(code)}
+              />
+            </View>
+          </View>
+        </View>
+      ) : null}
+      <ErrorText>{error}</ErrorText>
+    </View>
+  );
+}
+
 function ProviderCard({
   orgId,
   provider,
@@ -186,7 +353,7 @@ function ProviderCard({
   onChanged,
 }: {
   orgId: string;
-  provider: AiProvider;
+  provider: Exclude<AiProvider, 'claude'>;
   connection: Connection | null;
   canEdit: boolean;
   onChanged: () => Promise<void>;

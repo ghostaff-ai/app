@@ -10,6 +10,7 @@ import { supabaseActionStore } from './actions';
 import { createApp } from './app';
 import { supabaseChatStore, writerFactory } from './chatStore';
 import { supabaseStore } from './connections';
+import { spawnSetupToken } from './claudeCode';
 import { CONNECTORS } from '@ghostaff/shared';
 import { googleOAuth, googleTools } from './google';
 import { googleBusinessTools } from './googleBusiness';
@@ -146,6 +147,7 @@ const app = createApp({
   serviceAccount: process.env.ENGINE_SERVICE_ACCOUNT ?? '',
   chat: chatDeps,
   reports: { callerFromToken: caller, audience: publicUrl },
+  claudeSignIn: { spawn: spawnSetupToken },
   accounts,
   actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId) },
   cron: {
@@ -162,4 +164,5 @@ const app = createApp({
 });
 
 const port = Number(process.env.PORT ?? 8787);
-serve({ fetch: app.fetch, port }, () => console.log(`engine listening on :${port}`));
+const server = serve({ fetch: app.fetch, port }, () => console.log(`engine listening on :${port}`));
+app.injectWebSocket(server);

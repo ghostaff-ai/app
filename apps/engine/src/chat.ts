@@ -37,7 +37,11 @@ export interface ChatThreadHead {
 }
 
 /** The organisation's AI account, as the engine uses it. */
-export type AiAccount = { provider: 'anthropic' } | { provider: 'vertex'; project: string; region: string };
+export type AiAccount =
+  | { provider: 'anthropic' }
+  | { provider: 'vertex'; project: string; region: string }
+  /** Its Claude subscription; `keyFallback` when it also has an Anthropic key to fall back on. */
+  | { provider: 'claude'; keyFallback: boolean };
 
 /** The database as the chat needs it (service role). */
 export interface ChatStore {

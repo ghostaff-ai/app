@@ -5,8 +5,10 @@
 // they may do is checked against their membership. The callback only passes the
 // provider's code on to the app, which finishes the connect signed in (accounts.ts).
 
+import { createNodeWebSocket } from '@hono/node-ws';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { type ClaudeSession, type ClaudeSessionDeps, claudeSession } from './claudeSession';
 import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromProvider, startAccountConnect } from './accounts';
 import { type ActionDeps, approveAction, rejectAction } from './actions';
 import { CONNECTORS } from '@ghostaff/shared';
@@ -42,12 +44,16 @@ export interface AppDeps extends Deps {
   cron?: CronDeps;
   /** Checks the Google ID token of a job reporting its run (jobs.ts); off when not configured. */
   reports?: { callerFromToken: CallerFromToken; audience: string };
+  /** Connecting a Claude subscription through Claude Code's own sign-in (claudeSession.ts). */
+  claudeSignIn?: Omit<ClaudeSessionDeps, 'store' | 'vault' | 'userFromToken' | 'now'>;
 }
 
 type Env = { Variables: { userId: string } };
 
+/** The engine's routes; `injectWebSocket` hooks the WebSocket route into the Node server. */
 export function createApp(deps: AppDeps) {
   const app = new Hono<Env>();
+  const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
 
   // Bearer tokens, no cookies: any origin may call, the token is the guard.
   app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'DELETE'], allowHeaders: ['Authorization', 'Content-Type'] }));
@@ -96,6 +102,36 @@ export function createApp(deps: AppDeps) {
     }
     return c.json({ ok: true, run: done.run });
   });
+
+  // Connecting a Claude subscription: one WebSocket for the whole sign-in. A
+  // browser cannot set headers on a WebSocket, so the Supabase token comes as
+  // the first message instead (claudeSession.ts checks it).
+  app.get(
+    '/connections/ai/claude/session',
+    upgradeWebSocket(() => {
+      let session: ClaudeSession | null = null;
+      return {
+        onOpen(_event, ws) {
+          const socket = { send: (m: Record<string, unknown>) => ws.send(JSON.stringify(m)), close: () => ws.close() };
+          if (!deps.claudeSignIn) {
+            socket.send({ type: 'error', code: 'claude_unavailable' });
+            socket.close();
+            return;
+          }
+          session = claudeSession(
+            { ...deps.claudeSignIn, store: deps.store, vault: deps.vault, userFromToken: deps.userFromToken, now: deps.now },
+            socket,
+          );
+        },
+        onMessage(event) {
+          if (typeof event.data === 'string') session?.onMessage(event.data);
+        },
+        onClose() {
+          session?.onClose();
+        },
+      };
+    }),
+  );
 
   app.use('*', async (c, next) => {
     const token = c.req.header('Authorization')?.match(/^Bearer (.+)$/)?.[1];
@@ -150,5 +186,5 @@ export function createApp(deps: AppDeps) {
     return c.json({ error: 'failed', message: 'something went wrong' }, 500);
   });
 
-  return app;
+  return Object.assign(app, { injectWebSocket });
 }
