@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, SectionList, Text, View } from 'react-native';
 import { MicButton } from '@/components/chat/MicButton';
 import { DecisionCard } from '@/components/DecisionCard';
+import { DecisionView } from '@/components/DecisionView';
 import { DoneWithoutYou } from '@/components/DoneWithoutYou';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
 import { Button, Loading, Notice } from '@/components/ui';
@@ -13,6 +14,7 @@ import { useDoneWithoutYou } from '@/lib/hooks/useDoneWithoutYou';
 import { hello, waitingSentence } from '@/lib/hoy';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
+import { DESKTOP_LIST_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useTabScreenTop } from '@/lib/tabs';
 
 // Hoy (app-design.md): Secretaría on top with one sentence, a soft halo behind
@@ -24,12 +26,15 @@ import { useTabScreenTop } from '@/lib/tabs';
 
 export default function Hoy() {
   const top = useTabScreenTop();
+  const desktop = useIsDesktop();
   const { active } = useActiveOrg();
   const { profile } = useProfile();
   const { decisions, loading, error, reload } = useInbox(active?.id ?? null);
   const done = useDoneWithoutYou(active?.id ?? null);
   const agents = useAgents(active?.id ?? null);
   const [focused, setFocused] = useState(true);
+  // On a desktop the open decision sits beside the list (desktop-web.md).
+  const [picked, setPicked] = useState<string | null>(null);
 
   // Back from a decision: show its new state. Away from Hoy: the ghost rests.
   useFocusEffect(
@@ -49,11 +54,13 @@ export default function Hoy() {
   const sections: { title: string; count?: number; data: Decision[] }[] = [];
   if (waiting.length > 0) sections.push({ title: 'Te esperan', count: waiting.length, data: waiting });
   if (answered.length > 0) sections.push({ title: 'Respondidas', data: answered });
+  const selected = picked && decisions.some((d) => d.id === picked) ? picked : (waiting[0]?.id ?? null);
+  const open = (d: Decision) => (desktop ? setPicked(d.id) : router.push(`/decision/${d.id}`));
 
-  return (
+  const list = (
     <SectionList
       className="flex-1 bg-surface"
-      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40, paddingTop: top }}
+      contentContainerStyle={{ paddingHorizontal: desktop ? 40 : 16, paddingBottom: 40, paddingTop: top }}
       contentInsetAdjustmentBehavior="automatic"
       sections={sections}
       keyExtractor={(d) => d.id}
@@ -71,6 +78,8 @@ export default function Hoy() {
       ListFooterComponent={<DoneWithoutYou runs={done.runs} agents={agents.items} />}
       ListHeaderComponent={
         <View className="pb-2 pt-3">
+          {/* On a desktop the sidebar holds the organisation and the mic. */}
+          {desktop ? null : (
           <View className="flex-row items-center justify-between">
           <Pressable
             accessibilityRole="button"
@@ -84,6 +93,7 @@ export default function Hoy() {
           </Pressable>
           <MicButton />
           </View>
+          )}
           <View className="mt-2 h-56">
             <GhostViewer ghost="secretaria" active={focused} halo zoom={1.15} />
           </View>
@@ -102,7 +112,25 @@ export default function Hoy() {
           ) : null}
         </View>
       )}
-      renderItem={({ item }) => <DecisionCard decision={item} onPress={() => router.push(`/decision/${item.id}`)} />}
+      renderItem={({ item }) => <DecisionCard decision={item} selected={desktop && item.id === selected} onPress={() => open(item)} />}
     />
+  );
+
+  if (!desktop) return list;
+  return (
+    <View className="flex-1 flex-row bg-surface">
+      <View style={{ width: DESKTOP_LIST_WIDTH }} className="border-r border-line">
+        {list}
+      </View>
+      <View className="flex-1">
+        {selected ? (
+          <DecisionView key={selected} id={selected} onAnswered={() => void reload()} />
+        ) : (
+          <View className="flex-1 items-center justify-center px-10">
+            <Text className="text-center text-base text-muted">Cuando algo necesite tu OK, lo verás aquí al lado.</Text>
+          </View>
+        )}
+      </View>
+    </View>
   );
 }

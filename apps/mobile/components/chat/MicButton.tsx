@@ -11,7 +11,8 @@ import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 // now speaking goes through the phone keyboard's own dictation; voice notes
 // come with the engine.
 
-export function MicButton() {
+/** Who the mic talks to (Secretaría, or the first agent the person may talk to), and how to open that thread. */
+export function useTalkTarget() {
   const { active } = useActiveOrg();
   const orgId = active?.id ?? null;
   const agents = useAgents(orgId);
@@ -25,21 +26,32 @@ export function MicButton() {
     }, [reloadAgents, reloadLevels]),
   );
   const target = talkTarget(agents.items, mine.levels);
+  return target ? { name: target.name, talk: () => router.push(`/conversacion/nueva?agent=${target.id}`) } : null;
+}
+
+/** A microphone: the capsule and its stand, drawn so no icon set is needed. */
+export function MicGlyph() {
+  return (
+    <View className="items-center">
+      <View className="h-3.5 w-2 rounded-full bg-on-accent" />
+      <View className="mt-0.5 h-1.5 w-3.5 rounded-b-full border-x-2 border-b-2 border-on-accent" />
+      <View className="h-1 w-0.5 bg-on-accent" />
+    </View>
+  );
+}
+
+export function MicButton() {
+  const target = useTalkTarget();
   if (!target) return null;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Hablar con ${target.name}`}
       hitSlop={8}
-      onPress={() => router.push(`/conversacion/nueva?agent=${target.id}`)}
+      onPress={target.talk}
       className="h-11 w-11 items-center justify-center rounded-full bg-accent"
     >
-      {/* A microphone: the capsule and its stand, drawn so no icon set is needed. */}
-      <View className="items-center">
-        <View className="h-3.5 w-2 rounded-full bg-on-accent" />
-        <View className="mt-0.5 h-1.5 w-3.5 rounded-b-full border-x-2 border-b-2 border-on-accent" />
-        <View className="h-1 w-0.5 bg-on-accent" />
-      </View>
+      <MicGlyph />
     </Pressable>
   );
 }
