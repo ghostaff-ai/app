@@ -3,24 +3,16 @@ import { View } from 'react-native';
 import { Sidebar } from '@/components/Sidebar';
 import { Button, Loading, Notice } from '@/components/ui';
 import { useIsDesktop } from '@/lib/layout';
+import { headerFor } from '@/lib/header';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
-import { FONTS, usePalette, type Palette } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 
 // Signed in. The way in has three steps, each a guard: a profile first
 // (bienvenida), then an organisation (empezar: create one or join one), then
 // the three tabs (Hoy, Equipo, Registro). A decision, an agent and the sheets
 // open over the tabs. Creating and joining stay reachable later, from
 // Organizaciones, the sheet behind the organisation's name on Hoy.
-
-const headerFor = (c: Palette) =>
-  ({
-    headerShadowVisible: false,
-    headerStyle: { backgroundColor: c.surface },
-    headerTintColor: c.ink,
-    headerTitleStyle: { fontFamily: FONTS.display },
-    headerBackTitle: 'Atrás',
-  }) as const;
 
 export default function AppLayout() {
   const org = useActiveOrg();
@@ -63,8 +55,9 @@ export default function AppLayout() {
           options={{ title: 'Organizaciones', presentation: 'formSheet', sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: false }}
         />
         <Stack.Screen name="invitar" options={{ title: 'Invitar', presentation: 'modal' }} />
-        {/* On a desktop Conexiones is a page of its own, reached from the sidebar. */}
-        <Stack.Screen name="conexiones" options={desktop ? { headerShown: false } : { title: 'Conexiones', presentation: 'modal' }} />
+        {/* Conexiones has its own stack (conexiones/_layout). On a phone it opens as a
+            sheet; on a desktop it is a page of its own, reached from the sidebar. */}
+        <Stack.Screen name="conexiones" options={desktop ? { headerShown: false } : { presentation: 'modal', headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={!hasProfile} redirectTo={step}>
         <Stack.Screen name="bienvenida" options={{ headerShown: false }} />

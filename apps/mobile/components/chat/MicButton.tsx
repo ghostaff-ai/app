@@ -1,10 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable } from 'react-native';
+import { Icon, Microphone } from '@/components/icons';
 import { talkTarget } from '@/lib/chat';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useMyLevels } from '@/lib/hooks/useChat';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { usePalette } from '@/lib/theme';
 
 // The button that is always there (app-design.md #1 and #2): it opens a new
 // thread with Secretaría, or with the first agent the person may talk to. For
@@ -29,15 +31,10 @@ export function useTalkTarget() {
   return target ? { name: target.name, talk: () => router.push(`/conversacion/nueva?agent=${target.id}`) } : null;
 }
 
-/** A microphone: the capsule and its stand, drawn so no icon set is needed. */
-export function MicGlyph() {
-  return (
-    <View className="items-center">
-      <View className="h-3.5 w-2 rounded-full bg-on-accent" />
-      <View className="mt-0.5 h-1.5 w-3.5 rounded-b-full border-x-2 border-b-2 border-on-accent" />
-      <View className="h-1 w-0.5 bg-on-accent" />
-    </View>
-  );
+/** The mic on an accent ground (the desktop sidebar's «Hablar con…»). */
+export function MicGlyph({ size = 18 }: { size?: number }) {
+  const c = usePalette();
+  return <Icon icon={Microphone} size={size} color={c.onAccent} weight="regular" />;
 }
 
 export function MicButton() {
@@ -49,9 +46,9 @@ export function MicButton() {
       accessibilityLabel={`Hablar con ${target.name}`}
       hitSlop={8}
       onPress={target.talk}
-      className="h-11 w-11 items-center justify-center rounded-full bg-accent"
+      className="h-11 w-11 items-center justify-center rounded-full bg-card active:opacity-70"
     >
-      <MicGlyph />
+      <Icon icon={Microphone} size={22} weight="regular" />
     </Pressable>
   );
 }

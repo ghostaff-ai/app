@@ -44,7 +44,7 @@ export default function CreateOrganization() {
       <ScrollView contentContainerClassName="px-6 pt-4 pb-16" keyboardShouldPersistTaps="handled">
         <Field label="Nombre de la empresa" placeholder="Por ejemplo, Panadería Ana" autoCapitalize="words" value={name} onChangeText={setName} />
 
-        <Text className="mt-8 text-lg font-semibold text-ink">Cuéntanos un poco (opcional)</Text>
+        <Text className="mt-10 font-display text-title3 text-ink">Cuéntanos un poco (opcional)</Text>
         <Text className="mt-1 text-base text-muted">Con esto tus agentes empiezan sabiendo quiénes sois.</Text>
 
         <Field

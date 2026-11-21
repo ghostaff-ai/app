@@ -1,11 +1,11 @@
 import { RULE_KIND, type DecisionSource } from '@ghostaff/shared';
 import { AUTONOMY_STREAK } from '@ghostaff/shared/services';
-import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ErrorText, Loading, Notice } from '@/components/ui';
+import { Button, ErrorText, Loading, Notice } from '@/components/ui';
 import { answerLabel, dueLabel, kindLabel, shortDate } from '@/lib/format';
+import { success } from '@/lib/haptics';
 import { useDecision } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { GHOSTS, agentLabel, ghostFor } from '@/lib/team';
@@ -50,7 +50,7 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
     setActionError(null);
     try {
       await answer({ answer: a, note, ...(isRule && a === 'ok' ? { signedText: signed } : {}) });
-      if (Platform.OS !== 'web') void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      success();
       onAnswered?.();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : String(e));
@@ -87,18 +87,18 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
           />
           <View className="ml-3 flex-1">
             <Text className="text-base font-semibold text-ink">{agent}</Text>
-            <Text className="text-sm text-muted">
+            <Text className="text-footnote text-muted">
               {isRule ? 'Propone una regla' : kindLabel(decision.kind)} · {shortDate(decision.createdOn)}
             </Text>
           </View>
         </View>
 
         {due ? (
-          <Text testID="due" className={`mt-4 text-sm font-semibold ${due.urgent ? 'text-waiting' : 'text-muted'}`}>
+          <Text testID="due" className={`mt-4 text-footnote font-semibold ${due.urgent ? 'text-waiting' : 'text-muted'}`}>
             {due.text}
           </Text>
         ) : null}
-        <Text accessibilityRole="header" className="mt-2 font-display text-2xl leading-8 text-ink">
+        <Text accessibilityRole="header" className="mt-2 font-display text-[26px] leading-8 tracking-[-0.4px] text-ink">
           {decision.question}
         </Text>
 
@@ -127,7 +127,7 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
 
         {isRule && !decision.answer ? (
           <View className="mt-5">
-            <Text className="mb-2 text-sm font-semibold text-ink">La regla que firmas</Text>
+            <Text className="mb-2 text-footnote font-semibold text-ink">La regla que firmas</Text>
             <TextInput
               accessibilityLabel="Texto de la regla"
               multiline
@@ -168,7 +168,7 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
                 {busy === 'back' ? (
                   <ActivityIndicator />
                 ) : (
-                  <Text className="text-base font-semibold text-ink underline">Cambiar la respuesta</Text>
+                  <Text className="text-base font-semibold text-ink">Cambiar la respuesta</Text>
                 )}
               </Pressable>
             ) : null}
@@ -199,16 +199,11 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
       </ScrollView>
 
       {decision.answer ? null : (
-        <View className="flex-row gap-3 border-t border-line bg-surface px-5 pt-3" style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
-          <ActionButton label="No" tone="plain" busy={busy === 'no'} disabled={!!busy} onPress={() => void send('no')} />
-          <ActionButton
-            label={okLabel}
-            tone="primary"
-            grow
-            busy={busy === 'ok'}
-            disabled={!!busy || (isRule && !signed.trim())}
-            onPress={() => void send('ok')}
-          />
+        <View className="flex-row gap-3 bg-surface px-5 pt-3" style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
+          <Button label="No" variant="secondary" busy={busy === 'no'} disabled={!!busy} onPress={() => void send('no')} />
+          <View className="flex-1">
+            <Button label={okLabel} busy={busy === 'ok'} disabled={!!busy || (isRule && !signed.trim())} onPress={() => void send('ok')} />
+          </View>
         </View>
       )}
     </View>
@@ -218,8 +213,8 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
 function Outcome({ title, body }: { title: string; body: string | null }) {
   return (
     <View className="flex-1 rounded-2xl bg-card p-3">
-      <Text className="text-sm font-semibold text-ink">{title}</Text>
-      <Text className="mt-1 text-sm leading-5 text-muted">{body ?? '—'}</Text>
+      <Text className="text-footnote font-semibold text-ink">{title}</Text>
+      <Text className="mt-1 text-footnote leading-5 text-muted">{body ?? '—'}</Text>
     </View>
   );
 }
@@ -229,11 +224,11 @@ const isUrl = (s: string) => /^https?:\/\//i.test(s);
 function SourceChip({ source }: { source: DecisionSource }) {
   const link = source.link && isUrl(source.link) ? source.link : null;
   const body = (
-    <Text className={`text-sm ${link ? 'text-ink underline' : 'text-ink'}`} numberOfLines={1}>
+    <Text className={`text-footnote ${link ? 'text-ink underline' : 'text-ink'}`} numberOfLines={1}>
       {source.text}
     </Text>
   );
-  const cls = 'max-w-full rounded-full border border-line bg-card px-3 py-1.5';
+  const cls = 'max-w-full rounded-full bg-sunk px-3 py-1.5';
   if (!link) return <View className={cls}>{body}</View>;
   return (
     <Pressable accessibilityRole="link" accessibilityHint="Abre la fuente" onPress={() => void Linking.openURL(link)} className={cls}>
@@ -252,44 +247,9 @@ function Streak({ n, agent }: { n: number; agent: string }) {
           <View key={i} className={`h-1.5 w-3 rounded-full ${i < shown ? 'bg-ok' : 'bg-line'}`} />
         ))}
       </View>
-      <Text className="ml-3 flex-1 text-sm text-muted">
+      <Text className="ml-3 flex-1 text-footnote text-muted">
         {shown} de {AUTONOMY_STREAK} OK seguidos sin corregir a {agent} en esto.
       </Text>
     </View>
   );
 }
-
-function ActionButton({
-  label,
-  tone,
-  grow,
-  busy,
-  disabled,
-  onPress,
-}: {
-  label: string;
-  tone: 'primary' | 'plain';
-  grow?: boolean;
-  busy?: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  const primary = tone === 'primary';
-  const colors = usePalette();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled: !!disabled, busy: !!busy }}
-      onPress={disabled ? undefined : onPress}
-      className={`min-h-12 flex-row items-center justify-center rounded-full px-5 py-3 ${grow ? 'flex-1' : ''} ${
-        primary ? 'bg-accent' : 'border border-line bg-card'
-      } ${disabled && !busy ? 'opacity-50' : ''}`}
-    >
-      {busy ? <ActivityIndicator color={primary ? colors.onAccent : colors.ink} /> : null}
-      <Text numberOfLines={1} className={`text-base font-semibold ${primary ? 'text-on-accent' : 'text-ink'} ${busy ? 'ml-2' : ''}`}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-

@@ -1,10 +1,9 @@
 import type { Agent, AgentAccess, AgentLevel } from '@ghostaff/shared';
 import { getAgent, listAgentAccess, setAgentAccess } from '@ghostaff/shared/services';
-import * as Haptics from 'expo-haptics';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Platform, ScrollView, Text, View } from 'react-native';
-import { ErrorText, LEVEL_NAMES, LevelPicker, Loading, Notice } from '@/components/ui';
+import { ScrollView } from 'react-native';
+import { ErrorText, LEVEL_NAMES, LevelPicker, ListRow, ListSection, Loading, Notice } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 
 // Who may use one agent (team-chat.md, decisions 6 and 7): each member of the
@@ -40,8 +39,7 @@ export default function Acceso() {
   const change = async (person: AgentAccess, level: AgentLevel) => {
     const before = people;
     setPeople((ps) => ps.map((p) => (p.userId === person.userId ? { ...p, level, isDefault: false } : p)));
-    if (Platform.OS !== 'web') void Haptics.selectionAsync();
-    setError(null);
+        setError(null);
     try {
       await setAgentAccess(supabase, agent.id, person.userId, level);
     } catch (e) {
@@ -53,33 +51,24 @@ export default function Acceso() {
   const others = people.filter((p) => p.role !== 'owner');
 
   return (
-    <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-6 pt-2 pb-16">
-      <Stack.Screen options={{ title: `Quién puede · ${agent.name}` }} />
-      <Text className="text-base text-muted">
-        Con «Ver» lee sus conversaciones y lo que ha hecho. Con «Hablar» además le pide trabajo. Con «Nada» no lo ve.
-      </Text>
-
-      <View className="mt-6 overflow-hidden rounded-2xl border border-line bg-card">
-        {people.map((p, i) => (
-          <View key={p.userId} className={`flex-row items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-line' : ''}`}>
-            <View className="flex-1">
-              <Text className="text-base text-ink">{p.displayName}</Text>
-              {p.role === 'owner' || p.isDefault ? (
-                <Text className="text-sm text-muted">
-                  {p.role === 'owner' ? 'Propietario · siempre habla' : `Lo de siempre: ${LEVEL_NAMES[agent.memberDefault]}`}
-                </Text>
-              ) : null}
-            </View>
-            {p.role === 'owner' ? null : (
-              <LevelPicker label={`${p.displayName}, ${agent.name}`} value={p.level} onChange={(l) => void change(p, l)} />
-            )}
-          </View>
+    <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-5 pb-16">
+      <Stack.Screen options={{ title: 'Quién puede' }} />
+      <ListSection
+        footer={
+          others.length === 0
+            ? 'Aún no hay nadie más en la empresa. Cuando invites a alguien, eliges aquí qué puede hacer.'
+            : 'Con «Ver» lee sus conversaciones y lo que ha hecho. Con «Hablar» además le pide trabajo. Con «Nada» no lo ve.'
+        }
+      >
+        {people.map((p) => (
+          <ListRow
+            key={p.userId}
+            title={p.displayName}
+            subtitle={p.role === 'owner' ? 'Propietario, siempre habla' : p.isDefault ? `Lo de siempre: ${LEVEL_NAMES[agent.memberDefault]}` : null}
+            trailing={p.role === 'owner' ? undefined : <LevelPicker label={`${p.displayName}, ${agent.name}`} value={p.level} onChange={(l) => void change(p, l)} />}
+          />
         ))}
-      </View>
-
-      {others.length === 0 ? (
-        <Text className="mt-4 text-sm text-muted">Aún no hay nadie más en la empresa. Cuando invites a alguien, eliges aquí qué puede hacer.</Text>
-      ) : null}
+      </ListSection>
       <ErrorText>{error}</ErrorText>
     </ScrollView>
   );

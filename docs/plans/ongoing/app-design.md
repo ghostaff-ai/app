@@ -91,3 +91,14 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 - [ ] The signature motion when a decision is answered.
 - [ ] Notifications, the weekly summary, the widget: each its own plan when the engine sends them.
 - [ ] Órdago's agents writing the new fields: they read the README; check the first decisions that come with them.
+
+**2026-11-20, the polish pass** (branch `feat/ui-polish`, Jaime's ask: elegant, concise, professional). A refinement inside decisions 21–34, not a change to them:
+
+- [x] One type scale in `tailwind.config.ts` (`title` 30, `title2` 22, `title3` 18, `footnote` 13, `caption` 12), Rubik for titles, sentence case everywhere: no all-caps labels.
+- [x] Buttons in three weights (`primary`, `secondary`, `plain`) plus `danger` only to confirm a removal; `small` for inline.
+- [x] Phosphor icons (decision 30), imported one file per icon from `components/icons.tsx` so the app carries only those it draws.
+- [x] Inset grouped lists (`ListSection` + `ListRow`) for everything that is not a decision or an agent (decision 24); `EmptyState` says what is missing and the next step; `Segmented` for the phone's segmented control.
+- [x] Haptics in one place (`lib/haptics.ts`): selection on a choice, success when something lands, a tap when a message goes.
+- [x] Conexiones: each service's real logo (simple-icons, CC0, generated into `lib/brandLogos.ts` by `apps/mobile/scripts/brand-logos.mjs`; its initial when it has none), area filters, and a page per connection (`conexiones/[id]`, `conexiones/ia/[provider]`) inside the sheet's own stack.
+- [x] Organizaciones as a settings list; its links close the sheet first, because iOS opens nothing from a sheet until it is gone.
+- [ ] The ghost on Hoy in the iOS simulator: it draws nothing there (no GPU); check on a phone before treating it as a bug.

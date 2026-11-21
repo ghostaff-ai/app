@@ -64,7 +64,7 @@ export default function Conversacion() {
                 <Text className="font-display text-base text-ink" numberOfLines={1}>
                   {head.title}
                 </Text>
-                {agent ? <Text className="text-xs text-muted">{agent.name}</Text> : null}
+                {agent ? <Text className="text-caption text-muted">{agent.name}</Text> : null}
               </View>
             </View>
           ),
@@ -95,7 +95,7 @@ export default function Conversacion() {
           contentContainerStyle={{ paddingBottom: 16 }}
           style={{ flex: 1 }}
         />
-        {error ? <Text className="px-4 pb-1 text-sm text-no">{error}</Text> : null}
+        {error ? <Text className="px-4 pb-1 text-footnote text-no">{error}</Text> : null}
         {canTalk ? (
           <Composer placeholder={agent ? `Escribe a ${agent.name}` : 'Escribe aquí'} names={names} onSend={send} />
         ) : (

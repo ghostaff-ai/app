@@ -2,7 +2,8 @@ import { acceptInvitation } from '@ghostaff/shared/services';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
-import { Button, ErrorText, Loading } from '@/components/ui';
+import { ArrowsClockwise, EnvelopeSimple } from '@/components/icons';
+import { Button, ErrorText, Loading, EmptyState } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useMyInvitations } from '@/lib/hooks/useInvitations';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -41,21 +42,18 @@ export default function Join() {
       refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
     >
       {items.length === 0 ? (
-        <View className="py-6">
-          <Text className="text-lg font-semibold text-ink">Aún no tienes invitaciones</Text>
-          <Text className="mt-2 text-base text-muted">
-            Pide a alguien de tu empresa que te invite desde Ghostaff con este correo: {session?.user.email}. La invitación aparecerá aquí.
-          </Text>
-          <View className="mt-6">
-            <Button label="Volver a mirar" tone="plain" onPress={() => void reload()} />
-          </View>
-        </View>
+        <EmptyState
+          icon={EnvelopeSimple}
+          title="Aún no tienes invitaciones"
+          body={`Pide a alguien de tu empresa que te invite desde Ghostaff con este correo: ${session?.user.email ?? ''}. La invitación aparecerá aquí.`}
+          action={<Button label="Volver a mirar" variant="secondary" icon={ArrowsClockwise} onPress={() => void reload()} />}
+        />
       ) : (
         items.map((i) => (
-          <View key={i.id} className="mb-3 rounded-2xl border border-line bg-card p-5">
-            <Text className="text-lg font-semibold text-ink">{i.orgName}</Text>
+          <View key={i.id} className="mb-3 rounded-2xl bg-card p-5">
+            <Text className="font-display text-title3 text-ink">{i.orgName}</Text>
             <Text className="mt-1 text-base text-muted">Te invitó {i.invitedByName}.</Text>
-            <View className="mt-4">
+            <View className="mt-5">
               <Button label="Unirme" busy={busy === i.id} disabled={!!busy && busy !== i.id} onPress={() => void join(i.id)} />
             </View>
           </View>

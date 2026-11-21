@@ -64,12 +64,12 @@ export function StatusLine({ message }: { message: ChatMessage }) {
     return (
       <View className="mb-1 flex-row items-center" accessibilityLiveRegion="polite" accessibilityLabel={`${message.authorName} está trabajando: ${now}`}>
         <ActivityIndicator size="small" />
-        <Text className="ml-2 text-sm text-muted">{now}…</Text>
+        <Text className="ml-2 text-footnote text-muted">{now}…</Text>
       </View>
     );
   }
   if (message.state === 'failed') {
-    return <Text className="mb-1 text-sm text-no">No ha podido terminar</Text>;
+    return <Text className="mb-1 text-footnote text-no">No ha podido terminar</Text>;
   }
   if (steps.length === 0) return null;
   const last = steps[steps.length - 1] ?? '';
@@ -83,12 +83,12 @@ export function StatusLine({ message }: { message: ChatMessage }) {
       onPress={() => setOpen((o) => !o)}
       className="mb-1 self-start"
     >
-      <Text className="text-xs text-muted">
+      <Text className="text-caption text-muted">
         {open ? '▾' : '▸'} Hecho{took ? ` · ${took}` : ''}
       </Text>
       {open
         ? done.map((st, i) => (
-            <Text key={i} className="ml-3 text-xs text-muted">
+            <Text key={i} className="ml-3 text-caption text-muted">
               · {st}
             </Text>
           ))
@@ -140,19 +140,19 @@ export function ActionCard({
   const link = action.status === 'done' ? linkIn(action.result) : null;
   return (
     <View className="mt-2 rounded-xl border border-line bg-card p-3" accessibilityLabel={`Propuesta: ${action.label}. ${ACTION_STATUS[action.status]}`}>
-      <Text className="text-sm font-semibold text-ink">{action.label}</Text>
+      <Text className="text-footnote font-semibold text-ink">{action.label}</Text>
       {action.preview ? (
-        <Text className="mt-1 text-xs text-muted" selectable numberOfLines={8}>
+        <Text className="mt-1 text-caption text-muted" selectable numberOfLines={8}>
           {action.preview}
         </Text>
       ) : null}
-      <Text className={`mt-2 text-xs ${action.status === 'failed' ? 'text-no' : action.status === 'done' ? 'text-ok' : 'text-muted'}`}>
+      <Text className={`mt-2 text-caption ${action.status === 'failed' ? 'text-no' : action.status === 'done' ? 'text-ok' : 'text-muted'}`}>
         {ACTION_STATUS[action.status]}
         {action.decidedBy && action.status !== 'pending' ? ` · ${action.decidedBy}` : ''}
       </Text>
-      {action.status === 'failed' && action.result ? <Text className="mt-1 text-xs text-no">{action.result}</Text> : null}
+      {action.status === 'failed' && action.result ? <Text className="mt-1 text-caption text-no">{action.result}</Text> : null}
       {link ? (
-        <Text className="mt-1 text-xs text-accent" selectable>
+        <Text className="mt-1 text-caption text-accent" selectable>
           {link}
         </Text>
       ) : null}
@@ -164,7 +164,7 @@ export function ActionCard({
             onPress={() => void decide('approve')}
             className="flex-1 items-center rounded-full bg-accent px-3 py-2"
           >
-            {busy === 'approve' ? <ActivityIndicator size="small" /> : <Text className="text-sm font-semibold text-on-accent">Aprobar</Text>}
+            {busy === 'approve' ? <ActivityIndicator size="small" /> : <Text className="text-footnote font-semibold text-on-accent">Aprobar</Text>}
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -172,12 +172,12 @@ export function ActionCard({
             onPress={() => void decide('reject')}
             className="flex-1 items-center rounded-full border border-line bg-surface px-3 py-2"
           >
-            {busy === 'reject' ? <ActivityIndicator size="small" /> : <Text className="text-sm font-semibold text-ink">Rechazar</Text>}
+            {busy === 'reject' ? <ActivityIndicator size="small" /> : <Text className="text-footnote font-semibold text-ink">Rechazar</Text>}
           </Pressable>
         </View>
       ) : null}
-      {action.status === 'pending' && !canDecide ? <Text className="mt-2 text-xs text-muted">Lo aprueba quien es propietario de la empresa.</Text> : null}
-      {error ? <Text className="mt-2 text-xs text-no">{error}</Text> : null}
+      {action.status === 'pending' && !canDecide ? <Text className="mt-2 text-caption text-muted">Lo aprueba quien es propietario de la empresa.</Text> : null}
+      {error ? <Text className="mt-2 text-caption text-no">{error}</Text> : null}
     </View>
   );
 }
@@ -212,7 +212,7 @@ export function MessageView({
         {showAuthor ? (
           <View className="mb-1 flex-row items-center">
             <Image source={GHOSTS[ghost ?? 'base'].picture} style={{ width: 22, height: 22 }} resizeMode="contain" />
-            <Text className="ml-1.5 text-sm font-semibold text-ink">{message.authorName}</Text>
+            <Text className="ml-1.5 text-footnote font-semibold text-ink">{message.authorName}</Text>
           </View>
         ) : null}
         <StatusLine message={message} />
@@ -239,7 +239,7 @@ export function MessageView({
     <View className={`flex-row items-end px-4 ${showAuthor ? 'pt-4' : 'pt-1'}`}>
       <View style={{ width: 28 }}>{showAuthor ? <Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} /> : null}</View>
       <View className="ml-2 max-w-[78%]">
-        {showAuthor ? <Text className="mb-0.5 ml-1 text-xs font-semibold text-muted">{message.authorName}</Text> : null}
+        {showAuthor ? <Text className="mb-0.5 ml-1 text-caption font-semibold text-muted">{message.authorName}</Text> : null}
         <View className="rounded-2xl rounded-bl-md border border-line bg-card px-3.5 py-2">
           <Body text={text} names={names} className="text-base leading-6 text-ink" />
         </View>
