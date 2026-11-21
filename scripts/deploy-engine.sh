@@ -32,8 +32,8 @@ TIKTOK_CLIENT_KEY=""
 TIKTOK_SECRET=tiktok-client-secret
 # The record connector: our GitHub App «Ghostaff Registro», made by
 # scripts/github-app-registro.mjs, which stores its key in Secret Manager. The
-# App id is public. Empty until the App exists: then nothing syncs.
-GITHUB_APP_ID=""
+# App id is public (created 2026-11-21, installed on ordago-app/business).
+GITHUB_APP_ID="5864166"
 GITHUB_KEY_SECRET=github-app-registro-key
 # Cloud Scheduler calls the engine's /cron as this account every five minutes
 # (record sync, agents due); the engine checks its Google ID token.
