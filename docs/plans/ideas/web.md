@@ -1,10 +1,21 @@
 # The website: ghostaff.ai, what it is, and the pages the platforms ask for
 
 **Priority:** medium, with one urgent part — Google's OAuth verification and Meta's and TikTok's app reviews need a home page, a privacy policy and terms on our own domain ([connectors.md](../ongoing/connectors.md), phases 2 and 3), and none exists yet
-**Gate:** decision:Álvaro — where the site lives (a repo of its own?) and whether the legal pages can go up before the SL exists (Open questions)
-**Next:** the three legal-and-home pages first, plain, at ghostaff.ai; the full marketing site after
+**Gate:** decision:Álvaro — how the cinematic look is made (decision 2 below); who the data controller is before the legal pages go up
+**Next:** Álvaro picks the cinematic approach from the research; then two or three hero tries, as previews, for him to judge
 
-Jaime's request (2026-11-19), with foundable.com/es as a loose visual reference («salvando las distancias»). Research of the same night below; nothing here is decided.
+Jaime's request (2026-11-19), with foundable.com/es as a loose visual reference («salvando las distancias»). Research of the same night below. Álvaro's decisions of 2026-11-21 are in «Decisions».
+
+## Decisions (Álvaro, 2026-11-21)
+
+1. **A repo of its own, `ghostaff-ai/web`** (created 2026-11-21: Astro, static), copying the brand's tokens and ghost models.
+2. **The 3D look: open.** He wants it really visual and cinematic, like the scroll-driven 3D sites of top studios, maybe more cinematic than the app's ghosts, with those used somewhere. Research of 2026-11-21 in the session; his pick goes here.
+3. **The story:** a night office where ghosts do the company's work; the camera moves desk to desk (Finanzas files invoices, Redes writes a post, Secretaría sorts mail); the paperwork flies into one decision card that lands on a phone («Solo te traen lo que es tuyo»); then data in Europe, FAQ, **the founders, Álvaro and Jaime**, «Pedir acceso».
+4. **Astro on Firebase Hosting** in `ghostaff-prod`, as proposed below.
+5. **Founders:** a real photo, name, role and one line each, with their own ghost beside them; placeholders until they send them.
+6. **Legal pages built in the site, not published** until the controller is decided (open question 2).
+7. **Spanish and English from the first day** (`/` and `/en/`).
+8. **Two or three hero tries first**, as previews he judges, then the rest of the page.
 
 ## Goal
 
@@ -49,6 +60,5 @@ Research of 2026-11-19 (sources in the conversation of that night; prices are li
 
 ## Open questions
 
-1. **A repo of its own** (`ghostaff-ai/web`) or a folder in this one? A repo of its own keeps the app's CI and release pipeline free of the site; a folder keeps one place for the brand's tokens. Proposal: its own repo, copying the tokens.
-2. **Who is the controller** in the privacy policy before the SL exists: one founder as autónomo, as in connectors.md's open question 4, or wait for the SL. The platforms check the policy names someone real.
-3. **Web app at app.ghostaff.ai**: the app already builds for the web (`expo export --platform web`). Serving it too is a separate decision; this plan is only the public site.
+1. **Who is the controller** in the privacy policy before the SL exists: one founder as autónomo, as in connectors.md's open question 4, or wait for the SL. The platforms check the policy names someone real.
+2. **Web app at app.ghostaff.ai**: the app already builds for the web (`expo export --platform web`). Serving it too is a separate decision; this plan is only the public site.
