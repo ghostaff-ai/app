@@ -43,7 +43,8 @@ Its home, in order: a hero with its mascot floating in a sky, a line and a call 
 Subscription credits are lost when unused, so each month is planned to spend them (Álvaro, 2026-11-21).
 
 - **Higgsfield**: paid by Álvaro on 2026-11-21 for the film. Subscription credits do not roll over: unused ones expire at the end of each billing month, and after cancelling they stay usable until the paid period ends (Higgsfield help center). Bought credit packs last 90 days.
-- **Tripo** (made the app's ghosts): €18 on 2026-11-14 through Link/Stripe, Mastercard ···7405, to the ghostaff Gmail; no cancellation mail found on 2026-11-21, so it likely renews on the 14th. Monthly subscription credits reset on the billing date and do not carry over; cancelling or expiry clears them; bought extra credits never expire (Tripo help, «Do my credits expire?»).
+- **Tripo** (made the app's ghosts): €18 on 2026-11-14 through Link/Stripe. **Cancelled by Álvaro on 2026-11-21; 1,985 credits left, lost on 2026-12-14.** Monthly credits reset on the billing date and do not carry over; bought extra credits never expire (Tripo help). Web-app credits only work in Tripo Studio, not the API. A full model costs about 60 (generate 25, Ultra +15, texture +10, HD texture +10), 80 rigged. Spend plan: the founders as ghosts (~500), sharper ghosts for the web (~600), the film's office props as live 3D (~500), the rest for retries and Órdago or Cultuvilla.
+- Higgsfield credits may also go to videos for Órdago or Cultuvilla (Álvaro, 2026-11-21) once the film's takes are done.
 
 ## Where it lives and how it is served
 
