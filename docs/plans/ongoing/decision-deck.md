@@ -1,8 +1,8 @@
 # Decision deck: find the card that frees the most attention, before Hoy ships it
 
 **Priority:** medium — the decision card is what Hoy is made of (app-design.md, decisions 5–13), and it has not been tested on a person yet
-**Gate:** blocked:Álvaro has decisions for round 2, answered on the phone
-**Next:** round 2 with `/decide` from the plans waiting on Álvaro, shuffled, with `stakes: high` on the weighty ones, opened on his phone so swipe gets a fair test
+**Gate:** none
+**Next:** round 3 on the phone, so swipe gets a fair test; then compare swipe and button cards across rounds 1–3
 
 Álvaro asked (2026-11-21) for a way to take decisions that leaves him the most attention: things he can see (a picture when it helps), always a choice with the preferred option pointed out, and in Ghostaff something as easy as swiping. We test it now, on his real decisions, with agent-skills' `decision-deck` skill (a claude.ai page with the cards in a store), and Ghostaff takes the shape that wins. The cards use the same fields as Hoy's card and Órdago's `por-decidir`, so nothing has to be rebuilt.
 
@@ -29,10 +29,13 @@ Per card: seconds to answer, whether the context was opened, whether the pick wa
 | Round | Date | Cards | Shape | Median s | Picks taken | Context opened | Taken back |
 |---|---|---|---|---|---|---|---|
 | 1 | 2026-11-21 | 6 of 9 in the deck, 7–9 in chat («all of your picks») | swipe on odd cards, buttons on even; swipe-to-hire's 4 questions and the deck's own 5 | 10 (first card 237, reading the page) | 6 of 6 | 0 | 0 |
+| 2 | 2026-11-21 | 8 | real decisions from 5 repos, shuffled; 1 high-stakes (your pick first) | 31 | 6 of 8 (1 other option, 1 question) | 2 | 0 |
 
 Round 1, first 6 cards: **he never swiped.** On all three swipe cards he pressed «Take my pick →». On the computer with a mouse, the button beside the card won; swipe has to be tried on the phone before it counts. Every pick taken, no context opened: either the cards were clear or the pick was rubber-stamped (open question 1).
 
 Cards 7–9 (Álvaro, 2026-11-21, in chat): keep testing swipe against buttons; keep measuring; and round 2 uses the research's rules. The skill now hides the pick on `stakes: high` cards until he has chosen, then lets him keep his or switch, and decks are seeded shuffled (agent-skills `807e8b1`).
+
+Round 2 ([deck](https://claude.ai/artifact/Nj1j5ogFDJcEogCZy9gtyb)): again **no swipe** (computer). Slower than round 1 (31 s against 10): real decisions take longer than confirmations. On the high-stakes card he chose our pick blind. He went against the pick once (Secretaría starts by herself) and used «Something else…» once, to ask a question rather than answer: a card should make room for «I need to know X first».
 
 ## Open questions an experiment should answer
 
