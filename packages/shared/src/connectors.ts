@@ -340,7 +340,7 @@ export const CONNECTORS = [
     area: 'Citas y formularios',
     kind: 'mcp',
     name: 'Tally',
-    url: 'https://mcp.tally.so/mcp',
+    url: 'https://api.tally.so/mcp',
     title: 'Tally: formularios',
     reach: 'Tus agentes podrán ver tus formularios y sus respuestas, y preparar formularios nuevos.',
   },
@@ -518,6 +518,8 @@ export const CONNECTORS = [
     id: 'dropbox',
     area: 'Documentos y reuniones',
     kind: 'mcp',
+    // Dropbox refuses open registration: «Only pre-registered MCP trusted partners» (2026-11-21).
+    app: true,
     name: 'Dropbox',
     url: 'https://mcp.dropbox.com/mcp',
     scopes: ['account_info.read', 'files.metadata.read', 'files.metadata.write', 'files.content.read', 'files.content.write'],
@@ -554,6 +556,8 @@ export const CONNECTORS = [
     kind: 'mcp',
     name: 'Gamma',
     url: 'https://mcp.gamma.app/mcp',
+    // Gamma refuses a localhost redirect URI: it connects from the https engine (beta) only.
+    httpsOnly: true,
     title: 'Gamma: presentaciones',
     reach: 'Tus agentes podrán crear presentaciones, documentos y webs sencillas con Gamma.',
   },
