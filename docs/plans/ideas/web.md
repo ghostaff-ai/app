@@ -38,6 +38,13 @@ Its home, in order: a hero with its mascot floating in a sky, a line and a call 
 2. A 14-item mega-menu and dozens of languages: four links (Producto, Seguridad, Precios, Entrar) and ES, later EN.
 3. A prompt box in the hero that collects text before sign-up: it means storing data from strangers and clashes with the calm tone.
 
+## Paid tools and their credits
+
+Subscription credits are lost when unused, so each month is planned to spend them (Álvaro, 2026-11-21).
+
+- **Higgsfield**: paid by Álvaro on 2026-11-21 for the film. Subscription credits do not roll over: unused ones expire at the end of each billing month, and after cancelling they stay usable until the paid period ends (Higgsfield help center). Bought credit packs last 90 days.
+- **Tripo** (made the app's ghosts): €18 on 2026-11-14 through Link/Stripe, Mastercard ···7405, to the ghostaff Gmail; no cancellation mail found on 2026-11-21, so it likely renews on the 14th. Monthly subscription credits reset on the billing date and do not carry over; cancelling or expiry clears them; bought extra credits never expire (Tripo help, «Do my credits expire?»).
+
 ## Where it lives and how it is served
 
 Research of 2026-11-19 (sources in the conversation of that night; prices are list prices):
