@@ -53,7 +53,8 @@ select is((select count(*) from public.connector_requests), 0::bigint, 'another 
 
 reset role;
 select is(
-  (select count(distinct org_id) from public.connector_requests where lower(name) = 'glovo'),
+  (select count(distinct org_id) from public.connector_requests
+    where lower(name) = 'glovo' and org_id in ('10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002')),
   1::bigint, 'we can count how many organisations asked for an app');
 
 select * from finish();
