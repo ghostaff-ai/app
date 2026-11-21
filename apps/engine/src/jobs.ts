@@ -14,6 +14,7 @@
 import { type ChatMessage, messageText } from '@ghostaff/shared';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { Refusal } from './connections';
+import { type RunnerDeps, runnerReporter } from './runner';
 
 /** Where an agent's job runs and who it reports as. */
 export interface AgentJob {
@@ -31,6 +32,12 @@ export interface RunRecord {
   state: 'running' | 'done' | 'failed';
   threadId: string | null;
   messageId: string | null;
+  /** Who asked, for a run a person started. */
+  requestedBy?: string | null;
+  /** SHA-256 of the run's one-time nonce: runs on our runner only (runner.ts). */
+  nonceHash?: string | null;
+  /** Whether the run fetched its spec (runner.ts). */
+  specFetched?: boolean;
 }
 
 /** The database as jobs need it (service role). */
@@ -38,7 +45,7 @@ export interface JobStore {
   job(agentId: string): Promise<AgentJob | null>;
   /** The agent whose job reports as this service account. */
   agentByIdentity(email: string): Promise<ChatAgent | null>;
-  startRun(r: Omit<RunRecord, 'id' | 'state'> & { requestedBy: string | null }): Promise<string>;
+  startRun(r: Omit<RunRecord, 'id' | 'state' | 'nonceHash' | 'specFetched'> & { requestedBy: string | null; nonceHash?: string }): Promise<string>;
   run(id: string): Promise<RunRecord | null>;
   /** Closes a run still «running»; false when it was already closed (a report sent twice, or expired). */
   finishRun(id: string, patch: { state: 'done' | 'failed'; summary: string | null; noteworthy: boolean; decisionsOpened: number }): Promise<boolean>;
@@ -58,6 +65,8 @@ export interface JobDeps {
   launch: LaunchJob;
   /** Reads the organisation's record into the database (recordSync.ts); a no-op without a record. */
   syncOrg(orgId: string): Promise<void>;
+  /** Ghostaff's own runner (runner.ts); off when not configured. */
+  runner?: RunnerDeps;
 }
 
 /** What a job's runner reads as `AGENTE_CANAL`: the answer goes back through the engine, not Telegram. */
@@ -138,6 +147,8 @@ export async function askJob(
 
 export interface RunReport {
   run: string | null;
+  /** Our runner's one-time nonce for the run (runner.ts). */
+  nonce: string | null;
   ok: boolean;
   text: string | null;
   noteworthy: boolean;
@@ -156,6 +167,7 @@ export function readReport(body: unknown): RunReport {
   if (decisions.length > 50) throw new Refusal(400, 'bad_request', 'up to 50 decisions');
   return {
     run: (b.run as string | undefined) ?? null,
+    nonce: typeof b.nonce === 'string' ? b.nonce.slice(0, 200) : null,
     ok: b.ok,
     text: typeof b.text === 'string' && b.text.trim() ? b.text.trim() : null,
     noteworthy: b.noteworthy === true,
@@ -172,14 +184,21 @@ const decisionLines = (ds: RunReport['decisions']) =>
 /**
  * A job's report at the end of a run. `caller` is the service account the
  * Google ID token proved; it has to be the one registered for the run's agent.
+ * Our runner's one account runs every organisation's agents, so it reports
+ * only for a run it names, with that run's nonce.
  */
 export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, body: unknown): Promise<{ run: string; threadId: string | null }> {
   const report = readReport(body);
-  const agent = await deps.jobs.agentByIdentity(caller);
+  const ours = !!deps.runner && caller === deps.runner.job.identity.toLowerCase();
+  const reporter = ours ? await runnerReporter(chat, deps, report.run, report.nonce) : null;
+  const agent = reporter?.agent ?? (await deps.jobs.agentByIdentity(caller));
   if (!agent) throw new Refusal(403, 'not_allowed', 'no agent reports as this account');
 
   let run: RunRecord;
-  if (report.run) {
+  if (reporter) {
+    if (reporter.run.state !== 'running') return { run: reporter.run.id, threadId: null };
+    run = reporter.run;
+  } else if (report.run) {
     const found = await deps.jobs.run(report.run);
     if (!found || found.agentId !== agent.id) throw new Refusal(403, 'not_allowed', 'not this agent’s run');
     if (found.state !== 'running') return { run: found.id, threadId: null }; // a retry of a report already taken

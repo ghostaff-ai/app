@@ -44,6 +44,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.58.0
         version: 2.119.0(@opentelemetry/api@1.10.0)
+      croner:
+        specifier: 11.0.0
+        version: 11.0.0
       google-auth-library:
         specifier: ^11.3.4
         version: 11.3.4
@@ -220,6 +223,25 @@ importers:
       typescript:
         specifier: ~6.0.3
         version: 6.0.3
+
+  apps/runner:
+    dependencies:
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.5
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.0.15
+        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(jsdom@26.1.0)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   apps/sync:
     dependencies:
@@ -2809,6 +2831,10 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  croner@11.0.0:
+    resolution: {integrity: sha512-T17ADjdttrVToyzLpLq9Xb9xzcMwpQ/M3Qs9szhh0MVNTbv6NWQ9OFYa2qlzPYXFMn+uoDlnW1IpIv6cAvFtyA==}
+    engines: {node: '>=18.0'}
 
   cross-fetch@3.2.0:
     resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
@@ -8620,6 +8646,8 @@ snapshots:
       parse-json: 5.2.0
     optionalDependencies:
       typescript: 6.0.3
+
+  croner@11.0.0: {}
 
   cross-fetch@3.2.0:
     dependencies:

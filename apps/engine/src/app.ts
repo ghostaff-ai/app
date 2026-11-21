@@ -12,6 +12,7 @@ import { type ActionDeps, approveAction, rejectAction } from './actions';
 import { CONNECTORS } from '@ghostaff/shared';
 import { agentHello, type ChatDeps, replyInThread } from './chat';
 import { reportRun } from './jobs';
+import { runRecordToken, runSpec } from './runner';
 import { clientMetadataDocument } from './mcp';
 import { connectAi, type Deps, disconnectAi, Refusal } from './connections';
 import { bearer, type CallerFromToken } from './googleCaller';
@@ -95,6 +96,28 @@ export function createApp(deps: AppDeps) {
       }
     }
     return c.json({ ok: true, run: done.run });
+  });
+
+  // Our runner fetching its run's spec, once, and a fresh record token later, as its own service account and with
+  // the run's nonce (runner.ts); no Supabase token on these. What they answer is secret: never cached.
+  app.post('/runs/:id/spec', async (c) => {
+    const reports = deps.reports;
+    const token = bearer(c.req.header('Authorization'));
+    const caller = reports && token ? await reports.callerFromToken(token, reports.audience) : null;
+    if (!reports || !caller || !deps.chat.jobs?.runner) return c.json({ error: 'unauthorized' }, 401);
+    const body = await c.req.json().catch(() => null);
+    c.header('Cache-Control', 'no-store');
+    return c.json(await runSpec(deps.chat, deps.chat.jobs, caller, c.req.param('id'), body));
+  });
+
+  app.post('/runs/:id/record-token', async (c) => {
+    const reports = deps.reports;
+    const token = bearer(c.req.header('Authorization'));
+    const caller = reports && token ? await reports.callerFromToken(token, reports.audience) : null;
+    if (!reports || !caller || !deps.chat.jobs?.runner) return c.json({ error: 'unauthorized' }, 401);
+    const body = await c.req.json().catch(() => null);
+    c.header('Cache-Control', 'no-store');
+    return c.json(await runRecordToken(deps.chat.jobs, caller, c.req.param('id'), body));
   });
 
   app.use('*', async (c, next) => {
