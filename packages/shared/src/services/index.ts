@@ -1,10 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { AccountProvider } from '../connectors';
 import type {
+  AccountConnectResult,
   Agent,
   AgentAccess,
   AgentGhost,
   AgentLevel,
+  AgentRun,
+  AgentRunner,
   AiProvider,
+  ClaudeSessionEvent,
   Answer,
   ConnectAiInput,
   Connection,
@@ -378,7 +383,7 @@ interface ConnectionRow {
   id: string;
   org_id: string;
   kind: Connection['kind'];
-  provider: AiProvider;
+  provider: Connection['provider'];
   method: Connection['method'];
   hint: string;
   settings: Connection['settings'] | null;
@@ -466,6 +471,108 @@ export async function disconnectAi(engine: EngineAccess, orgId: string, provider
   await callEngine(engine, 'DELETE', `/connections/ai/${provider}?org=${encodeURIComponent(orgId)}`);
 }
 
+/** A Claude subscription being connected: the code goes in, or the person gives up. */
+export interface ClaudeSignIn {
+  /** The code Anthropic showed after signing in. */
+  sendCode(code: string): void;
+  cancel(): void;
+}
+
+/**
+ * Connects the organisation's Claude subscription through Claude Code's own
+ * sign-in, which the engine runs (apps/engine/src/claudeSession.ts). One
+ * WebSocket for the whole flow; the person's token goes in its first message,
+ * never in the URL. `onEvent` hears the sign-in link, that the code is being
+ * checked, then the connection or a refusal code; after either the socket closes.
+ */
+export function connectClaudeSubscription(
+  engine: EngineAccess,
+  orgId: string,
+  onEvent: (e: ClaudeSessionEvent) => void,
+  opts: { WebSocket?: typeof WebSocket } = {},
+): ClaudeSignIn {
+  let over = false;
+  const end = (e: ClaudeSessionEvent) => {
+    if (over) return;
+    over = true;
+    onEvent(e);
+  };
+  if (!engine.url) {
+    queueMicrotask(() => end({ type: 'error', code: 'not_configured' }));
+    return { sendCode() {}, cancel() {} };
+  }
+  const Socket = opts.WebSocket ?? WebSocket;
+  const url = `${engine.url.replace(/\/$/, '').replace(/^http/, 'ws')}/connections/ai/claude/session`;
+  const ws = new Socket(url);
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'start', token: engine.token, orgId }));
+  ws.onmessage = (m) => {
+    let e: { type?: string; url?: string; code?: string; connection?: ConnectionRow };
+    try {
+      e = JSON.parse(String(m.data));
+    } catch {
+      return;
+    }
+    if (e.type === 'url' && typeof e.url === 'string') onEvent({ type: 'url', url: e.url });
+    else if (e.type === 'working') onEvent({ type: 'working' });
+    else if (e.type === 'done' && e.connection) end({ type: 'done', connection: connectionFromRow(e.connection) });
+    else if (e.type === 'error') end({ type: 'error', code: typeof e.code === 'string' ? e.code : 'failed' });
+  };
+  ws.onerror = () => end({ type: 'error', code: 'unreachable' });
+  ws.onclose = () => end({ type: 'error', code: 'unreachable' });
+  return {
+    sendCode(code) {
+      if (!over && ws.readyState === Socket.OPEN) ws.send(JSON.stringify({ type: 'code', code: code.trim() }));
+    },
+    cancel() {
+      over = true;
+      ws.close();
+    },
+  };
+}
+
+/**
+ * Starts connecting an outside account by signing in there. Returns the
+ * provider's sign-in page. The engine sends the person back to `returnTo` with
+ * `?connected=<provider>&state=…&code=…`, which `finishAccountConnect` turns
+ * into the connection; or with `&result=<AccountConnectResult>` when it ended
+ * there (they said no).
+ */
+export async function startAccountConnect(
+  engine: EngineAccess,
+  input: { orgId: string; provider: AccountProvider; returnTo: string },
+): Promise<{ url: string }> {
+  return callEngine(engine, 'POST', `/connections/accounts/${input.provider}/start`, { orgId: input.orgId, returnTo: input.returnTo });
+}
+
+/**
+ * Finishes a connect as the person who started it: the engine refuses anyone
+ * else, so a stranger lured into signing in gives nothing away.
+ */
+export async function finishAccountConnect(
+  engine: EngineAccess,
+  input: { provider: AccountProvider; state: string; code: string },
+): Promise<AccountConnectResult> {
+  const { result } = await callEngine<{ result: AccountConnectResult }>(engine, 'POST', `/connections/accounts/${input.provider}/finish`, {
+    state: input.state,
+    code: input.code,
+  });
+  return result;
+}
+
+/** Removes the account connection, revokes our access with the provider and deletes the token. */
+export async function disconnectAccount(engine: EngineAccess, orgId: string, provider: AccountProvider): Promise<void> {
+  await callEngine(engine, 'DELETE', `/connections/accounts/${provider}?org=${encodeURIComponent(orgId)}`);
+}
+
+/**
+ * An owner's answer to an action an agent proposed (a card in its message):
+ * approving runs it with the organisation's connected account; the card then
+ * shows how it went. Anyone but an owner is refused.
+ */
+export async function decideAction(engine: EngineAccess, actionId: string, decision: 'approve' | 'reject'): Promise<{ status: string; result?: string }> {
+  return callEngine(engine, 'POST', `/actions/${encodeURIComponent(actionId)}/${decision}`);
+}
+
 /** The service account a customer grants Vertex AI access to on their own project. */
 export async function getEngineIdentity(engine: EngineAccess): Promise<{ serviceAccount: string }> {
   return callEngine(engine, 'GET', '/identity');
@@ -481,6 +588,9 @@ interface AgentRow {
   ghost: AgentGhost;
   department: Department;
   member_default: AgentLevel;
+  runner: AgentRunner;
+  description: string | null;
+  schedule: string | null;
   created_at: string;
 }
 
@@ -492,11 +602,14 @@ export function agentFromRow(r: AgentRow): Agent {
     ghost: r.ghost,
     department: r.department,
     memberDefault: r.member_default,
+    runner: r.runner ?? 'chat',
+    description: r.description ?? null,
+    schedule: r.schedule ?? null,
     createdAt: r.created_at,
   };
 }
 
-const AGENT_COLUMNS = 'id, org_id, name, ghost, department, member_default, created_at';
+const AGENT_COLUMNS = 'id, org_id, name, ghost, department, member_default, runner, description, schedule, created_at';
 
 /** The organisation's agents, oldest first. */
 export async function listAgents(client: SupabaseClient, orgId: string): Promise<Agent[]> {
@@ -726,4 +839,51 @@ export async function askAgent(engine: EngineAccess, threadId: string): Promise<
 /** A newly added agent introduces itself in a thread of its own; returns that thread. */
 export async function agentHello(engine: EngineAccess, agentId: string): Promise<{ threadId: string }> {
   return callEngine(engine, 'POST', `/agents/${agentId}/hello`);
+}
+
+// Agent runs: what the agents did, on their own or when asked
+// (supabase/migrations/20261121100000_agent_runners.sql). Read only: the engine records them.
+
+interface AgentRunRow {
+  id: string;
+  org_id: string;
+  agent_id: string;
+  origin: 'person' | 'schedule';
+  state: 'running' | 'done' | 'failed';
+  summary: string | null;
+  noteworthy: boolean;
+  decisions_opened: number;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export function agentRunFromRow(r: AgentRunRow): AgentRun {
+  return {
+    id: r.id,
+    orgId: r.org_id,
+    agentId: r.agent_id,
+    origin: r.origin,
+    state: r.state,
+    summary: r.summary,
+    noteworthy: r.noteworthy,
+    decisionsOpened: r.decisions_opened,
+    startedAt: r.started_at,
+    finishedAt: r.finished_at,
+  };
+}
+
+/** What the agents finished on their own since `since`, newest first: «Hecho sin ti» (app-design.md #11). */
+export async function listDoneWithoutYou(client: SupabaseClient, orgId: string, since: Date): Promise<AgentRun[]> {
+  const { data, error } = await client
+    .from('agent_runs')
+    .select('id, org_id, agent_id, origin, state, summary, noteworthy, decisions_opened, started_at, finished_at')
+    .eq('org_id', orgId)
+    .eq('origin', 'schedule')
+    .eq('state', 'done')
+    .gte('started_at', since.toISOString())
+    .order('started_at', { ascending: false })
+    .limit(50)
+    .returns<AgentRunRow[]>();
+  if (error) throw error;
+  return (data ?? []).map(agentRunFromRow);
 }

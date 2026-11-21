@@ -6,6 +6,29 @@
 
 export type MessagePart = { type: 'text'; text: string } | { type: string; [key: string]: unknown };
 
+/**
+ * An action the agent proposes in its message: something outside Ghostaff it
+ * will do only once an owner approves it (apps/engine/src/actions.ts). The
+ * card shows it; the engine runs what it stored, never what the part says.
+ */
+export interface ActionPart {
+  type: 'action';
+  actionId: string;
+  /** What it will do, in Spanish («Publicar en Instagram»). */
+  label: string;
+  /** The details a person needs to decide, as readable text. */
+  preview: string;
+  status: 'pending' | 'running' | 'done' | 'failed' | 'rejected';
+  /** What came of it: the tool's answer, or its error. */
+  result?: string;
+  /** Who approved or rejected it. */
+  decidedBy?: string;
+}
+
+export function isActionPart(p: MessagePart): p is ActionPart & MessagePart {
+  return p.type === 'action' && typeof (p as { actionId?: unknown }).actionId === 'string';
+}
+
 export interface ChatMessage {
   id: string;
   threadId: string;

@@ -4,9 +4,12 @@ import { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, SectionList, Text, View } from 'react-native';
 import { MicButton } from '@/components/chat/MicButton';
 import { DecisionCard } from '@/components/DecisionCard';
+import { DoneWithoutYou } from '@/components/DoneWithoutYou';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
 import { Button, Loading, Notice } from '@/components/ui';
+import { useAgents } from '@/lib/hooks/useAgents';
 import { useInbox } from '@/lib/hooks/useDecisions';
+import { useDoneWithoutYou } from '@/lib/hooks/useDoneWithoutYou';
 import { hello, waitingSentence } from '@/lib/hoy';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
@@ -16,13 +19,16 @@ import { useTabScreenTop } from '@/lib/tabs';
 // her (decision 21); under it only what waits for you, then what you answered
 // and the agent hasn't picked up yet (decision 8: you can still take it back).
 // The organisation's name opens the switcher (decision 3); the mic beside it
-// talks to Secretaría (decisions 1 and 2).
+// talks to Secretaría (decisions 1 and 2). At the end, folded, what the agents
+// did on their own (decision 11).
 
 export default function Hoy() {
   const top = useTabScreenTop();
   const { active } = useActiveOrg();
   const { profile } = useProfile();
   const { decisions, loading, error, reload } = useInbox(active?.id ?? null);
+  const done = useDoneWithoutYou(active?.id ?? null);
+  const agents = useAgents(active?.id ?? null);
   const [focused, setFocused] = useState(true);
 
   // Back from a decision: show its new state. Away from Hoy: the ghost rests.
@@ -30,8 +36,9 @@ export default function Hoy() {
     useCallback(() => {
       setFocused(true);
       void reload();
+      void done.reload();
       return () => setFocused(false);
-    }, [reload]),
+    }, [reload, done.reload]),
   );
 
   if (loading && decisions.length === 0) return <Loading />;
@@ -51,7 +58,17 @@ export default function Hoy() {
       sections={sections}
       keyExtractor={(d) => d.id}
       stickySectionHeadersEnabled={false}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={loading}
+          onRefresh={() => {
+            void reload();
+            void done.reload();
+            void agents.reload();
+          }}
+        />
+      }
+      ListFooterComponent={<DoneWithoutYou runs={done.runs} agents={agents.items} />}
       ListHeaderComponent={
         <View className="pb-2 pt-3">
           <View className="flex-row items-center justify-between">

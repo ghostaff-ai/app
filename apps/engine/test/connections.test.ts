@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import type { Checks, ConnectionRecord, Membership, Store } from '../src/connections';
 import { checkAnthropicKey, checkVertexProject } from '../src/providers';
+import { NO_TOOLS } from '../src/tools';
 import { MemoryVault, secretName } from '../src/vault';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
@@ -37,7 +38,9 @@ function setup(checks: Partial<Checks> = {}) {
     userFromToken: async (t) => (t.startsWith('token-') ? t.slice(6) : null),
     serviceAccount: 'engine@ghostaff-prod.iam.gserviceaccount.com',
     now: () => new Date('2026-11-14T10:00:00Z'),
-    chat: { chat: {} as never, writerFor: async () => async () => {} },
+    chat: { chat: {} as never, writerFor: async () => async () => {}, toolsFor: async () => NO_TOOLS },
+    accounts: {} as never,
+    actions: {} as never,
   });
   const call = (user: string | null, method: string, path: string, body?: unknown) =>
     app.request(path, {
@@ -103,6 +106,19 @@ describe('connecting an AI key', () => {
     await call(ANA, 'POST', '/connections/ai', { orgId: ORG, provider: 'anthropic', apiKey: ANTHROPIC_KEY });
     expect((await call(BEA, 'DELETE', `/connections/ai/anthropic?org=${ORG}`)).status).toBe(403);
     expect((await call(ANA, 'DELETE', `/connections/ai/anthropic?org=${ORG}`)).status).toBe(200);
+    expect(rows.size).toBe(0);
+    expect(vault.secrets.size).toBe(0);
+  });
+
+  it('a Claude subscription cannot be pasted in, only signed into; disconnecting it deletes its token', async () => {
+    const { rows, vault, call } = setup();
+    const res = await call(ANA, 'POST', '/connections/ai', { orgId: ORG, provider: 'claude', apiKey: ANTHROPIC_KEY });
+    expect(res.status).toBe(400);
+    expect(vault.secrets.size).toBe(0);
+    await vault.put(secretName(ORG, 'claude'), 'sk-ant-oat01-x', {});
+    rows.set(`${ORG}/claude`, {} as ConnectionRecord);
+    expect((await call(BEA, 'DELETE', `/connections/ai/claude?org=${ORG}`)).status).toBe(403);
+    expect((await call(ANA, 'DELETE', `/connections/ai/claude?org=${ORG}`)).status).toBe(200);
     expect(rows.size).toBe(0);
     expect(vault.secrets.size).toBe(0);
   });

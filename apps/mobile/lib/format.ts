@@ -39,3 +39,16 @@ export function kindLabel(kind: string): string {
   const words = kind.replace(/-/g, ' ');
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
+
+/** An instant as «10:30» today, else «7 nov». */
+export function whenLabel(iso: string, now = new Date()): string {
+  const at = new Date(iso);
+  if (todayIso(at) === todayIso(now)) return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+  return shortDate(todayIso(at));
+}
+
+/** The first line an agent said, without markdown marks: what a folded row shows. */
+export function firstLine(text: string | null): string {
+  const line = (text ?? '').split('\n').map((l) => l.replace(/^[#>*\-•\s]+/, '').replace(/\*\*/g, '').trim()).find(Boolean);
+  return line ?? 'Hecho.';
+}

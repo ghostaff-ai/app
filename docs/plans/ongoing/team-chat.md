@@ -1,8 +1,8 @@
 # Talking to the team: the chat
 
 **Priority:** high — «hablar con un departamento» is one of the four things the first version promises
-**Gate:** none
-**Next:** step 4, decision cards in the chat: when an agent can raise a decision (it needs the record and tools from the engine), show it inline as the Hoy card (decision 5)
+**Gate:** blocked:ghostaff-ai/app:build-first-version
+**Next:** step 4, decision cards in the chat, once the engine gives agents the record and tools (build-first-version, «The engine»): an agent raises a decision and it shows inline as the Hoy card (decision 5)
 
 Álvaro asked (2026-11-17) for a really good, curated chat: several people of one organisation talking to its agents, the owner deciding who can read or talk to each agent, and agents that are added by department and start working the moment they arrive, as a conversation rather than a form. I researched the libraries and guidelines and drew ten decisions; he took all my picks («go», 2026-11-17). The page he reviewed, with the options drawn and the sources: [Ghostaff chat choices](https://claude.ai/artifact/DCyY8cKXptDmf3xgBJp5an).
 

@@ -21,18 +21,22 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  // Loading is "signed in, and not settled for this person yet", worked out at
+  // render time: a flag set by the effect would leave one render, when the
+  // session arrives, with a person and no profile, which sends the layout to
+  // Bienvenida and loses the link that was opened (ActiveOrgContext, the same).
+  const [settledFor, setSettledFor] = useState<string | null>(null);
+  const loading = userId !== null && settledFor !== userId;
 
   useEffect(() => {
     if (!userId) {
       setProfile(null);
-      setLoading(false);
+      setSettledFor(null);
       return;
     }
     let alive = true;
-    setLoading(true);
     getMyProfile(supabase, userId)
       .then((p) => {
         if (!alive) return;
@@ -40,7 +44,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         setError(null);
       })
       .catch((e: unknown) => alive && setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => alive && setLoading(false));
+      .finally(() => alive && setSettledFor(userId));
     return () => {
       alive = false;
     };

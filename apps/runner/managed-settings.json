@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "disableBypassPermissionsMode": "disable"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/runner/apps/runner/node_modules/.bin/tsx /opt/runner/apps/runner/src/guard.ts"
+          }
+        ]
+      }
+    ]
+  }
+}
