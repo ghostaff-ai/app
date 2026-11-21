@@ -14,6 +14,7 @@
     "@anthropic-ai/vertex-sdk": "^1.1.3",
     "@ghostaff/shared": "workspace:*",
     "@hono/node-server": "^2.1.8",
+    "@hono/node-ws": "^1.3.2",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@supabase/supabase-js": "^2.58.0",
     "croner": "11.0.0",
