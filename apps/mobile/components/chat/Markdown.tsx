@@ -86,6 +86,9 @@ function Inline({ tokens, names }: { tokens: Token[]; names: string[] }) {
               </Text>
             );
           }
+          case 'checkbox':
+            // Inside a loose task item the box is inline; the list draws it as the marker.
+            return null;
           case 'br':
             return <Fragment key={i}>{'\n'}</Fragment>;
           case 'escape':

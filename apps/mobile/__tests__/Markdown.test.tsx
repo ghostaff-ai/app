@@ -49,6 +49,15 @@ describe('Markdown', () => {
     expect(allText()).not.toMatch(/\[ \]|\[x\]/);
   });
 
+  it('draws loose task list items (blank line between) the same way', async () => {
+    await render(<Markdown text={'- [ ] uno\n\n- [x] dos'} names={[]} />);
+    expect(screen.getByText('uno')).toBeTruthy();
+    expect(screen.getByText('dos')).toBeTruthy();
+    expect(screen.getByText('☐')).toBeTruthy();
+    expect(screen.getByText('☑')).toBeTruthy();
+    expect(allText()).not.toMatch(/\[ \]|\[x\]/);
+  });
+
   it('shows wide list numbers', async () => {
     await render(<Markdown text={'100. a\n101. b'} names={[]} />);
     expect(screen.getByText('100.')).toBeTruthy();
@@ -57,6 +66,7 @@ describe('Markdown', () => {
 
   it('hides reference definitions', async () => {
     await render(<Markdown text={'hola [r]\n\n[r]: https://x.y'} names={[]} />);
+    expect(allText()).toContain('hola');
     expect(allText()).not.toContain('https://x.y');
   });
 
