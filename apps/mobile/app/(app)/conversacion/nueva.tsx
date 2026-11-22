@@ -1,4 +1,4 @@
-import { startThread } from '@ghostaff/shared/services';
+import { startThread, transcribe } from '@ghostaff/shared/services';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useMemo } from 'react';
@@ -33,6 +33,12 @@ export default function NuevaConversacion() {
     [agents, members, session?.user.id],
   );
 
+  // No engine, no mic.
+  const dictate = useMemo(
+    () => (engine && orgId ? (audio: Blob, mimeType: string) => transcribe(engine, orgId, audio, mimeType) : undefined),
+    [engine, orgId],
+  );
+
   const agent = agents.find((a) => a.id === agentId);
   if ((loading || levelsLoading) && !agent) return <Loading />;
   if (!agent) return <Notice title="No encontramos este agente" />;
@@ -55,7 +61,7 @@ export default function NuevaConversacion() {
           <Text className="mt-1 text-center text-base text-muted">{g.job}</Text>
           <Text className="mt-6 text-center text-footnote text-muted">Lo que escribas lo verá también quien pueda ver a {agent.name}.</Text>
         </View>
-        <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={send} autoFocus />
+        <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={send} onDictate={dictate} autoFocus />
       </KeyboardColumn>
     </View>
   );

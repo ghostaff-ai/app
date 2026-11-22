@@ -9,9 +9,9 @@ import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { usePalette } from '@/lib/theme';
 
 // The button that is always there (app-design.md #1 and #2): it opens a new
-// thread with Secretaría, or with the first agent the person may talk to. For
-// now speaking goes through the phone keyboard's own dictation; voice notes
-// come with the engine.
+// thread with Secretaría, or with the first agent the person may talk to. It
+// only opens the thread: dictating is the chat's own box (Composer), which
+// has its own round mic beside send.
 
 /** Who the mic talks to (Secretaría, or the first agent the person may talk to), and how to open that thread. */
 export function useTalkTarget() {

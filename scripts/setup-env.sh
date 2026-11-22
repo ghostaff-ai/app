@@ -40,6 +40,8 @@ retry() { local n; for n in 1 2 3 4 5 6; do "$@" >/dev/null 2>&1 && return; slee
 grant() { retry gcloud projects add-iam-policy-binding "$P" --member "serviceAccount:$1" --role "$2" --condition None; }
 # The engine creates, rotates and deletes each organisation's secret, and reads its own.
 grant "$(sa engine)" roles/secretmanager.admin
+# Dictation: the engine calls Gemini on Vertex AI in the EU, billed to this project (docs/plans/ongoing/voice.md).
+grant "$(sa engine)" roles/aiplatform.user
 # The runner has no role at all: it proves who it is to the engine with its ID token.
 # The deployer builds and deploys, and nothing else: no secret's value, no IAM on the project.
 grant "$DEPLOYER_SA" roles/run.admin

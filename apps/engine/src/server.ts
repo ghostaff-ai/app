@@ -30,6 +30,7 @@ import { expireRuns } from './jobs';
 import type { ChatDeps } from './chat';
 import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
 import { type RunnerDeps, startScheduled } from './runner';
+import { DEFAULT_TRANSCRIBE_MODEL, type GoogleRequest, vertexTranscriber } from './transcribe';
 
 function required(name: string): string {
   const v = process.env[name];
@@ -43,6 +44,11 @@ const admin = createClient(supabaseUrl, required('SUPABASE_SERVICE_ROLE_KEY'), {
 });
 
 const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
+const googleRequest: GoogleRequest = async (url, data, opts) => {
+  const client = await auth.getClient();
+  const res = await client.request({ url, method: 'POST', data, validateStatus: () => true, timeout: opts?.timeoutMs });
+  return { status: res.status, data: res.data };
+};
 
 let vault: Vault;
 if (process.env.VAULT === 'memory') {
@@ -152,6 +158,12 @@ const chatDeps: ChatDeps = {
   toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
   jobs,
 };
+// Dictation: Gemini on Vertex AI in the EU, billed to Ghostaff's own project (transcribe.ts).
+const gcpProject = process.env.GCP_PROJECT;
+if (!gcpProject) console.warn('dictation off: set GCP_PROJECT.');
+const transcriber = gcpProject
+  ? vertexTranscriber({ project: gcpProject, model: process.env.TRANSCRIBE_MODEL || DEFAULT_TRANSCRIBE_MODEL, request: googleRequest })
+  : undefined;
 const cronCallers = (process.env.CRON_CALLERS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
 
 const app = createApp({
@@ -160,12 +172,7 @@ const app = createApp({
   checks: {
     anthropic: (key) => checkAnthropicKey(key),
     openai: (key) => checkOpenAiKey(key),
-    vertex: (project) =>
-      checkVertexProject(project, async (url, data) => {
-        const client = await auth.getClient();
-        const res = await client.request({ url, method: 'POST', data, validateStatus: () => true });
-        return { status: res.status, data: res.data };
-      }),
+    vertex: (project) => checkVertexProject(project, googleRequest),
   },
   async userFromToken(token) {
     const { data, error } = await admin.auth.getUser(token);
@@ -175,6 +182,7 @@ const app = createApp({
   chat: chatDeps,
   reports: { callerFromToken: caller, audience: publicUrl },
   claudeSignIn: { spawn: spawnSetupToken },
+  transcriber,
   accounts,
   actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId) },
   cron: {

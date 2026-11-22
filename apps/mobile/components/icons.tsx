@@ -27,6 +27,7 @@ export { ProhibitIcon as Prohibit } from 'phosphor-react-native/src/icons/Prohib
 export { SealCheckIcon as SealCheck } from 'phosphor-react-native/src/icons/SealCheck';
 export { SignOutIcon as SignOut } from 'phosphor-react-native/src/icons/SignOut';
 export { SparkleIcon as Sparkle } from 'phosphor-react-native/src/icons/Sparkle';
+export { StopIcon as Stop } from 'phosphor-react-native/src/icons/Stop';
 export { TrayIcon as Tray } from 'phosphor-react-native/src/icons/Tray';
 export { UserIcon as User } from 'phosphor-react-native/src/icons/User';
 export { UserPlusIcon as UserPlus } from 'phosphor-react-native/src/icons/UserPlus';
