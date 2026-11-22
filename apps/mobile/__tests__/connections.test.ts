@@ -1,6 +1,19 @@
 import type { Connection } from '@ghostaff/shared';
 import { EngineError } from '@ghostaff/shared/services';
-import { accountErrorMessage, accountResultMessage, canRunAgents, claudeSignInMessage, connectErrorMessage, connectorSections, PROVIDERS } from '@/lib/connections';
+import {
+  accountErrorMessage,
+  accountResultMessage,
+  aiAccountName,
+  aiUsageLine,
+  canRunAgents,
+  claudeSignInMessage,
+  connectErrorMessage,
+  connectorSections,
+  costLabel,
+  PROVIDERS,
+  resetLabel,
+  tokensLabel,
+} from '@/lib/connections';
 
 describe('what the connections screen says when the engine refuses', () => {
   it('names the right key prefix for each provider', () => {
@@ -22,7 +35,8 @@ describe('the Claude subscription card', () => {
   it('warns that Anthropic can cut it off, and what happens then', () => {
     expect(PROVIDERS.claude.title).toBe('Claude · tu suscripción');
     expect(PROVIDERS.claude.warning).toContain('sin aviso');
-    expect(PROVIDERS.claude.warning).toContain('clave de Anthropic');
+    expect(PROVIDERS.claude.warning).toContain('siguiente cuenta de IA');
+    expect(PROVIDERS.claude.warning).toContain('varias personas');
     expect(PROVIDERS.claude.limit).toContain('apps conectadas');
   });
 
@@ -76,9 +90,14 @@ describe('whether an organisation has an AI account its agents run on', () => {
     hint: '1234',
     settings: {},
     status: 'ok',
+    statusReason: null,
     checkedAt: '',
     connectedByName: 'Ana',
     updatedAt: '',
+    position: 1,
+    label: null,
+    limits: {},
+    lastUsedAt: null,
   });
 
   it('counts a Claude subscription, an Anthropic key or Claude on Google Cloud', () => {
@@ -91,5 +110,60 @@ describe('whether an organisation has an AI account its agents run on', () => {
     expect(canRunAgents([])).toBe(false);
     expect(canRunAgents([conn('ai', 'openai')])).toBe(false);
     expect(canRunAgents([conn('account', 'google')])).toBe(false);
+  });
+});
+
+describe('an AI account in the list', () => {
+  const base: Connection = {
+    id: 'c1',
+    orgId: 'o',
+    kind: 'ai',
+    provider: 'claude',
+    method: 'subscription',
+    hint: 'abcd',
+    settings: {},
+    status: 'ok',
+    statusReason: null,
+    checkedAt: '',
+    connectedByName: 'Ana',
+    updatedAt: '',
+    position: 1,
+    label: null,
+    limits: {},
+    lastUsedAt: null,
+  };
+  const usage = { uses: 12, failures: 0, tokens: 1_234_000, costUsd: 18.4, lastAt: null, byDay: [], byAgent: [] };
+
+  it('is called by the name an owner gave it, else by its kind', () => {
+    expect(aiAccountName(base)).toBe('Claude con tu suscripción');
+    expect(aiAccountName({ ...base, label: 'Claude de Jaime' })).toBe('Claude de Jaime');
+  });
+
+  it('a subscription shows its weekly and 5-hour limits; at a limit, says so', () => {
+    const limits = { sevenDay: { utilization: 0.62, resetsAt: null, status: 'allowed' }, fiveHour: { utilization: 0.2, resetsAt: null, status: 'allowed' } };
+    expect(aiUsageLine({ ...base, limits }, usage)).toBe('Semana 62 % · 5 h 20 %');
+    expect(aiUsageLine({ ...base, limits: { sevenDay: { utilization: 1, resetsAt: null, status: 'rejected' } } }, usage)).toBe('Semana: límite alcanzado');
+  });
+
+  it('a key shows its last 30 days with the estimated cost; a subscription never a cost', () => {
+    expect(aiUsageLine({ ...base, provider: 'anthropic', method: 'api_key' }, usage)).toBe('30 días: 12 usos · 1,2 M tokens · ~18 $');
+    expect(aiUsageLine(base, usage)).toBe('30 días: 12 usos · 1,2 M tokens');
+    expect(aiUsageLine(base, null)).toBe('Sin usar en los últimos 30 días');
+  });
+
+  it('a failing account says why before anything else', () => {
+    expect(aiUsageLine({ ...base, status: 'failing', statusReason: 'limited' }, usage)).toBe('Ha llegado a su límite');
+    expect(aiUsageLine({ ...base, status: 'failing', statusReason: 'refused' }, usage)).toContain('vuelve a conectarla');
+  });
+
+  it('numbers as a person reads them', () => {
+    expect(tokensLabel(850)).toBe('850');
+    expect(tokensLabel(12_400)).toBe('12 mil');
+    expect(costLabel(0.4)).toBe('~0,40 $');
+    expect(costLabel(0.001)).toBe('<0,01 $');
+    const now = new Date('2026-11-22T12:00:00Z');
+    expect(resetLabel('2026-11-22T12:40:00Z', now)).toBe('en 40 min');
+    expect(resetLabel('2026-11-22T15:00:00Z', now)).toBe('en 3 h');
+    expect(resetLabel('2026-11-22T11:00:00Z', now)).toBe('ya');
   });
 });

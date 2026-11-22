@@ -625,13 +625,13 @@ export function supabaseAccountStore(admin: SupabaseClient): AccountStore {
       return rows[0] ? attemptFromRow(rows[0]) : null;
     },
     async upsertAccount(row) {
-      check(await admin.from('connections').upsert(row, { onConflict: 'org_id,provider' }));
+      check(await admin.from('connections').upsert(row, { onConflict: 'org_id,account_key' }));
     },
     async removeAccount(orgId, provider) {
-      check(await admin.from('connections').delete().eq('org_id', orgId).eq('provider', provider));
+      check(await admin.from('connections').delete().eq('org_id', orgId).eq('kind', 'account').eq('provider', provider));
     },
     async setStatus(orgId, provider, status) {
-      check(await admin.from('connections').update({ status, checked_at: new Date().toISOString() }).eq('org_id', orgId).eq('provider', provider));
+      check(await admin.from('connections').update({ status, checked_at: new Date().toISOString() }).eq('org_id', orgId).eq('kind', 'account').eq('provider', provider));
     },
     async accounts(orgId) {
       const rows =

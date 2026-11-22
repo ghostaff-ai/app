@@ -6,7 +6,7 @@ import { type SignInProcess, Slots } from '../src/claudeCode';
 import { claudeSession, type ClaudeSessionDeps, MAX_MESSAGE } from '../src/claudeSession';
 import type { ConnectionRecord, Membership, Store } from '../src/connections';
 import { NO_TOOLS } from '../src/tools';
-import { MemoryVault, secretName } from '../src/vault';
+import { aiSecretName, MemoryVault } from '../src/vault';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 const URL = 'https://claude.com/cai/oauth/authorize?code=true&client_id=abc&state=s1';
@@ -46,10 +46,11 @@ function setup(over: Partial<ClaudeSessionDeps> = {}) {
   const rows: ConnectionRecord[] = [];
   const store: Store = {
     membership: async (o, u) => members[`${o}/${u}`] ?? null,
-    upsert: async (r) => {
+    insert: async (r) => {
       rows.push(r);
       return { provider: r.provider, method: r.method, hint: r.hint };
     },
+    aiConnections: async () => [],
     remove: async () => {},
   };
   const vault = new MemoryVault();
@@ -104,8 +105,8 @@ describe('connecting a Claude subscription', () => {
 
     t.claude.print(`\r\nYour OAuth token (valid for 1 year):\r\n\r\n${TOKEN}\r\n\r\nStore this token securely.`);
     await flush();
-    expect(await t.vault.get(secretName(ORG, 'claude'))).toBe(TOKEN);
     expect(t.rows).toHaveLength(1);
+    expect(await t.vault.get(aiSecretName(ORG, t.rows[0]!.id))).toBe(TOKEN);
     expect(t.rows[0]).toMatchObject({ kind: 'ai', provider: 'claude', method: 'subscription', hint: 'Wxyz', connected_by_name: 'Ana', settings: {} });
     expect(JSON.stringify(t.rows)).not.toContain(TOKEN);
     expect(t.sent.at(-1)).toEqual({ type: 'done', connection: { provider: 'claude', method: 'subscription', hint: 'Wxyz' } });
@@ -348,7 +349,7 @@ describe('the sign-in, against what can go wrong', () => {
     expect(t.vault.secrets.size).toBe(0);
     t.claude.end(0);
     await flush();
-    expect(await t.vault.get(secretName(ORG, 'claude'))).toBe(TOKEN);
+    expect(await t.vault.get(aiSecretName(ORG, t.rows[0]!.id))).toBe(TOKEN);
     expect(t.sent.at(-1)).toMatchObject({ type: 'done' });
   });
 
@@ -448,10 +449,11 @@ describe('the sign-in over a real WebSocket', () => {
     const app = createApp({
       store: {
         membership: async () => ({ role: 'owner', displayName: 'Ana' }),
-        upsert: async (r) => {
+        insert: async (r) => {
           rows.push(r);
-          return { provider: r.provider, hint: r.hint };
+          return { id: r.id, provider: r.provider, hint: r.hint };
         },
+        aiConnections: async () => [],
         remove: async () => {},
       },
       vault,
@@ -494,7 +496,7 @@ describe('the sign-in over a real WebSocket', () => {
       await closed;
       expect(heard.map((m) => m.type)).toEqual(['url', 'working', 'done']);
       expect(claude.written).toEqual([`${CODE}\r`]);
-      expect(await vault.get(secretName(ORG, 'claude'))).toBe(TOKEN);
+      expect(await vault.get(aiSecretName(ORG, rows[0]!.id))).toBe(TOKEN);
       expect(rows[0]?.hint).toBe('Wxyz');
     } finally {
       server.close();

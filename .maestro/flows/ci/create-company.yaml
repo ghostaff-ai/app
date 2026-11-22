@@ -1,11 +1,12 @@
 appId: ${APP_ID}
-name: A new person creates a company, connects its AI and walks its four tabs
+name: A new person creates a company, connects its AI, walks its four tabs and reorders its AI accounts
 ---
 # The first thing anyone does after signing up: create their company, be asked
-# to connect an AI account (the step can't be skipped; a stand-in key is written
-# into the local database, scripts/connect-ai.js), land on Hoy, and open Equipo,
-# Registro and Conexiones. Then a vacancy is filled, which opens the
-# agent's page (no engine runs in e2e, so no first thread).
+# to connect an AI account (the step can't be skipped; a stand-in key and a
+# stand-in subscription are written into the local database, scripts/connect-ai.js),
+# land on Hoy, and open Equipo, Registro and Conexiones. Then a vacancy is
+# filled, which opens the agent's page (no engine runs in e2e, so no first
+# thread). In Conexiones the owner moves the key below the subscription.
 - evalScript: ${output.email = 'e2e-co-' + Date.now() + '@ghostaff.test'}
 - evalScript: ${output.company = 'Panadería E2E ' + Date.now().toString().slice(-6)}
 - runFlow:
@@ -74,6 +75,20 @@ name: A new person creates a company, connects its AI and walks its four tabs
 - extendedWaitUntil:
     visible: "Instagram, facturas, citas…"
     timeout: 20000
+# Its AI accounts in the order the agents try them: the key first, as added.
+- scrollUntilVisible:
+    element:
+      id: "ai-down-1"
+    direction: DOWN
+    timeout: 30000
+- assertVisible: "1. Claude con tu clave"
+- assertVisible: "2. Claude con tu suscripción"
+- tapOn:
+    id: "ai-down-1"
+- extendedWaitUntil:
+    visible: "1. Claude con tu suscripción"
+    timeout: 15000
+- assertVisible: "2. Claude con tu clave"
 # A cold relaunch keeps the session and comes back to the company, not a crash.
 - stopApp
 - launchApp

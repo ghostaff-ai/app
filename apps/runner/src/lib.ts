@@ -30,6 +30,11 @@ export interface Report {
   text: string | null;
   noteworthy: boolean;
   decisions: { id: string; question: string }[];
+  /** What Claude Code used (its `result` event's usage), for the subscription's card in Ghostaff. */
+  usage?: unknown;
+  /** The last `rate_limit_info` Claude Code reported: the subscription's 5-hour and weekly limits. */
+  rateLimit?: unknown;
+  model?: string;
 }
 
 /** What a scheduled run's last message is when there is nothing to tell. */
@@ -94,6 +99,21 @@ export function agentEnv(claudeToken: string, home: string): Record<string, stri
 /** git's environment as the agent's user, for the runner's own git calls (no Claude credential). */
 export function gitEnv(home: string): Record<string, string> {
   return { HOME: home, PATH: '/usr/local/bin:/usr/bin:/bin', LANG: 'C.UTF-8', GIT_TERMINAL_PROMPT: '0' };
+}
+
+/**
+ * What a stream-json line tells about usage: the subscription's limits (a
+ * `rate_limit_event`) or the tokens (the `result` event). Neither holds a secret.
+ */
+export function usageOf(line: string): { rateLimit?: unknown; usage?: unknown } {
+  try {
+    const e = JSON.parse(line) as { type?: string; rate_limit_info?: unknown; usage?: unknown };
+    if (e.type === 'rate_limit_event' && e.rate_limit_info) return { rateLimit: e.rate_limit_info };
+    if (e.type === 'result' && e.usage) return { usage: e.usage };
+  } catch {
+    // not JSON: nothing to read
+  }
+  return {};
 }
 
 /** The final stream-json event: whether it is a successful result, and what Claude said last. */

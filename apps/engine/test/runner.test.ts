@@ -1,11 +1,11 @@
 import type { ChatMessage } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import type { ChatAgent, ChatStore, ChatThreadHead } from '../src/chat';
+import type { AiUse, ChatAgent, ChatStore, ChatThreadHead } from '../src/chat';
 import type { AgentJob, JobDeps, JobStore, RunRecord } from '../src/jobs';
 import { composePrompt, firedBetween, hashNonce, NO_SUBSCRIPTION, type RunnerAgent, type RunnerStore, startScheduled } from '../src/runner';
 import { NO_TOOLS } from '../src/tools';
-import { MemoryVault, secretName } from '../src/vault';
+import { aiSecretName, legacyAiSecretName, MemoryVault } from '../src/vault';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 const OTHER_ORG = '10000000-0000-0000-0000-000000000002';
@@ -62,10 +62,14 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
     [TALLER, spec(taller)],
   ]);
   const vault = new MemoryVault();
+  // ORG has a key first and then a subscription; the other organisation's subscription is from before
+  // several accounts were allowed (its token named after the provider).
+  const subscriptionOf = (orgId: string) => `sub-${orgId}`;
   if (opts.subscribed !== false) {
-    void vault.put(secretName(ORG, 'claude'), 'sk-ant-oat-org1', {});
-    void vault.put(secretName(OTHER_ORG, 'claude'), 'sk-ant-oat-org2', {});
+    void vault.put(aiSecretName(ORG, subscriptionOf(ORG)), 'sk-ant-oat-org1', {});
+    void vault.put(legacyAiSecretName(OTHER_ORG, 'claude'), 'sk-ant-oat-org2', {});
   }
+  const used: AiUse[] = [];
   let now = opts.now ?? new Date('2026-11-21T10:00:00Z');
   let working: string | null = null;
   let minted = 0;
@@ -89,7 +93,13 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
     },
     touchThread: async () => {},
     createThread: async () => 'x',
-    aiAccount: async () => null,
+    aiAccounts: async (orgId) => [
+      ...(orgId === ORG ? [{ id: 'key-1', provider: 'anthropic' as const }] : []),
+      { id: subscriptionOf(orgId), provider: 'claude' as const },
+    ],
+    recordAiUse: async (u) => {
+      used.push(u);
+    },
     proposeAction: async () => 'a',
   };
   const jobs: JobStore = {
@@ -127,6 +137,9 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
       if (!r || r.nonceHash !== hash || r.state !== 'running' || r.specFetched) return null;
       r.specFetched = true;
       return { ...r };
+    },
+    useConnection: async (id, connectionId) => {
+      runs.get(id)!.connectionId = connectionId;
     },
   };
   const jobDeps: JobDeps = {
@@ -178,7 +191,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
   const fetchSpec = (run: string, nonce: string, as = RUNNER) => post(`/runs/${run}/spec`, as, { nonce });
   const report = (body: unknown, as = RUNNER) => post('/runs/report', as, body);
   return {
-    ask, fetchSpec, report, post, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps,
+    ask, fetchSpec, report, post, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf,
     setNow: (d: Date) => {
       now = d;
     },
@@ -283,7 +296,7 @@ describe('POST /runs/:id/spec', () => {
     const t = setup();
     await t.ask();
     const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
-    await t.vault.remove(secretName(ORG, 'claude'));
+    await t.vault.remove(aiSecretName(ORG, t.subscriptionOf(ORG)));
     const res = await t.fetchSpec(run!, nonce!);
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe('no_subscription');
@@ -329,6 +342,54 @@ describe('our runner’s report', () => {
     expect(res.status).toBe(200);
     expect(t.updates.at(-1)).toMatchObject({ id: 'reply-1', state: 'done', text: 'Murcia sube al 12 %.' });
     expect(t.runs.get(run!)!.state).toBe('done');
+  });
+
+  it('lands its usage and the subscription’s limits on the subscription it worked on, skipping the key', async () => {
+    const t = setup();
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    await t.fetchSpec(run!, nonce!);
+    expect(t.runs.get(run!)!.connectionId).toBe(t.subscriptionOf(ORG));
+    const res = await t.report({
+      run,
+      nonce,
+      ok: true,
+      text: 'Hecho.',
+      noteworthy: true,
+      decisions: [],
+      model: 'claude-opus-5-5',
+      usage: { input_tokens: 10, output_tokens: 200, cache_read_input_tokens: 5000, cache_creation_input_tokens: 300 },
+      rateLimit: { status: 'allowed', unifiedWindows: { five_hour: { utilization: 0.4, resetsAt: 1795363200, status: 'allowed' } } },
+    });
+    expect(res.status).toBe(200);
+    expect(t.used).toEqual([
+      expect.objectContaining({
+        connectionId: t.subscriptionOf(ORG),
+        agentId: LEGAL,
+        source: 'run',
+        outcome: 'ok',
+        costUsd: null,
+        tokens: { input: 10, output: 200, cacheRead: 5000, cacheWrite: 300 },
+        limits: expect.objectContaining({ fiveHour: { utilization: 0.4, resetsAt: '2026-11-22T16:00:00.000Z', status: 'allowed' } }),
+      }),
+    ]);
+  });
+
+  it('a run stopped at the subscription’s limit marks it limited', async () => {
+    const t = setup();
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    await t.fetchSpec(run!, nonce!);
+    await t.report({
+      run,
+      nonce,
+      ok: false,
+      text: null,
+      decisions: [],
+      rateLimit: { unifiedWindows: { seven_day: { utilization: 1, resetsAt: 4102444800, status: 'rejected' } } },
+      usage: {},
+    });
+    expect(t.used[0]).toMatchObject({ outcome: 'limited' });
   });
 
   it('is refused without its nonce, with another run’s nonce, or without a run', async () => {

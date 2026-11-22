@@ -39,6 +39,7 @@ import {
   type Report,
   resultOf,
   type RunSpec,
+  usageOf,
   tokenNearExpiry,
 } from './lib';
 
@@ -120,8 +121,12 @@ function asAgent(ids: { uid: number; gid: number }, env: Record<string, string>,
 
 const yamlNames = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.yaml')) : []);
 
-/** Runs Claude Code as the agent; its exit code (null when killed) and its last stream-json line. */
-function runClaude(spec: RunSpec, ids: { uid: number; gid: number; home: string }, cwd: string): Promise<{ code: number | null; last: string }> {
+/** Runs Claude Code as the agent; its exit code (null when killed), its last stream-json line, and what it used. */
+function runClaude(
+  spec: RunSpec,
+  ids: { uid: number; gid: number; home: string },
+  cwd: string,
+): Promise<{ code: number | null; last: string; usage?: unknown; rateLimit?: unknown }> {
   return new Promise((resolve, reject) => {
     const child = spawn('claude', claudeArgs(spec), {
       uid: ids.uid,
@@ -131,13 +136,15 @@ function runClaude(spec: RunSpec, ids: { uid: number; gid: number; home: string 
       stdio: ['pipe', 'pipe', 'inherit'],
     });
     let last = '';
+    const used: { usage?: unknown; rateLimit?: unknown } = {};
     child.on('error', reject);
     createInterface({ input: child.stdout }).on('line', (line) => {
       if (!line.trim()) return;
       last = line;
+      Object.assign(used, usageOf(line));
       process.stdout.write(`${redact(line, secrets)}\n`);
     });
-    child.on('close', (code) => resolve({ code, last }));
+    child.on('close', (code) => resolve({ code, last, ...used }));
     child.stdin.end(spec.prompt);
   });
 }
@@ -171,7 +178,7 @@ async function main(): Promise<number> {
 
     const decisions = join(record, spec.decisionsDir);
     const before = new Set(yamlNames(decisions));
-    const { code, last } = await runClaude(spec, ids, record);
+    const { code, last, usage, rateLimit } = await runClaude(spec, ids, record);
     const result = resultOf(last);
     const ok = code === 0 && result.ok;
     const opened = newDecisions(decisionFiles(decisions), before, spec.slug, secrets);
@@ -180,6 +187,9 @@ async function main(): Promise<number> {
       text: ok ? result.text : failureText(code, result.text),
       noteworthy: !ok || noteworthy(result.text) || opened.length > 0,
       decisions: opened,
+      usage,
+      rateLimit,
+      model: spec.model,
     });
     return ok ? 0 : 1;
   } finally {

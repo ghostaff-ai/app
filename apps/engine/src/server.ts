@@ -8,7 +8,7 @@ import { GoogleAuth } from 'google-auth-library';
 import { type AccountDeps, accessTokens, supabaseAccountStore, supabaseRefreshLeases, toolsFor } from './accounts';
 import { supabaseActionStore } from './actions';
 import { createApp } from './app';
-import { supabaseChatStore, writerFactory } from './chatStore';
+import { costOf, supabaseChatStore, writerFactory } from './chatStore';
 import { supabaseStore } from './connections';
 import { spawnSetupToken } from './claudeCode';
 import { CONNECTORS } from '@ghostaff/shared';
@@ -148,6 +148,7 @@ const jobs = {
 const chatDeps: ChatDeps = {
   chat: supabaseChatStore(admin),
   writerFor: writerFactory(vault, auth),
+  costOf,
   toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
   jobs,
 };

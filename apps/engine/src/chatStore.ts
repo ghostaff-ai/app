@@ -5,14 +5,14 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
-import type { ChatMessage } from '@ghostaff/shared';
+import { addTokens, atLimit, type ChatMessage, estimateCostUsd, limitsFromRow, limitsToRow, mergeLimits, NO_TOKENS, type TokenUsage, tokensFromUsage } from '@ghostaff/shared';
 import { messageFromRow } from '@ghostaff/shared/services';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GoogleAuth } from 'google-auth-library';
-import type { AiAccount, ChatAgent, ChatStore, ChatThreadHead, Level, Writer } from './chat';
+import { type AiAccount, AiFailure, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, type Writer } from './chat';
 import { type PrintRunner, runClaudePrint } from './claudeCode';
-import { claudeAccountWriter } from './claudeWriter';
-import { secretName, type Vault } from './vault';
+import { subscriptionWriter } from './claudeWriter';
+import { readAiSecret, type Vault } from './vault';
 
 function check<T>(r: { data: T; error: unknown }): T {
   if (r.error) throw r.error;
@@ -114,18 +114,74 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
       if (!r) throw new Error('thread not created');
       return r.id as string;
     },
-    async aiAccount(orgId): Promise<AiAccount | null> {
-      const rows = check(await admin.from('connections').select('provider, settings').eq('org_id', orgId).eq('kind', 'ai')) ?? [];
-      // Vertex first: it keeps the model calls in the EU (invariant 2).
-      const vertex = rows.find((r) => r.provider === 'vertex');
-      if (vertex) return { provider: 'vertex', project: vertex.settings.project, region: vertex.settings.region };
-      // Then the organisation's Claude subscription, with its Anthropic key behind it if it has one.
-      const key = rows.some((r) => r.provider === 'anthropic');
-      if (rows.some((r) => r.provider === 'claude')) return { provider: 'claude', keyFallback: key };
-      if (key) return { provider: 'anthropic' };
-      return null;
+    async aiAccounts(orgId): Promise<AiAccount[]> {
+      const rows =
+        check(
+          await admin
+            .from('connections')
+            .select('id, provider, settings, limits')
+            .eq('org_id', orgId)
+            .eq('kind', 'ai')
+            .order('position')
+            .order('created_at'),
+        ) ?? [];
+      return orderAccounts(rows);
+    },
+    async recordAiUse(use) {
+      check(
+        await admin.from('ai_usage').insert({
+          org_id: use.orgId,
+          connection_id: use.connectionId,
+          agent_id: use.agentId,
+          source: use.source,
+          outcome: use.outcome,
+          model: use.model?.slice(0, 80) ?? null,
+          input_tokens: use.tokens.input,
+          output_tokens: use.tokens.output,
+          cache_read_tokens: use.tokens.cacheRead,
+          cache_write_tokens: use.tokens.cacheWrite,
+          cost_usd: use.costUsd,
+        }),
+      );
+      const now = new Date().toISOString();
+      const patch: Record<string, unknown> =
+        use.outcome === 'ok'
+          ? { status: 'ok', status_reason: null, last_used_at: now, checked_at: now }
+          : { status: 'failing', status_reason: use.outcome, checked_at: now };
+      if (use.limits) {
+        const current = check(await admin.from('connections').select('limits').eq('id', use.connectionId).maybeSingle());
+        const merged = mergeLimits(limitsFromRow(current?.limits), use.limits);
+        if (merged) patch.limits = limitsToRow(merged);
+      }
+      check(await admin.from('connections').update(patch).eq('id', use.connectionId).eq('org_id', use.orgId));
     },
   };
+}
+
+/**
+ * The rows of `connections` as accounts to try, in order: the owner's, except
+ * that one at a limit that has not reset yet goes last (still tried if nothing
+ * else answers). An OpenAI key is kept but the engine runs only Claude.
+ */
+export function orderAccounts(
+  rows: { id: string; provider: string; settings: { project?: string; region?: string } | null; limits?: unknown }[],
+  now: Date = new Date(),
+): AiAccount[] {
+  const usable: { account: AiAccount; limited: boolean }[] = [];
+  for (const r of rows) {
+    const limited = atLimit(limitsFromRow(r.limits), now);
+    if (r.provider === 'vertex' && r.settings?.project && r.settings.region) {
+      usable.push({ account: { id: r.id, provider: 'vertex', project: r.settings.project, region: r.settings.region }, limited });
+    } else if (r.provider === 'claude' || r.provider === 'anthropic') {
+      usable.push({ account: { id: r.id, provider: r.provider }, limited });
+    }
+  }
+  return [...usable.filter((u) => !u.limited), ...usable.filter((u) => u.limited)].map((u) => u.account);
+}
+
+/** What tokens cost on an account: list price for a key or Google Cloud; nothing per token on a subscription. */
+export function costOf(account: AiAccount, model: string, tokens: TokenUsage): number | null {
+  return account.provider === 'claude' ? null : estimateCostUsd(model, tokens);
 }
 
 /** The model agents talk with; ENGINE_CHAT_MODEL overrides it. */
@@ -140,8 +196,10 @@ export const MAX_TOOL_ROUNDS = 8;
  * answers or reaches MAX_TOOL_ROUNDS.
  */
 export function streamWith(client: Anthropic | AnthropicVertex): Writer {
-  return async ({ system, messages, tools, onText, onTool }) => {
+  return async ({ system, messages, tools, onText, onTool, onUsage }) => {
     const history: Anthropic.MessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
+    let used = NO_TOKENS;
+    const done = () => onUsage?.({ model: CHAT_MODEL, tokens: used, limits: null });
     let wrote = false;
     let gap = false; // a new round after tools: separate its text from what came before
     for (let round = 0; ; round++) {
@@ -162,11 +220,12 @@ export function streamWith(client: Anthropic | AnthropicVertex): Writer {
         }
       }
       const final = await stream.finalMessage();
+      used = addTokens(used, tokensFromUsage(final.usage));
       if (final.stop_reason === 'refusal') onText('\n\nEsto no puedo hacerlo.');
-      if (final.stop_reason !== 'tool_use') return;
+      if (final.stop_reason !== 'tool_use') return done();
       if (round >= MAX_TOOL_ROUNDS) {
         onText('\n\nHe llegado al límite de pasos para una respuesta. Dime si sigo.');
-        return;
+        return done();
       }
       const results: Anthropic.ToolResultBlockParam[] = [];
       for (const block of final.content) {
@@ -182,27 +241,16 @@ export function streamWith(client: Anthropic | AnthropicVertex): Writer {
 }
 
 export function writerFactory(vault: Vault, auth: GoogleAuth, runClaude: PrintRunner = runClaudePrint) {
-  const keyWriter = async (orgId: string): Promise<Writer> => {
-    const key = await vault.get(secretName(orgId, 'anthropic'));
-    if (!key) throw new Error('the organisation has no Anthropic key in the vault');
-    return streamWith(new Anthropic({ apiKey: key }));
-  };
-  return async (orgId: string, account: AiAccount): Promise<Writer> => {
-    if (account.provider === 'claude') {
-      const fallback = account.keyFallback ? () => keyWriter(orgId) : null;
-      const token = await vault.get(secretName(orgId, 'claude'));
-      if (!token) {
-        if (fallback) return fallback();
-        throw new Error('the organisation has no Claude subscription token in the vault');
-      }
-      return claudeAccountWriter(token, runClaude, CHAT_MODEL, fallback);
-    }
+  return async (orgId: string, account: AiAccount, opts: { busyFails: boolean }): Promise<Writer> => {
     if (account.provider === 'vertex') {
       // A fresh token per reply (the SDK pins its own google-auth-library version).
       const accessToken = await auth.getAccessToken();
       if (!accessToken) throw new Error('no Google access token');
       return streamWith(new AnthropicVertex({ projectId: account.project, region: account.region, accessToken }));
     }
-    return keyWriter(orgId);
+    const secret = await readAiSecret(vault, orgId, account);
+    if (!secret) throw new AiFailure('refused', `the ${account.provider} account has nothing in the vault`);
+    if (account.provider === 'claude') return subscriptionWriter(secret, runClaude, CHAT_MODEL, { busyFails: opts.busyFails });
+    return streamWith(new Anthropic({ apiKey: secret }));
   };
 }
