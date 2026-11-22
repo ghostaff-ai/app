@@ -1,53 +1,79 @@
+import { createPersonalSpace } from '@ghostaff/shared/services';
 import { router } from 'expo-router';
-import { ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Buildings, EnvelopeSimple, SignOut, UsersThree } from '@/components/icons';
-import { Choice, ListRow, ListSection, RowIcon } from '@/components/ui';
+import { useState } from 'react';
+import { Buildings, EnvelopeSimple, User } from '@/components/icons';
+import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
+import { OptionCard } from '@/components/onboarding/OptionCard';
+import { Button, Choice, ErrorText } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useMyInvitations } from '@/lib/hooks/useInvitations';
-import { useProfile } from '@/lib/profile/ProfileContext';
+import { type Purpose, stepsFor } from '@/lib/onboarding';
+import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { supabase } from '@/lib/supabase';
 
-// With a profile and no organisation yet: create one, or join one that
-// invited you. An invitation waiting for you is shown first.
+// Step 2 of the way in (welcome-and-spaces.md), with a profile and no space
+// yet: what Ghostaff is for. «Para mí» makes your personal space at once;
+// «Para mi empresa» goes on to its name. An invitation waiting for you comes first.
+
+const tooMany = (e: unknown) =>
+  (e as { code?: string })?.code === '54000' || /too many/.test(e instanceof Error ? e.message : String(e));
 
 export default function Start() {
-  const { profile } = useProfile();
-  const { session, signOut } = useAuth();
+  const { enter } = useActiveOrg();
+  const { signOut } = useAuth();
   const { items: invitations } = useMyInvitations();
-  const firstName = profile?.fullName.split(/\s+/)[0] ?? '';
+  const [purpose, setPurpose] = useState<Purpose | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const next = async () => {
+    if (purpose === 'company') {
+      router.push('/crear-empresa');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const space = await createPersonalSpace(supabase);
+      // The layout's guards follow the active space and move on by themselves.
+      await enter(space.id);
+    } catch (e) {
+      setError(tooMany(e) ? 'Ya tienes demasiados espacios.' : e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  };
 
   return (
-    <SafeAreaView className="flex-1 bg-surface">
-      <ScrollView contentContainerClassName="px-6 py-10">
-        <Text accessibilityRole="header" className="font-display text-title text-ink">Hola, {firstName}</Text>
-        <Text className="mt-2 mb-8 text-base text-muted">¿Cómo quieres empezar?</Text>
-
-        {invitations.length > 0 ? (
-          <Choice
-            title={invitations.length === 1 ? `Te han invitado a ${invitations[0]!.orgName}` : `Tienes ${invitations.length} invitaciones`}
-            body="Toca para verla y unirte."
-            icon={EnvelopeSimple}
-            onPress={() => router.push('/unirme')}
-          />
-        ) : null}
-
+    <OnboardingStep
+      ghost="base"
+      step={2}
+      of={stepsFor(purpose)}
+      title="¿Para qué vas a usar Ghostaff?"
+      topRight={<Button label="Salir" variant="plain" size="small" onPress={() => void signOut()} />}
+      action={
+        <>
+          <Button label="Seguir" disabled={!purpose} busy={busy} onPress={() => void next()} />
+          <ErrorText>{error}</ErrorText>
+        </>
+      }
+      link={<Button label="Unirme a una empresa" variant="plain" onPress={() => router.push('/unirme')} />}
+    >
+      {invitations.length > 0 ? (
         <Choice
-          title="Crear una empresa"
-          body="Monta el equipo de agentes de tu empresa u organización."
-          icon={Buildings}
-          onPress={() => router.push('/crear-empresa')}
-        />
-        <Choice
-          title="Unirme a una empresa"
-          body="Si alguien de tu empresa ya usa Ghostaff."
-          icon={UsersThree}
+          title={invitations.length === 1 ? `Te han invitado a ${invitations[0]!.orgName}` : `Tienes ${invitations.length} invitaciones`}
+          body="Míralas y únete."
+          icon={EnvelopeSimple}
           onPress={() => router.push('/unirme')}
         />
-
-        <ListSection footer={session?.user.email ? `Has entrado como ${session.user.email}` : undefined}>
-          <ListRow leading={<RowIcon icon={SignOut} tone="danger" />} title="Cerrar sesión" tone="danger" onPress={() => void signOut()} />
-        </ListSection>
-      </ScrollView>
-    </SafeAreaView>
+      ) : null}
+      <OptionCard title="Para mí" body="Tu asistente personal" icon={User} selected={purpose === 'personal'} onPress={() => setPurpose('personal')} />
+      <OptionCard
+        title="Para mi empresa"
+        body="Un equipo de agentes"
+        icon={Buildings}
+        selected={purpose === 'company'}
+        onPress={() => setPurpose('company')}
+      />
+    </OnboardingStep>
   );
 }

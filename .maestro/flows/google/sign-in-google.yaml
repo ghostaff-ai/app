@@ -21,5 +21,5 @@ name: Sign in with Google, the phone's own account sheet
     commands:
       - tapOn: "Continue|Continuar"
 - extendedWaitUntil:
-    visible: "Te damos la bienvenida|Hola, .*"
+    visible: "¿Cómo te llamas?|¿Para qué vas a usar Ghostaff?|.*(Buenos días|Buenas tardes|Buenas noches).*"
     timeout: 30000

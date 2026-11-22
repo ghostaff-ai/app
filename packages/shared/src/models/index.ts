@@ -6,10 +6,14 @@ import type { Limits } from '../aiUsage';
 
 export type MembershipRole = 'owner' | 'member';
 
+/** A company, or a person's own personal space (welcome-and-spaces.md). */
+export type OrganizationKind = 'personal' | 'company';
+
 export interface Organization {
   id: string;
   slug: string;
   name: string;
+  kind: OrganizationKind;
 }
 
 /** An organisation as the signed-in person sees it: with their role and how they sign. */

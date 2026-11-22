@@ -23,6 +23,7 @@ import type {
   NewAgent,
   NewOrganization,
   Organization,
+  OrganizationKind,
   PendingInvitation,
   Profile,
 } from '../models';
@@ -104,20 +105,26 @@ const DECISION_COLUMNS =
 interface MembershipWithOrg {
   role: MembershipRole;
   display_name: string;
-  organizations: { id: string; slug: string; name: string } | null;
+  organizations: { id: string; slug: string; name: string; kind: OrganizationKind } | null;
 }
 
-/** The organisations the signed-in person belongs to, by name. */
+/** Your spaces as the switcher lists them: your personal space first, then by name. */
+export function sortSpaces(list: MyOrganization[]): MyOrganization[] {
+  return [...list].sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name, 'es') : a.kind === 'personal' ? -1 : 1));
+}
+
+/** The organisations the signed-in person belongs to: personal first, then by name. */
 export async function listMyOrganizations(client: SupabaseClient, userId: string): Promise<MyOrganization[]> {
   const { data, error } = await client
     .from('memberships')
-    .select('role, display_name, organizations ( id, slug, name )')
+    .select('role, display_name, organizations ( id, slug, name, kind )')
     .eq('user_id', userId)
     .returns<MembershipWithOrg[]>();
   if (error) throw error;
-  return (data ?? [])
-    .flatMap((m) => (m.organizations ? [{ ...m.organizations, role: m.role, displayName: m.display_name }] : []))
-    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  const spaces = (data ?? []).flatMap((m) =>
+    m.organizations ? [{ ...m.organizations, role: m.role, displayName: m.display_name }] : [],
+  );
+  return sortSpaces(spaces);
 }
 
 /** The organisation's open decisions: unanswered first, then newest first. */
@@ -280,7 +287,14 @@ export async function createOrganization(client: SupabaseClient, o: NewOrganizat
     })
     .single<Organization>();
   if (error) throw error;
-  return { id: data.id, slug: data.slug, name: data.name };
+  return { id: data.id, slug: data.slug, name: data.name, kind: data.kind };
+}
+
+/** Your personal space: created the first time, the same one after that. Secretaría comes hired. */
+export async function createPersonalSpace(client: SupabaseClient): Promise<Organization> {
+  const { data, error } = await client.rpc('create_personal_space').single<Organization>();
+  if (error) throw error;
+  return { id: data.id, slug: data.slug, name: data.name, kind: data.kind };
 }
 
 interface MyInvitationRow {
@@ -309,7 +323,7 @@ export async function listMyInvitations(client: SupabaseClient): Promise<MyInvit
 export async function acceptInvitation(client: SupabaseClient, invitationId: string): Promise<Organization> {
   const { data, error } = await client.rpc('accept_invitation', { invitation_id: invitationId }).single<Organization>();
   if (error) throw error;
-  return { id: data.id, slug: data.slug, name: data.name };
+  return { id: data.id, slug: data.slug, name: data.name, kind: data.kind };
 }
 
 interface PendingInvitationRow {
