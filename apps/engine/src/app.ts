@@ -18,6 +18,7 @@ import { runRecordToken, runSpec } from './runner';
 import { clientMetadataDocument } from './mcp';
 import { connectAi, type Deps, disconnectAi, Refusal } from './connections';
 import { bearer, type CallerFromToken } from './googleCaller';
+import { type Transcriber, transcribeNote } from './transcribe';
 
 /** Calls from Google service accounts, not people: the scheduler's tick (ordago-agents-in-ghostaff.md). */
 export interface CronDeps {
@@ -47,6 +48,8 @@ export interface AppDeps extends Deps {
   reports?: { callerFromToken: CallerFromToken; audience: string };
   /** Connecting a Claude subscription through Claude Code's own sign-in (claudeSession.ts). */
   claudeSignIn?: Omit<ClaudeSessionDeps, 'store' | 'vault' | 'userFromToken' | 'now'>;
+  /** Dictation: a voice note into text (transcribe.ts); off when not configured. */
+  transcriber?: Transcriber;
 }
 
 type Env = { Variables: { userId: string } };
@@ -203,6 +206,17 @@ export function createApp(deps: AppDeps) {
 
   // Answers when the reply is written: Cloud Run keeps the CPU only while a request is open.
   app.post('/threads/:id/reply', async (c) => c.json(await replyInThread(deps.chat, c.get('userId'), c.req.param('id'))));
+
+  // A voice note in, its text out; the audio is never kept (transcribe.ts).
+  app.post('/transcribe', async (c) =>
+    c.json(
+      await transcribeNote({ store: deps.store, transcriber: deps.transcriber }, c.get('userId'), c.req.query('org'), {
+        contentType: c.req.header('Content-Type'),
+        contentLength: c.req.header('Content-Length'),
+        body: c.req.raw.body,
+      }),
+    ),
+  );
 
   app.post('/agents/:id/hello', async (c) => c.json(await agentHello(deps.chat, c.get('userId'), c.req.param('id')), 201));
 

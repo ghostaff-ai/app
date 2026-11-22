@@ -65,7 +65,7 @@ export interface Deps {
 /** A refusal the app turns into Spanish by its code. */
 export class Refusal extends Error {
   constructor(
-    readonly status: 400 | 403 | 404 | 409 | 422 | 502 | 503,
+    readonly status: 400 | 403 | 404 | 409 | 413 | 415 | 422 | 502 | 503,
     readonly code: string,
     message: string,
   ) {
@@ -82,6 +82,15 @@ export async function requireOwner(store: Pick<Store, 'membership'>, orgId: unkn
   const m = await store.membership(orgId, userId);
   // Not a member reads the same as not an owner: never reveal which organisations exist.
   if (!m || m.role !== 'owner') throw new Refusal(403, 'not_owner', 'only an owner manages connections');
+  return m;
+}
+
+/** Any member, owner or not: what every person in the organisation may do. */
+export async function requireMember(store: Pick<Store, 'membership'>, orgId: unknown, userId: string): Promise<Membership> {
+  if (!isUuid(orgId)) throw new Refusal(400, 'bad_request', 'org must be a uuid');
+  const m = await store.membership(orgId, userId);
+  // An organisation that doesn't exist reads the same as one you're not in.
+  if (!m) throw new Refusal(403, 'not_member', 'not a member of this organisation');
   return m;
 }
 

@@ -514,13 +514,18 @@ export class EngineError extends Error {
 }
 
 async function callEngine<T>(engine: EngineAccess, method: string, path: string, body?: unknown): Promise<T> {
+  return sendToEngine(engine, method, path, body ? { type: 'application/json', data: JSON.stringify(body) } : undefined);
+}
+
+/** A call to the engine with a body already encoded (JSON, or raw bytes such as a voice note). */
+async function sendToEngine<T>(engine: EngineAccess, method: string, path: string, body?: { type: string; data: BodyInit }): Promise<T> {
   if (!engine.url) throw new EngineError('not_configured', 0, 'engine URL not configured');
   let res: Response;
   try {
     res = await fetch(`${engine.url.replace(/\/$/, '')}${path}`, {
       method,
-      headers: { Authorization: `Bearer ${engine.token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
+      headers: { Authorization: `Bearer ${engine.token}`, ...(body ? { 'Content-Type': body.type } : {}) },
+      body: body?.data,
     });
   } catch (e) {
     throw new EngineError('unreachable', 0, e instanceof Error ? e.message : String(e));
@@ -712,6 +717,19 @@ export async function disconnectAccount(engine: EngineAccess, orgId: string, pro
  */
 export async function decideAction(engine: EngineAccess, actionId: string, decision: 'approve' | 'reject'): Promise<{ status: string; result?: string }> {
   return callEngine(engine, 'POST', `/actions/${encodeURIComponent(actionId)}/${decision}`);
+}
+
+/**
+ * Dictation: a voice note recorded in the chat's message box, turned into text
+ * by the engine (Gemini in the EU). The audio is sent as is and never kept; the
+ * text comes back for the person to review before sending. '' when nobody spoke.
+ */
+export async function transcribe(engine: EngineAccess, orgId: string, audio: Blob, mimeType: string): Promise<string> {
+  const { text } = await sendToEngine<{ text: string }>(engine, 'POST', `/transcribe?org=${encodeURIComponent(orgId)}`, {
+    type: mimeType,
+    data: audio,
+  });
+  return text;
 }
 
 /** The service account a customer grants Vertex AI access to on their own project. */
