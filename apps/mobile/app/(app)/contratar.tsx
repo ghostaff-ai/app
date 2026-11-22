@@ -2,6 +2,7 @@ import { agentHello, createAgent } from '@ghostaff/shared/services';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, Text, View } from 'react-native';
+import { CloseButton } from '@/components/CloseButton';
 import { Button, ErrorText, Notice } from '@/components/ui';
 import { letAgentAnswer } from '@/lib/hooks/useChat';
 import { useEngine } from '@/lib/hooks/useConnections';
@@ -42,6 +43,9 @@ export default function Contratar() {
 
   return (
     <View className="flex-1 items-center bg-surface px-8 pb-10 pt-8">
+      <View className="absolute right-4 top-4">
+        <CloseButton />
+      </View>
       <Image source={g.picture} style={{ width: 140, height: 140 }} resizeMode="contain" />
       <Text className="mt-3 text-footnote font-medium text-muted">{DEPARTMENT_NAMES[g.department]}</Text>
       <Text accessibilityRole="header" className="mt-1 font-display text-title text-ink">
