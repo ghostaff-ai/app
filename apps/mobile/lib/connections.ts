@@ -61,8 +61,6 @@ export const PROVIDERS: Record<AiProvider, ProviderCopy> = {
       'Tus agentes usan tu plan de Claude (Pro, Max…) a través de Claude Code, el programa de Anthropic. Lo que hagan pasa por Anthropic, en Estados Unidos, y cuenta en los límites de tu plan.',
     warning:
       'Anthropic puede cortar sin aviso una suscripción usada así, y más si la usa un equipo entero o si juntas las de varias personas. Si pasa, tus agentes siguen con tu siguiente cuenta de IA; si no tienes otra, dejan de contestar hasta que conectes una.',
-    limit:
-      'Por ahora, con la suscripción tus agentes no pueden usar las apps conectadas (Google, Instagram…). Cuando hace falta una app, usan tu clave de Anthropic o tu Google Cloud si has conectado una.',
   },
 };
 

@@ -37,7 +37,8 @@ describe('the Claude subscription card', () => {
     expect(PROVIDERS.claude.warning).toContain('sin aviso');
     expect(PROVIDERS.claude.warning).toContain('siguiente cuenta de IA');
     expect(PROVIDERS.claude.warning).toContain('varias personas');
-    expect(PROVIDERS.claude.limit).toContain('apps conectadas');
+    // Agents on a subscription use the connected apps too (subscription-tools.md): nothing to warn about.
+    expect(PROVIDERS.claude.limit).toBeUndefined();
   });
 
   it('says in Spanish why a sign-in did not work, never the raw code', () => {

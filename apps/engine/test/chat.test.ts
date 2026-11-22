@@ -216,13 +216,13 @@ describe('several AI accounts', () => {
     expect(updates.at(-1)?.state).toBe('failed');
   });
 
-  it('an agent with tools tries the accounts that have them first, then the subscriptions', async () => {
+  it("answers with the owner's first account even when it is a subscription and the agent has tools", async () => {
     const { call, asked } = setup({
       accounts: [sub1, key],
       tools: { ...NO_TOOLS, specs: [{ name: 'calendar_list' }] as never },
     });
     await call('ana', `/threads/${THREAD}/reply`);
-    expect(asked.map((a) => a.account)).toEqual(['key-1']);
+    expect(asked.map((a) => a.account)).toEqual(['sub-1']);
   });
 });
 
