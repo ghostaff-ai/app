@@ -76,11 +76,16 @@ name: A new person creates a company, connects its AI, walks its four tabs and r
     visible: "Instagram, facturas, citas…"
     timeout: 20000
 # Its AI accounts in the order the agents try them: the key first, as added.
+# The IA section is at the bottom of a long list: on CI's slower emulator 30 s
+# of scrolling at the default speed ran out just as it came into view.
 - scrollUntilVisible:
     element:
       id: "ai-down-1"
     direction: DOWN
-    timeout: 30000
+    speed: 80
+    visibilityPercentage: 50
+    centerElement: true
+    timeout: 90000
 - assertVisible: "1. Claude con tu clave"
 - assertVisible: "2. Claude con tu suscripción"
 - tapOn:
