@@ -1,0 +1,81 @@
+name: Deploy
+
+# Deploys one environment: Supabase migrations, then the runner and the engine
+# (docs/plans/ongoing/environments.md). Called by CI once everything passed on
+# develop (beta) or main (production). Google decides what a run may touch: each
+# project's Workload Identity provider accepts only ghostaff-ai/app on its own
+# branch, so a run on develop cannot deploy production whatever it asks for.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: beta or prod
+        required: true
+        type: string
+  # By hand, to redeploy or to check the branch rule (a dispatch on develop asking for prod must fail at Google).
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: beta or prod
+        required: true
+        type: choice
+        options: [beta, prod]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The commit CI passed.
+          ref: ${{ github.sha }}
+
+      # The Supabase token is the repository's, so this branch rule is checked here
+      # too, before anything touches a database; Google checks it again at auth.
+      - name: Environment
+        id: env
+        run: |
+          source scripts/env.sh "${{ inputs.environment }}"
+          if [ "$GITHUB_REF" != "refs/heads/$DEPLOY_BRANCH" ]; then
+            echo "::error::$GHOSTAFF_ENV deploys only from $DEPLOY_BRANCH, not $GITHUB_REF"
+            exit 1
+          fi
+          {
+            echo "project=$P"
+            echo "supabase_ref=$SUPABASE_REF"
+            echo "wif_provider=$WIF_PROVIDER"
+            echo "deployer=$DEPLOYER_SA"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ steps.env.outputs.wif_provider }}
+          service_account: ${{ steps.env.outputs.deployer }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+
+      - name: Migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase db push --remote="${{ steps.env.outputs.supabase_ref }}" --yes
+
+      - name: Runner
+        run: bash scripts/deploy-runner.sh "${{ inputs.environment }}"
+
+      # Ends with the engine's /health.
+      - name: Engine
+        run: bash scripts/deploy-engine.sh "${{ inputs.environment }}"
