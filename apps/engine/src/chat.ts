@@ -317,7 +317,7 @@ async function writeReply(
     },
   };
   try {
-    const accounts = orderForTools(await deps.chat.aiAccounts(agent.orgId), tools.specs.length > 0);
+    const accounts = await deps.chat.aiAccounts(agent.orgId);
     if (accounts.length === 0) {
       await deps.chat.updateReply(replyId, { text: NO_ACCOUNT, steps: ['Buscando una cuenta de IA'], state: 'done' });
       return;
@@ -373,16 +373,6 @@ async function writeReply(
       .updateReply(replyId, { ...withActions(text.trim() ? `${text.trim()}\n\n${FAILED}` : FAILED), state: 'failed' })
       .catch(() => {});
   }
-}
-
-/**
- * The order to try accounts in. A subscription answers through Claude Code
- * with no tools yet (claudeWriter.ts), so when the agent has tools the other
- * accounts go first, in the owner's order, and the subscriptions after them.
- */
-export function orderForTools(accounts: AiAccount[], hasTools: boolean): AiAccount[] {
-  if (!hasTools) return accounts;
-  return [...accounts.filter((a) => a.provider !== 'claude'), ...accounts.filter((a) => a.provider === 'claude')];
 }
 
 /** Records one account's reply; never fails the reply. */
