@@ -2,7 +2,7 @@
 
 **Priority:** high — production will hold customers' AI keys and mailboxes; today the only engine talks to the beta database, and deploys are run by hand
 **Gate:** none
-**Next:** set production's SMTP (its own Resend key) and the Google web client's secret in the Supabase dashboard; then copy beta's Spanish sign-in email template
+**Next:** Jaime enters the Google web client's secret in production's Supabase (Authentication → Sign In / Providers → Google); then step 4, the deploy scripts per environment
 
 Jaime (2026-11-22): one Google Cloud project and one Supabase per environment, set up as Órdago's: merge to `develop` brings up beta, merge to `main` brings up production. Front 1 of [ordago-as-customer.md](ordago-as-customer.md). It replaces the proposal in [build-first-version.md](build-first-version.md#environments-beta-and-production) of 2026-11-15.
 
@@ -43,4 +43,5 @@ On green CI on each branch, the workflow for that environment: applies Supabase 
 - [x] Step 1 (2026-11-22): Supabase `ghostaff-prod`, ref `krhhndjjqmmkzjmwwazv`, Central EU (Frankfurt), Postgres 17, Free plan, organisation Ghostaff; created by Jaime, who keeps its database password. «Grant API access to new tables automatically» ticked, as local and beta behave: the migrations grant functions but rely on tables being exposed by default, with row-level security on every table.
 - [x] Auth copied from beta through the Management API: 6-digit codes, sign-ups on, Google (the web client and the iOS client of `ai.ghostaff.app` only), Apple (`ai.ghostaff.app` only), redirect `ghostaff://**` (no `exp://**`: Expo Go has no place in production). Left: **SMTP** (without it production sends through Supabase's default, two emails an hour, and the Free plan refuses a custom template until SMTP is set) and the **Google web client's secret** (needed for Google on the web, not on the phones). Both are secrets, for Jaime to enter in the dashboard.
 - [x] Step 3 (2026-11-22): the 15 migrations of `develop` pushed (`supabase link`, `db push`, `unlink`, so no folder stays linked to production). Checked against beta: same migrations, same 16 tables, all with row-level security, same 27 functions.
+- [x] SMTP (2026-11-22): Jaime set Resend with a key of its own for production (checked: differs from beta's); beta's Spanish sign-in email copied (subject and template, checked equal). Still missing: the Google web client's secret (the provider is on with its client ids, so the phones work; Google on the web fails until it is set).
 - [ ] Step 2: production's keys in sops, waiting on Álvaro adding Jaime's age key as a recipient, or putting them in himself.
