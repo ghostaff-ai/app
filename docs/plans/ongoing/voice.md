@@ -2,7 +2,7 @@
 
 **Priority:** medium — people on the go, and many small-business owners, would rather speak than type
 **Gate:** none
-**Next:** task 1, the engine's `POST /transcribe` (Gemini on Vertex AI in `eu`)
+**Next:** run `scripts/setup-env.sh` on beta (Jaime's go-ahead), then a live note in Spanish and English from the beta app (iPhone, Android, web)
 
 Jaime's idea (2026-11-18). On 2026-11-22 he skipped the trial («monta el audio directamente con Gemini, sin la prueba») and approved the design below; it is being built.
 
@@ -51,6 +51,11 @@ What matters: Spanish from Spain and English (Jaime, 2026-11-22), notes of 2–5
 - **Ghostaff pays**, from its own Google Cloud project (`ghostaff-beta`, `ghostaff-prod`), so it works whatever AI account the organisation connected.
 - **Not in this version:** text appearing while you speak (needs streaming; a second version), and the mic on Hoy, Equipo and Registro, which keeps opening the thread with Secretaría.
 - `expo-audio` is a new native module: the next beta is a build, not an over-the-air update. iOS and Android ask for the microphone the first time.
+
+**Before production:**
+- A Vertex quota cap for the model and a budget alert on `ghostaff-beta` and `ghostaff-prod`.
+- Vertex zero data retention on both projects (Vertex caches inputs for up to 24 h unless it is disabled).
+- The per-person limit, 30 notes per rolling hour, is already in the engine (`too_many`); the app says so in Spanish.
 
 **Approaches.** (a) Record the whole note, send it once, transcribe in one call: my pick, the simplest that meets 10 minutes (a sync call takes 15). (b) Stream while speaking for live text: nicer, much more to build, and a 10-minute streaming cap; later. (c) The phone's own recogniser: ruled out on 2026-11-21 (the web sends audio to Google with no EU guarantee; iOS stops around a minute).
 

@@ -15,6 +15,11 @@ import { usePalette } from '@/lib/theme';
 // the text is appended to the box to review; nothing is sent on its own). With
 // «Ver» it turns into a quiet line saying who to ask.
 
+const MAX_LENGTH = 8000;
+
+/** 8412 as «8 412». */
+const spaced = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
 export function Composer({
   placeholder,
   names,
@@ -58,7 +63,9 @@ export function Composer({
 
   const query = mentionQuery(text);
   const suggestions = query === null ? [] : mentionSuggestions(query, names);
-  const ready = text.trim().length > 0 && !busy;
+  // The database refuses more; the box's own limit doesn't bound a dictated append.
+  const over = text.length > MAX_LENGTH;
+  const ready = text.trim().length > 0 && !busy && !over;
 
   const send = async () => {
     if (!ready) return;
@@ -67,6 +74,7 @@ export function Composer({
     try {
       await onSend(text.trim());
       setText('');
+      dictation.clearError();
       tap();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -95,7 +103,22 @@ export function Composer({
           ))}
         </View>
       ) : null}
-      {error || dictation.error ? <Text className="mb-1 ml-2 text-footnote text-no">{error ? `No se ha enviado. ${error}` : dictation.error}</Text> : null}
+      {over ? (
+        <Text className="mb-1 ml-2 text-footnote text-no">
+          El mensaje pasa de {MAX_LENGTH} caracteres; recórtalo antes de enviar. ({spaced(text.length)} / {spaced(MAX_LENGTH)})
+        </Text>
+      ) : null}
+      {error ? <Text className="mb-1 ml-2 text-footnote text-no">No se ha enviado. {error}</Text> : null}
+      {dictation.error ? (
+        <View className="mb-1 ml-2 flex-row flex-wrap items-center gap-x-3">
+          <Text className="text-footnote text-no">{dictation.error}</Text>
+          {dictation.canRetry ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Reintentar" onPress={() => void dictation.retry()} hitSlop={8} className="active:opacity-70">
+              <Text className="text-footnote text-ink underline">Reintentar</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       <View className="flex-row items-end gap-2">
         {dictating ? (
           <DictationBar recording={dictation.state === 'recording'} seconds={dictation.seconds} onCancel={() => void dictation.cancel()} />
@@ -106,10 +129,13 @@ export function Composer({
             placeholder={placeholder}
             placeholderTextColor={c.muted}
             value={text}
-            onChangeText={setText}
+            onChangeText={(t) => {
+              setText(t);
+              dictation.clearError();
+            }}
             multiline
             autoFocus={autoFocus}
-            maxLength={8000}
+            maxLength={MAX_LENGTH}
             onKeyPress={(e) => {
               // On a computer, Enter sends and Shift+Enter makes a new line.
               const ev = e.nativeEvent as { key: string; shiftKey?: boolean };
@@ -133,7 +159,7 @@ export function Composer({
           </Pressable>
         ) : dictation.state === 'transcribing' ? (
           <View className="h-11 w-11 items-center justify-center rounded-full bg-accent opacity-30" accessibilityState={{ disabled: true }}>
-            <Icon icon={Stop} size={20} color={c.onAccent} weight="fill" />
+            <ActivityIndicator color={c.onAccent} />
           </View>
         ) : (
           <>

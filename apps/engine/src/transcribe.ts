@@ -12,8 +12,43 @@ export interface Transcriber {
   transcribe(audio: Uint8Array, mimeType: string): Promise<string>;
 }
 
-/** A 10-minute note is a few MB in any of the browsers' or phones' formats; 20 MB leaves room. */
-export const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
+/**
+ * A 10-minute note is about 2.4 MB at the app's 32 kbit/s; 10 MB leaves room for
+ * other formats and stays well under what Vertex takes inline (the audio goes
+ * in base64, a third larger).
+ */
+export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Cost guard: each person gets `max` notes per rolling `windowMs`, counted in
+ * memory (a restarted or second instance counts again from zero; it is a guard
+ * against a runaway client, not an accounting). Clock and limits are injectable.
+ */
+export class NoteLimiter {
+  private readonly sent = new Map<string, number[]>();
+  private readonly max: number;
+  private readonly windowMs: number;
+  private readonly now: () => number;
+
+  constructor(opts: { max?: number; windowMs?: number; now?: () => number } = {}) {
+    this.max = opts.max ?? 30;
+    this.windowMs = opts.windowMs ?? 3_600_000;
+    this.now = opts.now ?? Date.now;
+  }
+
+  /** Counts one note for `userId`; false when they are over the limit. */
+  take(userId: string): boolean {
+    const t = this.now();
+    const recent = (this.sent.get(userId) ?? []).filter((at) => at > t - this.windowMs);
+    if (recent.length >= this.max) {
+      this.sent.set(userId, recent);
+      return false;
+    }
+    recent.push(t);
+    this.sent.set(userId, recent);
+    return true;
+  }
+}
 
 /** Gemini 3.5 Transcribe as Vertex AI names it for prerecorded files (not `-live`, which streams). */
 export const DEFAULT_TRANSCRIBE_MODEL = 'gemini-3.5-transcribe';
@@ -23,7 +58,7 @@ export type GoogleRequest = (url: string, body: unknown, opts?: { timeoutMs?: nu
 
 /**
  * How long Google gets to transcribe one note. A 10-minute note in a single sync
- * call takes a fair share of that (the model processes up to 15 minutes per call);
+ * call takes a fair share of that;
  * past 2 minutes the person has long given up waiting on «Transcribiendo…», and
  * without it a hung call would hold the request open up to the engine's 15-minute
  * Cloud Run timeout (scripts/deploy-engine.sh).
@@ -51,10 +86,14 @@ export function vertexTranscriber(opts: { project: string; model: string; reques
       try {
         res = await opts.request(url, body, { timeoutMs: TRANSCRIBE_TIMEOUT_MS });
       } catch {
+        console.warn('transcribe: vertex', 'timeout', mimeType, audio.byteLength); // numbers and type only, never content
         throw new Refusal(502, 'provider_unavailable', 'no answer from Vertex AI');
       }
       // Only the status, never Google's answer: it could quote what was said.
-      if (res.status < 200 || res.status >= 300) throw new Refusal(502, 'provider_unavailable', `Vertex AI answered ${res.status}`);
+      if (res.status < 200 || res.status >= 300) {
+        console.warn('transcribe: vertex', res.status, mimeType, audio.byteLength);
+        throw new Refusal(502, 'provider_unavailable', `Vertex AI answered ${res.status}`);
+      }
       const parts = (res.data as { candidates?: { content?: { parts?: { text?: string }[] } }[] })?.candidates?.[0]?.content?.parts ?? [];
       return parts.map((p) => p.text ?? '').join('').trim();
     },
@@ -65,6 +104,8 @@ export interface TranscribeDeps {
   store: Pick<Store, 'membership'>;
   /** Off when the engine has no Google Cloud project to bill (local work). */
   transcriber?: Transcriber;
+  /** One per engine; a fresh default limiter when not given. */
+  limiter?: NoteLimiter;
 }
 
 /** One voice note from a member of `orgId`, turned into text. */
@@ -77,8 +118,12 @@ export async function transcribeNote(
   await requireMember(deps.store, orgId, userId);
   if (!deps.transcriber) throw new Refusal(503, 'transcription_off', 'dictation is not configured on this engine');
   // The bare type/subtype: Chrome sends `audio/webm;codecs=opus`, Google's list of formats names `audio/webm`.
-  const mimeType = (note.contentType ?? '').split(';')[0]!.trim().toLowerCase();
+  let mimeType = (note.contentType ?? '').split(';')[0]!.trim().toLowerCase();
+  // iOS names an .m4a `audio/x-m4a`; Vertex's list has it as `audio/mp4`.
+  if (mimeType === 'audio/x-m4a' || mimeType === 'audio/m4a') mimeType = 'audio/mp4';
   if (!/^audio\/[\w.+-]+$/.test(mimeType)) throw new Refusal(415, 'unsupported_media', 'send the audio with an audio/* Content-Type');
+  // After membership and the type, before the body is read: a runaway client costs nothing.
+  if (deps.limiter && !deps.limiter.take(userId)) throw new Refusal(429, 'too_many', 'too many voice notes in the last hour');
   if (Number(note.contentLength) > MAX_AUDIO_BYTES) throw tooLarge();
   const audio = await readAtMost(note.body, MAX_AUDIO_BYTES);
   if (audio.byteLength === 0) throw new Refusal(400, 'bad_request', 'no audio');

@@ -33,17 +33,24 @@ export const SPEECH: RecordingOptions = {
 
 export type DictationState = 'idle' | 'recording' | 'transcribing';
 
+/** Between the press and the first sound: permission, audio session, prepare. Internal; the screen sees it as idle. */
+type Phase = DictationState | 'starting';
+
 export const DENIED = 'Ghostaff no tiene permiso para usar el micrófono. Actívalo en los ajustes.';
 const NOTHING_HEARD = 'No he oído nada. Inténtalo otra vez.';
+const TOO_MANY = 'Has dictado mucho en la última hora. Espera un poco.';
 const FAILED = 'No he podido transcribirlo. Inténtalo otra vez.';
 const TOO_LONG = 'La nota es demasiado larga.';
 const NOT_RECORDED = 'No he podido grabar. Inténtalo otra vez.';
 
-/** The recording's bytes and real mime type: the web hands over a blob URL (typed), a phone a file path (typed by extension). */
+/**
+ * The recording's bytes and the type to send. A phone's file is always what the
+ * preset writes (AAC in an .m4a, `audio/mp4`): the file read may call it
+ * `audio/x-m4a`, which Vertex doesn't list. The web hands over a typed blob URL.
+ */
 async function readRecording(uri: string): Promise<{ audio: Blob; mimeType: string }> {
   const audio = await (await fetch(uri)).blob();
-  const byExtension = /\.webm$/i.test(uri) ? 'audio/webm' : 'audio/mp4';
-  return { audio, mimeType: audio.type || byExtension };
+  return { audio, mimeType: uri.startsWith('blob:') ? audio.type || 'audio/webm' : 'audio/mp4' };
 }
 
 export function useDictation({
@@ -57,17 +64,24 @@ export function useDictation({
   const [state, setState] = useState<DictationState>('idle');
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [canRetry, setCanRetry] = useState(false);
 
   // What the callbacks below need to see now, not as of the render that made them.
-  const phase = useRef<DictationState>('idle');
+  const phase = useRef<Phase>('idle');
   const clock = useRef<ReturnType<typeof setInterval> | null>(null);
   const alive = useRef(true);
+  /** A recording whose transcription failed: in memory only (the file is already deleted), for «Reintentar». */
+  const kept = useRef<{ audio: Blob; mimeType: string } | null>(null);
   const latest = useRef({ onText, transcribe });
   latest.current = { onText, transcribe };
 
-  const go = (next: DictationState) => {
+  const go = (next: Phase) => {
     phase.current = next;
-    if (alive.current) setState(next);
+    if (alive.current) setState(next === 'starting' ? 'idle' : next);
+  };
+  const drop = () => {
+    kept.current = null;
+    if (alive.current) setCanRetry(false);
   };
   const stopClock = () => {
     if (clock.current) clearInterval(clock.current);
@@ -87,6 +101,25 @@ export function useDictation({
   };
   const release = () => setAudioModeAsync({ allowsRecording: false }).catch(() => {});
 
+  /** Sends a recording to be transcribed; on a failure (not silence) it is kept for a retry. */
+  const transcribeNote = async (note: { audio: Blob; mimeType: string }) => {
+    try {
+      const text = (await latest.current.transcribe(note.audio, note.mimeType)).trim();
+      if (!alive.current) return;
+      drop();
+      if (text) latest.current.onText(text);
+      else setError(NOTHING_HEARD);
+    } catch (e) {
+      if (!alive.current) return;
+      const code = (e as { code?: string }).code;
+      setError(code === 'too_large' ? TOO_LONG : code === 'too_many' ? TOO_MANY : FAILED);
+      if (code !== 'too_large') {
+        kept.current = note;
+        setCanRetry(true);
+      } else drop();
+    }
+  };
+
   const stop = useCallback(async () => {
     if (phase.current !== 'recording') return;
     stopClock();
@@ -97,13 +130,12 @@ export function useDictation({
       uri = recorder.uri;
       void release();
       if (!uri) throw new Error('no recording');
-      const { audio, mimeType } = await readRecording(uri);
-      const text = (await latest.current.transcribe(audio, mimeType)).trim();
-      if (!alive.current) return;
-      if (text) latest.current.onText(text);
-      else setError(NOTHING_HEARD);
-    } catch (e) {
-      if (alive.current) setError((e as { code?: string }).code === 'too_large' ? TOO_LONG : FAILED);
+      const note = await readRecording(uri);
+      discardFile(uri); // read into memory: the file is not needed any more
+      uri = null;
+      await transcribeNote(note);
+    } catch {
+      if (alive.current) setError(FAILED);
     } finally {
       discardFile(uri);
       go('idle');
@@ -111,15 +143,31 @@ export function useDictation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorder]);
 
+  const retry = useCallback(async () => {
+    const note = kept.current;
+    if (phase.current !== 'idle' || !note) return;
+    setError(null);
+    go('transcribing');
+    try {
+      await transcribeNote(note);
+    } finally {
+      go('idle');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const start = useCallback(async () => {
     if (phase.current !== 'idle') return;
     setError(null);
-    phase.current = 'recording'; // claimed now so a second press can't start another
+    drop();
+    // Claimed now so a second press can't start another, and so that the
+    // background event Android's permission dialog causes finds nothing to stop.
+    phase.current = 'starting';
     try {
       const { granted } = await requestRecordingPermissionsAsync();
       if (!granted) {
         phase.current = 'idle';
-        setError(DENIED);
+        if (alive.current) setError(DENIED);
         return;
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
@@ -131,8 +179,8 @@ export function useDictation({
       if (alive.current) setError(NOT_RECORDED);
       return;
     }
-    if (!alive.current) {
-      // Left the screen while asking: the cleanup ran before there was anything to stop.
+    if (!alive.current || phase.current !== 'starting') {
+      // Left the screen while asking: nothing is listening to this recording.
       phase.current = 'idle';
       recorder.stop().catch(() => {}).finally(() => discardFile(recorder.uri));
       void release();
@@ -140,7 +188,7 @@ export function useDictation({
     }
     const began = Date.now();
     setSeconds(0);
-    setState('recording');
+    go('recording');
     // The recorder's own clock and state, not JS time: a call or another app
     // taking the microphone stops it, and what it has is then transcribed.
     clock.current = setInterval(() => {
@@ -150,6 +198,7 @@ export function useDictation({
       setSeconds(s);
       if (stopped || s >= MAX_SECONDS) void stop();
     }, 250);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorder, stop]);
 
   const cancel = useCallback(async () => {
@@ -157,6 +206,7 @@ export function useDictation({
     stopClock();
     go('idle');
     setSeconds(0);
+    drop();
     try {
       await recorder.stop();
     } catch {
@@ -164,10 +214,18 @@ export function useDictation({
     }
     discardFile(recorder.uri);
     void release();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorder]);
 
+  const clearError = useCallback(() => {
+    setError(null);
+    drop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Recording happens only while the app is open: going to the background
-  // stops the note and transcribes what there is (never sent).
+  // stops the note and transcribes what there is (never sent). While starting
+  // there is nothing to stop yet (Android's permission dialog sends the app there).
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'background') void stop();
@@ -181,6 +239,7 @@ export function useDictation({
     return () => {
       alive.current = false;
       stopClock();
+      kept.current = null;
       if (phase.current === 'recording') {
         phase.current = 'idle';
         recorder.stop().catch(() => {}).finally(() => discardFile(recorder.uri));
@@ -189,5 +248,5 @@ export function useDictation({
     };
   }, [recorder]);
 
-  return { state, seconds, error, start, stop, cancel };
+  return { state, seconds, error, canRetry, start, stop, cancel, retry, clearError };
 }

@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
 import { type Membership, Refusal } from '../src/connections';
-import { MAX_AUDIO_BYTES, type Transcriber, vertexTranscriber } from '../src/transcribe';
+import { MAX_AUDIO_BYTES, NoteLimiter, type Transcriber, vertexTranscriber } from '../src/transcribe';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 
-function setup(opts: { transcriber?: Transcriber | null } = {}) {
+function setup(opts: { transcriber?: Transcriber | null; limiter?: NoteLimiter } = {}) {
   const members: Record<string, Membership> = { ana: { role: 'member', displayName: 'Ana' } };
   const heard: Array<{ audio: Uint8Array; mimeType: string }> = [];
   const fake: Transcriber = {
@@ -23,6 +23,7 @@ function setup(opts: { transcriber?: Transcriber | null } = {}) {
     chat: {} as never,
     accounts: {} as never,
     actions: {} as never,
+    transcribeLimiter: opts.limiter,
     transcriber: opts.transcriber === null ? undefined : (opts.transcriber ?? fake),
   });
   const send = (opts: { user?: string; org?: string | null; type?: string; body?: Uint8Array<ArrayBuffer>; headers?: Record<string, string> }) =>
@@ -65,6 +66,37 @@ describe('POST /transcribe', () => {
     expect(claimed.status).toBe(413);
     expect((await send({ body: new Uint8Array() })).status).toBe(400);
     expect(heard).toHaveLength(0);
+  });
+
+  it('is capped at 10 MB', () => {
+    expect(MAX_AUDIO_BYTES).toBe(10 * 1024 * 1024);
+  });
+
+  it('names the m4a aliases audio/mp4', async () => {
+    const { send, heard } = setup();
+    await send({ type: 'audio/x-m4a' });
+    await send({ type: 'audio/m4a' });
+    expect(heard.map((h) => h.mimeType)).toEqual(['audio/mp4', 'audio/mp4']);
+  });
+
+  it('limits each person to 30 notes in a rolling hour, after membership and before the body', async () => {
+    let now = 0;
+    const limiter = new NoteLimiter({ max: 30, windowMs: 3_600_000, now: () => now });
+    const { send, heard } = setup({ limiter });
+    for (let i = 0; i < 30; i++) {
+      expect((await send({})).status).toBe(200);
+      now += 1000;
+    }
+    const over = await send({});
+    expect(over.status).toBe(429);
+    expect(await over.json()).toMatchObject({ error: 'too_many' });
+    expect(heard).toHaveLength(30);
+    // An outsider is refused as not_member and doesn't use up anything.
+    expect((await send({ user: 'zoe' })).status).toBe(403);
+    // The first note leaves the window an hour after it was sent.
+    now = 3_600_000;
+    expect((await send({})).status).toBe(200);
+    expect((await send({})).status).toBe(429);
   });
 
   it('answers 503 when dictation is off', async () => {
@@ -126,6 +158,19 @@ describe('vertexTranscriber', () => {
     expect(err.message).not.toContain('hola');
     const timedOut = vertexTranscriber({ project: 'p', model: 'm', request: async () => { throw new Error('timeout of 120000ms exceeded'); } });
     await expect(timedOut.transcribe(new Uint8Array([1]), 'audio/wav')).rejects.toMatchObject({ status: 502, code: 'provider_unavailable' });
+  });
+
+  it('warns with the status or «timeout», the type and the size, never the content', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const quota = vertexTranscriber({ project: 'p', model: 'm', request: async () => ({ status: 429, data: { error: { message: 'said: hola mundo' } } }) });
+    await quota.transcribe(new Uint8Array([1, 2]), 'audio/mp4').catch(() => {});
+    const hung = vertexTranscriber({ project: 'p', model: 'm', request: async () => { throw new Error('boom: hola'); } });
+    await hung.transcribe(new Uint8Array([1, 2, 3]), 'audio/webm').catch(() => {});
+    expect(warn.mock.calls).toEqual([
+      ['transcribe: vertex', 429, 'audio/mp4', 2],
+      ['transcribe: vertex', 'timeout', 'audio/webm', 3],
+    ]);
+    warn.mockRestore();
   });
 
   it('the route answers that 502 with its code', async () => {

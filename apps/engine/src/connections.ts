@@ -65,7 +65,7 @@ export interface Deps {
 /** A refusal the app turns into Spanish by its code. */
 export class Refusal extends Error {
   constructor(
-    readonly status: 400 | 403 | 404 | 409 | 413 | 415 | 422 | 502 | 503,
+    readonly status: 400 | 403 | 404 | 409 | 413 | 415 | 422 | 429 | 502 | 503,
     readonly code: string,
     message: string,
   ) {
