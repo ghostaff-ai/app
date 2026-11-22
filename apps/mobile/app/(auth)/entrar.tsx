@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppleButton } from '@/components/auth/AppleButton';
 import { GoogleButton } from '@/components/auth/GoogleButton';
@@ -9,6 +9,9 @@ import { friendlyAuthError } from '@/lib/auth/errors';
 
 // Sign in: Apple (iPhone) or Google in one tap, or your email and the 6-digit
 // code we send to it. Any of them creates the account the first time.
+
+// The app icon's ghost on a transparent background (assets/icon/render.py).
+const LOGO = require('../../assets/icon/logo.png');
 
 const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 
@@ -36,8 +39,11 @@ export default function SignIn() {
   return (
     <SafeAreaView className="flex-1 bg-surface">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-center px-6">
-        <Text className="text-3xl font-bold text-ink">Ghostaff</Text>
-        <Text className="mt-2 text-base text-muted">
+        <View className="items-center">
+          <Text accessibilityRole="header" className="font-display text-title text-ink">Ghostaff</Text>
+          <Image source={LOGO} style={{ width: 96, height: 96, marginTop: 12 }} resizeMode="contain" accessible={false} />
+        </View>
+        <Text className="mt-4 text-center text-base text-muted">
           {sent ? `Te hemos mandado un código a ${email.trim()}.` : 'Entra o crea tu cuenta. Sin contraseñas.'}
         </Text>
 

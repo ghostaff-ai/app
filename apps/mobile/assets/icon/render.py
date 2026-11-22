@@ -6,6 +6,8 @@
 # The Android adaptive foreground (visible in its centre 2/3) with:
 #   blender -b -P render.py -- adaptive-foreground.png 0.8 0.15 none 0.5 1.95 0
 # favicon.png is icon.png at 48x48.
+# logo.png (the sign-in screen's logo) is the adaptive foreground's centre 560px, at 384:
+#   magick adaptive-foreground.png -gravity center -crop 560x560+0+0 +repage -resize 384x384 logo.png
 import bpy, sys, math
 argv=sys.argv[sys.argv.index("--")+1:]
 out, rough, spec, bg, zc, size = argv[0], float(argv[1]), float(argv[2]), argv[3], float(argv[4]), float(argv[5]); xc=float(argv[6]) if len(argv)>6 else 0.0
