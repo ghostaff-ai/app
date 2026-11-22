@@ -8,7 +8,7 @@ Jaime (2026-11-22): one Google Cloud project and one Supabase per environment, s
 
 ## Today (2026-11-22)
 
-- Supabase: only `ghostaff-beta` (ref `rggvcvnstbitbdptiwtk`, Frankfurt). Órdago is created there, Álvaro owner.
+- Supabase: `ghostaff-beta` (ref `rggvcvnstbitbdptiwtk`, Frankfurt), where Órdago is created with Álvaro as owner; `ghostaff-prod` created later that day (Progress).
 - Google Cloud: `ghostaff-prod` runs the `engine` service and the `agent-runner` job, **against the beta Supabase** (`SUPABASE_SERVICE_ROLE_KEY_BETA`). `ghostaff-beta` exists, empty.
 - CI: `ci.yml` (checks and end-to-end) and `beta.yml` (on green CI on `develop`, publishes the beta app over the air or starts a beta build). Migrations, engine and runner are deployed by hand by Álvaro (`scripts/deploy-engine.sh`, `deploy-runner.sh`): the agents' classifier blocks Google Cloud tokens.
 
