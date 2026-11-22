@@ -64,6 +64,22 @@ export interface SignInOutput {
   badCode: boolean;
 }
 
+/**
+ * What Claude Code printed, safe for the logs: terminal codes stripped, the
+ * last 800 characters, and anything that could be a secret (a token, the
+ * pasted code, any long run of code-like characters) blanked out.
+ */
+export function outputForLog(raw: string, secrets: string[] = []): string {
+  let text = stripTerminal(raw);
+  for (const s of secrets) if (s) text = text.split(s).join('[code]');
+  return text
+    .replace(/sk-ant-[A-Za-z0-9_-]*/g, 'sk-ant-[hidden]')
+    .replace(/[A-Za-z0-9_#~.-]{24,}/g, '[long]')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n+/g, '\n')
+    .slice(-800);
+}
+
 /** Reads what `claude setup-token` has printed so far; `final` once it has ended. */
 export function parseSignInOutput(raw: string, opts: { final?: boolean } = {}): SignInOutput {
   // The link is printed as an OSC 8 hyperlink: its target is the whole URL, never wrapped.

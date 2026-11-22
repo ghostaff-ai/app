@@ -30,7 +30,7 @@
 import type { Store } from './connections';
 import { Refusal, requireOwner } from './connections';
 import { randomBytes } from 'node:crypto';
-import { CLAUDE_SLOTS, makeHome, parseSignInOutput, type SignInProcess, type SignInSpawner, type Slots } from './claudeCode';
+import { CLAUDE_SLOTS, makeHome, outputForLog, parseSignInOutput, type SignInProcess, type SignInSpawner, type Slots } from './claudeCode';
 import { keyHint } from './providers';
 import { randomUUID } from 'node:crypto';
 import { aiSecretName, type Vault } from './vault';
@@ -234,7 +234,11 @@ function newSignIn(deps: ClaudeSessionDeps, signIns: Map<string, SignIn>, first:
     socket?.close();
     socket = null;
   };
-  const fail = (code: string) => finish({ type: 'error', code });
+  const fail = (reason: string) => {
+    // A code that did not become a token: what Claude Code said, with every secret blanked, so the next one can be fixed.
+    if (phase === 'exchanging') console.error(`claude sign-in: ${reason} after the code; Claude Code said: ${JSON.stringify(outputForLog(afterCode, [code]))}`);
+    finish({ type: 'error', code: reason });
+  };
 
   const deadline = (ms: number, code: string) => {
     if (timer) clearTimeout(timer);
