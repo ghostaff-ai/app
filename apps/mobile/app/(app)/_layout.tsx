@@ -1,26 +1,36 @@
 import { Stack } from 'expo-router';
+import { useRef } from 'react';
 import { View } from 'react-native';
 import { Sidebar } from '@/components/Sidebar';
 import { Button, Loading, Notice } from '@/components/ui';
+import { canRunAgents } from '@/lib/connections';
+import { useConnections } from '@/lib/hooks/useConnections';
 import { useIsDesktop } from '@/lib/layout';
 import { headerFor } from '@/lib/header';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
 import { usePalette } from '@/lib/theme';
 
-// Signed in. The way in has three steps, each a guard: a profile first
-// (bienvenida), then an organisation (empezar: create one or join one), then
-// the three tabs (Hoy, Equipo, Registro). A decision, an agent and the sheets
+// Signed in. The way in has four steps, each a guard: a profile first
+// (bienvenida), then an organisation (empezar: create one or join one), then,
+// for an owner, an AI account the agents can run on (conectar-ia), then the
+// tabs (Hoy, Equipo, Registro, Conexiones). A decision, an agent and the sheets
 // open over the tabs. Creating and joining stay reachable later, from
-// Organizaciones, the sheet behind the organisation's name on Hoy.
+// Organizaciones, the sheet behind the organisation's name on Hoy. A member who
+// isn't an owner can't connect one, so they get in and Hoy says what's missing.
 
 export default function AppLayout() {
   const org = useActiveOrg();
   const me = useProfile();
   const header = headerFor(usePalette());
   const desktop = useIsDesktop();
+  const connections = useConnections(org.active?.id ?? null);
+  // Wait for the connections only on the way in: switching or creating an
+  // organisation keeps the screens mounted and the gate follows once they're read.
+  const seenConnections = useRef(false);
+  if (connections.loaded) seenConnections.current = true;
 
-  if (org.loading || me.loading) return <Loading />;
+  if (org.loading || me.loading || (org.active && !seenConnections.current)) return <Loading />;
   const error = me.error ?? org.error;
   if (error)
     return (
@@ -33,12 +43,16 @@ export default function AppLayout() {
 
   const hasProfile = !!me.profile;
   const inOrg = hasProfile && !!org.active;
+  // An owner whose organisation has no AI account to run on connects one first.
+  // If the connections can't be read, let them in: the engine still says what's missing.
+  const needsAi =
+    inOrg && org.active?.role === 'owner' && connections.loaded && !connections.error && !canRunAgents(connections.items);
   // Where each step sends someone who isn't there yet (or is past it).
-  const step = !hasProfile ? '/bienvenida' : !org.active ? '/empezar' : '/';
+  const step = !hasProfile ? '/bienvenida' : !org.active ? '/empezar' : needsAi ? '/conectar-ia' : '/';
 
   const stack = (
     <Stack screenOptions={header}>
-      <Stack.Protected guard={inOrg} redirectTo={step}>
+      <Stack.Protected guard={inOrg && !needsAi} redirectTo={step}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false, title: org.active?.name ?? '' }} />
         <Stack.Screen name="decision/[id]" options={{ title: 'Decisión' }} />
         <Stack.Screen name="agente/[id]" options={{ title: '' }} />
@@ -55,9 +69,9 @@ export default function AppLayout() {
           options={{ title: 'Organizaciones', presentation: 'formSheet', sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: false }}
         />
         <Stack.Screen name="invitar" options={{ title: 'Invitar', presentation: 'modal' }} />
-        {/* Conexiones has its own stack (conexiones/_layout). On a phone it opens as a
-            sheet; on a desktop it is a page of its own, reached from the sidebar. */}
-        <Stack.Screen name="conexiones" options={desktop ? { headerShown: false } : { presentation: 'modal', headerShown: false }} />
+      </Stack.Protected>
+      <Stack.Protected guard={needsAi} redirectTo={step}>
+        <Stack.Screen name="conectar-ia" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={!hasProfile} redirectTo={step}>
         <Stack.Screen name="bienvenida" options={{ headerShown: false }} />
@@ -74,7 +88,7 @@ export default function AppLayout() {
 
   // On a desktop, once inside an organisation, the sidebar stands beside every
   // screen (docs/plans/ideas/desktop-web.md); the way in keeps the whole window.
-  if (!desktop || !inOrg) return stack;
+  if (!desktop || !inOrg || needsAi) return stack;
   return (
     <View className="flex-1 flex-row bg-surface">
       <Sidebar />

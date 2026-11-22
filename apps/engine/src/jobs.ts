@@ -11,7 +11,7 @@
 // thread when it has something to tell people. Every report syncs the
 // organisation's record, so a decision the agent opened is in the inbox at once.
 
-import { type ChatMessage, messageText } from '@ghostaff/shared';
+import { atLimit, type ChatMessage, type Limits, limitsFromEvent, messageText, type TokenUsage, tokensFromUsage } from '@ghostaff/shared';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { Refusal } from './connections';
 import { type RunnerDeps, runnerReporter } from './runner';
@@ -38,6 +38,8 @@ export interface RunRecord {
   nonceHash?: string | null;
   /** Whether the run fetched its spec (runner.ts). */
   specFetched?: boolean;
+  /** The AI account (a Claude subscription) the run works on: runs on our runner only. */
+  connectionId?: string | null;
 }
 
 /** The database as jobs need it (service role). */
@@ -153,6 +155,8 @@ export interface RunReport {
   text: string | null;
   noteworthy: boolean;
   decisions: { id: string; question: string }[];
+  /** Our runner only: what Claude Code used, and the subscription's limits it last reported. */
+  usage: { model: string | null; tokens: TokenUsage; limits: Limits | null } | null;
 }
 
 const isUuid = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f-]{36}$/i.test(s);
@@ -175,7 +179,27 @@ export function readReport(body: unknown): RunReport {
       const x = d as Record<string, unknown>;
       return typeof x?.id === 'string' && typeof x?.question === 'string' ? [{ id: x.id.slice(0, 200), question: x.question.slice(0, 500) }] : [];
     }),
+    usage:
+      b.usage && typeof b.usage === 'object'
+        ? {
+            model: typeof b.model === 'string' ? b.model.slice(0, 80) : null,
+            tokens: tokensFromUsage(b.usage),
+            limits: limitsFromEvent({ type: 'rate_limit_event', rate_limit_info: b.rateLimit }),
+          }
+        : null,
   };
+}
+
+/**
+ * How the run did on its subscription: at a limit, or refused before any token
+ * when it never got to work; a run that used tokens worked on it, even if the
+ * task itself failed.
+ */
+function runOutcome(report: RunReport): 'ok' | 'limited' | 'failed' {
+  if (report.ok) return 'ok';
+  if (atLimit(report.usage?.limits)) return 'limited';
+  const t = report.usage?.tokens;
+  return t && t.input + t.output + t.cacheRead + t.cacheWrite > 0 ? 'ok' : 'failed';
 }
 
 const decisionLines = (ds: RunReport['decisions']) =>
@@ -220,6 +244,22 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
     decisionsOpened: report.decisions.length,
   });
   if (!took) return { run: run.id, threadId: null }; // another copy of this report got there first
+  if (reporter && run.connectionId) {
+    const u = report.usage;
+    await chat.chat
+      .recordAiUse({
+        orgId: agent.orgId,
+        connectionId: run.connectionId,
+        agentId: agent.id,
+        source: 'run',
+        outcome: runOutcome(report),
+        model: u?.model ?? null,
+        tokens: u?.tokens ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        costUsd: null, // our runner works only on subscriptions
+        limits: u?.limits ?? null,
+      })
+      .catch((e) => console.error('run usage not recorded', e instanceof Error ? e.message : typeof e));
+  }
   // The decisions it opened, in the inbox now rather than at the next tick.
   await deps.syncOrg(agent.orgId).catch((e) => console.error('sync after report failed', e instanceof Error ? e.message : typeof e));
 

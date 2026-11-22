@@ -66,7 +66,8 @@ function setup(opts: { launchFails?: boolean } = {}) {
     },
     touchThread: async () => {},
     createThread: async () => 'x',
-    aiAccount: async () => null,
+    aiAccounts: async () => [],
+    recordAiUse: async () => {},
     proposeAction: async () => 'a',
   };
   const jobs: JobStore = {

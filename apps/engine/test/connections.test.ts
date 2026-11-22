@@ -3,7 +3,7 @@ import { createApp } from '../src/app';
 import type { Checks, ConnectionRecord, Membership, Store } from '../src/connections';
 import { checkAnthropicKey, checkVertexProject } from '../src/providers';
 import { NO_TOOLS } from '../src/tools';
-import { MemoryVault, secretName } from '../src/vault';
+import { aiSecretName, legacyAiSecretName, MemoryVault } from '../src/vault';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 const OTHER = '10000000-0000-0000-0000-000000000002';
@@ -21,12 +21,13 @@ function setup(checks: Partial<Checks> = {}) {
   const rows = new Map<string, ConnectionRecord>();
   const store: Store = {
     membership: async (o, u) => members[`${o}/${u}`] ?? null,
-    upsert: async (r) => {
-      rows.set(`${r.org_id}/${r.provider}`, r);
+    insert: async (r) => {
+      rows.set(r.id, r);
       return { ...r };
     },
-    remove: async (o, p) => {
-      rows.delete(`${o}/${p}`);
+    aiConnections: async (o) => [...rows.values()].filter((r) => r.org_id === o).map((r) => ({ id: r.id, provider: r.provider })),
+    remove: async (o, id) => {
+      if (rows.get(id)?.org_id === o) rows.delete(id);
     },
   };
   const vault = new MemoryVault();
@@ -60,7 +61,7 @@ describe('connecting an AI key', () => {
     expect(connection).toMatchObject({ provider: 'anthropic', method: 'api_key', hint: '1234', connected_by_name: 'Ana' });
     expect(JSON.stringify(connection)).not.toContain(ANTHROPIC_KEY);
     expect(JSON.stringify([...rows.values()])).not.toContain(ANTHROPIC_KEY);
-    expect(await vault.get(secretName(ORG, 'anthropic'))).toBe(ANTHROPIC_KEY);
+    expect(await vault.get(aiSecretName(ORG, connection.id))).toBe(ANTHROPIC_KEY);
   });
 
   it('a member who is not an owner cannot, and nothing is stored', async () => {
@@ -115,12 +116,48 @@ describe('connecting an AI key', () => {
     const res = await call(ANA, 'POST', '/connections/ai', { orgId: ORG, provider: 'claude', apiKey: ANTHROPIC_KEY });
     expect(res.status).toBe(400);
     expect(vault.secrets.size).toBe(0);
-    await vault.put(secretName(ORG, 'claude'), 'sk-ant-oat01-x', {});
-    rows.set(`${ORG}/claude`, {} as ConnectionRecord);
+    // Connected before several accounts were allowed: its token is under the provider's name.
+    await vault.put(legacyAiSecretName(ORG, 'claude'), 'sk-ant-oat01-x', {});
+    rows.set('old', { id: 'old', org_id: ORG, provider: 'claude' } as ConnectionRecord);
     expect((await call(BEA, 'DELETE', `/connections/ai/claude?org=${ORG}`)).status).toBe(403);
     expect((await call(ANA, 'DELETE', `/connections/ai/claude?org=${ORG}`)).status).toBe(200);
     expect(rows.size).toBe(0);
     expect(vault.secrets.size).toBe(0);
+  });
+
+  it('a second key of the same provider is another account, with its own secret; each is removed by its id', async () => {
+    const { rows, vault, call } = setup();
+    const second = ANTHROPIC_KEY.replace('1234', '5678');
+    const a = (await (await call(ANA, 'POST', '/connections/ai', { orgId: ORG, provider: 'anthropic', apiKey: ANTHROPIC_KEY })).json()) as {
+      connection: ConnectionRecord;
+    };
+    const b = (await (await call(ANA, 'POST', '/connections/ai', { orgId: ORG, provider: 'anthropic', apiKey: second })).json()) as {
+      connection: ConnectionRecord;
+    };
+    expect(a.connection.id).not.toBe(b.connection.id);
+    expect(rows.size).toBe(2);
+    expect(await vault.get(aiSecretName(ORG, a.connection.id))).toBe(ANTHROPIC_KEY);
+    expect(await vault.get(aiSecretName(ORG, b.connection.id))).toBe(second);
+    // Naming the provider no longer says which one.
+    expect((await call(ANA, 'DELETE', `/connections/ai/anthropic?org=${ORG}`)).status).toBe(409);
+    expect((await call(CARLA, 'DELETE', `/connections/ai/${a.connection.id}?org=${ORG}`)).status).toBe(403);
+    expect((await call(ANA, 'DELETE', `/connections/ai/${a.connection.id}?org=${OTHER}`)).status).toBe(403);
+    expect((await call(ANA, 'DELETE', `/connections/ai/${a.connection.id}?org=${ORG}`)).status).toBe(200);
+    expect([...rows.keys()]).toEqual([b.connection.id]);
+    expect(await vault.get(aiSecretName(ORG, a.connection.id))).toBeNull();
+    expect(await vault.get(aiSecretName(ORG, b.connection.id))).toBe(second);
+    expect((await call(ANA, 'DELETE', `/connections/ai/${a.connection.id}?org=${ORG}`)).status).toBe(404);
+  });
+
+  it('removing a new account keeps the old one’s secret, named after its provider', async () => {
+    const { rows, vault, call } = setup();
+    await vault.put(legacyAiSecretName(ORG, 'anthropic'), 'old-key', {});
+    rows.set('old', { id: 'old', org_id: ORG, provider: 'anthropic' } as ConnectionRecord);
+    const b = (await (await call(ANA, 'POST', '/connections/ai', { orgId: ORG, provider: 'anthropic', apiKey: ANTHROPIC_KEY })).json()) as {
+      connection: ConnectionRecord;
+    };
+    expect((await call(ANA, 'DELETE', `/connections/ai/${b.connection.id}?org=${ORG}`)).status).toBe(200);
+    expect(await vault.get(legacyAiSecretName(ORG, 'anthropic'))).toBe('old-key');
   });
 
   it('an unexpected failure never echoes the request', async () => {
@@ -144,7 +181,7 @@ describe('connecting a Google Cloud project', () => {
     const { rows, vault, call } = setup();
     const res = await call(ANA, 'POST', '/connections/ai', { orgId: ORG, provider: 'vertex', project: 'panaderia-ai', region: 'europe-west1' });
     expect(res.status).toBe(201);
-    expect(rows.get(`${ORG}/vertex`)).toMatchObject({ method: 'cloud_project', hint: 'panaderia-ai', settings: { project: 'panaderia-ai', region: 'europe-west1' } });
+    expect([...rows.values()].find((r) => r.provider === 'vertex')).toMatchObject({ method: 'cloud_project', hint: 'panaderia-ai', settings: { project: 'panaderia-ai', region: 'europe-west1' } });
     expect(vault.secrets.size).toBe(0);
   });
 

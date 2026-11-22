@@ -154,9 +154,29 @@ export interface AccountDeps {
   returnOrigins: string[];
   /** Every tool there is; an organisation gets those its accounts grant. */
   tools: Tool[];
+  /** One refresh per account at a time across engine instances; without it, only within this one. */
+  leases?: RefreshLeases;
   now?: () => Date;
+  /** How the engine waits for another instance's refresh (tests pass their own). */
+  sleep?: (ms: number) => Promise<void>;
   fetch?: typeof fetch;
 }
+
+/** The database's account leases (migration 20261120000000_refresh_leases.sql). */
+export interface RefreshLeases {
+  /** True when `holder` holds the account's lease now: it was free, expired, or already theirs. */
+  take(orgId: string, provider: AccountProvider, holder: string, seconds: number): Promise<boolean>;
+  release(orgId: string, provider: AccountProvider, holder: string): Promise<void>;
+}
+
+/** Long enough for any provider's refresh call to answer; a holder that dies frees it after this. */
+export const LEASE_SECONDS = 30;
+/** How often, and how many times, an instance looks for the token the lease's holder saves. */
+export const LEASE_POLL_MS = 500;
+export const LEASE_POLLS = 40;
+
+/** Another instance kept the account's lease past our wait: try again later; the account itself is fine. */
+export class RefreshBusy extends Error {}
 
 /** How long a sign-in may take before its attempt is refused. */
 export const ATTEMPT_TTL_MS = 10 * 60_000;
@@ -359,21 +379,49 @@ export async function disconnectAccount(deps: AccountDeps, userId: string, orgId
  * One per organisation, provider and grant version, so a reconnect is never
  * served an older account's token. Within an instance one refresh at a time
  * per key: a provider that rotates refresh tokens kills the old one, and two
- * refreshes with it would cost the second its grant. Across instances the
- * same race is caught after the fact: a refused refresh rereads the vault and
- * goes on with the token another instance just saved.
+ * refreshes with it would cost the second its grant. Across instances, the
+ * account's lease in the database (deps.leases): the instance that takes it
+ * refreshes, and the others wait for the token it saves to the vault. Should
+ * that still go wrong, a refused refresh rereads the vault and goes on with
+ * the token another instance just saved.
  */
 export function accessTokens(deps: AccountDeps) {
   const cache = new Map<string, { token: string; until: number }>();
   const inflight = new Map<string, Promise<string>>();
   const now = () => (deps.now ?? (() => new Date()))().getTime();
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  // Who this instance is, to the leases.
+  const holder = randomToken();
 
   const remember = (key: string, prefix: string, token: string, until: number) => {
     for (const k of cache.keys()) if (k.startsWith(prefix) && k !== key) cache.delete(k);
     cache.set(key, { token, until });
   };
 
-  const load = async (orgId: string, provider: AccountProvider, key: string, prefix: string, retried = false): Promise<string> => {
+  // Runs `refresh` holding the account's lease. While another instance holds
+  // it, looks in the vault for the token that one saves (`saved`), and takes
+  // the lease if it frees up first.
+  const leased = async (orgId: string, provider: AccountProvider, saved: () => Promise<string | null>, refresh: () => Promise<string>) => {
+    const leases = deps.leases;
+    if (!leases) return refresh();
+    const own = async () => {
+      try {
+        return await refresh();
+      } finally {
+        await leases.release(orgId, provider, holder).catch(() => {});
+      }
+    };
+    if (await leases.take(orgId, provider, holder, LEASE_SECONDS)) return own();
+    for (let i = 0; i < LEASE_POLLS; i++) {
+      await sleep(LEASE_POLL_MS);
+      const token = await saved();
+      if (token) return token;
+      if (await leases.take(orgId, provider, holder, LEASE_SECONDS)) return own();
+    }
+    throw new RefreshBusy(`${provider}: another engine instance kept refreshing`);
+  };
+
+  const load = async (orgId: string, provider: AccountProvider, key: string, prefix: string, retried = false, holding = false): Promise<string> => {
     const p = deps.providers[provider];
     const name = accountSecretName(orgId, provider);
     const raw = await deps.vault.get(name);
@@ -381,7 +429,9 @@ export function accessTokens(deps: AccountDeps) {
     const stored = JSON.parse(raw) as StoredGrant;
     // The stored access token while it has life left: no call to the provider at all.
     const margin = p.refreshWithin ?? 60_000;
-    if (stored.accessToken && stored.expiresAt && stored.expiresAt - margin > now()) {
+    const alive = (g: StoredGrant): g is StoredGrant & { accessToken: string; expiresAt: number } =>
+      Boolean(g.accessToken && g.expiresAt && g.expiresAt - margin > now());
+    if (alive(stored)) {
       remember(key, prefix, stored.accessToken, stored.expiresAt - margin);
       return stored.accessToken;
     }
@@ -389,6 +439,17 @@ export function accessTokens(deps: AccountDeps) {
       // No refresh token: the access token was all there was.
       if (stored.accessToken && (stored.expiresAt ?? 0) - 60_000 > now()) return stored.accessToken;
       throw new AccountGone(provider);
+    }
+    if (!holding) {
+      // Reread under the lease: the instance that held it before may have just saved a fresh token.
+      const savedByOther = async () => {
+        const again = await deps.vault.get(name);
+        const g = again ? (JSON.parse(again) as StoredGrant) : null;
+        if (!g || !alive(g)) return null;
+        remember(key, prefix, g.accessToken, g.expiresAt - margin);
+        return g.accessToken;
+      };
+      return leased(orgId, provider, savedByOther, () => load(orgId, provider, key, prefix, retried, true));
     }
     let fresh: Awaited<ReturnType<OAuthProvider['refresh']>>;
     try {
@@ -398,7 +459,7 @@ export function accessTokens(deps: AccountDeps) {
       // Another instance may have rotated it a moment ago: then the vault holds the new one.
       const again = await deps.vault.get(name);
       const now2 = again ? (JSON.parse(again) as StoredGrant) : null;
-      if (now2?.refreshToken && now2.refreshToken !== stored.refreshToken) return load(orgId, provider, key, prefix, true);
+      if (now2?.refreshToken && now2.refreshToken !== stored.refreshToken) return load(orgId, provider, key, prefix, true, true);
       throw e;
     }
     const expiresAt = now() + fresh.expiresIn * 1000;
@@ -564,18 +625,33 @@ export function supabaseAccountStore(admin: SupabaseClient): AccountStore {
       return rows[0] ? attemptFromRow(rows[0]) : null;
     },
     async upsertAccount(row) {
-      check(await admin.from('connections').upsert(row, { onConflict: 'org_id,provider' }));
+      check(await admin.from('connections').upsert(row, { onConflict: 'org_id,account_key' }));
     },
     async removeAccount(orgId, provider) {
-      check(await admin.from('connections').delete().eq('org_id', orgId).eq('provider', provider));
+      check(await admin.from('connections').delete().eq('org_id', orgId).eq('kind', 'account').eq('provider', provider));
     },
     async setStatus(orgId, provider, status) {
-      check(await admin.from('connections').update({ status, checked_at: new Date().toISOString() }).eq('org_id', orgId).eq('provider', provider));
+      check(await admin.from('connections').update({ status, checked_at: new Date().toISOString() }).eq('org_id', orgId).eq('kind', 'account').eq('provider', provider));
     },
     async accounts(orgId) {
       const rows =
         check(await admin.from('connections').select('provider, hint, settings, status, updated_at').eq('org_id', orgId).eq('kind', 'account')) ?? [];
       return rows.map((r) => ({ provider: r.provider, hint: r.hint, scopes: r.settings?.scopes ?? [], status: r.status, version: r.updated_at }));
+    },
+  };
+}
+
+/** The account leases, through the two functions only the service role may call. */
+export function supabaseRefreshLeases(admin: SupabaseClient): RefreshLeases {
+  return {
+    async take(orgId, provider, holder, seconds) {
+      const r = await admin.rpc('take_refresh_lease', { target_org: orgId, target_provider: provider, who: holder, seconds });
+      if (r.error) throw r.error;
+      return r.data === true;
+    },
+    async release(orgId, provider, holder) {
+      const r = await admin.rpc('release_refresh_lease', { target_org: orgId, target_provider: provider, who: holder });
+      if (r.error) throw r.error;
     },
   };
 }

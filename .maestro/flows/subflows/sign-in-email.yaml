@@ -25,6 +25,10 @@ name: Sign in with the emailed code
       MAILPIT_URL: ${MAILPIT_URL}
 - tapOn:
     id: "signin-code"
+# The sixth digit signs in on its own: no "Entrar" tap, and the screen may
+# already be gone, so no hideKeyboard either.
 - inputText: ${output.code}
-- hideKeyboard
-- tapOn: "Entrar"
+- extendedWaitUntil:
+    notVisible:
+      id: "signin-code"
+    timeout: 30000

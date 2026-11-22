@@ -6,6 +6,7 @@ import { usePalette } from '@/lib/theme';
 // app carries only the ones it draws: add an export here before using a new one.
 // SF Symbols and Material Symbols stay inside the native tabs.
 
+export { ArrowDownIcon as ArrowDown } from 'phosphor-react-native/src/icons/ArrowDown';
 export { ArrowUpIcon as ArrowUp } from 'phosphor-react-native/src/icons/ArrowUp';
 export { ArrowsClockwiseIcon as ArrowsClockwise } from 'phosphor-react-native/src/icons/ArrowsClockwise';
 export { BuildingsIcon as Buildings } from 'phosphor-react-native/src/icons/Buildings';

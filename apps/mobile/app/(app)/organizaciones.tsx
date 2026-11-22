@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { ScrollView, Text, View } from 'react-native';
-import { Buildings, Check, Icon, LinkSimple, Plus, SignOut, UserPlus, UsersThree } from '@/components/icons';
+import { Buildings, Check, Icon, Plus, SignOut, UserPlus, UsersThree } from '@/components/icons';
 import { Badge, ListRow, ListSection, RowIcon } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useWaitingCounts } from '@/lib/hooks/useDecisions';
@@ -12,7 +12,7 @@ import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 
 // iOS presents a screen from a sheet only once the sheet is gone, so a link
 // here closes the sheet first and then opens where it points.
-function go(path: '/conexiones' | '/invitar' | '/crear-empresa' | '/unirme') {
+function go(path: '/invitar' | '/crear-empresa' | '/unirme') {
   router.back();
   router.push(path);
 }
@@ -54,12 +54,9 @@ export default function Organizations() {
         })}
       </ListSection>
 
-      {active ? (
+      {active?.role === 'owner' ? (
         <ListSection header={active.name}>
-          <ListRow leading={<RowIcon icon={LinkSimple} />} title="Conexiones" subtitle="Las cuentas con las que trabajan tus agentes" chevron onPress={() => go('/conexiones')} />
-          {active.role === 'owner' ? (
-            <ListRow leading={<RowIcon icon={UserPlus} />} title="Invitar a alguien" chevron onPress={() => go('/invitar')} />
-          ) : null}
+          <ListRow leading={<RowIcon icon={UserPlus} />} title="Invitar a alguien" chevron onPress={() => go('/invitar')} />
         </ListSection>
       ) : null}
 

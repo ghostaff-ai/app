@@ -38,12 +38,13 @@ const supabaseUrl = process.env[`SUPABASE_URL_${suffix}`] || projectUrlFromKey(s
 
 // The engine (apps/engine) takes an organisation's keys to the vault. Its URL is
 // public too; what guards it is the person's sign-in token, so it is pinned
-// here (scripts/deploy-engine.sh prints it). It serves ghostaff-beta; prod gets
-// its own once prod has its own Supabase project. Local dev sets ENGINE_URL_DEV.
+// here, the same as ENGINE_URL in scripts/env.sh: beta's engine runs in Google
+// Cloud project ghostaff-beta, production's in ghostaff-prod, each against its
+// own Supabase (docs/plans/ongoing/environments.md). Local dev sets ENGINE_URL_DEV.
 const engineUrlPerEnv: Record<Env, string> = {
   dev: '',
-  beta: 'https://engine-664656500315.europe-west1.run.app',
-  prod: '',
+  beta: 'https://engine-1002624835789.europe-west1.run.app',
+  prod: 'https://engine-664656500315.europe-west1.run.app',
 };
 const engineUrl = process.env[`ENGINE_URL_${suffix}`] || engineUrlPerEnv[env];
 

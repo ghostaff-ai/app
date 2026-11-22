@@ -1,7 +1,10 @@
-// Connecting and disconnecting an organisation's AI account. Only an owner may.
-// A key is checked with the provider, written to the vault, and only then
-// recorded in the database: provider, how, the last 4 characters, who and when.
-// The key itself never reaches the database and is never sent back.
+// Connecting and disconnecting an organisation's AI accounts. Only an owner may.
+// A key is checked with the provider, written to the vault under the new
+// connection's id, and only then recorded in the database: provider, how, the
+// last 4 characters, who and when. The key itself never reaches the database
+// and is never sent back. An organisation may have any number of AI accounts
+// (two Claude subscriptions, a key…); each new one goes last in the order the
+// engine tries them, which an owner changes from the app (set_ai_order).
 
 import type { AiProvider, ConnectAiInput } from '@ghostaff/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -13,7 +16,8 @@ import {
   looksLikeKey,
   looksLikeProject,
 } from './providers';
-import { secretName, type Vault } from './vault';
+import { randomUUID } from 'node:crypto';
+import { aiSecretName, legacyAiSecretName, type Vault } from './vault';
 
 export interface Membership {
   role: 'owner' | 'member';
@@ -21,6 +25,7 @@ export interface Membership {
 }
 
 export interface ConnectionRecord {
+  id: string;
   org_id: string;
   kind: 'ai';
   provider: AiProvider;
@@ -37,9 +42,11 @@ export interface ConnectionRecord {
 /** The database as the engine sees it (service role). */
 export interface Store {
   membership(orgId: string, userId: string): Promise<Membership | null>;
-  /** Inserts or replaces the organisation's connection for that provider; returns the row. */
-  upsert(row: ConnectionRecord): Promise<Record<string, unknown>>;
-  remove(orgId: string, provider: AiProvider): Promise<void>;
+  /** Adds an AI connection, last in its organisation's order; returns the row. */
+  insert(row: ConnectionRecord): Promise<Record<string, unknown>>;
+  /** The organisation's AI connections, first to last. */
+  aiConnections(orgId: string): Promise<{ id: string; provider: AiProvider }[]>;
+  remove(orgId: string, connectionId: string): Promise<void>;
 }
 
 export interface Checks {
@@ -93,7 +100,9 @@ export async function connectAi(deps: Deps, userId: string, body: unknown): Prom
   const owner = await requireOwner(deps.store, input.orgId, userId);
   const orgId = input.orgId as string;
   const now = (deps.now ?? (() => new Date()))().toISOString();
+  const id = randomUUID();
   const base = {
+    id,
     org_id: orgId,
     kind: 'ai' as const,
     provider: input.provider,
@@ -110,22 +119,37 @@ export async function connectAi(deps: Deps, userId: string, body: unknown): Prom
     if (!looksLikeProject(project)) throw new Refusal(400, 'bad_project', 'not a Google Cloud project ID');
     if (!isEuRegion(region)) throw new Refusal(400, 'bad_region', 'not an EU region we support');
     refuseFailedCheck(await deps.checks.vertex(project));
-    return deps.store.upsert({ ...base, method: 'cloud_project', hint: project, settings: { project, region } });
+    return deps.store.insert({ ...base, method: 'cloud_project', hint: project, settings: { project, region } });
   }
 
   const key = typeof input.apiKey === 'string' ? input.apiKey.trim() : '';
   if (!looksLikeKey(input.provider, key)) throw new Refusal(400, 'bad_key_format', 'that does not look like a key for this provider');
   refuseFailedCheck(await deps.checks[input.provider](key));
-  await deps.vault.put(secretName(orgId, input.provider), key, { org_id: orgId, provider: input.provider, kind: 'ai' });
-  return deps.store.upsert({ ...base, method: 'api_key', hint: keyHint(key), settings: {} });
+  await deps.vault.put(aiSecretName(orgId, id), key, { org_id: orgId, provider: input.provider, kind: 'ai' });
+  return deps.store.insert({ ...base, method: 'api_key', hint: keyHint(key), settings: {} });
 }
 
-export async function disconnectAi(deps: Deps, userId: string, orgId: unknown, provider: unknown): Promise<void> {
-  if (!isProvider(provider)) throw new Refusal(400, 'bad_request', 'unknown provider');
+/**
+ * Removes one AI account, named by its id. An app from before several were
+ * allowed names a provider instead: that works while the organisation has
+ * only one account of that provider.
+ */
+export async function disconnectAi(deps: Deps, userId: string, orgId: unknown, which: unknown): Promise<void> {
+  if (!isUuid(which) && !isProvider(which)) throw new Refusal(400, 'bad_request', 'name the connection');
   await requireOwner(deps.store, orgId, userId);
+  const org = orgId as string;
+  const all = await deps.store.aiConnections(org);
+  const matching = isUuid(which) ? all.filter((c) => c.id === which) : all.filter((c) => c.provider === which);
+  if (matching.length > 1) throw new Refusal(409, 'ambiguous', 'several accounts of that provider: name one by its id');
+  const [target] = matching;
+  if (!target) throw new Refusal(404, 'not_found', 'no such AI account');
   // The key (or a subscription's token) goes first: if that fails, the row stays and the owner can retry.
-  if (provider !== 'vertex') await deps.vault.remove(secretName(orgId as string, provider));
-  await deps.store.remove(orgId as string, provider);
+  if (target.provider !== 'vertex') {
+    await deps.vault.remove(aiSecretName(org, target.id));
+    // The secret named after the provider belonged to the last account of it from before 2026-11-22.
+    if (!all.some((c) => c.id !== target.id && c.provider === target.provider)) await deps.vault.remove(legacyAiSecretName(org, target.provider));
+  }
+  await deps.store.remove(org, target.id);
 }
 
 /** The Store over Supabase with the service role, which bypasses row-level security. */
@@ -141,17 +165,25 @@ export function supabaseStore(admin: SupabaseClient): Store {
       if (error) throw error;
       return data ? { role: data.role, displayName: data.display_name } : null;
     },
-    async upsert(row) {
-      const { data, error } = await admin
-        .from('connections')
-        .upsert(row, { onConflict: 'org_id,provider' })
-        .select(CONNECTION_COLUMNS)
-        .single();
+    async insert(row) {
+      const { data, error } = await admin.from('connections').insert(row).select(CONNECTION_COLUMNS).single();
       if (error) throw error;
       return data as Record<string, unknown>;
     },
-    async remove(orgId, provider) {
-      const { error } = await admin.from('connections').delete().eq('org_id', orgId).eq('provider', provider);
+    async aiConnections(orgId) {
+      const { data, error } = await admin
+        .from('connections')
+        .select('id, provider')
+        .eq('org_id', orgId)
+        .eq('kind', 'ai')
+        .order('position')
+        .order('created_at')
+        .returns<{ id: string; provider: AiProvider }[]>();
+      if (error) throw error;
+      return data ?? [];
+    },
+    async remove(orgId, connectionId) {
+      const { error } = await admin.from('connections').delete().eq('org_id', orgId).eq('id', connectionId).eq('kind', 'ai');
       if (error) throw error;
     },
   };

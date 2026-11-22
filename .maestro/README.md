@@ -19,8 +19,11 @@ never touches another app's emulator or your phone.
 
 - `flows/ci/` runs anywhere, offline from real Google: the sign-in screen; a new person
   signing up with the emailed code (read from Mailpit) and getting through the welcome; and
-  a new person creating a company, landing on Hoy, filling a vacancy in Equipo, opening
-  Registro and coming back to the company after a cold relaunch.
+  a new person creating a company, being asked to connect its AI (a stand-in key and a
+  stand-in subscription are then written straight into the local database by
+  `scripts/connect-ai.js`, with the local service-role key), landing on Hoy, filling a
+  vacancy in Equipo, opening Registro and Conexiones, moving the key below the
+  subscription there, and coming back to the company after a cold relaunch.
 
   CI runs them on every pull request and push (`.github/workflows/ci.yml`, job
   `End-to-end (Android)`), and the beta app only gets a push once they pass

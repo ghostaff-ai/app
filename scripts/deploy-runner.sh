@@ -1,41 +1,23 @@
 #!/usr/bin/env bash
-# Sets up and deploys Ghostaff's agent runner (apps/runner): the Cloud Run job
-# `agent-runner` in ghostaff-prod, europe-west1, that the engine starts once
-# per agent run (docs/plans/ongoing/ordago-agents-in-ghostaff.md, «Our runner»).
-# Safe to re-run: every setup step checks first, and each run deploys the
-# current commit.
+# Deploys Ghostaff's agent runner (apps/runner) to an environment's Google Cloud project: the Cloud Run
+# job `agent-runner` in europe-west1 that the engine starts once per agent run
+# (docs/plans/ongoing/ordago-agents-in-ghostaff.md, «Our runner»). Each run deploys the current commit.
 #
-#   bash scripts/deploy-runner.sh
+#   bash scripts/deploy-runner.sh beta   # or prod
 #
-# Needs a gcloud configuration signed in as ghostaff.ai@gmail.com (named
-# `ghostaff` unless CLOUDSDK_ACTIVE_CONFIG_NAME says otherwise) and docker.
-# The engine must know the runner's account: scripts/deploy-engine.sh sets
-# RUNNER_IDENTITY to the same one.
+# The project must be set up first (scripts/setup-env.sh), which makes the runner's account (with no
+# roles: it proves who it is to the engine with its ID token, and everything it touches the engine
+# hands it per run). Runs on a laptop and in CI, like scripts/deploy-engine.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source scripts/env.sh "${1:-}"
 
-export CLOUDSDK_ACTIVE_CONFIG_NAME=${CLOUDSDK_ACTIVE_CONFIG_NAME:-ghostaff}
-P=ghostaff-prod
-R=europe-west1
 JOB=agent-runner
-# Runs every organisation's agents, and has no role at all: it proves who it is to the engine with
-# its ID token, and everything it touches (the record, the Claude subscription) the engine hands it per run.
 RUNNER_SA="runner@$P.iam.gserviceaccount.com"
 # The engine starts the job, with each run's id and nonce as overrides.
 ENGINE_SA="engine@$P.iam.gserviceaccount.com"
 REGISTRY="$R-docker.pkg.dev"
 IMAGE="$REGISTRY/$P/runner/runner:$(git rev-parse --short HEAD)"
-
-echo "== APIs"
-gcloud services enable --project "$P" run.googleapis.com artifactregistry.googleapis.com iam.googleapis.com
-
-echo "== The runner's identity, with no roles"
-gcloud iam service-accounts describe "$RUNNER_SA" --project "$P" >/dev/null 2>&1 ||
-  gcloud iam service-accounts create runner --project "$P" --display-name "Ghostaff agent runner"
-
-echo "== Image registry"
-gcloud artifacts repositories describe runner --location "$R" --project "$P" >/dev/null 2>&1 ||
-  gcloud artifacts repositories create runner --repository-format docker --location "$R" --project "$P"
 
 echo "== Build and push $IMAGE"
 # Cloud Run runs amd64: built for it even on an Apple Silicon Mac (emulated, slower).
@@ -56,4 +38,4 @@ echo "== The engine may start it, with overrides, and nothing else"
 gcloud run jobs add-iam-policy-binding "$JOB" --project "$P" --region "$R" \
   --member "serviceAccount:$ENGINE_SA" --role roles/run.jobsExecutorWithOverrides >/dev/null
 
-echo "Runner job $JOB deployed with $IMAGE, running as $RUNNER_SA."
+echo "Runner job $JOB ($GHOSTAFF_ENV) deployed with $IMAGE, running as $RUNNER_SA."

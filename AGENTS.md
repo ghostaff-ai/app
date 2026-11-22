@@ -12,7 +12,7 @@ This repo is the product code: the app (iPhone, Android and web from one codebas
 
 **The product decisions live outside this repo**, in the private Órdago business repo: [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md) (what we build and why) and [`ghostaff.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff.md) (the company). Until Ghostaff is a company of its own, that stays the source of truth for the *why*; this repo holds the *how*. Read it before planning anything here.
 
-**Álvaro and Jaime decide together what gets built here and when** (Jaime, 2026-11-21; it replaces «Álvaro decides alone» of 2026-11-12). A product decision needs both. Once something is decided, building it waits for neither's review: land the PR with `pnpm pr:land`, which merges it when its checks are green (Branches).
+**Álvaro and Jaime each decide on their own what gets built here and when** (Álvaro, 2026-11-22; it replaces «decide together» of 2026-11-21). Either founder's word is enough: what one of them asks for gets built, and an agent never waits for, asks about or notes the other's agreement. They talk to each other directly. Building waits for no one's review: land the PR with `pnpm pr:land`, which merges it when its checks are green (Branches).
 
 ## Sibling repos
 
@@ -22,7 +22,7 @@ Checked out side by side under `~/githubs/ghostaff-ai/`:
 git clone --recurse-submodules git@github.com:ghostaff-ai/app.git ~/githubs/ghostaff-ai/app
 ```
 
-- `ghostaff-ai/agents` is today's agent engine (Claude Code on Cloud Run Jobs), moved here from `ordago-app` on 2026-11-15 with Jaime's OK. It still runs Órdago's agents (`proyectos/ordago/`) unchanged; whether this repo's engine replaces it or grows from it is for both founders to decide. Read it, don't copy from it blindly. Clone it beside this one: `git clone git@github.com:ghostaff-ai/agents.git ~/githubs/ghostaff-ai/agents`.
+- `ghostaff-ai/agents` is today's agent engine (Claude Code on Cloud Run Jobs), moved here from `ordago-app` on 2026-11-15 with Jaime's OK. It still runs Órdago's agents (`proyectos/ordago/`) unchanged; whether this repo's engine replaces it or grows from it is still to decide, by either founder. Read it, don't copy from it blindly. Clone it beside this one: `git clone git@github.com:ghostaff-ai/agents.git ~/githubs/ghostaff-ai/agents`.
 - `cultuvilla/app` is the reference for an Expo app with the store release pipeline already working. Reuse its patterns.
 - **Apple and Expo access:** the iOS app is on Álvaro's Apple team `8HWS4483VD`, where Jaime is Admin with his own Apple ID; each founder signs into Apple and Expo as himself and makes his own API key, never a copied `.p8`. Who holds what: `ordago-app/ordago-apps/docs/ops/apple-developer-access.md`.
 
@@ -39,7 +39,7 @@ packages/shared/   models, the record's file formats (por-decidir/), the data se
 supabase/          migrations, row-level-security tests (pgTAP), local config
 ```
 
-Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm pr:land` (land the current branch: Branches), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh` (the engine to Cloud Run), `bash scripts/deploy-runner.sh` (the runner's job), `pnpm db:start` / `pnpm db:test`
+Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm pr:land` (land the current branch: Branches), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh beta|prod` (the engine to Cloud Run), `bash scripts/deploy-runner.sh beta|prod` (the runner's job; both run by CI on merge, [environments.md](docs/plans/ongoing/environments.md)), `bash scripts/setup-env.sh beta|prod` (a project's one-time setup), `pnpm db:start` / `pnpm db:test`
 (Postgres and the policy tests), `pnpm app:start` / `pnpm app:web` (Metro on the first free port of 8083, 8093 … 8173, from
 `scripts/metro-port.sh`; never a bare `expo start`). Setup is in the [README](README.md#setup).
 

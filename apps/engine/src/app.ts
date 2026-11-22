@@ -175,8 +175,9 @@ export function createApp(deps: AppDeps) {
     return c.json({ connection }, 201);
   });
 
-  app.delete('/connections/ai/:provider', async (c) => {
-    await disconnectAi(deps, c.get('userId'), c.req.query('org'), c.req.param('provider'));
+  // By the connection's id; an app from before several AI accounts names the provider (connections.ts).
+  app.delete('/connections/ai/:which', async (c) => {
+    await disconnectAi(deps, c.get('userId'), c.req.query('org'), c.req.param('which'));
     return c.json({ ok: true });
   });
 

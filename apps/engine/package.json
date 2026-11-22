@@ -20,7 +20,8 @@
     "croner": "11.0.0",
     "google-auth-library": "^11.3.4",
     "hono": "^4.13.18",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "undici": "^6.29.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

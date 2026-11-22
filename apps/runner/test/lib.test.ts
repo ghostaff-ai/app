@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { blockReason, onlyWhatRuns, type PushContext } from '../src/guard';
-import { agentEnv, claudeArgs, crashText, decisionFiles, engineClosedRun, newDecisions, tokenNearExpiry, noteworthy, passwdIds, readSpec, redact, resultOf } from '../src/lib';
+import { agentEnv, claudeArgs, crashText, decisionFiles, engineClosedRun, newDecisions, tokenNearExpiry, noteworthy, passwdIds, readSpec, redact, resultOf, usageOf } from '../src/lib';
 
 const SPEC = {
   run: '40000000-0000-0000-0000-000000000001',
@@ -149,5 +149,15 @@ describe('the guard', () => {
   it('reads what runs, not what is only written', () => {
     expect(onlyWhatRuns("echo 'git push --force'")).toBe("echo ''");
     expect(blocked("bash -c 'git push --force origin main'")).toMatch(/forzado/);
+  });
+});
+
+describe('what Claude Code used', () => {
+  it('reads the limits from a rate_limit_event and the tokens from the result, nothing from other lines', () => {
+    const info = { status: 'allowed', unifiedWindows: { five_hour: { utilization: 0.4, resetsAt: 1, status: 'allowed' } } };
+    expect(usageOf(JSON.stringify({ type: 'rate_limit_event', rate_limit_info: info }))).toEqual({ rateLimit: info });
+    expect(usageOf(JSON.stringify({ type: 'result', usage: { input_tokens: 1 } }))).toEqual({ usage: { input_tokens: 1 } });
+    expect(usageOf(JSON.stringify({ type: 'assistant' }))).toEqual({});
+    expect(usageOf('not json')).toEqual({});
   });
 });

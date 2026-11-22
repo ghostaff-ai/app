@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { type AiUsageDay, limitsFromRow } from '../aiUsage';
 import type { AccountProvider } from '../connectors';
 import type {
   AccountConnectResult,
@@ -388,9 +389,14 @@ interface ConnectionRow {
   hint: string;
   settings: Connection['settings'] | null;
   status: Connection['status'];
+  status_reason?: Connection['statusReason'];
   checked_at: string;
   connected_by_name: string;
   updated_at: string;
+  position?: number | null;
+  label?: string | null;
+  limits?: unknown;
+  last_used_at?: string | null;
 }
 
 export function connectionFromRow(r: ConnectionRow): Connection {
@@ -403,14 +409,19 @@ export function connectionFromRow(r: ConnectionRow): Connection {
     hint: r.hint,
     settings: r.settings ?? {},
     status: r.status,
+    statusReason: r.status_reason ?? null,
     checkedAt: r.checked_at,
     connectedByName: r.connected_by_name,
     updatedAt: r.updated_at,
+    position: r.position ?? 0,
+    label: r.label ?? null,
+    limits: limitsFromRow(r.limits),
+    lastUsedAt: r.last_used_at ?? null,
   };
 }
 
 export const CONNECTION_COLUMNS =
-  'id, org_id, kind, provider, method, hint, settings, status, checked_at, connected_by_name, updated_at';
+  'id, org_id, kind, provider, method, hint, settings, status, status_reason, checked_at, connected_by_name, updated_at, position, label, limits, last_used_at';
 
 /** The organisation's connections. Every member sees them; only owners change them. */
 export async function listConnections(client: SupabaseClient, orgId: string): Promise<Connection[]> {
@@ -418,10 +429,55 @@ export async function listConnections(client: SupabaseClient, orgId: string): Pr
     .from('connections')
     .select(CONNECTION_COLUMNS)
     .eq('org_id', orgId)
+    .order('position')
     .order('created_at')
     .returns<ConnectionRow[]>();
   if (error) throw error;
   return (data ?? []).map(connectionFromRow);
+}
+
+/** The organisation's AI accounts in the order the engine tries them. Owners only (`set_ai_order` checks). */
+export async function setAiOrder(client: SupabaseClient, orgId: string, ordered: readonly string[]): Promise<void> {
+  const { error } = await client.rpc('set_ai_order', { target_org: orgId, ordered });
+  if (error) throw error;
+}
+
+/** Names an AI account; an empty name goes back to the provider's. Owners only. */
+export async function renameAiConnection(client: SupabaseClient, connectionId: string, label: string): Promise<void> {
+  const { error } = await client.rpc('rename_ai_connection', { target: connectionId, new_label: label });
+  if (error) throw error;
+}
+
+interface AiUsageDayRow {
+  connection_id: string;
+  agent_id: string | null;
+  day: string;
+  uses: number | string;
+  failures: number | string;
+  input_tokens: number | string;
+  output_tokens: number | string;
+  cache_read_tokens: number | string;
+  cache_write_tokens: number | string;
+  cost_usd: number | string | null;
+  last_at: string;
+}
+
+/** What each AI account did in the last `days` days (Madrid), per agent and day. Members read their own organisation's. */
+export async function listAiUsage(client: SupabaseClient, orgId: string, days = 30, now: Date = new Date()): Promise<AiUsageDay[]> {
+  const since = new Date(now.getTime() - (days - 1) * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+  const { data, error } = await client.rpc('ai_usage_daily', { target_org: orgId, since });
+  if (error) throw error;
+  const n = (v: number | string | null) => (v === null ? 0 : Number(v));
+  return ((data ?? []) as AiUsageDayRow[]).map((r) => ({
+    connectionId: r.connection_id,
+    agentId: r.agent_id,
+    day: r.day,
+    uses: n(r.uses),
+    failures: n(r.failures),
+    tokens: { input: n(r.input_tokens), output: n(r.output_tokens), cacheRead: n(r.cache_read_tokens), cacheWrite: n(r.cache_write_tokens) },
+    costUsd: r.cost_usd === null ? null : Number(r.cost_usd),
+    lastAt: r.last_at,
+  }));
 }
 
 /** How to reach the engine as the signed-in person. */
@@ -466,24 +522,31 @@ export async function connectAi(engine: EngineAccess, input: ConnectAiInput): Pr
   return connectionFromRow(connection);
 }
 
-/** Removes the connection and deletes its key from the vault. */
-export async function disconnectAi(engine: EngineAccess, orgId: string, provider: AiProvider): Promise<void> {
-  await callEngine(engine, 'DELETE', `/connections/ai/${provider}?org=${encodeURIComponent(orgId)}`);
+/** Removes one AI account and deletes its key or token from the vault. */
+export async function disconnectAi(engine: EngineAccess, orgId: string, connectionId: string): Promise<void> {
+  await callEngine(engine, 'DELETE', `/connections/ai/${encodeURIComponent(connectionId)}?org=${encodeURIComponent(orgId)}`);
 }
 
 /** A Claude subscription being connected: the code goes in, or the person gives up. */
 export interface ClaudeSignIn {
-  /** The code Anthropic showed after signing in. */
-  sendCode(code: string): void;
+  /** The code Anthropic showed after signing in. `engine`: fresh access, if the token may have changed. */
+  sendCode(code: string, engine?: EngineAccess): void;
+  /** Back in the app while it waits for the code: picks the sign-in up again on a new socket. */
+  reconnect(engine?: EngineAccess): void;
   cancel(): void;
 }
 
 /**
  * Connects the organisation's Claude subscription through Claude Code's own
- * sign-in, which the engine runs (apps/engine/src/claudeSession.ts). One
- * WebSocket for the whole flow; the person's token goes in its first message,
- * never in the URL. `onEvent` hears the sign-in link, that the code is being
- * checked, then the connection or a refusal code; after either the socket closes.
+ * sign-in, which the engine runs (apps/engine/src/claudeSession.ts). The
+ * person's token goes in a socket's first message, never in the URL. `onEvent`
+ * hears the sign-in link, that the code is being checked, then the connection
+ * or a refusal code; after either it is over.
+ *
+ * The person leaves the app to sign in at Anthropic, and the phone may drop the
+ * socket meanwhile. While it waits for the code that is not an error: the code
+ * (or `reconnect`, when the app comes back) opens a new socket that resumes the
+ * sign-in by the id the engine gave with the link.
  */
 export function connectClaudeSubscription(
   engine: EngineAccess,
@@ -492,40 +555,104 @@ export function connectClaudeSubscription(
   opts: { WebSocket?: typeof WebSocket } = {},
 ): ClaudeSignIn {
   let over = false;
+  let access = engine;
+  let ws: WebSocket | null = null;
+  /** The socket the engine is listening on: after the link, or after `resumed`. */
+  let attached = false;
+  let id: string | null = null;
+  let awaitingCode = false;
+  let pendingCode: string | null = null;
   const end = (e: ClaudeSessionEvent) => {
     if (over) return;
     over = true;
+    const last = ws;
+    ws = null;
+    last?.close();
     onEvent(e);
   };
   if (!engine.url) {
     queueMicrotask(() => end({ type: 'error', code: 'not_configured' }));
-    return { sendCode() {}, cancel() {} };
+    return { sendCode() {}, reconnect() {}, cancel() {} };
   }
   const Socket = opts.WebSocket ?? WebSocket;
   const url = `${engine.url.replace(/\/$/, '').replace(/^http/, 'ws')}/connections/ai/claude/session`;
-  const ws = new Socket(url);
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'start', token: engine.token, orgId }));
-  ws.onmessage = (m) => {
-    let e: { type?: string; url?: string; code?: string; connection?: ConnectionRow };
-    try {
-      e = JSON.parse(String(m.data));
-    } catch {
-      return;
-    }
-    if (e.type === 'url' && typeof e.url === 'string') onEvent({ type: 'url', url: e.url });
-    else if (e.type === 'working') onEvent({ type: 'working' });
-    else if (e.type === 'done' && e.connection) end({ type: 'done', connection: connectionFromRow(e.connection) });
-    else if (e.type === 'error') end({ type: 'error', code: typeof e.code === 'string' ? e.code : 'failed' });
+
+  const sendCodeNow = (socket: WebSocket, code: string) => socket.send(JSON.stringify({ type: 'code', code: code.trim() }));
+
+  const open = (first: () => Record<string, unknown>) => {
+    const me = new Socket(url);
+    ws = me;
+    attached = false;
+    me.onopen = () => me.send(JSON.stringify(first()));
+    me.onmessage = (m) => {
+      if (me !== ws) return;
+      let e: { type?: string; url?: string; id?: string; code?: string; connection?: ConnectionRow };
+      try {
+        e = JSON.parse(String(m.data));
+      } catch {
+        return;
+      }
+      if (e.type === 'url' && typeof e.url === 'string') {
+        id = typeof e.id === 'string' ? e.id : null;
+        awaitingCode = true;
+        attached = true;
+        onEvent({ type: 'url', url: e.url });
+      } else if (e.type === 'resumed') {
+        attached = true;
+        if (pendingCode !== null) {
+          sendCodeNow(me, pendingCode);
+          pendingCode = null;
+        }
+      } else if (e.type === 'working') {
+        awaitingCode = false;
+        onEvent({ type: 'working' });
+      } else if (e.type === 'done' && e.connection) end({ type: 'done', connection: connectionFromRow(e.connection) });
+      else if (e.type === 'error') end({ type: 'error', code: typeof e.code === 'string' ? e.code : 'failed' });
+    };
+    const dropped = () => {
+      if (me !== ws) return;
+      ws = null;
+      attached = false;
+      // Waiting for the code with nothing to send: quietly; the next code or return to the app resumes.
+      if (awaitingCode && id && pendingCode === null) return;
+      end({ type: 'error', code: 'unreachable' });
+    };
+    me.onerror = dropped;
+    me.onclose = dropped;
   };
-  ws.onerror = () => end({ type: 'error', code: 'unreachable' });
-  ws.onclose = () => end({ type: 'error', code: 'unreachable' });
+
+  const resume = () => {
+    const resumeId = id;
+    open(() => ({ type: 'resume', token: access.token, orgId, id: resumeId }));
+  };
+
+  open(() => ({ type: 'start', token: access.token, orgId }));
+
   return {
-    sendCode(code) {
-      if (!over && ws.readyState === Socket.OPEN) ws.send(JSON.stringify({ type: 'code', code: code.trim() }));
+    sendCode(code, fresh) {
+      if (over) return;
+      if (fresh) access = fresh;
+      if (ws && attached && ws.readyState === Socket.OPEN) return sendCodeNow(ws, code);
+      pendingCode = code;
+      if (ws && ws.readyState !== Socket.OPEN && ws.readyState !== Socket.CONNECTING) {
+        const dead = ws;
+        ws = null;
+        dead.close();
+      }
+      if (!ws && awaitingCode && id) resume();
+    },
+    reconnect(fresh) {
+      if (over || !awaitingCode || !id) return;
+      if (fresh) access = fresh;
+      if (ws && (ws.readyState === Socket.OPEN || ws.readyState === Socket.CONNECTING)) return;
+      ws = null;
+      resume();
     },
     cancel() {
       over = true;
-      ws.close();
+      const last = ws;
+      ws = null;
+      last?.close();
     },
   };
 }
@@ -839,6 +966,30 @@ export async function askAgent(engine: EngineAccess, threadId: string): Promise<
 /** A newly added agent introduces itself in a thread of its own; returns that thread. */
 export async function agentHello(engine: EngineAccess, agentId: string): Promise<{ threadId: string }> {
   return callEngine(engine, 'POST', `/agents/${agentId}/hello`);
+}
+
+/** An app an organisation asked us to connect (connectors.md, phase 0: demand decides what comes next). */
+export interface ConnectorRequest {
+  name: string;
+  requestedByName: string;
+  createdAt: string;
+}
+
+/** Asks for a connector Conexiones does not list. Any member may; asking twice for the same app changes nothing. */
+export async function requestConnector(client: SupabaseClient, orgId: string, name: string): Promise<void> {
+  const { error } = await client.rpc('request_connector', { target_org: orgId, wanted: name });
+  if (error) throw error;
+}
+
+/** What the organisation has asked for, newest first. */
+export async function listConnectorRequests(client: SupabaseClient, orgId: string): Promise<ConnectorRequest[]> {
+  const { data, error } = await client
+    .from('connector_requests')
+    .select('name, requested_by_name, created_at')
+    .eq('org_id', orgId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ name: r.name, requestedByName: r.requested_by_name, createdAt: r.created_at }));
 }
 
 // Agent runs: what the agents did, on their own or when asked

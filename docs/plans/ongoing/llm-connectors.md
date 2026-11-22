@@ -30,6 +30,8 @@ The authentication section (read 2026-11-14) says, in Anthropic's words:
 
 **Álvaro's decision (2026-11-14): build Claude subscriptions anyway, until Anthropic says otherwise.** He reads it as a grey zone. The narrowest way to build it is the hosted-Claude-Code exception: the subscription run calls the `claude` program itself (not the Agent SDK), and the user signs in through Anthropic's flow inside it. Still grey: in a job that starts fresh each run, the sign-in has to be kept between runs, which comes close to "store … session tokens", and a team of agents is not "individual usage". The risk falls on the user: Anthropic can cut off their subscription without warning. So the app shows a warning when they connect, and the engine falls back to an API key or Ghostaff's account when the subscription is refused.
 
+**A connected AI account is required (Álvaro, 2026-11-22; it changes the product plan's default).** An owner connects one the agents run on (Claude subscription, Anthropic key, or Claude on their Google Cloud) before the team opens; the app no longer says «Ghostaff pone la IA». The engine already refused to answer without one, so nothing that worked stops working.
+
 ## Decisions (Álvaro, 2026-11-14)
 
 1. **First: API keys** for Anthropic and OpenAI, plus Google Cloud credentials for Claude in the EU. OpenRouter's one-click connect comes after.
@@ -61,6 +63,8 @@ Decisions (Álvaro, 2026-11-14: "pick the best option long term"):
 - [ ] Tried with a real key on the beta.
 - [ ] The engine reads the organisation's connection when it runs an agent (once the engine runs agents).
 - [x] «Claude · tu suscripción» built (2026-11-21, not deployed): the owner taps Conectar, the engine runs the unmodified Claude Code's own `claude setup-token` (pinned 2.1.330 in the engine image) over one WebSocket (`/connections/ai/claude/session`), relays Anthropic's sign-in link, types back the code the owner pastes, and keeps the 1-year token in the vault (`org-<uuid>-ai-claude`; the row keeps its last 4). Chat answers on it with `claude -p`, no tools yet: an agent with connected apps answers with the Anthropic key when there is one (the card says so); the key also answers when the subscription fails before writing or all Claude Code slots (4 per instance) are busy. The card warns that Anthropic can cut it off without notice. Checked up to Anthropic refusing a made-up code, in the engine image; a real sign-in is still untried. Deploying needs Cloud Run's `--timeout 900 --memory 2Gi` (in `scripts/deploy-engine.sh`).
+- [x] The sign-in survives the phone dropping its socket while the person signs in at Anthropic (2026-11-22, found on the phone: every attempt died there): the engine keeps Claude Code waiting for the code (within the 10 minutes) and the app resumes on a new socket by the id sent with the link, on the code or when it comes back to the foreground. Needs Cloud Run's `--session-affinity` (in `scripts/deploy-engine.sh`); a reconnect that lands on another instance reads «caducado».
+- [x] Several AI accounts per organisation, in the order an owner picks, each with its usage (2026-11-22): [multiple-ai-accounts.md](multiple-ai-accounts.md). It replaces the fixed order above (Google Cloud, subscription, key) and the key as the subscription's only fallback.
 - [ ] Then: OpenRouter's one-click connect; ChatGPT plans once OpenAI accepts us.
 
 ## Data in Europe
