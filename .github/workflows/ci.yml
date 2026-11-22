@@ -141,3 +141,17 @@ jobs:
             ~/.maestro/tests/
             ~/.local/state/maestro/tests/
           if-no-files-found: ignore
+
+  # Everything above passed on develop or main: deploy that branch's environment
+  # (develop → beta, main → production; docs/plans/ongoing/environments.md).
+  deploy:
+    name: Deploy
+    needs: [check, database, e2e-android]
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: ${{ github.ref == 'refs/heads/main' && 'prod' || 'beta' }}
+    secrets: inherit

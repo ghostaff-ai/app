@@ -43,5 +43,5 @@ export TIKTOK_CLIENT_KEY=""
 # On a laptop, the gcloud configuration signed in as ghostaff.ai@gmail.com; in CI, whatever the auth
 # step set up.
 if [ -z "${CI:-}" ]; then
-  export CLOUDSDK_ACTIVE_CONFIG_NAME=${CLOUDSDK_ACTIVE_CONFIG_NAME:-ghostaff}
+  export CLOUDSDK_ACTIVE_CONFIG_NAME=${CLOUDSDK_ACTIVE_CONFIG_NAME:-ghostaff-prod}
 fi
