@@ -264,7 +264,7 @@ describe('a sign-in that outlives its socket (the person leaves the app to sign 
     t.claude.print(`\r\n${TOKEN}\r\n`);
     await flush();
     expect(again.heard.at(-1)).toMatchObject({ type: 'done' });
-    expect(await t.vault.get(secretName(ORG, 'claude'))).toBe(TOKEN);
+    expect(await t.vault.get(aiSecretName(ORG, t.rows[0]!.id))).toBe(TOKEN);
     expect(again.closed()).toBe(1);
   });
 
