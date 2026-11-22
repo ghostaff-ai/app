@@ -72,7 +72,7 @@ As of 2026-11-22.
 
 ## Approval
 
-**Needs your yes** — the `Gate` question; recommended answer: yes, because answering a decision is what the first version is for and today only a founder's phone tests it, and 4 minutes on a job of 30 to 37 is cheap next to a broken beta. `AGENTS.md` has no `## Approval` section, so nothing is pre-approved. It changes the tests and the gate, nothing a person sees in the app, so it is not a product decision in the sense of «a product decision needs both»: either founder's yes is enough.
+**Needs your yes** — the `Gate` question; recommended answer: yes, because answering a decision is what the first version is for and today only a founder's phone tests it, and 4 minutes on a job of 30 to 37 is cheap next to a broken beta. `AGENTS.md` has no `## Approval` section, so nothing is pre-approved.
 
 No path here is a hard stop. The two small changes under `apps/mobile` (test ids; an empty engine URL meaning «no engine») are there only to make the flows possible and steady.
 

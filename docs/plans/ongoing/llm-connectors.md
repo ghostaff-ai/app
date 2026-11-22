@@ -30,7 +30,7 @@ The authentication section (read 2026-11-14) says, in Anthropic's words:
 
 **Álvaro's decision (2026-11-14): build Claude subscriptions anyway, until Anthropic says otherwise.** He reads it as a grey zone. The narrowest way to build it is the hosted-Claude-Code exception: the subscription run calls the `claude` program itself (not the Agent SDK), and the user signs in through Anthropic's flow inside it. Still grey: in a job that starts fresh each run, the sign-in has to be kept between runs, which comes close to "store … session tokens", and a team of agents is not "individual usage". The risk falls on the user: Anthropic can cut off their subscription without warning. So the app shows a warning when they connect, and the engine falls back to an API key or Ghostaff's account when the subscription is refused.
 
-**A connected AI account is required (Álvaro, 2026-11-22; Jaime to confirm, since it changes the product plan's default).** An owner connects one the agents run on (Claude subscription, Anthropic key, or Claude on their Google Cloud) before the team opens; the app no longer says «Ghostaff pone la IA». The engine already refused to answer without one, so nothing that worked stops working.
+**A connected AI account is required (Álvaro, 2026-11-22; it changes the product plan's default).** An owner connects one the agents run on (Claude subscription, Anthropic key, or Claude on their Google Cloud) before the team opens; the app no longer says «Ghostaff pone la IA». The engine already refused to answer without one, so nothing that worked stops working.
 
 ## Decisions (Álvaro, 2026-11-14)
 

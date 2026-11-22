@@ -102,7 +102,7 @@ As of 2026-11-22.
 
 ## Approval
 
-**Needs your yes**, from both founders (AGENTS.md: a product decision needs both) — the `Gate` question: notifications go from our engine straight to Apple and Google, with no Expo push service, and say only how many decisions wait and in which organisation, never the question itself. Recommended answer: yes, because any push crosses Apple or Google, which have no EU-only route (invariant 2), so the record's words stay out of the payload; the question text can come back later as a per-person switch.
+**Needs your yes**, from either founder (AGENTS.md: either founder decides alone) — the `Gate` question: notifications go from our engine straight to Apple and Google, with no Expo push service, and say only how many decisions wait and in which organisation, never the question itself. Recommended answer: yes, because any push crosses Apple or Google, which have no EU-only route (invariant 2), so the record's words stay out of the payload; the question text can come back later as a per-person switch.
 
 Picks made here that the same yes takes, and that either founder can change: the hour is 09:00 in the phone's time zone until the person changes it; nothing is sent between 22:00 and 08:00; permission is asked after the first answered decision, never at launch; every member of the organisation is notified, because a decision has no person yet.
 

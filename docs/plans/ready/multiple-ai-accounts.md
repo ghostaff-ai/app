@@ -16,7 +16,7 @@ An owner can add a second AI account after the first, even another sign-in to th
 - The vault secret is `org-<uuid>-ai-<provider>` (`apps/engine/src/vault.ts`), so a second account would overwrite the first.
 - The order is fixed in `chatStore.ts` `aiAccount()`: Google Cloud, then the subscription, then the Anthropic key (only behind the subscription).
 
-## Decisions (Álvaro, 2026-11-22, taking every proposed pick; Jaime to confirm, it is a product decision)
+## Decisions (Álvaro, 2026-11-22, taking every proposed pick)
 
 1. **The owner sets the order by hand.** A new account goes to the bottom. Google Cloud cards carry a «datos en la UE» tag instead of being forced first.
 2. **Failover, not load spreading.** The engine uses #1; it moves to #2 only when #1 fails before writing (limit reached, token revoked, key refused), and so on. A failing account shows «falla» with the reason and is tried again later. Spreading work across accounts may come later.
