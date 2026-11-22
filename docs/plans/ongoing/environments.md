@@ -1,8 +1,8 @@
 # Two environments: beta from develop, production from main
 
 **Priority:** high — production will hold customers' AI keys and mailboxes; today the only engine talks to the beta database, and deploys are run by hand
-**Gate:** blocked:GitHub Actions refuses every job in ghostaff-ai («recent account payments have failed or your spending limit needs to be increased»), so #36 cannot pass CI (recheck 2026-11-23)
-**Next:** once Actions runs, #36 merges and the beta app moves to the new engine; then Task 5 (with Jaime's OK), Task 6's deploy, and the PR for Task 7 (branch `feat/ci-deploy`)
+**Gate:** blocked:Jaime adds the repository secret `SUPABASE_ACCESS_TOKEN` (Task 7) and OKs Task 5's deletions in `ghostaff-prod`
+**Next:** with the secret in, label PR #41 (Task 7) `automerge` and check the `deploy` job on `develop`; with the OK, Task 5 then Task 6's deploy
 
 Jaime (2026-11-22): one Google Cloud project and one Supabase per environment, set up as Órdago's: merge to `develop` brings up beta, merge to `main` brings up production. Front 1 of [ordago-as-customer.md](ordago-as-customer.md). It replaces the proposal in [build-first-version.md](build-first-version.md#environments-beta-and-production) of 2026-11-15.
 
@@ -139,13 +139,13 @@ On green CI on each branch, the workflow for that environment: applies Supabase 
 
 **Files:** create `.github/workflows/deploy.yml` (reusable, `on: workflow_call` with input `environment`: `beta` | `prod`); modify `.github/workflows/ci.yml` (a `deploy` job: `needs: [check, database, e2e-android]`, `if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')`, calls `deploy.yml` with `beta` on `develop` and `prod` on `main`, `permissions: id-token: write, contents: read`).
 
-`deploy.yml`, in order: migrations (`npx supabase db push --project-ref <ref> --password "$SUPABASE_DB_PASSWORD"` with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD_BETA` / `_PROD` from repository secrets), then `google-github-actions/auth@v2` with `workload_identity_provider: $WIF_PROVIDER` and `service_account: $DEPLOYER_SA` (read from `env.sh`), `google-github-actions/setup-gcloud@v2`, `bash scripts/deploy-runner.sh <env>`, `bash scripts/deploy-engine.sh <env>`, and `curl -fsS $ENGINE_URL/health`.
+`deploy.yml`, in order: a branch guard (`$GITHUB_REF` must be `refs/heads/$DEPLOY_BRANCH`, before anything touches a database), then `google-github-actions/auth@v2` with `workload_identity_provider: $WIF_PROVIDER` and `service_account: $DEPLOYER_SA` (read from `env.sh`), `google-github-actions/setup-gcloud@v2`, migrations (`supabase db push --remote=<ref> --yes` with `SUPABASE_ACCESS_TOKEN`; the CLI signs in through a temporary login role, so no database password), `bash scripts/deploy-runner.sh <env>`, `bash scripts/deploy-engine.sh <env>`, and `curl -fsS $ENGINE_URL/health`.
 
-- [ ] Jaime adds the repository secrets `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD_BETA`, `SUPABASE_DB_PASSWORD_PROD`.
+- [ ] Jaime adds the repository secret `SUPABASE_ACCESS_TOKEN` (a personal access token of the Supabase account that owns organisation Ghostaff). Until it exists every `deploy` job fails at its migrations, so PR #41 waits for it before its `automerge` label.
 - [ ] Write both files; PR with `automerge`. After the merge, the CI run on `develop` deploys beta: the `deploy` job is green and `/health` answers.
 - [ ] Review focus 3 by hand: a `workflow_dispatch` of `deploy.yml` from `develop` asking for `prod` fails at the `auth` step.
 - [ ] Production deploys from CI the first time `develop` is merged into `main`. That merge is the first release (`main` is still the scaffold, 191 commits behind): either founder decides when.
 - [x] Tasks 1–3 (2026-11-22, PR #36, branch `feat/environments`): `scripts/env.sh` with its test, `scripts/setup-env.sh`, the deploy scripts per environment. `ghostaff-beta` set up (re-runs create nothing), runner and engine deployed there, `/health` and the tick's `/cron` answer 200. The old tick in `ghostaff-prod` is **paused** (not deleted), so beta's database has one tick; the old engine there keeps serving the beta app until #36 lands.
-- [x] Task 4 code in #36: the beta app's engine is `https://engine-1002624835789.europe-west1.run.app`, production's `https://engine-664656500315.europe-west1.run.app`. Reaches the beta app over the air once #36 merges.
+- [x] Task 4 code in #36: the beta app's engine is `https://engine-1002624835789.europe-west1.run.app`, production's `https://engine-664656500315.europe-west1.run.app`. #36 merged on 2026-11-22 and the beta app talks to the new engine (its `/connections/ai/claude/session` calls land in `ghostaff-beta` since 16:34 UTC); the old engine in `ghostaff-prod` gets no app traffic since.
 - [x] Task 6, setup only: `bash scripts/setup-env.sh prod` (deployer, Workload Identity on `main`, `SUPABASE_SERVICE_ROLE_KEY` from Supabase). The deploy waits for Task 5: it replaces the `engine` service the beta app still uses.
-- [x] Task 7 written on `feat/ci-deploy` (stacked on #36, not pushed): `deploy.yml` (branch guard, Google auth, migrations with `supabase db push --remote=<ref> --yes`, runner, engine) and a `deploy` job in `ci.yml`. Only one repository secret is needed, `SUPABASE_ACCESS_TOKEN`: the CLI pushes through a temporary login role, no database password.
+- [x] Task 7 written on `feat/ci-deploy`, PR #41: `deploy.yml` (branch guard, Google auth, migrations with `supabase db push --remote=<ref> --yes`, runner, engine) and a `deploy` job in `ci.yml`. Only one repository secret is needed, `SUPABASE_ACCESS_TOKEN`: the CLI pushes through a temporary login role, no database password.
