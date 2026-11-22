@@ -70,6 +70,7 @@ function setup(over: Partial<ClaudeSessionDeps> = {}) {
     now: () => new Date('2026-11-21T10:00:00Z'),
     slots: new Slots(4),
     signIns: new Map(),
+    enterDelayMs: 0,
     ...over,
   };
   const session = claudeSession(deps, { send: (m) => sent.push(m), close: () => void closed++ });
@@ -100,7 +101,10 @@ describe('connecting a Claude subscription', () => {
     expect(t.sent).toEqual([{ type: 'url', url: URL, id: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) }]);
 
     t.say({ type: 'code', code: ` ${CODE} ` });
-    expect(t.claude.written).toEqual([`${CODE}\r`]);
+    expect(t.claude.written).toEqual([CODE]);
+    await flush();
+    // Enter goes on its own, or Claude Code takes it as part of a paste.
+    expect(t.claude.written).toEqual([CODE, '\r']);
     expect(t.sent.at(-1)).toEqual({ type: 'working' });
 
     t.claude.print(`\r\nYour OAuth token (valid for 1 year):\r\n\r\n${TOKEN}\r\n\r\nStore this token securely.`);
@@ -260,7 +264,8 @@ describe('a sign-in that outlives its socket (the person leaves the app to sign 
     again.say({ type: 'code', code: CODE }); // sent before the resume is checked: it waits its turn
     await flush();
     expect(again.heard).toEqual([{ type: 'resumed' }, { type: 'working' }]);
-    expect(t.claude.written).toEqual([`${CODE}\r`]);
+    await flush();
+    expect(t.claude.written).toEqual([CODE, '\r']);
     t.claude.print(`\r\n${TOKEN}\r\n`);
     await flush();
     expect(again.heard.at(-1)).toMatchObject({ type: 'done' });
@@ -281,7 +286,7 @@ describe('a sign-in that outlives its socket (the person leaves the app to sign 
     expect(one.closed()).toBe(1);
     one.session.onClose(); // the old socket closing does not end the sign-in
     two.say({ type: 'code', code: CODE });
-    expect(t.claude.written).toEqual([`${CODE}\r`]);
+    expect(t.claude.written).toEqual([CODE]);
     expect(two.heard.at(-1)).toEqual({ type: 'working' });
   });
 
@@ -495,7 +500,7 @@ describe('the sign-in over a real WebSocket', () => {
       });
       await closed;
       expect(heard.map((m) => m.type)).toEqual(['url', 'working', 'done']);
-      expect(claude.written).toEqual([`${CODE}\r`]);
+      expect(claude.written[0]).toBe(CODE);
       expect(await vault.get(aiSecretName(ORG, rows[0]!.id))).toBe(TOKEN);
       expect(rows[0]?.hint).toBe('Wxyz');
     } finally {

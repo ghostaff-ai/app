@@ -47,6 +47,8 @@ export interface ClaudeSessionDeps {
   urlTimeoutMs?: number;
   /** How long it may take to turn the code into the token. */
   tokenTimeoutMs?: number;
+  /** The pause between typing the code and pressing Enter. */
+  enterDelayMs?: number;
   /** The whole session, sign-in at Anthropic included. */
   sessionTimeoutMs?: number;
   /** How long the socket may stay open without its `start` message. */
@@ -378,7 +380,12 @@ function newSignIn(deps: ClaudeSessionDeps, signIns: Map<string, SignIn>, first:
         phase = 'exchanging';
         afterCode = '';
         deadline(tokenTimeout, 'timeout');
-        child?.write(`${code}\r`);
+        // The code, then Enter on its own: Claude Code reads one chunk with both as a
+        // paste, Enter included, and keeps waiting with the code in its field.
+        child?.write(code);
+        setTimeout(() => {
+          if (phase === 'exchanging') child?.write('\r');
+        }, deps.enterDelayMs ?? 500);
         send({ type: 'working' });
         return;
       }
