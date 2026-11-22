@@ -186,9 +186,9 @@ The B-app cards above that use a maker's server (`app: true` in the catalogue) a
 
 ### Kind C — the general ways in
 
-- [ ] Forwarding address per organisation
-- [ ] Upload a file (a bank export, a spreadsheet)
-- [ ] Ask for a connector we lack (and count the requests)
+- [ ] Forwarding address per organisation — to decide first: the domain (`<org>@in.ghostaff.ai`?) and an inbound mail service that keeps mail in the EU and calls the engine (Postmark's EU servers, Mailgun EU, or our own MX on Cloud Run); where attachments are stored (open question of the upload below)
+- [ ] Upload a file (a bank export, a spreadsheet) — to decide first: storage per organisation in the EU (Supabase Storage in Frankfurt with a bucket policy per `org_id`, or Cloud Storage in `europe-west1`), and how an agent reads it (a tool that lists and reads the organisation's files)
+- [~] Ask for a connector we lack (and count the requests) — step 3 on `feat/connector-requests` (2026-11-20): «Pedir X» when the search finds nothing and «¿Falta alguna?» at the end of the list, any member, once per organisation and app (`connector_requests`, `request_connector`). Count them with the service role: `select lower(name), count(*) from public.connector_requests group by 1 order by 2 desc`
 
 ## Handoff
 
@@ -224,11 +224,9 @@ State on 2026-11-19 (branch `feat/connectors-google`, not merged): 54 cards buil
 
 ## Known gaps
 
-From the security review of 2026-11-19; fixed on the branch unless listed here.
+From the security review of 2026-11-19; fixed on the branch unless listed here. Fixed since on `fix/connectors-hardening` (2026-11-20): two instances refreshing the same token (a lease per account in `refresh_leases`, taken before refreshing) and TikTok's video fetch reaching a private address behind a public name (`apps/engine/src/publicFetch.ts`, checked at connect time).
 
-- **A refresh across two Cloud Run instances at once.** Within an instance there is one refresh per account at a time, and a refused refresh rereads the vault before giving up, which covers the common case. Two instances refreshing the same rotating token in the same instant can still cost the grant (some providers revoke the whole token family on reuse). Fix when it shows: a lease row per account, taken in a `security definer` function before refreshing.
 - **`ghostaff://` on Android can be claimed by another app.** The engine sends the provider's code only to the app's scheme (or a listed web origin), and only the person who started can finish, but an app registering the same scheme could read the code. Fix: verified App Links / Universal Links for the return address.
-- **TikTok's video fetch checks the host name, not the address it resolves to.** A public name pointing to a private address would pass; low on Cloud Run without a VPC. Fix: resolve and refuse private ranges.
 - **Approving is owners only.** Whether a member with «talk» on the agent may approve some kinds of action is a product decision (Álvaro).
 
 ## Open questions

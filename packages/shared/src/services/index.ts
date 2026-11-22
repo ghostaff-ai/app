@@ -841,6 +841,30 @@ export async function agentHello(engine: EngineAccess, agentId: string): Promise
   return callEngine(engine, 'POST', `/agents/${agentId}/hello`);
 }
 
+/** An app an organisation asked us to connect (connectors.md, phase 0: demand decides what comes next). */
+export interface ConnectorRequest {
+  name: string;
+  requestedByName: string;
+  createdAt: string;
+}
+
+/** Asks for a connector Conexiones does not list. Any member may; asking twice for the same app changes nothing. */
+export async function requestConnector(client: SupabaseClient, orgId: string, name: string): Promise<void> {
+  const { error } = await client.rpc('request_connector', { target_org: orgId, wanted: name });
+  if (error) throw error;
+}
+
+/** What the organisation has asked for, newest first. */
+export async function listConnectorRequests(client: SupabaseClient, orgId: string): Promise<ConnectorRequest[]> {
+  const { data, error } = await client
+    .from('connector_requests')
+    .select('name, requested_by_name, created_at')
+    .eq('org_id', orgId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ name: r.name, requestedByName: r.requested_by_name, createdAt: r.created_at }));
+}
+
 // Agent runs: what the agents did, on their own or when asked
 // (supabase/migrations/20261121100000_agent_runners.sql). Read only: the engine records them.
 

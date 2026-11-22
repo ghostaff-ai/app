@@ -18,6 +18,8 @@ export interface ToolInputSchema {
 export interface ToolContext {
   accessToken: string;
   fetch: typeof fetch;
+  /** For a URL the model gave: reaches public addresses only (publicFetch.ts). Defaults to that real one. */
+  fetchPublic?: typeof fetch;
 }
 
 export interface Tool {
