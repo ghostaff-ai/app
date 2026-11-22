@@ -21,7 +21,7 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 
 **Shape**
 
-1. Three tabs, **Hoy · Equipo · Registro**, and a mic button that is always there.
+1. Three tabs, **Hoy · Equipo · Registro**, and a mic button that is always there. A fourth, **Conexiones**, joined them (Álvaro, 2026-11-22): everything an organisation connects, its AI account first.
 2. Talking goes to **Secretaría**, who answers or passes it to the right agent; the agent replies by name.
 3. Switching organisation: the name at the top opens a sheet with how many decisions wait in each.
 4. On a computer: the list and the decision side by side.
@@ -99,6 +99,7 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 - [x] Phosphor icons (decision 30), imported one file per icon from `components/icons.tsx` so the app carries only those it draws.
 - [x] Inset grouped lists (`ListSection` + `ListRow`) for everything that is not a decision or an agent (decision 24); `EmptyState` says what is missing and the next step; `Segmented` for the phone's segmented control.
 - [x] Haptics in one place (`lib/haptics.ts`): selection on a choice, success when something lands, a tap when a message goes.
-- [x] Conexiones: each service's real logo (simple-icons, CC0, generated into `lib/brandLogos.ts` by `apps/mobile/scripts/brand-logos.mjs`; its initial when it has none), area filters, and a page per connection (`conexiones/[id]`, `conexiones/ia/[provider]`) inside the sheet's own stack.
+- [x] Conexiones: each service's real logo (simple-icons, CC0, generated into `lib/brandLogos.ts` by `apps/mobile/scripts/brand-logos.mjs`; its initial when it has none), area filters, and a page per connection (`conexiones/[id]`, `conexiones/ia/[provider]`) inside the sheet's own stack. Since 2026-11-22 it is the fourth tab, with its own stack.
+- [x] An owner whose organisation has no AI account its agents run on (Claude subscription, Anthropic key, Claude on Google Cloud) connects one before the tabs (`conectar-ia`); a member who isn't an owner gets in, and Hoy says what's missing (Álvaro, 2026-11-22).
 - [x] Organizaciones as a settings list; its links close the sheet first, because iOS opens nothing from a sheet until it is gone.
 - [ ] The ghost on Hoy in the iOS simulator: it draws nothing there (no GPU); check on a phone before treating it as a bug.

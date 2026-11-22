@@ -9,8 +9,7 @@ import { useProfile } from '@/lib/profile/ProfileContext';
 import { usePalette } from '@/lib/theme';
 
 // The desktop's navigation (docs/plans/ideas/desktop-web.md): it stands in for
-// the phone's three tabs and the mic, plus Conexiones, which on the phone is a
-// sheet behind Organizaciones. The organisation's name on top opens the
+// the phone's four tabs and the mic. The organisation's name on top opens the
 // switcher, as on Hoy (app-design.md, decision 3).
 
 type Item = { href: Href; label: string; icon: (color: string) => ReactNode; match: (path: string) => boolean };

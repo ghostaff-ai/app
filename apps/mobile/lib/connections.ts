@@ -1,4 +1,4 @@
-import { type AccountConnectResult, type AiProvider, type CatalogueConnector, CONNECTOR_AREAS, CONNECTORS } from '@ghostaff/shared';
+import { type AccountConnectResult, type AiProvider, type CatalogueConnector, type Connection, CONNECTOR_AREAS, CONNECTORS } from '@ghostaff/shared';
 import { EngineError } from '@ghostaff/shared/services';
 
 // What the connections screen says, in Spanish. One place, so the engine's
@@ -32,7 +32,7 @@ export const PROVIDERS: Record<AiProvider, ProviderCopy> = {
   },
   openai: {
     name: 'OpenAI con tu clave',
-    short: 'OpenAI, en Estados Unidos',
+    short: 'En Estados Unidos. Tus agentes aún no la usan',
     title: 'OpenAI, con tu clave',
     dataNote: 'Lo que hagan los agentes pasa por OpenAI, en Estados Unidos. La factura de la IA llega a tu nombre.',
     keyHelp: 'Créala en platform.openai.com, en API keys. Empieza por sk-.',
@@ -59,6 +59,16 @@ export const PROVIDERS: Record<AiProvider, ProviderCopy> = {
 
 /** The AI accounts in the order Conexiones lists them: the one that keeps data in Europe first. */
 export const AI_ORDER: readonly AiProvider[] = ['vertex', 'claude', 'anthropic', 'openai'];
+
+/**
+ * The AI accounts the engine runs agents on today (apps/engine/src/chatStore.ts,
+ * aiAccount). An OpenAI key is kept but not used yet, so it doesn't count.
+ */
+export const RUNS_AGENTS: readonly AiProvider[] = ['vertex', 'claude', 'anthropic'];
+
+/** Whether the organisation has an AI account its agents can run on. */
+export const canRunAgents = (items: readonly Connection[]) =>
+  items.some((i) => i.kind === 'ai' && (RUNS_AGENTS as readonly string[]).includes(i.provider));
 
 export const REGION_NAMES: Record<string, string> = {
   'europe-west1': 'Bélgica (europe-west1)',

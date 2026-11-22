@@ -1,5 +1,6 @@
+import type { Connection } from '@ghostaff/shared';
 import { EngineError } from '@ghostaff/shared/services';
-import { accountErrorMessage, accountResultMessage, claudeSignInMessage, connectErrorMessage, connectorSections, PROVIDERS } from '@/lib/connections';
+import { accountErrorMessage, accountResultMessage, canRunAgents, claudeSignInMessage, connectErrorMessage, connectorSections, PROVIDERS } from '@/lib/connections';
 
 describe('what the connections screen says when the engine refuses', () => {
   it('names the right key prefix for each provider', () => {
@@ -61,5 +62,33 @@ describe('the account cards of Conexiones', () => {
     expect(ids('RESENAS')).toEqual(['googlebusiness']);
     expect(ids('facturas')).toContain('holded');
     expect(ids('nada que exista')).toEqual([]);
+  });
+});
+
+describe('whether an organisation has an AI account its agents run on', () => {
+  const conn = (kind: Connection['kind'], provider: Connection['provider']): Connection => ({
+    id: provider,
+    orgId: 'o',
+    kind,
+    provider,
+    method: 'api_key',
+    hint: '1234',
+    settings: {},
+    status: 'ok',
+    checkedAt: '',
+    connectedByName: 'Ana',
+    updatedAt: '',
+  });
+
+  it('counts a Claude subscription, an Anthropic key or Claude on Google Cloud', () => {
+    expect(canRunAgents([conn('ai', 'claude')])).toBe(true);
+    expect(canRunAgents([conn('ai', 'anthropic')])).toBe(true);
+    expect(canRunAgents([conn('ai', 'vertex')])).toBe(true);
+  });
+
+  it('does not count an OpenAI key, which the engine does not use yet, nor other accounts', () => {
+    expect(canRunAgents([])).toBe(false);
+    expect(canRunAgents([conn('ai', 'openai')])).toBe(false);
+    expect(canRunAgents([conn('account', 'google')])).toBe(false);
   });
 });

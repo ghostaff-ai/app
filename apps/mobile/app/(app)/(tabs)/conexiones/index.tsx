@@ -12,6 +12,7 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
+import { useTabScreenTop } from '@/lib/tabs';
 import { usePalette } from '@/lib/theme';
 
 // The organisation's connections: its accounts on outside services, grouped
@@ -19,8 +20,8 @@ import { usePalette } from '@/lib/theme';
 // connection's page (conexiones/[id], conexiones/ia/[provider]), where it is connected,
 // checked or removed. The engine keeps every token and key in the vault; this
 // screen only ever sees an account's email or a key's last 4 characters.
-// On a desktop it is a page of the sidebar (docs/plans/ideas/desktop-web.md):
-// its own title, and each section's connections in a grid of three.
+// It is the fourth tab on a phone; on a desktop a page of the sidebar
+// (docs/plans/ideas/desktop-web.md), with each section's connections in a grid of three.
 
 type Filter = 'all' | 'connected' | ConnectorArea;
 
@@ -29,6 +30,7 @@ export default function Connections() {
   const { active } = useActiveOrg();
   const { items } = useConnections(active?.id ?? null);
   const desktop = useIsDesktop();
+  const top = useTabScreenTop();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const connected = useMemo(() => new Set(items.filter((i) => i.kind === 'account').map((i) => i.provider)), [items]);
@@ -61,13 +63,13 @@ export default function Connections() {
     <ScrollView
       className="flex-1 bg-surface"
       contentContainerClassName={desktop ? 'px-5 pb-16 pt-8' : 'pb-16'}
-      contentContainerStyle={desktop ? { maxWidth: DESKTOP_CONTENT_MAX_WIDTH, width: '100%', alignSelf: 'center' } : undefined}
+      contentContainerStyle={desktop ? { maxWidth: DESKTOP_CONTENT_MAX_WIDTH, width: '100%', alignSelf: 'center' } : { paddingTop: top }}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       contentInsetAdjustmentBehavior="automatic"
     >
       <View className="px-5 pt-3">
-        {desktop ? <ScreenTitle>Conexiones</ScreenTitle> : null}
+        <ScreenTitle>Conexiones</ScreenTitle>
         <View className="flex-row items-start">
           <View className="mt-0.5">
             <Icon icon={LockSimple} size={16} color={c.muted} weight="regular" />
@@ -126,7 +128,7 @@ export default function Connections() {
         {sections.length > 0 ? <AskForConnector searched="" asked={asked} onAsk={ask} /> : null}
 
         {!search && (filter === 'all' || filter === 'connected') ? (
-          <Group desktop={desktop} header="IA" footer="Si no conectas nada, Ghostaff pone la IA. Conecta la tuya si quieres su factura a tu nombre.">
+          <Group desktop={desktop} header="IA" footer="Tus agentes trabajan con la cuenta de IA de tu empresa, y su factura llega a tu nombre. Sin una, no pueden contestar.">
             {AI_ORDER.filter((p) => filter === 'all' || items.some((i) => i.kind === 'ai' && i.provider === p)).map((p: AiProvider) => {
               const conn = items.find((i) => i.kind === 'ai' && i.provider === p);
               return (

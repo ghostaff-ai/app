@@ -9,7 +9,9 @@ import { DoneWithoutYou } from '@/components/DoneWithoutYou';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
 import { CaretDown, Icon, WarningCircle } from '@/components/icons';
 import { Badge, Button, Loading, Notice } from '@/components/ui';
+import { canRunAgents } from '@/lib/connections';
 import { useAgents } from '@/lib/hooks/useAgents';
+import { useConnections } from '@/lib/hooks/useConnections';
 import { useInbox } from '@/lib/hooks/useDecisions';
 import { useDoneWithoutYou } from '@/lib/hooks/useDoneWithoutYou';
 import { hello, waitingSentence } from '@/lib/hoy';
@@ -35,6 +37,9 @@ export default function Hoy() {
   const { decisions, loading, error, reload } = useInbox(active?.id ?? null);
   const done = useDoneWithoutYou(active?.id ?? null);
   const agents = useAgents(active?.id ?? null);
+  const connections = useConnections(active?.id ?? null);
+  // An owner never gets here without an AI account (the layout's gate); a member can't connect one.
+  const noAi = connections.loaded && !connections.error && !canRunAgents(connections.items);
   const [focused, setFocused] = useState(true);
   // On a desktop the open decision sits beside the list (desktop-web.md).
   const [picked, setPicked] = useState<string | null>(null);
@@ -45,8 +50,9 @@ export default function Hoy() {
       setFocused(true);
       void reload();
       void done.reload();
+      void connections.reload();
       return () => setFocused(false);
-    }, [reload, done.reload]),
+    }, [reload, done.reload, connections.reload]),
   );
 
   if (loading && decisions.length === 0) return <Loading />;
@@ -107,6 +113,19 @@ export default function Hoy() {
           <Text className="mt-1 text-[17px] leading-6 text-muted">
             <Text className="font-semibold text-ink">{hello(profile?.fullName)}</Text> {waitingSentence(decisions)}
           </Text>
+          {noAi ? (
+            <View testID="no-ai" className="mt-4 flex-row items-start rounded-2xl bg-card px-4 py-3.5">
+              <View className="mt-0.5">
+                <Icon icon={WarningCircle} size={20} color={c.waiting} />
+              </View>
+              <View className="ml-2.5 flex-1">
+                <Text className="text-base font-semibold text-ink">Tu equipo aún no puede trabajar</Text>
+                <Text className="mt-1 text-footnote text-muted">
+                  Falta que quien es propietario de {active?.name} conecte una cuenta de IA, en Conexiones.
+                </Text>
+              </View>
+            </View>
+          ) : null}
         </View>
       }
       renderSectionHeader={({ section }) => (

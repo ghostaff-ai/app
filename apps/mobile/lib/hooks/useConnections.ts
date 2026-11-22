@@ -5,11 +5,18 @@ import { useAuth } from '../auth/AuthContext';
 import { engineUrl } from '../env';
 import { supabase } from '../supabase';
 
+// Every mounted copy of the hook, so that a connection made or removed on one
+// screen reaches the others: the layout's AI gate lifts the moment an account
+// is connected on its page.
+const mounted = new Set<() => Promise<void>>();
+
 /** An organisation's connections, read from the database as the signed-in person. */
 export function useConnections(orgId: string | null) {
   const [items, setItems] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Which organisation the items belong to, once a first read has finished.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!orgId) {
@@ -25,14 +32,24 @@ export function useConnections(orgId: string | null) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+      setLoadedFor(orgId);
     }
   }, [orgId]);
 
   useEffect(() => {
     void load();
+    mounted.add(load);
+    return () => {
+      mounted.delete(load);
+    };
   }, [load]);
 
-  return { items, loading, error, reload: load };
+  /** Read again, here and in every other screen showing connections. */
+  const reload = useCallback(async () => {
+    await Promise.all([...mounted].map((l) => l()));
+  }, []);
+
+  return { items, loading, loaded: !!orgId && loadedFor === orgId, error, reload };
 }
 
 /** How to call the engine as the signed-in person; null when not signed in. */
