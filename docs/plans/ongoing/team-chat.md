@@ -76,4 +76,11 @@ Tasks (branch `feat/chat-legible`, one PR, landed with `pnpm pr:land`):
 3. **The dots.** Reproduce the beta screenshot (iPhone, a long thread scrolled), find the source (likely message glyphs showing through the native header's scroll edge on iOS 26), fix in `lib/header.ts` or the thread screen; if not reproducible, write down what was checked here.
 4. **Check.** `pnpm check`; the web against local Supabase with a seeded thread holding the screenshot's reply (lists, bold, a link, a mention), light and dark; then `pnpm pr:land`.
 
+Progress (2026-11-22):
+
+- [x] Tasks 1–2: `components/chat/Markdown.tsx` (marked's lexer, our renderer, @mentions bolded), agent text in ink in `Message.tsx`; only `http(s):` and `mailto:` links open, any other link is plain text. Tests in `__tests__/Markdown.test.tsx`. Jest maps `marked` to its CommonJS build (`jest.config.js`): under Jest's babel its named-group regexes were rewritten and emphasis broke; Metro doesn't do that.
+- [x] Checked on the web against local Supabase, light and dark, with a seeded thread like Jaime's screenshot (lists, bold, italics, heading, quote, code, a blocked `javascript:` link, a table as raw text).
+- [ ] Task 3, the dots: not reproduced (no iOS run). Most likely iOS 26's top scroll-edge effect on the list blurring the tops of glyphs under the header. To try on a phone: do the dots move with the scroll (edge effect) or stay put (list clipping)? Fix to try then: `scrollEdgeEffects: { top: 'hidden' }` in the thread's `Stack.Screen` options, else `contentInsetAdjustmentBehavior="never"` on the list.
+- Not checked on a phone yet.
+
 Watch for: a reply that streams in (markdown half-written), a very long reply (parse cost per update), dark mode contrast of links and code, text selection still working (`selectable`), and links from an agent opening outside the app.
