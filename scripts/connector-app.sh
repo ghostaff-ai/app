@@ -4,22 +4,21 @@
 # Conexiones turns on. Run it by hand in a terminal, after registering the app
 # in the maker's developer portal:
 #
-#   bash scripts/connector-app.sh hubspot <client-id>
+#   bash scripts/connector-app.sh beta hubspot <client-id>   # or prod
 #
 # The secret is typed (or pasted) at the hidden prompt: it never goes on the
 # command line, in a file or in a chat. Run again to rotate it; the engine picks
-# the new one up within ten minutes, no deploy needed.
+# the new one up within ten minutes, no deploy needed. Each environment has its own copy: run it once per
+# environment the app's redirect URIs allow.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export CLOUDSDK_ACTIVE_CONFIG_NAME=${CLOUDSDK_ACTIVE_CONFIG_NAME:-ghostaff}
-P=ghostaff-prod
-R=europe-west1
+source scripts/env.sh "${1:-}"
 
-id=${1:-}
-client_id=${2:-}
+id=${2:-}
+client_id=${3:-}
 if [ -z "$id" ] || [ -z "$client_id" ]; then
-  echo "usage: bash scripts/connector-app.sh <connector-id> <client-id>" >&2
+  echo "usage: bash scripts/connector-app.sh beta|prod <connector-id> <client-id>" >&2
   exit 2
 fi
 if ! grep -q "id: '$id'," packages/shared/src/connectors.ts; then
