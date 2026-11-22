@@ -30,7 +30,7 @@
 import type { Store } from './connections';
 import { Refusal, requireOwner } from './connections';
 import { randomBytes } from 'node:crypto';
-import { CLAUDE_SLOTS, makeHome, parseSignInOutput, type SignInProcess, type SignInSpawner, type Slots } from './claudeCode';
+import { CLAUDE_SLOTS, makeHome, outputForLog, parseSignInOutput, type SignInProcess, type SignInSpawner, type Slots } from './claudeCode';
 import { keyHint } from './providers';
 import { randomUUID } from 'node:crypto';
 import { aiSecretName, type Vault } from './vault';
@@ -47,6 +47,8 @@ export interface ClaudeSessionDeps {
   urlTimeoutMs?: number;
   /** How long it may take to turn the code into the token. */
   tokenTimeoutMs?: number;
+  /** The pause between typing the code and pressing Enter. */
+  enterDelayMs?: number;
   /** The whole session, sign-in at Anthropic included. */
   sessionTimeoutMs?: number;
   /** How long the socket may stay open without its `start` message. */
@@ -234,7 +236,11 @@ function newSignIn(deps: ClaudeSessionDeps, signIns: Map<string, SignIn>, first:
     socket?.close();
     socket = null;
   };
-  const fail = (code: string) => finish({ type: 'error', code });
+  const fail = (reason: string) => {
+    // A code that did not become a token: what Claude Code said, with every secret blanked, so the next one can be fixed.
+    if (phase === 'exchanging') console.error(`claude sign-in: ${reason} after the code; Claude Code said: ${JSON.stringify(outputForLog(afterCode, [code]))}`);
+    finish({ type: 'error', code: reason });
+  };
 
   const deadline = (ms: number, code: string) => {
     if (timer) clearTimeout(timer);
@@ -374,7 +380,12 @@ function newSignIn(deps: ClaudeSessionDeps, signIns: Map<string, SignIn>, first:
         phase = 'exchanging';
         afterCode = '';
         deadline(tokenTimeout, 'timeout');
-        child?.write(`${code}\r`);
+        // The code, then Enter on its own: Claude Code reads one chunk with both as a
+        // paste, Enter included, and keeps waiting with the code in its field.
+        child?.write(code);
+        setTimeout(() => {
+          if (phase === 'exchanging') child?.write('\r');
+        }, deps.enterDelayMs ?? 500);
         send({ type: 'working' });
         return;
       }

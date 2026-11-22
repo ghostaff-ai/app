@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { childEnv, parseSignInOutput, Slots, spawnInTerminal, stripTerminal } from '../src/claudeCode';
+import { childEnv, outputForLog, parseSignInOutput, Slots, spawnInTerminal, stripTerminal } from '../src/claudeCode';
 
 // What `claude setup-token` 2.1.317 printed in a pty on this machine, up to a
 // wrong code pasted in (the PKCE challenge and state replaced).
@@ -150,5 +150,16 @@ describe('slots for Claude Code', () => {
     const slots = new Slots(1);
     slots.tryTake();
     await expect(slots.take(10)).rejects.toThrow('busy');
+  });
+});
+
+describe('outputForLog', () => {
+  it('blanks tokens, the pasted code and long code-like runs', () => {
+    const raw = '\x1b[32mPaste code here:\x1b[0m abcdEFGH1234567890abcdEFGH#xyz\r\nYour token: sk-ant-oat01-AAAAAAAAAAAAAAAAAAAAAAAA\r\nOAuth error: invalid_grant';
+    const out = outputForLog(raw, ['abcdEFGH1234567890abcdEFGH#xyz']);
+    expect(out).not.toContain('abcdEFGH');
+    expect(out).not.toContain('AAAAAAAA');
+    expect(out).toContain('sk-ant-[hidden]');
+    expect(out).toContain('invalid_grant');
   });
 });
