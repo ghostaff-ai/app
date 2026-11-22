@@ -14,7 +14,7 @@
     "shared:typecheck": "pnpm --filter @ghostaff/shared typecheck",
     "sync:test": "pnpm --filter @ghostaff/sync test",
     "sync:typecheck": "pnpm --filter @ghostaff/sync typecheck",
-    "scripts:test": "bash scripts/metro-port.test.sh",
+    "scripts:test": "bash scripts/metro-port.test.sh && bash scripts/env.test.sh",
     "sync:por-decidir": "pnpm --filter @ghostaff/sync por-decidir",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
