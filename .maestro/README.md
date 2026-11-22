@@ -23,7 +23,7 @@ never touches another app's emulator or your phone.
   stand-in subscription are then written straight into the local database by
   `scripts/connect-ai.js`, with the local service-role key), landing on Hoy, filling a
   vacancy in Equipo, opening Registro and Conexiones, moving the key below the
-  subscription there, and coming back to the company after a cold relaunch.
+  subscription there, opening «Añadir conexión», and coming back to the company after a cold relaunch.
 
   CI runs them on every pull request and push (`.github/workflows/ci.yml`, job
   `End-to-end (Android)`), and the beta app only gets a push once they pass

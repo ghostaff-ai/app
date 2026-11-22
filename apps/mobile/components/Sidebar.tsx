@@ -42,22 +42,22 @@ const ITEMS: Item[] = [
     ),
   },
   {
-    href: '/registro',
-    label: 'Registro',
-    match: (p) => p.startsWith('/registro'),
-    icon: (c) => (
-      <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
-        <Path d="M4 5h16M4 10h16M4 15h10M4 20h7" />
-      </Svg>
-    ),
-  },
-  {
     href: '/conexiones',
     label: 'Conexiones',
     match: (p) => p.startsWith('/conexiones'),
     icon: (c) => (
       <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
         <Path d="M9 7H6a4 4 0 0 0 0 8h3M15 7h3a4 4 0 0 1 0 8h-3M8 11h8" />
+      </Svg>
+    ),
+  },
+  {
+    href: '/registro',
+    label: 'Registro',
+    match: (p) => p.startsWith('/registro'),
+    icon: (c) => (
+      <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
+        <Path d="M4 5h16M4 10h16M4 15h10M4 20h7" />
       </Svg>
     ),
   },

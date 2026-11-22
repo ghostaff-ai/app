@@ -4,7 +4,8 @@ name: A new person creates a company, connects its AI, walks its four tabs and r
 # The first thing anyone does after signing up: say it's for their company, name it, be asked
 # to connect an AI account (the step can't be skipped; a stand-in key and a
 # stand-in subscription are written into the local database, scripts/connect-ai.js),
-# land on Hoy, and open Equipo, Registro and Conexiones. Secretaría comes
+# land on Hoy, and open Equipo, Registro and Conexiones (only what is
+# connected, then «Añadir conexión»). Secretaría comes
 # hired with the company; another vacancy is filled, which opens the agent's page (no engine runs in e2e, so no first
 # thread). In Conexiones the owner moves the key below the subscription.
 - evalScript: ${output.email = 'e2e-co-' + Date.now() + '@ghostaff.test'}
@@ -70,21 +71,13 @@ name: A new person creates a company, connects its AI, walks its four tabs and r
 - extendedWaitUntil:
     visible: "Lo decidido, lo último primero."
     timeout: 20000
+# Conexiones lists only what is connected: the two AI accounts, in the order
+# the agents try them, the key first, as added.
 - tapOn: "Conexiones"
 - extendedWaitUntil:
-    visible: "Instagram, facturas, citas…"
-    timeout: 20000
-# Its AI accounts in the order the agents try them: the key first, as added.
-# The IA section is at the bottom of a long list: on CI's slower emulator 30 s
-# of scrolling at the default speed ran out just as it came into view.
-- scrollUntilVisible:
-    element:
+    visible:
       id: "ai-down-1"
-    direction: DOWN
-    speed: 80
-    visibilityPercentage: 50
-    centerElement: true
-    timeout: 90000
+    timeout: 20000
 - assertVisible: "1. Claude con tu clave"
 - assertVisible: "2. Claude con tu suscripción"
 - tapOn:
@@ -93,6 +86,19 @@ name: A new person creates a company, connects its AI, walks its four tabs and r
     visible: "1. Claude con tu suscripción"
     timeout: 15000
 - assertVisible: "2. Claude con tu clave"
+# «Añadir conexión» opens everything there is to connect.
+- tapOn:
+    id: "add-connection"
+- extendedWaitUntil:
+    visible: "Instagram, facturas, citas…"
+    timeout: 15000
+- assertVisible:
+    id: "add-ai-claude"
+- back
+- extendedWaitUntil:
+    visible:
+      id: "ai-account-1"
+    timeout: 15000
 # A cold relaunch keeps the session and comes back to the company, not a crash.
 - stopApp
 - launchApp
