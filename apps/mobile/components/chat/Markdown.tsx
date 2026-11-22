@@ -14,6 +14,9 @@ const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'mon
 const HEADING = 'text-title3 font-semibold';
 const BODY = 'text-base leading-6';
 
+/** The only link schemes a reply may open. */
+const OPENABLE = /^(https?:|mailto:)/i;
+
 type Tone = 'ink' | 'muted';
 
 function toneClass(tone: Tone): string {
@@ -62,20 +65,24 @@ function Inline({ tokens, names }: { tokens: Token[]; names: string[] }) {
             );
           case 'codespan':
             return (
-              <Text key={i} className="rounded bg-sunk" style={{ fontFamily: MONO }}>
+              <Text key={i} className="bg-sunk" style={{ fontFamily: MONO }}>
                 {(t as Tokens.Codespan).text}
               </Text>
             );
           case 'link': {
             const link = t as Tokens.Link;
+            const children = <Inline tokens={link.tokens} names={names} />;
+            // A reply is untrusted: only these schemes open, anything else is plain text.
+            if (!OPENABLE.test(link.href)) return <Fragment key={i}>{children}</Fragment>;
             return (
               <Text
                 key={i}
                 className="text-accent underline"
                 accessibilityRole="link"
-                onPress={() => void Linking.openURL(link.href)}
+                // A scheme nobody handles rejects; there is nothing useful to tell the person.
+                onPress={() => Linking.openURL(link.href).catch(() => {})}
               >
-                <Inline tokens={link.tokens} names={names} />
+                {children}
               </Text>
             );
           }
@@ -100,9 +107,21 @@ function Inline({ tokens, names }: { tokens: Token[]; names: string[] }) {
   );
 }
 
-function Paragraph({ tokens, names, tone, className = BODY }: { tokens: Token[]; names: string[]; tone: Tone; className?: string }) {
+function Paragraph({
+  tokens,
+  names,
+  tone,
+  className = BODY,
+  role,
+}: {
+  tokens: Token[];
+  names: string[];
+  tone: Tone;
+  className?: string;
+  role?: 'header';
+}) {
   return (
-    <Text className={`${className} ${toneClass(tone)}`} selectable>
+    <Text className={`${className} ${toneClass(tone)}`} accessibilityRole={role} selectable>
       <Inline tokens={tokens} names={names} />
     </Text>
   );
@@ -147,7 +166,7 @@ function Block({ token: t, names, tone }: { token: Token; names: string[]; tone:
     }
     case 'heading': {
       const h = t as Tokens.Heading;
-      return <Paragraph tokens={h.tokens} names={names} tone={tone} className={HEADING} />;
+      return <Paragraph tokens={h.tokens} names={names} tone={tone} className={HEADING} role="header" />;
     }
     case 'list':
       return <List list={t as Tokens.List} names={names} tone={tone} />;

@@ -48,6 +48,44 @@ describe('Markdown', () => {
     open.mockRestore();
   });
 
+  it('renders a link with a blocked scheme as plain text', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue();
+    await render(<Markdown text="[x](javascript:alert(1))" names={[]} />);
+    const node = screen.getByText('x');
+    expect(node.props.accessibilityRole).toBeUndefined();
+    expect(node.props.onPress).toBeUndefined();
+    expect(screen.queryByRole('link')).toBeNull();
+    await fireEvent.press(node);
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('opens mailto links', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue();
+    await render(<Markdown text="[mail](mailto:a@b.co)" names={[]} />);
+    await fireEvent.press(screen.getByText('mail'));
+    expect(open).toHaveBeenCalledWith('mailto:a@b.co');
+    open.mockRestore();
+  });
+
+  it('swallows a failed open instead of leaving an unhandled rejection', async () => {
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+    const open = jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('no handler'));
+    await render(<Markdown text="[web](https://ghostaff.ai)" names={[]} />);
+    await fireEvent.press(screen.getByText('web'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(open).toHaveBeenCalled();
+    expect(unhandled).not.toHaveBeenCalled();
+    process.off('unhandledRejection', unhandled);
+    open.mockRestore();
+  });
+
+  it('marks headings as headers', async () => {
+    await render(<Markdown text="## Título" names={[]} />);
+    expect(screen.getByRole('header')).toBeTruthy();
+  });
+
   it('bolds @mentions', async () => {
     await render(<Markdown text="hola @Redes" names={['Redes']} />);
     const node = screen.getByText('@Redes');
