@@ -9,6 +9,8 @@ export type Palette = {
   surface: string;
   card: string;
   sunk: string;
+  /** What sits above a sunk track: the chosen segment of a segmented control. */
+  raised: string;
   ink: string;
   muted: string;
   line: string;
@@ -24,6 +26,7 @@ export const LIGHT: Palette = {
   surface: '#F3F3F7',
   card: '#FFFFFF',
   sunk: '#E9E8F0',
+  raised: '#FFFFFF',
   ink: '#16151E',
   muted: '#6A687A',
   line: '#E1E0E9',
@@ -38,6 +41,7 @@ export const DARK: Palette = {
   surface: '#0C0D13',
   card: '#171922',
   sunk: '#23252F',
+  raised: '#3A3D4B',
   ink: '#ECEDF3',
   muted: '#8C8FA0',
   line: '#262833',

@@ -1,5 +1,7 @@
+import { Slot } from 'expo-router';
 import { NativeTabs } from 'expo-router/native-tabs';
 import { Platform } from 'react-native';
+import { useIsDesktop } from '@/lib/layout';
 import { usePalette } from '@/lib/theme';
 
 // The three tabs (app-design.md, decision 1), drawn by the phone itself
@@ -10,6 +12,8 @@ import { usePalette } from '@/lib/theme';
 
 export default function TabsLayout() {
   const c = usePalette();
+  // On a desktop the sidebar (../_layout.tsx) is the navigation: no tab bar.
+  if (useIsDesktop()) return <Slot />;
   // On the web there is no system bar to borrow: the floating pill takes the page's colours.
   const web = Platform.OS === 'web';
   return (

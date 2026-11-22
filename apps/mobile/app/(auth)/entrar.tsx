@@ -91,7 +91,7 @@ export default function SignIn() {
               <Button label="Entrar" disabled={code.length !== 6} busy={busy === 'code'} onPress={() => run(() => verifyCode(email, code))} />
             </View>
             <View className="mt-3">
-              <Button label="Usar otro correo" tone="plain" onPress={() => { setSent(false); setCode(''); setError(null); }} />
+              <Button label="Usar otro correo" variant="plain" onPress={() => { setSent(false); setCode(''); setError(null); }} />
             </View>
           </View>
         )}

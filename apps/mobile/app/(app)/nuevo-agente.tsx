@@ -46,7 +46,7 @@ export default function NuevoAgente() {
 
   return (
     <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-6 pt-2 pb-16" keyboardShouldPersistTaps="handled">
-      <Text className="mt-2 text-sm font-semibold text-ink">Elige su fantasma</Text>
+      <Text className="mt-2 text-footnote font-semibold text-ink">Elige su fantasma</Text>
       <View className="mt-2 flex-row flex-wrap justify-between">
         {GHOST_ORDER.map((g) => {
           const on = g === ghost;
@@ -60,12 +60,12 @@ export default function NuevoAgente() {
               className={`mb-3 w-[31%] items-center rounded-2xl border-2 bg-card p-2 ${on ? 'border-accent' : 'border-line'}`}
             >
               <Image source={GHOSTS[g].picture} style={{ width: 72, height: 72 }} resizeMode="contain" />
-              <Text className="mt-1 text-xs text-ink">{GHOSTS[g].label}</Text>
+              <Text className="mt-1 text-caption text-ink">{GHOSTS[g].label}</Text>
             </Pressable>
           );
         })}
       </View>
-      {ghost ? <Text className="text-sm text-muted">{GHOSTS[ghost].job}</Text> : null}
+      {ghost ? <Text className="text-footnote text-muted">{GHOSTS[ghost].job}</Text> : null}
       <Field label="Nombre" placeholder="Por ejemplo, Lucía" maxLength={60} value={name} onChangeText={setName} />
       <Chips
         label="Departamento"

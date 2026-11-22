@@ -15,6 +15,15 @@ export default {
   theme: {
     extend: {
       colors: Object.fromEntries(COLOR_NAMES.map((n) => [n, `var(--c-${n})`])),
+      // The type scale (app-design.md, «The look»): Rubik for titles, the phone's
+      // own face for the rest. Sentence case everywhere; no all-caps labels.
+      fontSize: {
+        title: ['30px', { lineHeight: '36px', letterSpacing: '-0.6px' }],
+        title2: ['22px', { lineHeight: '28px', letterSpacing: '-0.3px' }],
+        title3: ['18px', { lineHeight: '24px', letterSpacing: '-0.2px' }],
+        footnote: ['13px', { lineHeight: '18px' }],
+        caption: ['12px', { lineHeight: '16px' }],
+      },
       fontFamily: {
         display: [FONTS.display],
         'display-medium': [FONTS.displayMedium],

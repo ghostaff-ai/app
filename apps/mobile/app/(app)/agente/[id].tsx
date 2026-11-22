@@ -2,10 +2,11 @@ import type { Agent } from '@ghostaff/shared';
 import { deleteAgent, getAgent } from '@ghostaff/shared/services';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { ThreadRow } from '@/components/chat/ThreadRow';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
-import { Button, ErrorText, LEVEL_NAMES, Loading, Notice } from '@/components/ui';
+import { Eye, Plus, Prohibit } from '@/components/icons';
+import { Button, ErrorText, LEVEL_NAMES, ListRow, ListSection, Loading, Notice, RowIcon } from '@/components/ui';
 import { useMyLevels, useThreads } from '@/lib/hooks/useChat';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
@@ -64,88 +65,68 @@ export default function Agente() {
     }
   };
 
-  const header = (
-    <View>
-      <Text className="text-center text-xs uppercase tracking-wide text-muted">
-        {DEPARTMENT_NAMES[agent.department]} · {g.label}
-      </Text>
-      <Text className="mt-2 text-center text-base text-ink">{g.job}</Text>
-      <View className="mb-2 mt-6 flex-row items-center justify-between">
-        <Text className="font-display text-lg text-ink">Conversaciones</Text>
-        {canTalk ? (
-          <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push(`/conversacion/nueva?agent=${agent.id}`)}>
-            <Text className="text-base font-semibold text-ink">+ Nueva</Text>
-          </Pressable>
-        ) : level ? (
-          <Text className="text-sm text-muted">Puedes {LEVEL_NAMES[level].toLowerCase()}</Text>
-        ) : null}
-      </View>
-      {threads.length === 0 ? (
-        <View className="rounded-2xl border border-dashed border-line p-4">
-          <Text className="text-sm text-muted">
-            {canTalk ? `Aún no hay conversaciones. Empieza una y ${agent.name} la verá, igual que quien pueda verle.` : 'Aún no hay conversaciones.'}
-          </Text>
-        </View>
-      ) : null}
-    </View>
-  );
-
-  const footer = (
-    <View className="pb-10">
-      {owner ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push(`/acceso/${agent.id}`)}
-          className="mt-6 flex-row items-center justify-between rounded-2xl border border-line bg-card px-4 py-3"
-        >
-          <View>
-            <Text className="text-base font-semibold text-ink">Quién puede</Text>
-            <Text className="text-sm text-muted">Ver o hablar con {agent.name}, persona a persona</Text>
-          </View>
-          <Text className="text-xl text-muted">›</Text>
-        </Pressable>
-      ) : null}
-      {owner ? (
-        <View className="mt-3">
-          {confirming ? (
-            <View className="flex-row gap-3">
-              <View className="flex-1">
-                <Button label="Cancelar" tone="plain" onPress={() => setConfirming(false)} />
-              </View>
-              <View className="flex-1">
-                <Button label="Sí, quitar" tone="no" busy={busy} onPress={() => void remove()} />
-              </View>
-            </View>
-          ) : (
-            <Button label="Quitar del equipo" tone="plain" onPress={() => setConfirming(true)} />
-          )}
-        </View>
-      ) : null}
-      <ErrorText>{error}</ErrorText>
-    </View>
-  );
-
   return (
     <View className="flex-1 bg-surface">
       <Stack.Screen options={{ title: agent.name }} />
-      {/* The ghost stays out of the list so dragging it never scrolls the page. */}
-      <View style={{ height: 200 }}>
+      {/* The ghost stays out of the scroll view so dragging it never scrolls the page. */}
+      <View style={{ height: 210 }}>
         <GhostViewer ghost={agent.ghost} active={focused} />
       </View>
-      <FlatList
-        data={threads}
-        keyExtractor={(t) => t.id}
-        ListHeaderComponent={header}
-        ListFooterComponent={footer}
-        renderItem={({ item, index }) => (
-          <View
-            className={`overflow-hidden border-x border-line bg-card ${index === 0 ? 'rounded-t-2xl border-t' : ''} ${index === threads.length - 1 ? 'rounded-b-2xl border-b' : ''}`}
-          >
-            <ThreadRow thread={item} first={index === 0} onPress={() => router.push(`/conversacion/${item.id}`)} />
+      <ScrollView contentContainerClassName="px-5 pb-12">
+        <Text className="text-center text-footnote font-medium text-muted">
+          {DEPARTMENT_NAMES[agent.department]}, {g.label.toLowerCase()}
+        </Text>
+        <Text className="mt-1.5 text-center text-[17px] leading-6 text-ink">{g.job}</Text>
+
+        <ListSection
+          header={
+            <View className="mb-2 flex-row items-center justify-between px-4">
+              <Text accessibilityRole="header" className="text-footnote font-medium text-muted">
+                Conversaciones
+              </Text>
+              {canTalk ? (
+                <Button label="Nueva" size="small" variant="secondary" icon={Plus} onPress={() => router.push(`/conversacion/nueva?agent=${agent.id}`)} />
+              ) : level ? (
+                <Text className="text-footnote text-muted">Puedes {LEVEL_NAMES[level].toLowerCase()}</Text>
+              ) : null}
+            </View>
+          }
+        >
+          {threads.length === 0 ? (
+            <ListRow
+              title="Aún no hay conversaciones"
+              subtitle={canTalk ? `Empieza una y ${agent.name} la verá, igual que quien pueda verle.` : null}
+            />
+          ) : null}
+          {threads.map((t) => (
+            <ThreadRow key={t.id} thread={t} onPress={() => router.push(`/conversacion/${t.id}`)} />
+          ))}
+        </ListSection>
+
+        {owner ? (
+          <ListSection>
+            <ListRow
+              leading={<RowIcon icon={Eye} />}
+              title="Quién puede"
+              subtitle={`Ver o hablar con ${agent.name}, persona a persona`}
+              chevron
+              onPress={() => router.push(`/acceso/${agent.id}`)}
+            />
+            <ListRow
+              leading={<RowIcon icon={Prohibit} tone="danger" />}
+              title={confirming ? 'Cancelar' : 'Quitar del equipo'}
+              tone={confirming ? 'default' : 'danger'}
+              onPress={() => setConfirming((v) => !v)}
+            />
+          </ListSection>
+        ) : null}
+        {owner && confirming ? (
+          <View className="mt-3">
+            <Button label={`Sí, quitar a ${agent.name}`} variant="danger" busy={busy} onPress={() => void remove()} />
           </View>
-        )}
-        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12 }}
-      />
+        ) : null}
+        <ErrorText>{error}</ErrorText>
+      </ScrollView>
     </View>
   );
 }

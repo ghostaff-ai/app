@@ -46,7 +46,7 @@ export default function Welcome() {
     <SafeAreaView className="flex-1 bg-surface">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
         <ScrollView contentContainerClassName="px-6 py-10" keyboardShouldPersistTaps="handled">
-          <Text className="text-3xl font-bold text-ink">Te damos la bienvenida</Text>
+          <Text accessibilityRole="header" className="font-display text-title text-ink">Te damos la bienvenida</Text>
           <Text className="mt-2 text-base text-muted">Antes de empezar, cuéntanos un poco de ti.</Text>
 
           <Field
