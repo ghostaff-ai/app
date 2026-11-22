@@ -44,10 +44,9 @@ const admin = createClient(supabaseUrl, required('SUPABASE_SERVICE_ROLE_KEY'), {
 });
 
 const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
-/** A Google API call as the engine's own service account; Google's status comes back, never thrown. */
-const googleRequest: GoogleRequest = async (url, data) => {
+const googleRequest: GoogleRequest = async (url, data, opts) => {
   const client = await auth.getClient();
-  const res = await client.request({ url, method: 'POST', data, validateStatus: () => true });
+  const res = await client.request({ url, method: 'POST', data, validateStatus: () => true, timeout: opts?.timeoutMs });
   return { status: res.status, data: res.data };
 };
 

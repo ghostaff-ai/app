@@ -18,8 +18,17 @@ export const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 /** Gemini 3.5 Transcribe as Vertex AI names it for prerecorded files (not `-live`, which streams). */
 export const DEFAULT_TRANSCRIBE_MODEL = 'gemini-3.5-transcribe';
 
-/** An authenticated Google API call, as the engine's own service account. */
-export type GoogleRequest = (url: string, body: unknown) => Promise<{ status: number; data: unknown }>;
+/** An authenticated Google API call, as the engine's own service account; Google's status comes back, never thrown. */
+export type GoogleRequest = (url: string, body: unknown, opts?: { timeoutMs?: number }) => Promise<{ status: number; data: unknown }>;
+
+/**
+ * How long Google gets to transcribe one note. A 10-minute note in a single sync
+ * call takes a fair share of that (the model processes up to 15 minutes per call);
+ * past 2 minutes the person has long given up waiting on «Transcribiendo…», and
+ * without it a hung call would hold the request open up to the engine's 15-minute
+ * Cloud Run timeout (scripts/deploy-engine.sh).
+ */
+export const TRANSCRIBE_TIMEOUT_MS = 120_000;
 
 /**
  * Gemini on Vertex AI's EU multi-region endpoint: the processing stays in EU
@@ -34,12 +43,18 @@ export function vertexTranscriber(opts: { project: string; model: string; reques
     `/publishers/google/models/${opts.model}:generateContent`;
   return {
     async transcribe(audio, mimeType) {
-      const res = await opts.request(url, {
+      const body = {
         contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: Buffer.from(audio).toString('base64') } }] }],
         generationConfig: { audioTranscriptionConfig: { mode: 'SMART' } },
-      });
-      // Only the status: Google's answer could quote what was said.
-      if (res.status < 200 || res.status >= 300) throw new Error(`vertex answered ${res.status}`);
+      };
+      let res: { status: number; data: unknown };
+      try {
+        res = await opts.request(url, body, { timeoutMs: TRANSCRIBE_TIMEOUT_MS });
+      } catch {
+        throw new Refusal(502, 'provider_unavailable', 'no answer from Vertex AI');
+      }
+      // Only the status, never Google's answer: it could quote what was said.
+      if (res.status < 200 || res.status >= 300) throw new Refusal(502, 'provider_unavailable', `Vertex AI answered ${res.status}`);
       const parts = (res.data as { candidates?: { content?: { parts?: { text?: string }[] } }[] })?.candidates?.[0]?.content?.parts ?? [];
       return parts.map((p) => p.text ?? '').join('').trim();
     },
@@ -61,8 +76,9 @@ export async function transcribeNote(
 ): Promise<{ text: string }> {
   await requireMember(deps.store, orgId, userId);
   if (!deps.transcriber) throw new Refusal(503, 'transcription_off', 'dictation is not configured on this engine');
-  const mimeType = note.contentType?.trim() ?? '';
-  if (!/^audio\/[\w.+-]+/i.test(mimeType)) throw new Refusal(415, 'unsupported_media', 'send the audio with an audio/* Content-Type');
+  // The bare type/subtype: Chrome sends `audio/webm;codecs=opus`, Google's list of formats names `audio/webm`.
+  const mimeType = (note.contentType ?? '').split(';')[0]!.trim().toLowerCase();
+  if (!/^audio\/[\w.+-]+$/.test(mimeType)) throw new Refusal(415, 'unsupported_media', 'send the audio with an audio/* Content-Type');
   if (Number(note.contentLength) > MAX_AUDIO_BYTES) throw tooLarge();
   const audio = await readAtMost(note.body, MAX_AUDIO_BYTES);
   if (audio.byteLength === 0) throw new Refusal(400, 'bad_request', 'no audio');
