@@ -145,7 +145,15 @@ const config: ExpoConfig = {
       },
     ],
     'expo-apple-authentication',
-    ['expo-audio', { microphonePermission: 'Ghostaff usa el micrófono para que puedas dictar tus mensajes.' }],
+    [
+      'expo-audio',
+      {
+        microphonePermission: 'Ghostaff usa el micrófono para que puedas dictar tus mensajes.',
+        // Recording only while the app is open: no UIBackgroundModes audio, no foreground-service permissions.
+        enableBackgroundRecording: false,
+        enableBackgroundPlayback: false,
+      },
+    ],
     ...(googleIosUrlScheme ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }] as [string, object]] : []),
     'expo-router',
     'expo-splash-screen',

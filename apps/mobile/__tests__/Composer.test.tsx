@@ -1,12 +1,21 @@
+import { AppState } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Composer } from '@/components/chat/Composer';
 
 // expo-audio is a native module: a recorder that records nothing and a permission we can flip.
+let mockRecording = false;
+let mockStartedAt = 0;
 const mockRecorder = {
   uri: 'file:///cache/ExpoAudio/note.m4a' as string | null,
   prepareToRecordAsync: jest.fn(async () => {}),
-  record: jest.fn(),
-  stop: jest.fn(async () => {}),
+  record: jest.fn(() => {
+    mockRecording = true;
+    mockStartedAt = Date.now();
+  }),
+  stop: jest.fn(async () => {
+    mockRecording = false;
+  }),
+  getStatus: () => ({ isRecording: mockRecording, durationMillis: mockRecording ? Date.now() - mockStartedAt : 0 }),
 };
 const mockPermission = jest.fn(async () => ({ granted: true }));
 const mockDelete = jest.fn();
@@ -46,6 +55,7 @@ const settle = async () => {
 describe('Composer dictation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRecording = false;
     mockPermission.mockResolvedValue({ granted: true });
     mockRecorder.uri = 'file:///cache/ExpoAudio/note.m4a';
     globalThis.fetch = jest.fn(async () => ({ blob: async () => new Blob(['voz'], { type: '' }) })) as unknown as typeof fetch;
@@ -57,13 +67,68 @@ describe('Composer dictation', () => {
     expect(screen.getByLabelText('Enviar')).toBeTruthy();
   });
 
-  it('is the mic while the box is empty and send once there is text', async () => {
+  it('keeps the mic beside send, with or without text', async () => {
     await setup(jest.fn());
     expect(screen.getByLabelText('Dictar')).toBeTruthy();
-    expect(screen.queryByLabelText('Enviar')).toBeNull();
-    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'Hola');
     expect(screen.getByLabelText('Enviar')).toBeTruthy();
-    expect(screen.queryByLabelText('Dictar')).toBeNull();
+    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'Hola');
+    expect(screen.getByLabelText('Dictar')).toBeTruthy();
+    expect(screen.getByLabelText('Enviar')).toBeTruthy();
+  });
+
+  it('appends the transcript to what is already written: «Hola» + «qué tal»', async () => {
+    await setup(jest.fn(async () => 'qué tal'));
+    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'Hola');
+    await press('Dictar');
+    await settle();
+    await press('Parar y transcribir');
+    await settle();
+    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('Hola qué tal');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('a double press of stop transcribes once', async () => {
+    const onDictate = jest.fn(async () => 'x');
+    await setup(onDictate);
+    await press('Dictar');
+    await settle();
+    const stop = screen.getByLabelText('Parar y transcribir');
+    await fireEvent.press(stop);
+    await fireEvent.press(stop);
+    await settle();
+    expect(onDictate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not write into the box if the screen is left while transcribing', async () => {
+    let finish: (t: string) => void = () => {};
+    const onDictate = jest.fn(() => new Promise<string>((r) => (finish = r)));
+    await setup(onDictate);
+    await press('Dictar');
+    await settle();
+    await press('Parar y transcribir');
+    await settle();
+    await screen.unmount();
+    await act(async () => finish('tarde'));
+    expect(mockDelete).toHaveBeenCalled();
+  });
+
+  it('stops and transcribes when the app goes to the background', async () => {
+    let onChange: (s: string) => void = () => {};
+    jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, h: (s: string) => void) => {
+      onChange = h;
+      return { remove: jest.fn() };
+    }) as never);
+    const onDictate = jest.fn(async () => 'de fondo');
+    await setup(onDictate);
+    await press('Dictar');
+    await settle();
+    await act(async () => onChange('active'));
+    expect(onDictate).not.toHaveBeenCalled();
+    await act(async () => onChange('background'));
+    await settle();
+    expect(onDictate).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('de fondo');
+    jest.restoreAllMocks();
   });
 
   it('records, transcribes and puts the text in the box without sending it', async () => {
@@ -151,6 +216,23 @@ describe('Composer dictation', () => {
   describe('with a clock', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
+
+    it('transcribes what is there when the recorder stops by itself', async () => {
+      const onDictate = jest.fn(async () => 'cortado');
+      await setup(onDictate);
+      await press('Dictar');
+      await settle();
+      await act(async () => {
+        jest.advanceTimersByTime(3000);
+      });
+      mockRecording = false; // a phone call took the microphone
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+      });
+      await settle();
+      expect(onDictate).toHaveBeenCalledTimes(1);
+      expect(screen.getByLabelText('Escribe aquí').props.value).toBe('cortado');
+    });
 
     it('counts the seconds and stops by itself at 10:00', async () => {
       const onDictate = jest.fn(async () => 'largo');

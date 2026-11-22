@@ -1,6 +1,7 @@
 import { AudioQuality, IOSOutputFormat, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, type RecordingOptions } from 'expo-audio';
 import { File } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
 // Dictation (voice.md): record a note, have the engine turn it into text, hand
 // the text to the caller. Nothing is kept: the recording is deleted once read
@@ -73,7 +74,10 @@ export function useDictation({
     clock.current = null;
   };
   const discardFile = (uri: string | null) => {
-    if (uri && !uri.startsWith('blob:')) {
+    if (!uri) return;
+    if (uri.startsWith('blob:')) {
+      URL.revokeObjectURL(uri); // the web's recording lives in memory until released
+    } else {
       try {
         new File(uri).delete();
       } catch {
@@ -137,10 +141,14 @@ export function useDictation({
     const began = Date.now();
     setSeconds(0);
     setState('recording');
+    // The recorder's own clock and state, not JS time: a call or another app
+    // taking the microphone stops it, and what it has is then transcribed.
     clock.current = setInterval(() => {
-      const s = Math.min(MAX_SECONDS, Math.floor((Date.now() - began) / 1000));
+      const status = recorder.getStatus();
+      const stopped = !status.isRecording && Date.now() - began > 1000;
+      const s = Math.min(MAX_SECONDS, Math.floor(status.durationMillis / 1000));
       setSeconds(s);
-      if (s >= MAX_SECONDS) void stop();
+      if (stopped || s >= MAX_SECONDS) void stop();
     }, 250);
   }, [recorder, stop]);
 
@@ -157,6 +165,15 @@ export function useDictation({
     discardFile(recorder.uri);
     void release();
   }, [recorder]);
+
+  // Recording happens only while the app is open: going to the background
+  // stops the note and transcribes what there is (never sent).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'background') void stop();
+    });
+    return () => sub.remove();
+  }, [stop]);
 
   // Leaving the screen mid-note stops and discards it.
   useEffect(() => {

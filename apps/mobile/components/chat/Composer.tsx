@@ -11,10 +11,9 @@ import { usePalette } from '@/lib/theme';
 
 // Where a person writes in a thread (team-chat.md): a growing text box and a
 // round send button; typing @ offers the agents and people that can be
-// mentioned. With «onDictate», the round button is the mic while the box is
-// empty (speak, and the text lands in the box to review; nothing is sent on its
-// own) and send once there is text. With «Ver» it turns into a quiet line
-// saying who to ask.
+// mentioned. With «onDictate», a plain round mic sits beside send (speak, and
+// the text is appended to the box to review; nothing is sent on its own). With
+// «Ver» it turns into a quiet line saying who to ask.
 
 export function Composer({
   placeholder,
@@ -55,7 +54,7 @@ export function Composer({
       input.current?.focus();
     }
   }, [dictating]);
-  const mic = onDictate !== undefined && text.trim().length === 0 && !busy;
+  const mic = onDictate !== undefined && !busy;
 
   const query = mentionQuery(text);
   const suggestions = query === null ? [] : mentionSuggestions(query, names);
@@ -134,27 +133,30 @@ export function Composer({
           </Pressable>
         ) : dictation.state === 'transcribing' ? (
           <View className="h-11 w-11 items-center justify-center rounded-full bg-accent opacity-30" accessibilityState={{ disabled: true }}>
-            <Icon icon={Microphone} size={20} color={c.onAccent} weight="bold" />
+            <Icon icon={Stop} size={20} color={c.onAccent} weight="fill" />
           </View>
-        ) : mic ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Dictar"
-            onPress={() => void dictation.start()}
-            className="h-11 w-11 items-center justify-center rounded-full bg-accent"
-          >
-            <Icon icon={Microphone} size={20} color={c.onAccent} weight="bold" />
-          </Pressable>
         ) : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Enviar"
-            accessibilityState={{ disabled: !ready, busy }}
-            onPress={ready ? () => void send() : undefined}
-            className={`h-11 w-11 items-center justify-center rounded-full bg-accent ${ready ? '' : 'opacity-30'}`}
-          >
-            {busy ? <ActivityIndicator color={c.onAccent} /> : <Icon icon={ArrowUp} size={20} color={c.onAccent} weight="bold" />}
-          </Pressable>
+          <>
+            {mic ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Dictar"
+                onPress={() => void dictation.start()}
+                className="h-11 w-11 items-center justify-center rounded-full border border-line bg-card active:opacity-70"
+              >
+                <Icon icon={Microphone} size={20} color={c.ink} weight="bold" />
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Enviar"
+              accessibilityState={{ disabled: !ready, busy }}
+              onPress={ready ? () => void send() : undefined}
+              className={`h-11 w-11 items-center justify-center rounded-full bg-accent ${ready ? '' : 'opacity-30'}`}
+            >
+              {busy ? <ActivityIndicator color={c.onAccent} /> : <Icon icon={ArrowUp} size={20} color={c.onAccent} weight="bold" />}
+            </Pressable>
+          </>
         )}
       </View>
     </View>
