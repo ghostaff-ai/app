@@ -6,7 +6,7 @@
 
 Álvaro asked (2026-11-17) for a really good, curated chat: several people of one organisation talking to its agents, the owner deciding who can read or talk to each agent, and agents that are added by department and start working the moment they arrive, as a conversation rather than a form. I researched the libraries and guidelines and drew ten decisions; he took all my picks («go», 2026-11-17). The page he reviewed, with the options drawn and the sources: [Ghostaff chat choices](https://claude.ai/artifact/DCyY8cKXptDmf3xgBJp5an).
 
-It builds on the calm-desk decisions in [app-design.md](../ongoing/app-design.md) (#1 three tabs and the mic, #2 talking goes to Secretaría, #13 «Preguntar», #17 first person, #18 agent text muted, #20 one card for every decision) and reopens none of them.
+It builds on the calm-desk decisions in [app-design.md](../ongoing/app-design.md) (#1 three tabs and the mic, #2 talking goes to Secretaría, #13 «Preguntar», #17 first person, #18 agent text, #20 one card for every decision). It reopened only #18, in step 5.
 
 ## What's out there (2026-11-17)
 
@@ -21,7 +21,7 @@ Guidelines that shaped the picks: Slack's agent design (show progress, threads w
 
 1. **Our own chat on Supabase.** Messages in our database with `org_id` and row-level security, live to everyone in the thread through Realtime; the engine writes the agent's words as they come, the app only reads and writes through `security definer` functions. Libraries only for the hard parts: Legend List (a list pinned to the newest message), react-native-keyboard-controller, a throttled streaming markdown renderer. Message parts follow the AI SDK's shape so the UI can change later.
 2. **Titled threads per agent, shared.** One topic per thread, titled by the agent; everyone with access to that agent sees them and can join. A «Solo yo» lock only if someone asks for it.
-3. **People in bubbles, agents flat.** Your messages on the right in ink, colleagues on the left with their initials, agents full width in muted text with their small ghost.
+3. **People in bubbles, agents flat.** Your messages on the right in ink, colleagues on the left with their initials, agents full width with their small ghost. Their text was muted until Jaime changed it to ink on 2026-11-22 (step 5).
 4. **One live line while it works** («Leyendo 14 correos nuevos…»), folding into «3 pasos · 41 s» that opens the steps.
 5. **An OK asked in a chat is the decision card**, the same row as in Hoy: answering in either place answers both, it counts towards earned autonomy, and someone who can't take it sends it to the department's responsible person.
 6. **Access is set on each agent's page**, three levels per person: **Nada** (doesn't see it), **Ver** (reads its threads and what it did), **Hablar** (also starts threads and asks for work). The invite sheet shows the same control per agent. With «Ver» the composer reads «Solo lectura · pide acceso a <owner>».
@@ -61,3 +61,11 @@ Guidelines that shaped the picks: Slack's agent design (show progress, threads w
 - Agents only talk today: no record, mail or tools, and their prompt says so.
 
 **Step 4, decision cards in the chat** (decision 5): needs agents that can raise decisions, which needs the engine to give them the record and tools ([build-first-version.md](build-first-version.md), «The engine»). A message part of type decision, drawn as the Hoy card.
+
+**Step 5, a thread you can read** (Jaime, 2026-11-22, on the beta app): agents' replies looked grey and printed their markdown raw (`**Vuelve a preguntármelo**`, `- ` lists). He approved this design the same day:
+
+- **Agent text in ink**, like everything else a person reads. What sets an agent apart is its ghost, its name and the flat full-width layout, not a lighter colour. It changes app-design.md #18; «never a sparkle icon» stays. The status line («Hecho · 6 s» and its steps) stays muted: it is about the message, not the message.
+- **Agents' markdown rendered**: bold, italics, numbered and bulleted lists, links that open, inline code, and headings, quotes and code blocks drawn plainly. People's messages stay plain text.
+- **Approaches.** (a) A markdown parser (`marked`'s lexer) feeding our own small renderer of `Text` and `View` with the app's classes, @mentions bolded inside it: my pick, since the parser is maintained and tested elsewhere and the drawing stays ours, in NativeWind, on iPhone, Android and web. (b) A ready component (`react-native-markdown-display` or its forks): styles through its own style sheets, the original unmaintained, and @mentions would need a custom rule. (c) A parser of our own: debt for no gain. Jaime handed me the how; (a).
+- **The dots under the thread's header** in his screenshot (`· ·  ·  ·`): find where they come from and remove them if they are a fault.
+

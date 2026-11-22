@@ -44,7 +44,7 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 15. Weekly summary: **audio plus cards**, each sentence linked to its source in the record.
 16. A home-screen widget («3 te esperan» with the ghost), later.
 17. Agents speak in the **first person** and use «tú».
-18. Agent-written text in a muted style, the person's in ink; never a sparkle icon.
+18. Agent-written text in ink, like the person's, set apart by the agent's ghost, name and layout; never a sparkle icon. (Muted until 2026-11-22, when Jaime found it grey and hard to read on the beta app: team-chat.md, step 5.)
 
 **The first run**
 

@@ -1,8 +1,8 @@
 # Voice: speak, and it's transcribed into the message
 
 **Priority:** medium — people on the go, and many small-business owners, would rather speak than type
-**Gate:** blocked:5–10 real voice notes, recorded in a bar and in a car, for the trial
-**Next:** run the trial on Gemini 3.5 Transcribe in `eu` with those notes (Chirp 3 as the fallback if it fails); then open questions 2–4
+**Gate:** blocked:5–10 real voice notes from Jaime, in Spanish and in English, recorded in a bar and in a car, for the trial
+**Next:** run the trial on Gemini 3.5 Transcribe in `eu` with those notes, both languages (Chirp 3 as the fallback if it fails); then open questions 2–4
 
 Jaime's idea (2026-11-18), written down loosely. Don't treat any detail here as decided.
 
@@ -16,6 +16,8 @@ The person speaks instead of typing. The audio is transcribed straight into the 
 - What Jaime means is what he does with Claude: record a long note, it's transcribed automatically, and he sends the text. **It isn't about sending voice notes** to the agents, nor about agents answering in audio.
 - The weekly summary in audio ([app-design.md](../ongoing/app-design.md), decision 15) is a separate thing and doesn't change.
 
+**Confirmed (Jaime, 2026-11-22):** «hablar con los agentes por audio» means exactly this, speech turned into text in the message box, **in Spanish and in English**, the language detected on its own (a note may mix both). Not voice notes kept as audio, not agents answering by voice.
+
 ## The idea
 
 1. **A mic button of our own in the chat's message box**, next to send. Press it and talk for as long as you need: a long, loose explanation, as you would in a voice note.
@@ -25,7 +27,7 @@ The person speaks instead of typing. The audio is transcribed straight into the 
 
 ## Who could transcribe: research of 2026-11-19
 
-What matters: Spanish from Spain, notes of 2–5 minutes, noise (a bar, a car), audio processed in the EU and discarded, and the web too (the app is iPhone, Android and web). List prices of that day; sources in the conversation of that night.
+What matters: Spanish from Spain and English (Jaime, 2026-11-22), notes of 2–5 minutes, noise (a bar, a car), audio processed in the EU and discarded, and the web too (the app is iPhone, Android and web). List prices of that day; sources in the conversation of that night.
 
 | Option | EU processing | Long notes | Price per minute | Notes |
 |---|---|---|---|---|
