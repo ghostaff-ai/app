@@ -1,8 +1,8 @@
 # Two environments: beta from develop, production from main
 
 **Priority:** high — production will hold customers' AI keys and mailboxes; today the only engine talks to the beta database, and deploys are run by hand
-**Gate:** blocked:PR #41 merging (automerge, CI running)
-**Next:** check the first `deploy` job on `develop` (beta, green, `/health`), then a `workflow_dispatch` from `develop` asking for `prod` must fail; Jaime puts `SUPABASE_ANON_KEY_PROD` into EAS
+**Gate:** none
+**Next:** once PR #42 merges, the next push to `develop` deploys beta from CI green; Jaime puts `SUPABASE_ANON_KEY_PROD` into EAS; production comes up with the first release
 
 Jaime (2026-11-22): one Google Cloud project and one Supabase per environment, set up as Órdago's: merge to `develop` brings up beta, merge to `main` brings up production. Front 1 of [ordago-as-customer.md](ordago-as-customer.md). It replaces the proposal in [build-first-version.md](build-first-version.md#environments-beta-and-production) of 2026-11-15.
 
@@ -142,9 +142,10 @@ On green CI on each branch, the workflow for that environment: applies Supabase 
 
 `deploy.yml`, in order: a branch guard (`$GITHUB_REF` must be `refs/heads/$DEPLOY_BRANCH`, before anything touches a database), then `google-github-actions/auth@v2` with `workload_identity_provider: $WIF_PROVIDER` and `service_account: $DEPLOYER_SA` (read from `env.sh`), `google-github-actions/setup-gcloud@v2`, migrations (`supabase db push --remote=<ref> --yes` with `SUPABASE_ACCESS_TOKEN`; the CLI signs in through a temporary login role, so no database password), `bash scripts/deploy-runner.sh <env>`, `bash scripts/deploy-engine.sh <env>`, and `curl -fsS $ENGINE_URL/health`.
 
-- [ ] Jaime adds the repository secret `SUPABASE_ACCESS_TOKEN` (a personal access token of the Supabase account that owns organisation Ghostaff). Until it exists every `deploy` job fails at its migrations, so PR #41 waits for it before its `automerge` label.
-- [ ] Write both files; PR with `automerge`. After the merge, the CI run on `develop` deploys beta: the `deploy` job is green and `/health` answers.
-- [ ] Review focus 3 by hand: a `workflow_dispatch` of `deploy.yml` from `develop` asking for `prod` fails at the `auth` step.
+- [x] Jaime added the repository secret `SUPABASE_ACCESS_TOKEN` (2026-11-22): a scoped token on beta and production with Project Settings: Read, Database: Read-write, Migrations: Read-write and **Connection Pooling: Read**. That last one matters: GitHub's runners have no IPv6, and the CLI asks the Management API for the pooler to reach the database over IPv4. Without it the migrations fail with «IPv6 is not supported on your current network».
+- [x] Both files, PR #41 (merged 2026-11-22). Its first CI deploys got the token empty through `secrets: inherit`, while a dispatch of `deploy.yml` read it; PR #42 passes it by name and makes it a required `workflow_call` secret. A dispatch of `deploy.yml` for beta from `develop` (run 45054509173) went green end to end: migrations up to date, runner, engine, `/health` `{"ok":true}`.
+- [ ] After #42 merges, the CI run on `develop` deploys beta green on its own.
+- [x] Review focus 3 by hand (run 45054922993): a dispatch from `develop` asking for `prod` stops at the `Environment` step («prod deploys only from main, not refs/heads/develop»), before Google or any database. Google's own lock stands behind it: `ghostaff-prod`'s provider accepts only `assertion.ref == 'refs/heads/main'`.
 - [ ] Production deploys from CI the first time `develop` is merged into `main`. That merge is the first release (`main` is still the scaffold, 191 commits behind): either founder decides when.
 - [x] Tasks 1–3 (2026-11-22, PR #36, branch `feat/environments`): `scripts/env.sh` with its test, `scripts/setup-env.sh`, the deploy scripts per environment. `ghostaff-beta` set up (re-runs create nothing), runner and engine deployed there, `/health` and the tick's `/cron` answer 200. The old tick in `ghostaff-prod` is **paused** (not deleted), so beta's database has one tick; the old engine there keeps serving the beta app until #36 lands.
 - [x] Task 4 code in #36: the beta app's engine is `https://engine-1002624835789.europe-west1.run.app`, production's `https://engine-664656500315.europe-west1.run.app`. #36 merged on 2026-11-22 and the beta app talks to the new engine (its `/connections/ai/claude/session` calls land in `ghostaff-beta` since 16:34 UTC); the old engine in `ghostaff-prod` gets no app traffic since.
