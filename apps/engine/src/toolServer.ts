@@ -27,6 +27,9 @@ export function exposedName(name: string): string {
   return `${name.slice(0, MAX_NAME - 9)}_${hash}`;
 }
 
+/** How long closing waits for a call still running (a tool's own requests time out before this). */
+const CLOSE_WAIT_MS = 30_000;
+
 export interface ToolServer {
   /** `http://127.0.0.1:<port>/mcp` */
   url: string;
@@ -39,6 +42,8 @@ export interface ToolServer {
 export async function startToolServer(tools: AgentTools, onTool: (name: string) => void): Promise<ToolServer> {
   const byExposed = new Map(tools.specs.map((s) => [exposedName(s.name), s] as const));
 
+  /** Calls still running: closing waits for them, so none touches the reply after it has ended. */
+  const inFlight = new Set<Promise<unknown>>();
   const mcp = new Server({ name: MCP_SERVER_NAME, version: '1.0.0' }, { capabilities: { tools: {} } });
   mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [...byExposed].map(([name, s]) => ({ name, description: s.description, inputSchema: s.input_schema })),
@@ -47,9 +52,19 @@ export async function startToolServer(tools: AgentTools, onTool: (name: string) 
     const spec = byExposed.get(req.params.name);
     if (!spec) return { content: [{ type: 'text', text: `No existe la herramienta ${req.params.name}.` }], isError: true };
     onTool(spec.name);
-    const out = await tools.run(spec.name, req.params.arguments ?? {});
+    const call = Promise.resolve()
+      .then(() => tools.run(spec.name, req.params.arguments ?? {}))
+      .catch((e: unknown) => {
+      // Never what it threw: a database error would reach the model, and the person.
+      console.error('tool failed', spec.name, e instanceof Error ? e.name : typeof e);
+      return { content: 'La herramienta ha fallado. Prueba otra vez en un momento.', isError: true };
+    });
+    inFlight.add(call);
+    const out = await call.finally(() => inFlight.delete(call));
     return { content: [{ type: 'text', text: out.content }], isError: out.isError };
   });
+  // One client, one session: Claude Code initialises once per run. A second
+  // `initialize` (a reconnect mid-run) is refused, leaving that run without tools.
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: randomUUID });
   await mcp.connect(transport);
 
@@ -73,6 +88,7 @@ export async function startToolServer(tools: AgentTools, onTool: (name: string) 
     url: `http://127.0.0.1:${port}/mcp`,
     token,
     async close() {
+      await Promise.race([Promise.allSettled(inFlight), new Promise((r) => setTimeout(r, CLOSE_WAIT_MS).unref())]);
       await mcp.close().catch(() => {});
       http.closeAllConnections();
       await new Promise<void>((resolve) => http.close(() => resolve()));

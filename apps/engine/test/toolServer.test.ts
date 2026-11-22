@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exposedName, startToolServer, type ToolServer } from '../src/toolServer';
 import { type AgentTools, NO_TOOLS, type ToolSpec } from '../src/tools';
 
@@ -67,6 +67,37 @@ describe('the MCP server one subscription reply gets', () => {
     const out = await (await connect(s)).callTool({ name: 'broken', arguments: {} });
     expect(out.isError).toBe(true);
     expect(out.content).toEqual([{ type: 'text', text: 'Google no contesta.' }]);
+  });
+
+  it('turns a tool that throws into an error result, never with what it threw', async () => {
+    const f = fakeTools();
+    f.tools.run = async () => {
+      throw new Error('duplicate key value violates unique constraint "actions_pkey"');
+    };
+    const out = await (await connect(await start(f))).callTool({ name: 'calendar_list', arguments: {} });
+    expect(out.isError).toBe(true);
+    expect(JSON.stringify(out.content)).not.toContain('actions_pkey');
+    expect(out.content).toEqual([{ type: 'text', text: 'La herramienta ha fallado. Prueba otra vez en un momento.' }]);
+  });
+
+  it('waits for a call still running before it closes', async () => {
+    const f = fakeTools();
+    let finish: () => void = () => {};
+    f.tools.run = async () => {
+      await new Promise<void>((resolve) => (finish = resolve));
+      f.log.push('call finished');
+      return { content: 'ok', isError: false };
+    };
+    const s = await startToolServer(f.tools, f.onTool);
+    const client = await connect(s);
+    void client.callTool({ name: 'calendar_list', arguments: {} }).catch(() => {});
+    await vi.waitFor(() => expect(f.log).toContain('step calendar_list'));
+    const closed = s.close().then(() => f.log.push('closed'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(f.log).not.toContain('closed');
+    finish();
+    await closed;
+    expect(f.log.slice(-2)).toEqual(['call finished', 'closed']);
   });
 
   it("refuses a request without the token, or with another server's token", async () => {

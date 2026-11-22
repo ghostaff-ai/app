@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -129,6 +130,20 @@ describe('an agent answering on the Claude subscription', () => {
     await ask(subscriptionWriter(TOKEN, r.run, 'm'));
     expect(r.calls[0]?.args).not.toContain('--mcp-config');
     expect(seen).not.toContain('mcp.json');
+  });
+
+  it('closes the server and removes its HOME when Claude Code cannot even start', async () => {
+    let home = '';
+    let url = '';
+    const run: PrintRunner = (_args, opts) => {
+      home = opts.home;
+      url = JSON.parse(readFileSync(join(home, 'mcp.json'), 'utf8')).mcpServers.ghostaff.url;
+      throw new Error('spawn E2BIG');
+    };
+    const tools = { ...NO_TOOLS, specs: [{ name: 'calendar_list', description: 'd', input_schema: { type: 'object' as const, properties: {} } }] };
+    await expect(ask(subscriptionWriter(TOKEN, run, 'm'), tools)).rejects.toThrow('E2BIG');
+    expect(existsSync(home)).toBe(false);
+    await expect(fetch(url, { method: 'POST' })).rejects.toThrow();
   });
 
   it('closes the server when Claude Code fails', async () => {

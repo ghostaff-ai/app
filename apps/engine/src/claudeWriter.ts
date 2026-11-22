@@ -93,63 +93,61 @@ async function runOnce(
 ): Promise<void> {
   const home = await makeHome();
   let server: ToolServer | null = null;
-  let configPath: string | undefined;
   try {
+    let configPath: string | undefined;
     if (tools.specs.length) {
       server = await startToolServer(tools, onTool);
       configPath = await writeMcpConfig(home.path, server);
     }
-  } catch (e) {
-    await server?.close();
-    await home.remove().catch(() => {});
-    throw e;
-  }
-  const child = run(claudeArgs(model, system, configPath), { home: home.path, token, stdin: transcript(messages) });
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    void child.kill();
-  }, timeoutMs ?? RUN_TIMEOUT_MS);
-  let result: { is_error?: boolean; subtype?: string; api_error_status?: number; usage?: unknown } | null = null;
-  let limits: Limits | null = null;
-  try {
-    for await (const line of child.lines) {
-      let event: {
-        type?: string;
-        event?: { type?: string; delta?: { type?: string; text?: string } };
-        is_error?: boolean;
-        subtype?: string;
-        api_error_status?: number;
-        usage?: unknown;
-      };
-      try {
-        event = JSON.parse(line);
-      } catch {
-        continue;
+    const child = run(claudeArgs(model, system, configPath), { home: home.path, token, stdin: transcript(messages) });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      void child.kill();
+    }, timeoutMs ?? RUN_TIMEOUT_MS);
+    let result: { is_error?: boolean; subtype?: string; api_error_status?: number; usage?: unknown } | null = null;
+    let limits: Limits | null = null;
+    try {
+      for await (const line of child.lines) {
+        let event: {
+          type?: string;
+          event?: { type?: string; delta?: { type?: string; text?: string } };
+          is_error?: boolean;
+          subtype?: string;
+          api_error_status?: number;
+          usage?: unknown;
+        };
+        try {
+          event = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (event.type === 'stream_event' && event.event?.type === 'content_block_delta' && event.event.delta?.type === 'text_delta') {
+          const text = event.event.delta.text ?? '';
+          if (text) onText(text);
+        } else if (event.type === 'rate_limit_event') {
+          limits = mergeLimits(limits, limitsFromEvent(event));
+        } else if (event.type === 'result') {
+          result = event;
+        }
       }
-      if (event.type === 'stream_event' && event.event?.type === 'content_block_delta' && event.event.delta?.type === 'text_delta') {
-        const text = event.event.delta.text ?? '';
-        if (text) onText(text);
-      } else if (event.type === 'rate_limit_event') {
-        limits = mergeLimits(limits, limitsFromEvent(event));
-      } else if (event.type === 'result') {
-        result = event;
+      const code = await child.done;
+      if (timedOut) throw new AiFailure('failed', 'claude code took too long', limits);
+      // Never the result's text in the error: only its status.
+      if (!result) throw new AiFailure('failed', `claude code ended without an answer (exit ${code})`, limits);
+      if (result.is_error) {
+        const status = result.api_error_status;
+        const atLimit = status === 429 || [limits?.fiveHour, limits?.sevenDay].some((w) => w?.status === 'rejected');
+        const kind = atLimit ? 'limited' : status === 401 || status === 403 ? 'refused' : 'failed';
+        throw new AiFailure(kind, `claude code failed (${status ?? result.subtype ?? 'error'})`, limits);
       }
+      onUsage?.({ model, tokens: result.usage ? tokensFromUsage(result.usage) : NO_TOKENS, limits });
+    } finally {
+      clearTimeout(timer);
+      await child.kill();
     }
-    const code = await child.done;
-    if (timedOut) throw new AiFailure('failed', 'claude code took too long', limits);
-    // Never the result's text in the error: only its status.
-    if (!result) throw new AiFailure('failed', `claude code ended without an answer (exit ${code})`, limits);
-    if (result.is_error) {
-      const status = result.api_error_status;
-      const atLimit = status === 429 || [limits?.fiveHour, limits?.sevenDay].some((w) => w?.status === 'rejected');
-      const kind = atLimit ? 'limited' : status === 401 || status === 403 ? 'refused' : 'failed';
-      throw new AiFailure(kind, `claude code failed (${status ?? result.subtype ?? 'error'})`, limits);
-    }
-    onUsage?.({ model, tokens: result.usage ? tokensFromUsage(result.usage) : NO_TOKENS, limits });
   } finally {
-    clearTimeout(timer);
-    await child.kill();
+    // Waits for a tool call still running, so nothing touches the reply after it has ended.
     await server?.close();
     await home.remove().catch(() => {});
   }
