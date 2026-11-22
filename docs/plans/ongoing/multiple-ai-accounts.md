@@ -2,7 +2,7 @@
 
 **Priority:** high — Álvaro (2026-11-22): an owner adds as many AI accounts as they like and decides which goes first
 **Gate:** none
-**Next:** the PR (branch `feat/multiple-ai-accounts`) green and merged, rebased over PR #38 if that lands first; then the engine deployed, and a real second Claude sign-in tried on the beta
+**Next:** Álvaro adds a second Claude sign-in on the beta and asks an agent something, to see the limit bars fill
 
 Follows [llm-connectors.md](llm-connectors.md), which built one AI account per provider.
 
@@ -53,5 +53,5 @@ How it is stored:
 - [x] Engine: every connect adds an account; delete by id; failover in order; usage and limits recorded on every reply and runner run. Naming and ordering are database functions the app calls, not engine routes.
 - [x] App: the list in order with arrows, «Añadir otra cuenta de IA», name, usage on each row, the account's page.
 - [x] Maestro: `create-company.yaml` gets a key and a subscription and moves the key down.
-- [ ] Deployed (engine and runner by CI on merge) and the migration on beta.
+- [x] On beta (2026-11-22): the app over the air on merge; the migration, runner and engine by hand by Álvaro (deploys are not in CI yet, environments.md task 7). Lesson: a PR with a migration breaks the beta app until those three run, so run them right after its merge.
 - [ ] Tried with a real second Claude sign-in on the beta, and the limit bars filled by a real reply.
