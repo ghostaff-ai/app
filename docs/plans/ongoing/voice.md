@@ -1,10 +1,12 @@
 # Voice: speak, and it's transcribed into the message
 
 **Priority:** medium — people on the go, and many small-business owners, would rather speak than type
-**Gate:** blocked:5–10 real voice notes from Jaime, in Spanish and in English, recorded in a bar and in a car, for the trial
-**Next:** run the trial on Gemini 3.5 Transcribe in `eu` with those notes, both languages (Chirp 3 as the fallback if it fails); then open questions 2–4
+**Gate:** none
+**Next:** task 1, the engine's `POST /transcribe` (Gemini on Vertex AI in `eu`)
 
-Jaime's idea (2026-11-18), written down loosely. Don't treat any detail here as decided.
+Jaime's idea (2026-11-18). On 2026-11-22 he skipped the trial («monta el audio directamente con Gemini, sin la prueba») and approved the design below; it is being built.
+
+**Price and plan (Jaime, 2026-11-22).** Gemini 3.5 Transcribe on Vertex AI costs about **0.005 USD a minute** (list price of 2026-11-19, research below): a 2-minute note is about 1 cent, 1,000 minutes a month about 5 USD. **Dictation will be part of the premium plan.** No plans or prices exist in the product yet (they belong to the product plan, `ghostaff-producto.md`); until they do, everyone signed in can dictate and Ghostaff pays. When premium exists, the engine's `/transcribe` is where to gate it, by the organisation it receives.
 
 ## Goal
 
@@ -40,7 +42,30 @@ What matters: Spanish from Spain and English (Jaime, 2026-11-22), notes of 2–5
 
 **Proposal:** record in the app with `expo-audio` (works on the web too), send the file to the engine in europe-west1, which transcribes it with **Gemini 3.5 Transcribe in `eu`** (smart mode answers open question 4 too) and deletes the audio; the text goes back into the message box. **Fallback:** Chirp 3 in `eu`. No independent benchmark of Spanish in noise was found: only the providers' own claims, hence the trial with real notes first.
 
+## Design (Jaime, 2026-11-22)
+
+- **A mic in the chat's message box**, next to send. Press and speak, **up to 10 minutes** (it stops on its own then); while recording, the time and buttons to stop or cancel. On stop, «Transcribiendo…», then the text lands in the box. **Nothing is sent on its own**: the person reads, fixes and sends.
+- **Spanish and English**, detected on their own, a note may mix both.
+- **Light tidying**: punctuation, filler words dropped («eh», «o sea»), spoken corrections applied («el martes, no, el miércoles» → «el miércoles»). Never rewritten, summarised or translated.
+- **How:** the app records with `expo-audio` (web too) and sends the file to the engine; the engine checks the person is a member of the organisation, calls Gemini on Vertex AI in `eu`, returns the text and drops the audio. Nothing is stored or logged.
+- **Ghostaff pays**, from its own Google Cloud project (`ghostaff-beta`, `ghostaff-prod`), so it works whatever AI account the organisation connected.
+- **Not in this version:** text appearing while you speak (needs streaming; a second version), and the mic on Hoy, Equipo and Registro, which keeps opening the thread with Secretaría.
+- `expo-audio` is a new native module: the next beta is a build, not an over-the-air update. iOS and Android ask for the microphone the first time.
+
+**Approaches.** (a) Record the whole note, send it once, transcribe in one call: my pick, the simplest that meets 10 minutes (a sync call takes 15). (b) Stream while speaking for live text: nicer, much more to build, and a 10-minute streaming cap; later. (c) The phone's own recogniser: ruled out on 2026-11-21 (the web sends audio to Google with no EU guarantee; iOS stops around a minute).
+
+## Tasks (branch `feat/voice-dictation`, one PR, landed with `pnpm pr:land`)
+
+1. **Engine, `POST /transcribe`** (`apps/engine/src/transcribe.ts`, wired in `app.ts`/`server.ts`): signed-in caller, `?org=<id>` must be an organisation they belong to (403 otherwise); body is the raw audio with an `audio/*` Content-Type, at most 20 MB (413 beyond); calls Gemini on Vertex AI (`generateContent`, location `eu`, the engine's own credentials and `GCP_PROJECT`, model from `TRANSCRIBE_MODEL`, default the Gemini 3.5 Transcribe id as Vertex names it) with the audio inline and an instruction: transcribe exactly what is said in the language spoken (Spanish, English or both), add punctuation, drop filler words, apply the speaker's own corrections, never add, summarise or translate; return only the text. Answers `{ text }`; empty speech gives `{ text: '' }`. The audio is never written anywhere or logged. The model call sits behind an injected `transcriber` (a fake in tests; off with a warning when not configured, answering 503). Vitest: auth, membership, size, content type, the fake's text passed through.
+2. **Service** `transcribe(engine, orgId, audio: Blob, mimeType)` in `@ghostaff/shared/services`, like `decideAction`.
+3. **App**: `expo-audio` with its config plugin and the microphone permission in Spanish; a `DictateButton` in `components/chat/Composer.tsx` beside send (shown only while the box is empty or always, implementer's call matching the design: mic, recording with mm:ss, stop, cancel, «Transcribiendo…»), auto-stop at 10:00, the text appended to what is already in the box; errors in Spanish in the composer's error line («No he podido transcribirlo. Inténtalo otra vez.»), permission denied explained. Tests with the recorder and the service mocked.
+4. **Cloud**: `scripts/setup-env.sh` enables `aiplatform.googleapis.com` and grants the engine `roles/aiplatform.user` in its own project; `TRANSCRIBE_MODEL` passed by `scripts/deploy-engine.sh` if not defaulted. Running setup on beta or prod is Jaime's go-ahead.
+5. **Check**: the engine locally against Vertex with a generated Spanish and English note (`say -o`), then the web against local Supabase (mic button, states, text landing), then `pnpm pr:land`.
+
 ## Open questions
+
+Questions 1, 3 and 4 below were settled by the design above (2026-11-22); 2 too: up to 10 minutes, the text all at once at the end.
+
 
 1. **Decided (Álvaro, 2026-11-21): Gemini 3.5 Transcribe on Vertex AI in the EU, after the trial.** He asked first in the deck (2026-11-21) whether, with the phone's own recogniser, leaving the EU would be the user's responsibility rather than ours. Answer given in the session: when our button starts the recogniser, choosing it is ours, so it counts as our processing (the web sends audio to Google with no EU guarantee); only the keyboard's own dictation, which a person turns on themselves, is their tool. **Who transcribes:** on the phone (the system's speech recognition), the organisation's own AI provider ([llm-connectors.md](../ongoing/llm-connectors.md)), or a dedicated speech service. What matters: good Spanish, long notes, background noise, and cost. Proposal above: Gemini 3.5 Transcribe on Vertex AI in the EU, run by the engine; whether it is billed to Ghostaff or to the organisation's own AI account follows llm-connectors.md.
 2. **Long notes:** the maximum length, and whether the text appears as you speak or all at once at the end.
