@@ -1,9 +1,13 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { describe, expect, it } from 'vitest';
 import { AiFailure, type Writer } from '../src/chat';
 import { type PrintRunner, Slots } from '../src/claudeCode';
 import { costOf, orderAccounts } from '../src/chatStore';
 import { subscriptionWriter, transcript } from '../src/claudeWriter';
-import { NO_TOOLS } from '../src/tools';
+import { type AgentTools, NO_TOOLS } from '../src/tools';
 
 const TOKEN = `sk-ant-oat01-${'t'.repeat(90)}`;
 const delta = (text: string) => JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } } });
@@ -23,6 +27,36 @@ function fakeRunner(lines: string[], exit = 0) {
     };
   };
   return { run, calls, killed: () => killed };
+}
+
+/** A runner that, while «Claude Code» runs, does what `during` says (as Claude Code would call a tool), then answers. */
+function toolRunner(during: (opts: { home: string }) => Promise<void>, answer = [delta('Tienes el dentista.'), result()]) {
+  const calls: { args: string[]; home: string }[] = [];
+  const run: PrintRunner = (args, opts) => {
+    calls.push({ args, home: opts.home });
+    let failed = false;
+    return {
+      lines: (async function* () {
+        await during({ home: opts.home }).catch((e) => {
+          failed = true;
+          throw e;
+        });
+        yield* answer;
+      })(),
+      done: Promise.resolve(failed ? 1 : 0),
+      kill: async () => {},
+    };
+  };
+  return { run, calls };
+}
+
+/** Connects as Claude Code would, from the config the writer left in its HOME. */
+async function mcpClientFrom(home: string) {
+  const config = JSON.parse(await readFile(join(home, 'mcp.json'), 'utf8')).mcpServers.ghostaff;
+  expect(config.type).toBe('http');
+  const client = new Client({ name: 'claude-code', version: '0' });
+  await client.connect(new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers: config.headers } }));
+  return client;
 }
 
 const ask = async (write: Writer, tools = NO_TOOLS) => {
@@ -52,11 +86,60 @@ describe('an agent answering on the Claude subscription', () => {
     expect(r.killed()).toBe(1);
   });
 
-  it('tells the agent it has no tools on this path when the organisation has some', async () => {
-    const r = fakeRunner([delta('x'), result()]);
-    await ask(subscriptionWriter(TOKEN, r.run, 'm'), { ...NO_TOOLS, specs: [{ name: 'calendar_list' }] as never });
-    const system = r.calls[0]?.args[r.calls[0].args.indexOf('--system-prompt') + 1];
-    expect(system).toContain('no tienes las herramientas');
+  it("gives Claude Code the organisation's tools through a local MCP server", async () => {
+    const log: string[] = [];
+    const tools: AgentTools = {
+      ...NO_TOOLS,
+      specs: [{ name: 'calendar_list', description: 'Lista eventos.', input_schema: { type: 'object', properties: {} } }],
+      run: async (name, input) => {
+        log.push(`run ${name} ${JSON.stringify(input)}`);
+        return { content: 'lunes: dentista', isError: false };
+      },
+    };
+    const r = toolRunner(async ({ home }) => {
+      const client = await mcpClientFrom(home);
+      const out = await client.callTool({ name: 'calendar_list', arguments: { days: 7 } });
+      expect(out.content).toEqual([{ type: 'text', text: 'lunes: dentista' }]);
+    });
+    let text = '';
+    await subscriptionWriter(TOKEN, r.run, 'm')({
+      system: 'Eres Legal.',
+      messages: [{ role: 'user', content: 'Ana: ¿qué tengo?' }],
+      tools,
+      onText: (t) => (text += t),
+      onTool: (name) => log.push(`step ${name}`),
+    });
+    expect(text).toBe('Tienes el dentista.');
+    expect(log).toEqual(['step calendar_list', 'run calendar_list {"days":7}']);
+    const [call] = r.calls;
+    const args = call?.args ?? [];
+    expect(args[args.indexOf('--mcp-config') + 1]).toBe(join(call?.home ?? '', 'mcp.json'));
+    expect(args[args.indexOf('--allowedTools') + 1]).toBe('mcp__ghostaff');
+    expect(args[args.indexOf('--tools') + 1]).toBe('');
+    expect(args).toContain('--strict-mcp-config');
+    expect(args[args.indexOf('--system-prompt') + 1]).toBe('Eres Legal.');
+    expect(args.join(' ')).not.toMatch(/[0-9a-f]{64}/);
+  });
+
+  it('starts no server when the organisation has no tools', async () => {
+    const seen: string[] = [];
+    const r = toolRunner(async ({ home }) => {
+      seen.push(...(await readdir(home)));
+    });
+    await ask(subscriptionWriter(TOKEN, r.run, 'm'));
+    expect(r.calls[0]?.args).not.toContain('--mcp-config');
+    expect(seen).not.toContain('mcp.json');
+  });
+
+  it('closes the server when Claude Code fails', async () => {
+    let url = '';
+    const r = toolRunner(async ({ home }) => {
+      url = JSON.parse(await readFile(join(home, 'mcp.json'), 'utf8')).mcpServers.ghostaff.url;
+    }, [result(true)]);
+    const tools = { ...NO_TOOLS, specs: [{ name: 'calendar_list', description: 'd', input_schema: { type: 'object' as const, properties: {} } }] };
+    await expect(ask(subscriptionWriter(TOKEN, r.run, 'm'), tools)).rejects.toThrow('claude code failed');
+    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:/);
+    await expect(fetch(url, { method: 'POST' })).rejects.toThrow();
   });
 
   it('fails when Claude Code reports an error, without its text in the error', async () => {
