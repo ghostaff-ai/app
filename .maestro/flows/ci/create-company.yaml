@@ -1,10 +1,13 @@
 appId: ${APP_ID}
 name: A new person creates a company and walks its three tabs
 ---
-# The first thing anyone does after signing up: create their company, land on
-# Hoy, and open Equipo and Registro. Then a vacancy is filled, which opens the
+# The first thing anyone does after signing up: create their company, be asked
+# to connect an AI account (the step can't be skipped; a stand-in key is written
+# into the local database, scripts/connect-ai.js), land on Hoy, and open Equipo,
+# Registro and Conexiones. Then a vacancy is filled, which opens the
 # agent's page (no engine runs in e2e, so no first thread).
 - evalScript: ${output.email = 'e2e-co-' + Date.now() + '@ghostaff.test'}
+- evalScript: ${output.company = 'Panadería E2E ' + Date.now().toString().slice(-6)}
 - runFlow:
     file: ../subflows/sign-in-email.yaml
     env:
@@ -24,13 +27,29 @@ name: A new person creates a company and walks its three tabs
     visible: "Por ejemplo, Panadería Ana"
     timeout: 15000
 - tapOn: "Por ejemplo, Panadería Ana"
-- inputText: "Panadería E2E"
+- inputText: ${output.company}
 - hideKeyboard
 - tapOn: "Crear empresa"
+# An owner connects the team's AI before anything else: offered, not skippable.
+- extendedWaitUntil:
+    visible: "Conecta la IA de tu equipo"
+    timeout: 30000
+- assertVisible:
+    id: "connect-ai-claude"
+- assertNotVisible: "Hoy"
+- runScript:
+    file: ../../scripts/connect-ai.js
+    env:
+      COMPANY: ${output.company}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+# The app reads the connections again on launch and lets the owner in.
+- stopApp
+- launchApp
 # Hoy: the company's name on top, the greeting under it.
 - extendedWaitUntil:
-    visible: "Panadería E2E"
-    timeout: 30000
+    visible: ${output.company}
+    timeout: 60000
 - assertVisible: ".*(Buenos días|Buenas tardes|Buenas noches), Ana.*"
 - tapOn: "Equipo"
 - extendedWaitUntil:
@@ -51,9 +70,13 @@ name: A new person creates a company and walks its three tabs
 - extendedWaitUntil:
     visible: "Lo decidido, lo último primero."
     timeout: 20000
+- tapOn: "Conexiones"
+- extendedWaitUntil:
+    visible: "Instagram, facturas, citas…"
+    timeout: 20000
 # A cold relaunch keeps the session and comes back to the company, not a crash.
 - stopApp
 - launchApp
 - extendedWaitUntil:
-    visible: "Panadería E2E"
+    visible: ${output.company}
     timeout: 60000

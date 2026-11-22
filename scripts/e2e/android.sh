@@ -28,7 +28,7 @@ export PATH="$SDK/platform-tools:$SDK/emulator:$SDK/cmdline-tools/latest/bin:$HO
 export MAESTRO_CLI_NO_ANALYTICS=1
 
 supabase_env() {
-  (cd "$ROOT" && npx supabase status -o env 2>/dev/null) | grep -E '^(ANON_KEY|MAILPIT_URL)=' | tr -d '"'
+  (cd "$ROOT" && npx supabase status -o env 2>/dev/null) | grep -E '^(ANON_KEY|MAILPIT_URL|SERVICE_ROLE_KEY)=' | tr -d '"'
 }
 
 booted() { adb -s "$SERIAL" get-state 2>/dev/null | grep -q device; }
@@ -69,6 +69,7 @@ cmd_test() {
   local flows=("$@")
   [[ ${#flows[@]} -gt 0 ]] || flows=("$ROOT/.maestro/flows/ci")
   maestro --device "$SERIAL" test -e APP_ID="$APP_ID" -e MAILPIT_URL="${MAILPIT_URL:-http://127.0.0.1:54324}" \
+    -e SUPABASE_URL=http://127.0.0.1:54321 -e SERVICE_ROLE_KEY="${SERVICE_ROLE_KEY:-}" \
     ${GOOGLE_ACCOUNT:+-e GOOGLE_ACCOUNT="$GOOGLE_ACCOUNT"} "${flows[@]}"
 }
 
