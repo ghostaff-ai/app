@@ -12,6 +12,11 @@ on:
         description: beta or prod
         required: true
         type: string
+    # Passed by name, not with `secrets: inherit`: the first CI deploy (2026-11-22) got it empty
+    # through inherit, while a dispatch of this file read it fine.
+    secrets:
+      SUPABASE_ACCESS_TOKEN:
+        required: true
   # By hand, to redeploy or to check the branch rule (a dispatch on develop asking for prod must fail at Google).
   workflow_dispatch:
     inputs:
