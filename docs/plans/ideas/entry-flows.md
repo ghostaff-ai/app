@@ -25,11 +25,11 @@ Each step is a guard in the layout: no profile sends you to Bienvenida, no organ
 
 1. **Keep where you were going across sign-in.** When a guard sends a signed-out person to Entrar, keep the address they opened (the router's current path, in memory and in session storage on the web) and go there once they are in and past Bienvenida and Empezar. An invitation link then lands on the invitation, a decision link on the decision.
 2. **An invitation link signs you up for that organisation.** Today the invited person goes through Empezar and has to find «Unirme». If they came from an invitation, skip Empezar and show the invitation straight away (it already is first on Empezar; the link should open it).
-3. **Bienvenida asks less.** Only the name is required, and Google and Apple already give it. With a name from the provider, consider skipping the screen and asking the optional questions later, once, on Hoy. Fewer screens before the team is visible.
+3. **Bienvenida asks less.** Taken further in [welcome-and-spaces.md](../ongoing/welcome-and-spaces.md) (Jaime, 2026-11-22): the name only, as the first of a few full-screen steps. Only the name is required, and Google and Apple already give it. With a name from the provider, consider skipping the screen and asking the optional questions later, once, on Hoy. Fewer screens before the team is visible.
 4. **The first Hoy shows the team working, not a list of vacancies.** «Toca para que empiece» on five ghosts is a lot to choose from cold. Proposal: Secretaría starts on its own when the company is created, and Hoy says what it is doing first («Leyendo cómo es tu empresa…»), with the rest as vacancies below. Needs the engine's first run (build-first-version.md).
 5. **Empezar: say what creating a company means**: who will see it (only who you invite), that it costs nothing yet, and that you can create more later.
 
 ## Open questions
 
-1. **Skipping Bienvenida** when the provider gave a name: the optional answers (what you do, how you heard of us) feed nothing yet; is losing some of them acceptable?
+1. **Answered (Jaime, 2026-11-22): the optional answers go** ([welcome-and-spaces.md](../ongoing/welcome-and-spaces.md)); the name step stays, prefilled. Was: **Skipping Bienvenida** when the provider gave a name: the optional answers (what you do, how you heard of us) feed nothing yet; is losing some of them acceptable?
 2. **Decided (Álvaro, 2026-11-21, in the decision deck): creating the company counts as the «yes»;** Secretaría starts reading the moment the company exists. He chose this over the recommendation (she asks with one tap on the first Hoy). **Secretaría starting by itself** on a new company: the product plan's rule is that agents work only when a person says so.
