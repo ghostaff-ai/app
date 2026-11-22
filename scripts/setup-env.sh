@@ -35,7 +35,9 @@ for a in engine:"Ghostaff engine" scheduler:"Ghostaff tick" runner:"Ghostaff age
 done
 
 echo "== Roles"
-grant() { gcloud projects add-iam-policy-binding "$P" --member "serviceAccount:$1" --role "$2" --condition None >/dev/null; }
+# Retried: IAM takes a few seconds to see an account created just above (2026-11-22, first run on prod).
+retry() { local n; for n in 1 2 3 4 5 6; do "$@" >/dev/null 2>&1 && return; sleep 5; done; "$@" >/dev/null; }
+grant() { retry gcloud projects add-iam-policy-binding "$P" --member "serviceAccount:$1" --role "$2" --condition None; }
 # The engine creates, rotates and deletes each organisation's secret, and reads its own.
 grant "$(sa engine)" roles/secretmanager.admin
 # The runner has no role at all: it proves who it is to the engine with its ID token.
@@ -45,7 +47,7 @@ grant "$DEPLOYER_SA" roles/artifactregistry.writer
 grant "$DEPLOYER_SA" roles/cloudscheduler.admin
 grant "$DEPLOYER_SA" roles/secretmanager.viewer # metadata only: which connectors have their secret
 for name in engine runner scheduler; do
-  gcloud iam service-accounts add-iam-policy-binding "$(sa "$name")" --project "$P" \
+  retry gcloud iam service-accounts add-iam-policy-binding "$(sa "$name")" --project "$P" \
     --member "serviceAccount:$DEPLOYER_SA" --role roles/iam.serviceAccountUser >/dev/null
 done
 
@@ -65,7 +67,7 @@ gcloud iam workload-identity-pools providers "$VERB" ghostaff-app --location glo
   --project "$P" --issuer-uri https://token.actions.githubusercontent.com \
   --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
   --attribute-condition "$CONDITION" >/dev/null
-gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER_SA" --project "$P" --role roles/iam.workloadIdentityUser \
+retry gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER_SA" --project "$P" --role roles/iam.workloadIdentityUser \
   --member "principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/$REPO" >/dev/null
 
 echo "== Secrets"
