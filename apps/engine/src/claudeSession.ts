@@ -5,11 +5,23 @@
 // requests to two different instances, and the sign-in lives in one process:
 //
 //   app → {type:'start', token, orgId}   the person's Supabase access token
-//   engine → {type:'url', url}           Anthropic's sign-in page, from Claude Code
+//   engine → {type:'url', url, id}       Anthropic's sign-in page, from Claude Code, and a resume id
 //   app → {type:'code', code}            the code Anthropic showed after sign-in
 //   engine → {type:'working'}            the code is in; Claude Code checks it
 //   engine → {type:'done', connection}   the token is in the vault, the row written
 //   engine → {type:'error', code}        any refusal or failure; the socket closes
+//
+// The person leaves the app to sign in at Anthropic, and a phone kills the
+// socket of an app in the background. So while it waits for the code, a sign-in
+// outlives its socket: Claude Code stays up (until the session's 10 minutes) and
+// a new socket picks it up again:
+//
+//   app → {type:'resume', token, orgId, id}   the same person and organisation
+//   engine → {type:'resumed'}                 then `code` as above
+//   engine → {type:'error', code:'expired'}   no such sign-in here (any more)
+//
+// Sign-ins live in this process only; Cloud Run's session affinity sends the
+// reconnect to the same instance, and one that lands elsewhere reads `expired`.
 //
 // Owners only (requireOwner, same refusals as a key). The token goes to the
 // vault and nowhere else: not to the app, not to the logs, not to the database
@@ -17,6 +29,7 @@
 
 import type { Store } from './connections';
 import { Refusal, requireOwner } from './connections';
+import { randomBytes } from 'node:crypto';
 import { CLAUDE_SLOTS, makeHome, parseSignInOutput, type SignInProcess, type SignInSpawner, type Slots } from './claudeCode';
 import { keyHint } from './providers';
 import { secretName, type Vault } from './vault';
@@ -41,7 +54,24 @@ export interface ClaudeSessionDeps {
   saveTimeoutMs?: number;
   /** The engine's Claude Code processes (claudeCode.ts). */
   slots?: Slots;
+  /** Sign-ins waiting for their code, by resume id; tests give their own. */
+  signIns?: Map<string, SignIn>;
 }
+
+/** A sign-in that can outlive its socket while it waits for the code. */
+export interface SignIn {
+  userId: string;
+  orgId: string;
+  /** Hands the sign-in a new socket; the one it had, if any, is closed. */
+  attach(socket: SessionSocket): void;
+  onMessage(msg: Message): void;
+  onClose(socket: SessionSocket): void;
+}
+
+/** The engine's sign-ins waiting for their code. */
+const SIGN_INS = new Map<string, SignIn>();
+
+type Message = { type?: unknown; token?: unknown; orgId?: unknown; code?: unknown; id?: unknown };
 
 /** The socket as the session sees it. */
 export interface SessionSocket {
@@ -51,7 +81,11 @@ export interface SessionSocket {
 
 export interface ClaudeSession {
   onMessage(data: string): void;
-  /** The socket closed (the person left, or we closed it). Kills Claude Code, cleans its HOME. */
+  /**
+   * The socket closed (the person left, or we closed it). Kills Claude Code and
+   * cleans its HOME, except while the sign-in waits for the code: then it waits
+   * for a resume.
+   */
   onClose(): void;
 }
 
@@ -69,7 +103,79 @@ export const MAX_MESSAGE = 16 * 1024;
 
 type Phase = 'new' | 'starting' | 'url' | 'exchanging' | 'saving' | 'over';
 
+/** One socket: it starts a sign-in, or resumes one, then passes its messages on. */
 export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): ClaudeSession {
+  const signIns = deps.signIns ?? SIGN_INS;
+  let signIn: SignIn | null = null;
+  let resuming: Message[] | null = null; // messages that arrive while a resume is checked
+  let closed = false;
+  const refuse = (code: string) => {
+    if (closed) return;
+    closed = true;
+    clearTimeout(noStart);
+    try {
+      socket.send({ type: 'error', code });
+    } catch {
+      // gone already
+    }
+    socket.close();
+  };
+  // An unsigned socket does not get to sit there.
+  const noStart = setTimeout(() => {
+    if (!signIn && !resuming) refuse('unauthorized');
+  }, deps.startTimeoutMs ?? 10_000);
+
+  const resume = async (msg: Message) => {
+    resuming = [];
+    const uid = typeof msg.token === 'string' ? await deps.userFromToken(msg.token).catch(() => null) : null;
+    if (closed) return;
+    if (!uid) return refuse('unauthorized');
+    const found = typeof msg.id === 'string' ? signIns.get(msg.id) : undefined;
+    // Someone else's sign-in reads the same as none: never reveal that it exists.
+    if (!found || found.userId !== uid || found.orgId !== msg.orgId) return refuse('expired');
+    clearTimeout(noStart);
+    signIn = found;
+    found.attach(socket);
+    const queued = resuming;
+    resuming = null;
+    for (const m of queued) found.onMessage(m);
+  };
+
+  return {
+    onMessage(data) {
+      if (closed) return;
+      if (data.length > MAX_MESSAGE) {
+        if (signIn) return signIn.onMessage({ type: 'oversized' });
+        return refuse('bad_request');
+      }
+      let msg: Message;
+      try {
+        msg = JSON.parse(data);
+      } catch {
+        msg = { type: 'unreadable' };
+      }
+      if (signIn) return signIn.onMessage(msg);
+      if (resuming) return void resuming.push(msg);
+      if (msg.type === 'start') {
+        clearTimeout(noStart);
+        signIn = newSignIn(deps, signIns, socket);
+        signIn.onMessage(msg);
+        return;
+      }
+      if (msg.type === 'resume') return void resume(msg);
+      refuse('bad_request');
+    },
+    onClose() {
+      closed = true;
+      clearTimeout(noStart);
+      signIn?.onClose(socket);
+    },
+  };
+}
+
+function newSignIn(deps: ClaudeSessionDeps, signIns: Map<string, SignIn>, first: SessionSocket): SignIn {
+  let socket: SessionSocket | null = first;
+  const id = randomBytes(32).toString('base64url');
   const urlTimeout = deps.urlTimeoutMs ?? 30_000;
   const tokenTimeout = deps.tokenTimeoutMs ?? 90_000;
   let phase: Phase = 'new';
@@ -85,20 +191,25 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
   let orgId = '';
   let userId = '';
   let ownerName = '';
+  // The whole session, a detached one included.
   const whole = setTimeout(
     () => {
       if (phase !== 'saving') fail('timeout');
     },
     deps.sessionTimeoutMs ?? 10 * 60_000,
   );
-  // An unsigned socket does not get to sit there.
-  const noStart = setTimeout(() => {
-    if (phase === 'new') fail('unauthorized');
-  }, deps.startTimeoutMs ?? 10_000);
+
+  const send = (message: Record<string, unknown>) => {
+    try {
+      socket?.send(message);
+    } catch {
+      // the person already left
+    }
+  };
 
   const cleanUp = () => {
+    signIns.delete(id);
     clearTimeout(whole);
-    clearTimeout(noStart);
     if (timer) clearTimeout(timer);
     timer = null;
     const dying = child?.kill() ?? Promise.resolve();
@@ -118,12 +229,9 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
     if (phase === 'over') return;
     phase = 'over';
     cleanUp();
-    try {
-      socket.send(message);
-    } catch {
-      // the person already left
-    }
-    socket.close();
+    send(message);
+    socket?.close();
+    socket = null;
   };
   const fail = (code: string) => finish({ type: 'error', code });
 
@@ -187,7 +295,8 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
       phase = 'url';
       if (timer) clearTimeout(timer);
       timer = null; // the person takes their time at Anthropic; the whole session's limit still holds
-      socket.send({ type: 'url', url: seen.url });
+      signIns.set(id, signIn);
+      send({ type: 'url', url: seen.url, id });
     }
   };
 
@@ -199,7 +308,7 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
     if (seen.badCode || final) fail('bad_code');
   };
 
-  const start = async (msg: { token?: unknown; orgId?: unknown }) => {
+  const start = async (msg: Message) => {
     phase = 'starting';
     try {
       const uid = typeof msg.token === 'string' ? await deps.userFromToken(msg.token).catch(() => null) : null;
@@ -237,21 +346,21 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
     }
   };
 
-  return {
-    onMessage(data) {
+  const signIn: SignIn = {
+    get userId() {
+      return userId;
+    },
+    get orgId() {
+      return orgId;
+    },
+    attach(next) {
+      const previous = socket;
+      socket = next;
+      if (previous && previous !== next) previous.close();
+      send({ type: 'resumed' });
+    },
+    onMessage(msg) {
       if (phase === 'over' || phase === 'saving') return;
-      if (data.length > MAX_MESSAGE) return fail('bad_request');
-      let msg: {
-        type?: unknown;
-        token?: unknown;
-        orgId?: unknown;
-        code?: unknown;
-      };
-      try {
-        msg = JSON.parse(data);
-      } catch {
-        return fail('bad_request');
-      }
       if (msg.type === 'start' && phase === 'new') {
         void start(msg);
         return;
@@ -263,15 +372,21 @@ export function claudeSession(deps: ClaudeSessionDeps, socket: SessionSocket): C
         afterCode = '';
         deadline(tokenTimeout, 'timeout');
         child?.write(`${code}\r`);
-        socket.send({ type: 'working' });
+        send({ type: 'working' });
         return;
       }
       fail('bad_request');
     },
-    onClose() {
+    onClose(closing) {
+      if (closing !== socket) return; // an old socket, already replaced
+      socket = null;
+      // Waiting for the code: the person is at Anthropic, and the phone dropped
+      // the socket. Claude Code stays up for a resume, within the whole limit.
+      if (phase === 'url') return;
       // A save under way finishes: the subscription is connected even if nobody hears it.
       if (phase !== 'saving') phase = 'over';
       cleanUp();
     },
   };
+  return signIn;
 }

@@ -68,11 +68,19 @@ function setup(over: Partial<ClaudeSessionDeps> = {}) {
     },
     now: () => new Date('2026-11-21T10:00:00Z'),
     slots: new Slots(4),
+    signIns: new Map(),
     ...over,
   };
   const session = claudeSession(deps, { send: (m) => sent.push(m), close: () => void closed++ });
   const say = (m: unknown) => session.onMessage(JSON.stringify(m));
-  return { deps, session, say, sent, rows, vault, claude, homes, closed: () => closed };
+  /** Another socket on the same engine, as a reconnect opens. */
+  const socket = () => {
+    const heard: Record<string, unknown>[] = [];
+    let shut = 0;
+    const s = claudeSession(deps, { send: (m) => heard.push(m), close: () => void shut++ });
+    return { heard, say: (m: unknown) => s.onMessage(JSON.stringify(m)), session: s, closed: () => shut };
+  };
+  return { deps, session, say, socket, sent, rows, vault, claude, homes, closed: () => closed };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -88,7 +96,7 @@ describe('connecting a Claude subscription', () => {
     await flush();
     expect(t.deps.spawn).toHaveBeenCalledWith('/tmp/fake-home');
     t.claude.print(`Welcome\r\n\x1b]8;id=x;${URL}\x07${URL}\x1b]8;;\x07\r\nPaste code here if prompted >`);
-    expect(t.sent).toEqual([{ type: 'url', url: URL }]);
+    expect(t.sent).toEqual([{ type: 'url', url: URL, id: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) }]);
 
     t.say({ type: 'code', code: ` ${CODE} ` });
     expect(t.claude.written).toEqual([`${CODE}\r`]);
@@ -198,18 +206,129 @@ describe('connecting a Claude subscription', () => {
     expect(t.sent).toEqual([{ type: 'error', code: 'claude_unavailable' }]);
   });
 
-  it('the person leaving kills Claude Code and cleans its HOME', async () => {
+  it('the person leaving before the link kills Claude Code and cleans its HOME', async () => {
     const t = setup();
     t.say({ type: 'start', token: 'token-ana', orgId: ORG });
     await flush();
-    t.claude.print(`\x1b]8;id=x;${URL}\x07`);
     t.session.onClose();
     await flush();
     expect(t.claude.killed).toBe(true);
     expect(t.homes.removed).toBe(1);
-    t.claude.print(TOKEN); // too late: nothing is stored
+    t.claude.print(`\x1b]8;id=x;${URL}\x07`);
+    t.claude.print(TOKEN); // too late: nothing is sent or stored
     await flush();
+    expect(t.sent).toEqual([]);
     expect(t.vault.secrets.size).toBe(0);
+  });
+
+  it('the person leaving after the code was sent ends it, as before', async () => {
+    const t = setup();
+    t.say({ type: 'start', token: 'token-ana', orgId: ORG });
+    await flush();
+    t.claude.print(`\x1b]8;id=x;${URL}\x07`);
+    t.say({ type: 'code', code: CODE });
+    t.session.onClose();
+    await flush();
+    expect(t.claude.killed).toBe(true);
+  });
+});
+
+describe('a sign-in that outlives its socket (the person leaves the app to sign in)', () => {
+  const toLink = async (t: ReturnType<typeof setup>) => {
+    t.say({ type: 'start', token: 'token-ana', orgId: ORG });
+    await flush();
+    t.claude.print(`\x1b]8;id=x;${URL}\x07`);
+    return t.sent[0]?.id as string;
+  };
+
+  it('the socket dropping while it waits for the code leaves Claude Code running', async () => {
+    const t = setup();
+    await toLink(t);
+    t.session.onClose();
+    await flush();
+    expect(t.claude.killed).toBe(false);
+    expect(t.homes.removed).toBe(0);
+  });
+
+  it('the same person resumes on a new socket, and the code reaches Claude Code', async () => {
+    const t = setup();
+    const id = await toLink(t);
+    t.session.onClose();
+    const again = t.socket();
+    again.say({ type: 'resume', token: 'token-ana', orgId: ORG, id });
+    again.say({ type: 'code', code: CODE }); // sent before the resume is checked: it waits its turn
+    await flush();
+    expect(again.heard).toEqual([{ type: 'resumed' }, { type: 'working' }]);
+    expect(t.claude.written).toEqual([`${CODE}\r`]);
+    t.claude.print(`\r\n${TOKEN}\r\n`);
+    await flush();
+    expect(again.heard.at(-1)).toMatchObject({ type: 'done' });
+    expect(await t.vault.get(secretName(ORG, 'claude'))).toBe(TOKEN);
+    expect(again.closed()).toBe(1);
+  });
+
+  it('a second resume replaces the first socket', async () => {
+    const t = setup();
+    const id = await toLink(t);
+    t.session.onClose();
+    const one = t.socket();
+    one.say({ type: 'resume', token: 'token-ana', orgId: ORG, id });
+    await flush();
+    const two = t.socket();
+    two.say({ type: 'resume', token: 'token-ana', orgId: ORG, id });
+    await flush();
+    expect(one.closed()).toBe(1);
+    one.session.onClose(); // the old socket closing does not end the sign-in
+    two.say({ type: 'code', code: CODE });
+    expect(t.claude.written).toEqual([`${CODE}\r`]);
+    expect(two.heard.at(-1)).toEqual({ type: 'working' });
+  });
+
+  it('someone else, or another organisation, cannot resume it', async () => {
+    const t = setup();
+    const id = await toLink(t);
+    t.session.onClose();
+    const bea = t.socket();
+    bea.say({ type: 'resume', token: 'token-bea', orgId: ORG, id });
+    await flush();
+    expect(bea.heard).toEqual([{ type: 'error', code: 'expired' }]);
+    const elsewhere = t.socket();
+    elsewhere.say({ type: 'resume', token: 'token-ana', orgId: '10000000-0000-0000-0000-000000000002', id });
+    await flush();
+    expect(elsewhere.heard).toEqual([{ type: 'error', code: 'expired' }]);
+    const unsigned = t.socket();
+    unsigned.say({ type: 'resume', token: 'nope', orgId: ORG, id });
+    await flush();
+    expect(unsigned.heard).toEqual([{ type: 'error', code: 'unauthorized' }]);
+    expect(t.claude.killed).toBe(false);
+    expect(t.claude.written).toEqual([]);
+  });
+
+  it('an unknown id has expired', async () => {
+    const t = setup();
+    const s = t.socket();
+    s.say({ type: 'resume', token: 'token-ana', orgId: ORG, id: 'x'.repeat(43) });
+    await flush();
+    expect(s.heard).toEqual([{ type: 'error', code: 'expired' }]);
+    expect(s.closed()).toBe(1);
+  });
+
+  it('the whole limit still ends a detached sign-in, and its id expires', async () => {
+    vi.useFakeTimers();
+    const t = setup({ sessionTimeoutMs: 600_000 });
+    t.say({ type: 'start', token: 'token-ana', orgId: ORG });
+    await vi.advanceTimersByTimeAsync(0);
+    t.claude.print(`\x1b]8;id=x;${URL}\x07`);
+    const id = t.sent[0]?.id as string;
+    t.session.onClose();
+    await vi.advanceTimersByTimeAsync(600_001);
+    expect(t.claude.killed).toBe(true);
+    expect(t.homes.removed).toBe(1);
+    expect(t.deps.signIns?.size).toBe(0);
+    const late = t.socket();
+    late.say({ type: 'resume', token: 'token-ana', orgId: ORG, id });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(late.heard).toEqual([{ type: 'error', code: 'expired' }]);
   });
 });
 

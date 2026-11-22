@@ -3,7 +3,7 @@ import { type ClaudeSignIn, connectAi, connectClaudeSubscription, disconnectAi, 
 import { Stack, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { AppState, ScrollView, Text, View } from 'react-native';
 import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
 import { Icon, WarningCircle } from '@/components/icons';
 import { Button, Chips, ErrorText, Field, ListRow, ListSection, Notice } from '@/components/ui';
@@ -257,6 +257,16 @@ function ClaudeForm({ orgId, onDone, onCancel }: { orgId: string; onDone: () => 
 
   useEffect(() => () => signIn.current?.cancel(), []);
 
+  // The phone drops the socket while the person signs in at Anthropic: coming
+  // back to the app picks the sign-in up again, so the code goes straight in.
+  useEffect(() => {
+    if (phase !== 'url') return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') signIn.current?.reconnect(engine ?? undefined);
+    });
+    return () => sub.remove();
+  }, [phase, engine]);
+
   const reset = () => {
     signIn.current = null;
     setPhase('idle');
@@ -310,8 +320,11 @@ function ClaudeForm({ orgId, onDone, onCancel }: { orgId: string; onDone: () => 
     <View>
       <ListSection header="En la web de Anthropic">
         <Step n={1}>Abre Anthropic y entra con la cuenta de Claude de la empresa.</Step>
-        <Step n={2}>Al terminar, Anthropic te enseña un código. Cópialo y pégalo aquí debajo.</Step>
+        <Step n={2}>Al terminar, Anthropic te enseña un código. Cópialo, vuelve aquí y pégalo debajo.</Step>
       </ListSection>
+      <Text className="mt-2 px-1 text-footnote text-muted">
+        Puedes salir de Ghostaff para entrar en Anthropic: el inicio de sesión te espera aquí unos minutos.
+      </Text>
       <View className="mt-4">
         <Button label="Abrir Anthropic" variant="secondary" onPress={() => url && void WebBrowser.openBrowserAsync(url)} />
       </View>
@@ -327,7 +340,7 @@ function ClaudeForm({ orgId, onDone, onCancel }: { orgId: string; onDone: () => 
       />
       {phase === 'working' ? <Text className="mt-3 px-1 text-footnote text-muted">Comprobando el código con Anthropic…</Text> : null}
       <View className="mt-6 gap-2">
-        <Button label="Conectar" disabled={code.trim().length < 10} busy={phase === 'working'} onPress={() => signIn.current?.sendCode(code)} />
+        <Button label="Conectar" disabled={code.trim().length < 10} busy={phase === 'working'} onPress={() => signIn.current?.sendCode(code, engine ?? undefined)} />
         <Button label="Cancelar" variant="plain" onPress={cancel} />
       </View>
       <ErrorText>{error}</ErrorText>

@@ -29,6 +29,7 @@ describe('the Claude subscription card', () => {
   it('says in Spanish why a sign-in did not work, never the raw code', () => {
     expect(claudeSignInMessage('bad_code')).toContain('código');
     expect(claudeSignInMessage('timeout')).toContain('demasiado tiempo');
+    expect(claudeSignInMessage('expired')).toContain('caducado');
     expect(claudeSignInMessage('not_owner')).toContain('propietario');
     expect(claudeSignInMessage('weird_internal_code')).toBe('Algo ha fallado. Inténtalo de nuevo.');
   });
