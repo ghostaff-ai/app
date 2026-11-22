@@ -1,0 +1,3 @@
+[submodule ".agents/_shared"]
+	path = .agents/_shared
+	url = https://github.com/ghostaff-ai/agent-skills.git

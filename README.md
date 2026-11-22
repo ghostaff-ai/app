@@ -10,6 +10,7 @@ Tools come from `mise.toml` (Node 22, pnpm 10) and Docker runs the local databas
 
 ```bash
 mise install
+git submodule update --init    # .agents/_shared, which `pnpm pr:land` runs from
 pnpm install
 pnpm check                     # typecheck + unit tests
 ```

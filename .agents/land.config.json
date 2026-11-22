@@ -1,0 +1,30 @@
+{
+  "baseBranch": "develop",
+  "protectedBranches": ["main"],
+  "mergeMethod": "merge",
+
+  "_requireApprovingReview": "FALSE by decision (Jaime, 2026-11-22): a PR to develop merges on green CI alone, end-to-end tests included, with no review. That is a weaker bar than a review, accepted on purpose: develop is not what is released (main is), and every merge still reaches the beta only after CI passes on develop. No reviewer is wired here, so there is no label to add either.",
+  "reviewLabel": null,
+  "requireApprovingReview": false,
+
+  "_ciGates": "MUST mirror .github/workflows/ci.yml. It has no paths: filter, only paths-ignore ['**/*.md', 'docs/**'], so paths is ['**']. pathsIgnore ['**/*.md', 'docs/'] is NOT set yet: the pinned .agents/_shared predates it and would silently drop the key (ghostaff-ai/agent-skills#20). Add it when the submodule is bumped past that PR; until then a PR made only of Markdown waits for a CI run that never starts. The three lanes are every job of ci.yml, none with an if: or needs:, named as `gh pr checks` prints them.",
+  "ciGates": [
+    {
+      "workflow": "ci.yml",
+      "paths": ["**"],
+      "requiredLanes": ["Typecheck and unit tests", "Row-level security (pgTAP)", "End-to-end (Android)"]
+    }
+  ],
+
+  "_sharedBlastRadius": "Every app imports @ghostaff/shared: when it moves on either side while the other moved anything, pr:land runs integrationCheck on the merge result instead of rebasing (which would re-run the end-to-end lane).",
+  "sharedBlastRadius": ["packages/shared/"],
+
+  "_rebaseRadius": "A move of these on develop rebases every open PR: the root manifests reach every workspace, and a migration changes what the pgTAP and end-to-end lanes run against, which only CI can judge. A PR that changes one of them is checked locally at scope wide instead.",
+  "rebaseRadius": ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.base.json", "supabase/migrations/"],
+
+  "_integrationCheck": "scripts/land-integration-check.sh in a throwaway worktree holding the merge result: install, typecheck and unit tests. Exit 3 = it could not run (pr:land exits 30, nothing wrong with the PR).",
+  "integrationCheck": { "command": "bash scripts/land-integration-check.sh", "timeoutMs": 1200000 },
+
+  "_hardStop": "Empty: nothing merged to develop deploys by itself to production; main is the release.",
+  "hardStop": []
+}
