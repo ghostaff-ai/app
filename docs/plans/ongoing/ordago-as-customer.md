@@ -22,10 +22,25 @@ Jaime (2026-11-22): before moving Órdago's twelve agents ([ordago-agents-in-gho
 
 Each front gets its own plan when it is designed; this file only keeps the order and the why.
 
-## What the panel has and Ghostaff lacks (first look, 2026-11-22; front 3 makes it exact)
+## What the panel has and Ghostaff lacks (inventory of `ordago-apps/apps/ordago-panel`, 2026-11-22)
 
-- Ghostaff has: the decision inbox synced from `por-decidir/`, team chat, connectors, the vault, the runner (not deployed).
-- The panel also has: a desk per agent (what waits on you, its goal, three headlines, history, Indicaciones, autonomy, a run button), the board (`tablon/`) for feedback to an agent, and tabs of metrics per area (Redes, SEO, Producto, Finanzas, Correo, Estrategias…).
+Front 3's walk still has to confirm it by using both. The panel does not read the agents' YAML: it reads `agentes/departamentos.yaml`, each `agentes/<a>/README.md` and `rumbo.md`, and launches the job `ordago-<agente>` (`lib/ejecuciones.ts`).
+
+- **Ghostaff has it:** sign-in (better: one account per person, invitations, levels); «Te espera» with OK / No / note / sign a rule (`DecisionView.tsx`, `recordSync.ts`), though on Hoy and not per agent; the history of answers (`agentes/historial-decisiones.csv`, `shared/src/record/history.ts`).
+- **Partly:** the 3D office (ghosts with no status light, no robot card); the agent's header (`schedule` and `description` are in the database, not on `agente/[id].tsx`); «what it did last» (`agent_runs.summary`, no three headlines nor history per agent); talking to it (chat threads, not written to `tablon/` nor tied to one delivery); autonomy (only the 10-OK streak, `AUTONOMY_STREAK`; the panel has a four-step ladder per kind with «28 days without a No»); launching (a message starts a run; no «run its task» button, no «working» state, `agent_runs.state` exists); grouping by department.
+- **Missing, by how much Órdago uses it daily:**
+  1. OK / Stop on each Redes piece before it goes out (writes `aprobaciones.json` in the publisher's bucket): without it nothing is published.
+  2. The record sync reads only `por-decidir/`: also README, `rumbo.md`, `tablon/` and the logs, and writes feedback to `tablon/`.
+  3. Indicaciones visible (in force and withdrawn), and the board tied to a delivery.
+  4. The desk per agent: motto, when it runs, headlines with their history, the goal with its path to the milestones.
+  5. «Run its task» and the «working» notice, never two at once.
+  6. Reviewing the comments Orgánico posted or suggests.
+  7. Radar (accept / discard) and Organizadores (editable funnel), which write `organizadores.yaml`.
+  8. The full autonomy ladder.
+  9. Metric tabs. Cheap where they read the record (Hoy, SEO, Redes, Estrategias); the rest need new connectors.
+  10. Office: robot card, status light, a down source shown amber instead of zeros, the weekly photo of each area against its goal.
+- **Sources with no connector in Ghostaff:** Meta Ads API, BigQuery `ordago_bi`, Firestore and Auth of `ordago-prod`, Cloud Monitoring, the bucket `gs://ordago-prod-reels-publicacion`, Cloud Run's executions API (is an agent running?).
+- **Unverified:** the GitHub record connector exists in the engine (`githubApp.ts`) but seems set up by CLI only, not from Conexiones.
 
 ## Open decisions (either founder)
 
