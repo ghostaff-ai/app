@@ -6,10 +6,13 @@
 // The engine uploads the video itself (FILE_UPLOAD), so no domain has to be
 // verified with TikTok. That means the engine fetches a URL the model gives:
 // only public https hosts, never an IP, localhost or an internal name, and
-// never more than MAX_VIDEO_BYTES.
+// never more than MAX_VIDEO_BYTES. The name check is the first line; the
+// download goes through fetchPublic, which also refuses a public name whose
+// addresses are private, at the moment it connects (publicFetch.ts).
 
 import type { AccountGrant, OAuthProvider } from './accounts';
 import { AccountGone, randomToken } from './accounts';
+import { fetchPublic } from './publicFetch';
 import { clip, type Tool, type ToolContext, ToolError } from './tools';
 
 export const TIKTOK_SCOPES = {
@@ -136,7 +139,7 @@ export function chunking(size: number): { chunkSize: number; count: number } {
  * lies about it, cannot make the engine hold more than MAX_VIDEO_BYTES.
  */
 async function download(ctx: ToolContext, url: URL): Promise<Uint8Array> {
-  const res = await ctx.fetch(url, { redirect: 'error' });
+  const res = await (ctx.fetchPublic ?? fetchPublic)(url, { redirect: 'error' });
   if (!res.ok || !res.body) throw new ToolError(`No se puede descargar el vídeo (${res.status}).`);
   const tooBig = () => new ToolError('El vídeo es demasiado grande: como mucho 120 MB.');
   if (Number(res.headers.get('content-length') ?? 0) > MAX_VIDEO_BYTES) throw tooBig();

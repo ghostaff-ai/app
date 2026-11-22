@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppleButton } from '@/components/auth/AppleButton';
+import { CodeStep } from '@/components/auth/CodeStep';
 import { GoogleButton } from '@/components/auth/GoogleButton';
 import { Button, ErrorText } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -18,7 +19,6 @@ const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim()
 export default function SignIn() {
   const { sendCode, verifyCode } = useAuth();
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
   // Which way in is working: its button spins, the others wait.
   const [busy, setBusy] = useState<'code' | 'social' | null>(null);
@@ -79,27 +79,21 @@ export default function SignIn() {
             </View>
           </View>
         ) : (
-          <View className="mt-8">
-            <TextInput
-              accessibilityLabel="Código"
-              testID="signin-code"
-              className="rounded-xl border border-line bg-card px-4 py-3 text-center text-2xl tracking-widest text-ink"
-              placeholder="123456"
-              keyboardType="number-pad"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              textContentType="oneTimeCode"
-              maxLength={6}
-              value={code}
-              onChangeText={(t) => setCode(t.replace(/\D/g, ''))}
-            />
-            <View className="mt-4">
-              <Button label="Entrar" disabled={code.length !== 6} busy={busy === 'code'} onPress={() => run(() => verifyCode(email, code))} />
-            </View>
-            <View className="mt-3">
-              <Button label="Usar otro correo" variant="plain" onPress={() => { setSent(false); setCode(''); setError(null); }} />
-            </View>
-          </View>
+          <CodeStep
+            email={email.trim()}
+            busy={busy === 'code'}
+            onVerify={(c) => run(() => verifyCode(email, c))}
+            onResend={async () => {
+              setError(null);
+              try {
+                await sendCode(email);
+              } catch (e) {
+                setError(friendlyAuthError(e));
+                throw e;
+              }
+            }}
+            onChangeEmail={() => { setSent(false); setError(null); }}
+          />
         )}
         <ErrorText>{error}</ErrorText>
       </KeyboardAvoidingView>

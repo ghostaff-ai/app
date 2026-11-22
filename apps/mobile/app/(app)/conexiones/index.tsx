@@ -1,14 +1,17 @@
 import { type AiProvider, CONNECTOR_AREAS, type ConnectorArea } from '@ghostaff/shared';
+import { listConnectorRequests, requestConnector, type ConnectorRequest } from '@ghostaff/shared/services';
 import { router } from 'expo-router';
-import { type ReactElement, useMemo, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import { AskForConnector } from '@/components/connections/AskForConnector';
 import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
-import { LockSimple, MagnifyingGlass, Icon } from '@/components/icons';
-import { Chip, EmptyState, ListRow, ListSection, ScreenTitle, SearchField } from '@/components/ui';
+import { LockSimple, Icon } from '@/components/icons';
+import { Chip, ListRow, ListSection, ScreenTitle, SearchField } from '@/components/ui';
 import { AI_ORDER, connectorSections, connectorWhat, PROVIDERS } from '@/lib/connections';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { supabase } from '@/lib/supabase';
 import { usePalette } from '@/lib/theme';
 
 // The organisation's connections: its accounts on outside services, grouped
@@ -30,6 +33,21 @@ export default function Connections() {
   const [filter, setFilter] = useState<Filter>('all');
   const connected = useMemo(() => new Set(items.filter((i) => i.kind === 'account').map((i) => i.provider)), [items]);
   const sections = useMemo(() => connectorSections(connected, search), [connected, search]);
+  const orgId = active?.id ?? null;
+  const [asked, setAsked] = useState<ConnectorRequest[]>([]);
+  const loadAsked = useCallback(async () => {
+    if (!orgId) return;
+    // What was asked is a nicety: if it cannot be read, the screen goes on without it.
+    setAsked(await listConnectorRequests(supabase, orgId).catch(() => []));
+  }, [orgId]);
+  useEffect(() => {
+    void loadAsked();
+  }, [loadAsked]);
+  const ask = async (name: string) => {
+    if (!orgId) return;
+    await requestConnector(supabase, orgId, name);
+    await loadAsked();
+  };
   if (!active) return null;
 
   const shown = sections.filter((s) => filter === 'all' || (filter === 'connected' ? s.title === 'Conectadas' : s.title === filter));
@@ -78,13 +96,7 @@ export default function Connections() {
       ) : null}
 
       <View className="px-5">
-        {sections.length === 0 ? (
-          <EmptyState
-            icon={MagnifyingGlass}
-            title={`Aún no conectamos con «${search.trim()}»`}
-            body="Prueba con lo que hace (facturas, citas, reseñas) o escríbenos y la añadimos."
-          />
-        ) : null}
+        {sections.length === 0 ? <AskForConnector searched={search} asked={asked} onAsk={ask} /> : null}
         {(search ? sections : shown).map((section) => (
           <Group key={section.title} desktop={desktop} header={section.title}>
             {section.connectors.map((connector) => {
@@ -111,6 +123,7 @@ export default function Connections() {
             })}
           </Group>
         ))}
+        {sections.length > 0 ? <AskForConnector searched="" asked={asked} onAsk={ask} /> : null}
 
         {!search && (filter === 'all' || filter === 'connected') ? (
           <Group desktop={desktop} header="IA" footer="Si no conectas nada, Ghostaff pone la IA. Conecta la tuya si quieres su factura a tu nombre.">

@@ -1,7 +1,7 @@
 # Órdago's agents in Ghostaff: first the face, then the body, one agent at a time
 
 **Priority:** high — Ghostaff uses Ghostaff: until Órdago's agents run through it, the platform is a chat with no work behind it
-**Gate:** none
+**Gate:** blocked:ordago-as-customer (Jaime, 2026-11-22: the agents move only once the rest of the architecture is ready)
 **Next:** Álvaro creates the GitHub App (`node scripts/github-app-registro.mjs`) and runs the deploys (engine, runner); then the agents import (`org add-agents`), a first real message to Legal from the app, and, once Órdago's Claude subscription is in Conexiones, Legal moves (`org add-agents --org ordago --from … --runner ghostaff --only legal`)
 
 Álvaro asked (2026-11-21) how close Ghostaff is to running all of Órdago's agents, then to build what is missing. Where we stood that day: the app (sign-in, organisations, decision inbox, team chat, connectors, vault) is on the beta; the agents still run entirely in `ghostaff-ai/agents` (Claude Code in a container on Cloud Run Jobs in `ordago-agents`, on a timetable, working in `ordago-app/business`, reporting by Telegram), and the engine here only answers in chat. He took my picks with four changes («go», 2026-11-21).
