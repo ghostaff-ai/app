@@ -40,6 +40,26 @@ describe('Markdown', () => {
     expect(screen.getByText('b')).toBeTruthy();
   });
 
+  it('draws task list items with a box marker and no bracket text', async () => {
+    await render(<Markdown text={'- [ ] uno\n- [x] dos'} names={[]} />);
+    expect(screen.getByText('uno')).toBeTruthy();
+    expect(screen.getByText('dos')).toBeTruthy();
+    expect(screen.getByText('☐')).toBeTruthy();
+    expect(screen.getByText('☑')).toBeTruthy();
+    expect(allText()).not.toMatch(/\[ \]|\[x\]/);
+  });
+
+  it('shows wide list numbers', async () => {
+    await render(<Markdown text={'100. a\n101. b'} names={[]} />);
+    expect(screen.getByText('100.')).toBeTruthy();
+    expect(screen.getByText('101.')).toBeTruthy();
+  });
+
+  it('hides reference definitions', async () => {
+    await render(<Markdown text={'hola [r]\n\n[r]: https://x.y'} names={[]} />);
+    expect(allText()).not.toContain('https://x.y');
+  });
+
   it('opens a link with Linking', async () => {
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue();
     await render(<Markdown text="[web](https://ghostaff.ai)" names={[]} />);

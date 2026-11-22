@@ -1,3 +1,5 @@
+const path = require('path');
+
 module.exports = {
   preset: 'jest-expo',
   // Off for pr:land's integration check (scripts/land-integration-check.sh): it runs
@@ -13,7 +15,7 @@ module.exports = {
     // rewrites the named groups in marked's regexes into numbered ones, which breaks
     // emphasis after a code span. Metro (Hermes) leaves them alone, so jest loads the
     // package's own CommonJS build untouched.
-    '^marked$': '<rootDir>/node_modules/marked/lib/marked.umd.js',
+    '^marked$': path.join(path.dirname(require.resolve('marked/package.json')), 'lib/marked.umd.js'),
     '^@/(.*)$': '<rootDir>/$1',
   },
 };

@@ -131,14 +131,19 @@ function List({ list, names, tone }: { list: Tokens.List; names: string[]; tone:
   const start = typeof list.start === 'number' ? list.start : 1;
   return (
     <View>
-      {list.items.map((item, i) => (
-        <View key={i} className={`flex-row ${i > 0 ? 'mt-1' : ''}`}>
-          <Text className={`w-6 ${BODY} ${toneClass(tone)}`}>{list.ordered ? `${start + i}.` : '•'}</Text>
-          <View className="flex-1">
-            <Blocks tokens={item.tokens} names={names} tone={tone} tight />
+      {list.items.map((item, i) => {
+        // A task item leads with a `checkbox` token; draw it as the marker instead.
+        const tokens = item.task ? item.tokens.filter((t) => t.type !== 'checkbox') : item.tokens;
+        const marker = item.task ? (item.checked ? '☑' : '☐') : list.ordered ? `${start + i}.` : '•';
+        return (
+          <View key={i} className={`flex-row ${i > 0 ? 'mt-1' : ''}`}>
+            <Text className={`min-w-6 pr-1 ${BODY} ${toneClass(tone)}`}>{marker}</Text>
+            <View className="flex-1">
+              <Blocks tokens={tokens} names={names} tone={tone} tight />
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -184,6 +189,9 @@ function Block({ token: t, names, tone }: { token: Token; names: string[]; tone:
           </Text>
         </View>
       );
+    case 'def':
+      // A reference definition ([r]: https://…) is bookkeeping for links, not text.
+      return null;
     case 'hr':
       return <View className="h-px bg-line" />;
     default:
