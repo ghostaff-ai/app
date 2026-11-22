@@ -1,8 +1,8 @@
 # Two environments: beta from develop, production from main
 
 **Priority:** high — production will hold customers' AI keys and mailboxes; today the only engine talks to the beta database, and deploys are run by hand
-**Gate:** blocked:Jaime adds the repository secret `SUPABASE_ACCESS_TOKEN` (Task 7) and OKs Task 5's deletions in `ghostaff-prod`
-**Next:** with the secret in, label PR #41 (Task 7) `automerge` and check the `deploy` job on `develop`; with the OK, Task 5 then Task 6's deploy
+**Gate:** blocked:PR #41 merging (automerge, CI running)
+**Next:** check the first `deploy` job on `develop` (beta, green, `/health`), then a `workflow_dispatch` from `develop` asking for `prod` must fail; Jaime puts `SUPABASE_ANON_KEY_PROD` into EAS
 
 Jaime (2026-11-22): one Google Cloud project and one Supabase per environment, set up as Órdago's: merge to `develop` brings up beta, merge to `main` brings up production. Front 1 of [ordago-as-customer.md](ordago-as-customer.md). It replaces the proposal in [build-first-version.md](build-first-version.md#environments-beta-and-production) of 2026-11-15.
 
@@ -125,15 +125,15 @@ On green CI on each branch, the workflow for that environment: applies Supabase 
 
 **Files:** none (cloud only); `connectors.md` and this plan updated with the new URLs.
 
-- [ ] Ask Jaime first (deletion). Then delete in `ghostaff-prod`: Cloud Run service `engine`, job `agent-runner`, Scheduler job `tick`, secret `SUPABASE_SERVICE_ROLE_KEY_BETA`. Keep the other secrets, accounts and repos: production uses them.
+- [x] Jaime OK'd it (2026-11-22). Deleted in `ghostaff-prod`: Cloud Run service `engine`, job `agent-runner`, Scheduler job `tick`, secret `SUPABASE_SERVICE_ROLE_KEY_BETA`. Keep the other secrets, accounts and repos: production uses them.
 
 ### Task 6: Production up
 
 **Files:** none in the repo beyond this plan.
 
-- [ ] `bash scripts/setup-env.sh prod` (twice: the second changes nothing).
-- [ ] `bash scripts/deploy-runner.sh prod`, `bash scripts/deploy-engine.sh prod`; `curl -fsS https://engine-664656500315.europe-west1.run.app/health` answers.
-- [ ] Production's anon key (public by design) into EAS's `production` environment as `SUPABASE_ANON_KEY_PROD` (`eas env:create --environment production --visibility plaintext`), piped from the Supabase CLI, so a production build has its config.
+- [x] `bash scripts/setup-env.sh prod` (twice: the second changes nothing).
+- [ ] Production's runner and engine come up from CI with the first release (`develop` into `main`), not by hand: a hand deploy now would ship `develop`'s code to production without that decision, and production's Supabase still lacks migration `20261122200000` (several AI accounts), which CI applies first. Until then `ghostaff-prod` runs nothing. Then `curl -fsS https://engine-664656500315.europe-west1.run.app/health` answers.
+- [ ] Production's anon key (public by design) into EAS's `production` environment as `SUPABASE_ANON_KEY_PROD` (`eas env:create --environment production --visibility plaintext`), piped from the Supabase CLI, so a production build has its config. Jaime runs it: the EAS CLI on his Mac is signed in to another account.
 
 ### Task 7: CI deploys
 
@@ -147,5 +147,7 @@ On green CI on each branch, the workflow for that environment: applies Supabase 
 - [ ] Production deploys from CI the first time `develop` is merged into `main`. That merge is the first release (`main` is still the scaffold, 191 commits behind): either founder decides when.
 - [x] Tasks 1–3 (2026-11-22, PR #36, branch `feat/environments`): `scripts/env.sh` with its test, `scripts/setup-env.sh`, the deploy scripts per environment. `ghostaff-beta` set up (re-runs create nothing), runner and engine deployed there, `/health` and the tick's `/cron` answer 200. The old tick in `ghostaff-prod` is **paused** (not deleted), so beta's database has one tick; the old engine there keeps serving the beta app until #36 lands.
 - [x] Task 4 code in #36: the beta app's engine is `https://engine-1002624835789.europe-west1.run.app`, production's `https://engine-664656500315.europe-west1.run.app`. #36 merged on 2026-11-22 and the beta app talks to the new engine (its `/connections/ai/claude/session` calls land in `ghostaff-beta` since 16:34 UTC); the old engine in `ghostaff-prod` gets no app traffic since.
-- [x] Task 6, setup only: `bash scripts/setup-env.sh prod` (deployer, Workload Identity on `main`, `SUPABASE_SERVICE_ROLE_KEY` from Supabase). The deploy waits for Task 5: it replaces the `engine` service the beta app still uses.
+- [x] Task 6, setup only: `bash scripts/setup-env.sh prod` (deployer, Workload Identity on `main`, `SUPABASE_SERVICE_ROLE_KEY` from Supabase). The deploy comes with the first release.
+- [x] Task 5 (2026-11-22): the old beta engine, runner, tick and `SUPABASE_SERVICE_ROLE_KEY_BETA` deleted from `ghostaff-prod`; left there: `SUPABASE_SERVICE_ROLE_KEY`, `github-app-registro-key`, `google-oauth-connectors-secret`, the accounts and registries.
+- [x] `SUPABASE_ACCESS_TOKEN` in the repository's secrets (Jaime, 2026-11-22); PR #41 labelled `automerge`. `scripts/env.sh` defaults the gcloud configuration to `ghostaff-prod`, as this plan said (it had `ghostaff`, which does not exist on Jaime's Mac).
 - [x] Task 7 written on `feat/ci-deploy`, PR #41: `deploy.yml` (branch guard, Google auth, migrations with `supabase db push --remote=<ref> --yes`, runner, engine) and a `deploy` job in `ci.yml`. Only one repository secret is needed, `SUPABASE_ACCESS_TOKEN`: the CLI pushes through a temporary login role, no database password.
