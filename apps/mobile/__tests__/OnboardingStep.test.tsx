@@ -34,9 +34,9 @@ describe('OnboardingStep', () => {
 });
 
 describe('stepsFor', () => {
-  it('counts the way in: three for you, four for a company, two before choosing', () => {
+  it('counts the way in: three for you, four for a company, and the shorter way before choosing', () => {
     expect(stepsFor('personal')).toBe(3);
     expect(stepsFor('company')).toBe(4);
-    expect(stepsFor(null)).toBe(2);
+    expect(stepsFor(null)).toBe(3);
   });
 });

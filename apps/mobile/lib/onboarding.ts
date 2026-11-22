@@ -3,9 +3,7 @@
 
 export type Purpose = 'personal' | 'company';
 
-/** How many steps the way in has, once you've chosen what it's for (two before). */
+/** How many steps the way in has: four for a company, otherwise three (the shorter way, until a company is chosen). */
 export function stepsFor(purpose: Purpose | null): number {
-  if (purpose === 'personal') return 3;
-  if (purpose === 'company') return 4;
-  return 2;
+  return purpose === 'company' ? 4 : 3;
 }

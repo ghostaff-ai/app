@@ -1,21 +1,20 @@
-import { createOrganization, splitLinks, normalizeLink } from '@ghostaff/shared/services';
+import { createOrganization } from '@ghostaff/shared/services';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { Button, ErrorText, Field } from '@/components/ui';
+import { stepsFor } from '@/lib/onboarding';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
 
-// Create an organisation: its name, and optionally a light first look at it
-// (web, what it does, other links). Incorporación will build the record from
-// this later; nothing here is required beyond the name.
+// A company: only its name (welcome-and-spaces.md). Its web and what it does
+// are added later. Step 3 of the way in for someone with no space yet; a
+// modal with a close when opened later from «Tus espacios».
 
 export default function CreateOrganization() {
-  const { enter } = useActiveOrg();
+  const { enter, organizations } = useActiveOrg();
+  const onTheWayIn = organizations.length === 0;
   const [name, setName] = useState('');
-  const [website, setWebsite] = useState('');
-  const [about, setAbout] = useState('');
-  const [links, setLinks] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,56 +22,42 @@ export default function CreateOrganization() {
     setBusy(true);
     setError(null);
     try {
-      const org = await createOrganization(supabase, {
-        name,
-        website: normalizeLink(website),
-        about,
-        links: splitLinks(links),
-      });
+      const org = await createOrganization(supabase, { name });
       await enter(org.id);
       // After the layout has re-rendered with the new organisation, so the inbox route exists.
       requestAnimationFrame(() => router.replace('/'));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setError(/too many/.test(msg) ? 'Has llegado al máximo de empresas por cuenta.' : msg);
+      setError(/too many/.test(msg) ? 'Ya tienes demasiados espacios.' : msg);
       setBusy(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 bg-surface">
-      <ScrollView contentContainerClassName="px-6 pt-4 pb-16" keyboardShouldPersistTaps="handled">
-        <Field label="Nombre de la empresa" placeholder="Por ejemplo, Panadería Ana" autoCapitalize="words" value={name} onChangeText={setName} />
-
-        <Text className="mt-10 font-display text-title3 text-ink">Cuéntanos un poco (opcional)</Text>
-        <Text className="mt-1 text-base text-muted">Con esto tus agentes empiezan sabiendo quiénes sois.</Text>
-
-        <Field
-          label="Web"
-          placeholder="tuempresa.com"
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          inputMode="url"
-          value={website}
-          onChangeText={setWebsite}
-        />
-        <Field label="¿Qué hacéis?" hint="Un par de frases, como se lo contarías a alguien." multiline value={about} onChangeText={setAbout} />
-        <Field
-          label="Otros enlaces"
-          hint="Redes, ficha en las tiendas, una carpeta de Drive… uno por línea."
-          multiline
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={links}
-          onChangeText={setLinks}
-        />
-
-        <View className="mt-8">
-          <Button label="Crear empresa" disabled={!name.trim()} busy={busy} onPress={() => void submit()} />
-        </View>
-        <ErrorText>{error}</ErrorText>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    <OnboardingStep
+      ghost="incorporacion"
+      step={onTheWayIn ? 3 : undefined}
+      of={onTheWayIn ? stepsFor('company') : undefined}
+      title="¿Cómo se llama tu empresa?"
+      line="La web y lo que hacéis, luego."
+      topRight={onTheWayIn ? undefined : <Button label="Cerrar" variant="plain" size="small" onPress={() => router.back()} />}
+      link={onTheWayIn ? <Button label="Atrás" variant="plain" onPress={() => router.back()} /> : undefined}
+      action={
+        <>
+          <Button label="Crear" disabled={!name.trim()} busy={busy} onPress={() => void submit()} />
+          <ErrorText>{error}</ErrorText>
+        </>
+      }
+    >
+      <Field
+        label="Nombre de la empresa"
+        placeholder="Por ejemplo, Panadería Ana"
+        autoCapitalize="words"
+        returnKeyType="done"
+        value={name}
+        onChangeText={setName}
+        onSubmitEditing={() => (name.trim() ? void submit() : undefined)}
+      />
+    </OnboardingStep>
   );
 }

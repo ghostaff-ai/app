@@ -80,7 +80,8 @@ export default function AppLayout() {
         <Stack.Screen name="empezar" options={{ headerShown: false }} />
       </Stack.Protected>
       <Stack.Protected guard={hasProfile} redirectTo={step}>
-        <Stack.Screen name="crear-empresa" options={{ title: 'Crear una empresa', presentation: 'modal' }} />
+        {/* A step of the way in before any space exists, a modal after (welcome-and-spaces.md). */}
+        <Stack.Screen name="crear-empresa" options={{ headerShown: false, presentation: org.organizations.length ? 'modal' : 'card' }} />
         <Stack.Screen name="unirme" options={{ title: 'Unirme a una empresa', presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>

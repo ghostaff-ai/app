@@ -28,9 +28,11 @@ export { SealCheckIcon as SealCheck } from 'phosphor-react-native/src/icons/Seal
 export { SignOutIcon as SignOut } from 'phosphor-react-native/src/icons/SignOut';
 export { SparkleIcon as Sparkle } from 'phosphor-react-native/src/icons/Sparkle';
 export { TrayIcon as Tray } from 'phosphor-react-native/src/icons/Tray';
+export { UserIcon as User } from 'phosphor-react-native/src/icons/User';
 export { UserPlusIcon as UserPlus } from 'phosphor-react-native/src/icons/UserPlus';
 export { UsersThreeIcon as UsersThree } from 'phosphor-react-native/src/icons/UsersThree';
 export { WarningCircleIcon as WarningCircle } from 'phosphor-react-native/src/icons/WarningCircle';
+export { XIcon as X } from 'phosphor-react-native/src/icons/X';
 export { XCircleIcon as XCircle } from 'phosphor-react-native/src/icons/XCircle';
 
 export type IconComponent = ComponentType<IconProps>;
