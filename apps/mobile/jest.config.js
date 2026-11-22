@@ -9,6 +9,11 @@ module.exports = {
   ],
   moduleNameMapper: {
     '\\.glb$': '<rootDir>/test/glbStub.js',
+    // marked ships ESM only. Jest's babel would transform it, and its Node target
+    // rewrites the named groups in marked's regexes into numbered ones, which breaks
+    // emphasis after a code span. Metro (Hermes) leaves them alone, so jest loads the
+    // package's own CommonJS build untouched.
+    '^marked$': '<rootDir>/node_modules/marked/lib/marked.umd.js',
     '^@/(.*)$': '<rootDir>/$1',
   },
 };

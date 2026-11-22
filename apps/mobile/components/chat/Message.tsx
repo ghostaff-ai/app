@@ -1,12 +1,14 @@
 import { type ActionPart, type ChatMessage, isActionPart, messageText, splitMentions } from '@ghostaff/shared';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { Markdown } from '@/components/chat/Markdown';
 import { GHOSTS, type GhostId } from '@/lib/team';
 
 // One message of a thread (team-chat.md, decision 3): people in bubbles (yours
 // on the right in ink, colleagues on the left with their initials), agents
-// flat and full width in the muted agent style (app-design.md #18) with their
-// small ghost. Consecutive messages from the same author drop the name.
+// flat and full width in ink with their small ghost (app-design.md #18, changed
+// 2026-11-22), their replies' markdown rendered. Consecutive messages from the same
+// author drop the name.
 // An agent's reply carries one status line (decision 4): what it is doing
 // while it writes, then «Hecho · 3 s», which unfolds into its steps.
 
@@ -216,7 +218,7 @@ export function MessageView({
           </View>
         ) : null}
         <StatusLine message={message} />
-        {text ? <Body text={text} names={names} className="text-base leading-6 text-muted" /> : null}
+        {text ? <Markdown text={text} names={names} /> : null}
         {actions.map((a) => (
           // An action is decided once the agent has finished writing its message.
           <ActionCard key={a.actionId} action={a} canDecide={canDecide && message.state !== 'working'} onDecide={onDecide} />
