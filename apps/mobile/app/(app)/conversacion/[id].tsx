@@ -3,7 +3,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useMemo } from 'react';
 import { Image, Platform, Text, View } from 'react-native';
-import { decideAction } from '@ghostaff/shared/services';
+import { decideAction, transcribe } from '@ghostaff/shared/services';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
 import { Loading, Notice } from '@/components/ui';
@@ -39,6 +39,11 @@ export default function Conversacion() {
   const ghostOf = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a.ghost])), [agents]);
   const owner = members.find((m) => m.role === 'owner' && m.userId !== me)?.displayName ?? null;
   const isOwner = active?.role === 'owner';
+  // No engine, no mic.
+  const dictate = useMemo(
+    () => (engine && orgId ? (audio: Blob, mimeType: string) => transcribe(engine, orgId, audio, mimeType) : undefined),
+    [engine, orgId],
+  );
   // The card updates itself when the engine rewrites the message.
   const decide = useMemo(
     () => async (actionId: string, decision: 'approve' | 'reject') => {
@@ -97,7 +102,7 @@ export default function Conversacion() {
         />
         {error ? <Text className="px-4 pb-1 text-footnote text-no">{error}</Text> : null}
         {canTalk ? (
-          <Composer placeholder={agent ? `Escribe a ${agent.name}` : 'Escribe aquí'} names={names} onSend={send} />
+          <Composer placeholder={agent ? `Escribe a ${agent.name}` : 'Escribe aquí'} names={names} onSend={send} onDictate={dictate} />
         ) : (
           <ReadOnlyComposer owner={owner} />
         )}
