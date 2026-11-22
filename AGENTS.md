@@ -12,14 +12,14 @@ This repo is the product code: the app (iPhone, Android and web from one codebas
 
 **The product decisions live outside this repo**, in the private Órdago business repo: [`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md) (what we build and why) and [`ghostaff.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff.md) (the company). Until Ghostaff is a company of its own, that stays the source of truth for the *why*; this repo holds the *how*. Read it before planning anything here.
 
-**Álvaro and Jaime each decide on their own what gets built here and when** (Álvaro, 2026-11-22; it replaces «decide together» of 2026-11-21). Either founder's word is enough: what one of them asks for gets built, and an agent never waits for, asks about or notes the other's agreement. They talk to each other directly. Building waits for no one's review: open the PR and merge it when its checks are green (Branches).
+**Álvaro and Jaime each decide on their own what gets built here and when** (Álvaro, 2026-11-22; it replaces «decide together» of 2026-11-21). Either founder's word is enough: what one of them asks for gets built, and an agent never waits for, asks about or notes the other's agreement. They talk to each other directly. Building waits for no one's review: land the PR with `pnpm pr:land`, which merges it when its checks are green (Branches).
 
 ## Sibling repos
 
 Checked out side by side under `~/githubs/ghostaff-ai/`:
 
 ```bash
-git clone git@github.com:ghostaff-ai/app.git ~/githubs/ghostaff-ai/app
+git clone --recurse-submodules git@github.com:ghostaff-ai/app.git ~/githubs/ghostaff-ai/app
 ```
 
 - `ghostaff-ai/agents` is today's agent engine (Claude Code on Cloud Run Jobs), moved here from `ordago-app` on 2026-11-15 with Jaime's OK. It still runs Órdago's agents (`proyectos/ordago/`) unchanged; whether this repo's engine replaces it or grows from it is still to decide, by either founder. Read it, don't copy from it blindly. Clone it beside this one: `git clone git@github.com:ghostaff-ai/agents.git ~/githubs/ghostaff-ai/agents`.
@@ -39,7 +39,7 @@ packages/shared/   models, the record's file formats (por-decidir/), the data se
 supabase/          migrations, row-level-security tests (pgTAP), local config
 ```
 
-Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh beta|prod` (the engine to Cloud Run), `bash scripts/deploy-runner.sh beta|prod` (the runner's job; both run by CI on merge, [environments.md](docs/plans/ongoing/environments.md)), `bash scripts/setup-env.sh beta|prod` (a project's one-time setup), `pnpm db:start` / `pnpm db:test`
+Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm pr:land` (land the current branch: Branches), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh beta|prod` (the engine to Cloud Run), `bash scripts/deploy-runner.sh beta|prod` (the runner's job; both run by CI on merge, [environments.md](docs/plans/ongoing/environments.md)), `bash scripts/setup-env.sh beta|prod` (a project's one-time setup), `pnpm db:start` / `pnpm db:test`
 (Postgres and the policy tests), `pnpm app:start` / `pnpm app:web` (Metro on the first free port of 8083, 8093 … 8173, from
 `scripts/metro-port.sh`; never a bare `expo start`). Setup is in the [README](README.md#setup).
 
@@ -60,11 +60,33 @@ Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm engine
 
 ## Branches
 
-- `develop` is the default branch and where work lands, through pull requests.
-- **Merge your own pull request as soon as its checks are green** (Álvaro, 2026-11-17): label it `automerge` (`gh pr edit <n> --add-label automerge`) and `.github/workflows/automerge.yml` merges it once the whole CI, end-to-end tests included, has passed on its latest commit, then runs CI on `develop` so the beta ships it. Never `gh pr merge --auto`: without required checks (a paid plan on a private repo) GitHub merges at once, before the end-to-end tests (2026-11-21). Don't wait for anyone to test on the phone first; a problem found later gets its own fix PR. Stacked PRs merge in order, the base first.
-- `main` is what is released.
+- `develop` is the default branch and where work lands, through pull requests. `main` is what is released.
 - Markdown-only changes (plans, this file) may be committed straight to `develop`.
-- **The main checkout (`~/githubs/ghostaff-ai/app`) stays on `develop`, pulled** (Álvaro, 2026-11-17). Every session works on its own branch in its own worktree (`git worktree add .claude/worktrees/<name> -b <branch> origin/develop`) and never switches the main checkout's branch: Metro serves whatever branch that folder is on, and Álvaro runs it from there. Keep branches short-lived: a draft that lives for hours hides its work and everyone else's from what he sees.
+- **The main checkout (`~/githubs/ghostaff-ai/app`) stays on `develop`, pulled** (Álvaro, 2026-11-17). Every session works on its own branch in its own worktree and never switches the main checkout's branch: Metro serves whatever branch that folder is on, and Álvaro runs it from there. Keep branches short-lived: a draft that lives for hours hides its work and everyone else's from what he sees.
+
+  ```bash
+  git worktree add .claude/worktrees/<name> -b <branch> origin/develop && git -C .claude/worktrees/<name> submodule update --init
+  ```
+
+  git doesn't populate submodules in a new worktree, and without `.agents/_shared` `pnpm pr:land` fails with `MODULE_NOT_FOUND`. To reap a landed worktree, use what `pr:land` prints (`rm -rf`, `git worktree prune`, `git branch -d`): `git worktree remove` refuses on a repo with submodules, and `--force` would discard uncommitted work without saying so.
+
+### Landing a pull request: `pnpm pr:land`
+
+**`pnpm pr:land` is the only way a pull request merges** (Jaime, 2026-11-22; it replaces the `automerge` label and its workflow). Run it from the branch's worktree once the work is committed: it pushes, opens the PR, waits for CI, handles a moving `develop` and merges. It is a resumable loop, not a merge command, so run it, act on its exit code and run it again until it exits `0`. Kill it anywhere and re-run it; it resumes from what it observes.
+
+| Exit | Means | Do |
+|---|---|---|
+| `0` | Merged; the remote branch is gone. | Reap the worktree with the command it prints. |
+| `10` | CI is red, or the merge result with today's `develop` fails `scripts/land-integration-check.sh`. | Read the log (an infrastructure failure isn't a regression), fix, commit, re-run. |
+| `20` | A review requested changes. No reviewer is wired here today, so it shouldn't happen. | Fix the cause, re-run. |
+| `30` | A human is needed: a draft or closed PR, CI never settled within its timeout, or the integration check couldn't run (a missing tool, not the PR's fault). | Read the reason it prints. Fix the machine or the PR state, or hand it to Álvaro or Jaime. |
+| `40` | Preflight failed: a dirty tree, a protected branch, nothing to land, or a PR that **conflicts** with `develop` (which dispatches no CI at all). | Commit or clean, or rebase onto `origin/develop`, resolve, `git push --force-with-lease`, re-run. |
+
+- **Never `gh pr merge` by hand**, nor `gh pr merge --auto`. A manual merge skips the guards `pr:land` carries: the required lanes (a skipped end-to-end lane is a failure, not an absence), the vacuous-green check and the staleness rule. Without required checks (a paid plan on a private repo), `--auto` merges at once, before the end-to-end tests (2026-11-21).
+- **Land your own pull request as soon as its checks are green** (Álvaro, 2026-11-17). **The bar is green CI, with no review** (Jaime, 2026-11-22): the three lanes of `ci.yml` (`Typecheck and unit tests`, `Row-level security (pgTAP)`, `End-to-end (Android)`) must pass on the PR's latest commit. That is weaker than a review and accepted on purpose. Don't wait for anyone to test on the phone first: a problem found later gets its own fix PR. Stacked PRs land in order, the base first.
+- **Don't rebase to stay fresh; `pr:land` owns staleness.** It rebases by itself when `develop` changed a file your PR changes, or moved a root manifest or a migration (`rebaseRadius`). When only `packages/shared/` moved under your PR, or your PR changes a root manifest, it runs `scripts/land-integration-check.sh` (install, typecheck, unit tests) on the merge result locally instead of re-running CI.
+- **A PR made only of Markdown waits for a CI run that never starts** (`ci.yml` ignores `**/*.md` and `docs/**`) until `pr:land` exits `30`. Commit those straight to `develop` instead. This goes away when `.agents/_shared` is bumped past [agent-skills#20](https://github.com/ghostaff-ai/agent-skills/pull/20) and the `ci.yml` gate in `.agents/land.config.json` gets `"pathsIgnore": ["**/*.md", "docs/"]`.
+- **`pr:land` is shared code; this repo's values are data.** `scripts/pr-land.js` is a symlink into the `.agents/_shared` submodule ([ghostaff-ai/agent-skills](https://github.com/ghostaff-ai/agent-skills), also used by Órdago and Cultuvilla). Fix the procedure upstream there, through a PR Álvaro reviews, then bump the submodule here in a PR of its own. Everything specific to this repo goes in `.agents/land.config.json` (base branch, the CI gate mirroring `ci.yml`, the blast and rebase radii, the integration check). When `ci.yml`'s jobs or filters change, change that file in the same PR. The `landing-prs` skill has the details.
 - **What Álvaro looks at is the beta app on his phone, not Metro.** Every push to `develop` reaches it on its own once CI passes, end-to-end tests included: GitHub publishes the change over the air, or starts a new beta build when the native side changed (`.github/workflows/beta.yml`).
 - **A main flow has an end-to-end test** in `.maestro/flows/ci/` (Maestro on an Android emulator, a release build against the local Supabase; [.maestro/README.md](.maestro/README.md)). A screen that changes one updates its flow in the same PR; run `pnpm e2e` before opening it. Metro and the dev build are for agents while they build.
 

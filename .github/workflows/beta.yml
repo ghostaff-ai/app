@@ -21,7 +21,7 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [develop]
-    # A CI run dispatched by automerge.yml after its merge counts like a push.
+    # A CI run dispatched by hand on develop counts like a push.
   workflow_dispatch:
 
 concurrency:

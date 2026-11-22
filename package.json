@@ -23,6 +23,8 @@
     "typecheck": "pnpm shared:typecheck && pnpm sync:typecheck && pnpm engine:typecheck && pnpm runner:typecheck && pnpm app:typecheck",
     "test": "pnpm shared:test && pnpm sync:test && pnpm engine:test && pnpm runner:test && pnpm app:test && pnpm scripts:test",
     "check": "pnpm typecheck && pnpm test",
+    "pr:land": "node scripts/pr-land.js",
+    "land:integration-check": "bash scripts/land-integration-check.sh",
     "prepare": "husky",
     "engine:dev": "pnpm --filter @ghostaff/engine dev",
     "engine:test": "pnpm --filter @ghostaff/engine test",
