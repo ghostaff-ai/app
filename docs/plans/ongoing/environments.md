@@ -144,7 +144,7 @@ On green CI on each branch, the workflow for that environment: applies Supabase 
 - [ ] Jaime adds the repository secrets `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD_BETA`, `SUPABASE_DB_PASSWORD_PROD`.
 - [ ] Write both files; PR with `automerge`. After the merge, the CI run on `develop` deploys beta: the `deploy` job is green and `/health` answers.
 - [ ] Review focus 3 by hand: a `workflow_dispatch` of `deploy.yml` from `develop` asking for `prod` fails at the `auth` step.
-- [ ] Production deploys from CI the first time `develop` is merged into `main`. That merge is the first release (`main` is still the scaffold, 191 commits behind): both founders decide when.
+- [ ] Production deploys from CI the first time `develop` is merged into `main`. That merge is the first release (`main` is still the scaffold, 191 commits behind): either founder decides when.
 - [x] Tasks 1–3 (2026-11-22, PR #36, branch `feat/environments`): `scripts/env.sh` with its test, `scripts/setup-env.sh`, the deploy scripts per environment. `ghostaff-beta` set up (re-runs create nothing), runner and engine deployed there, `/health` and the tick's `/cron` answer 200. The old tick in `ghostaff-prod` is **paused** (not deleted), so beta's database has one tick; the old engine there keeps serving the beta app until #36 lands.
 - [x] Task 4 code in #36: the beta app's engine is `https://engine-1002624835789.europe-west1.run.app`, production's `https://engine-664656500315.europe-west1.run.app`. Reaches the beta app over the air once #36 merges.
 - [x] Task 6, setup only: `bash scripts/setup-env.sh prod` (deployer, Workload Identity on `main`, `SUPABASE_SERVICE_ROLE_KEY` from Supabase). The deploy waits for Task 5: it replaces the `engine` service the beta app still uses.

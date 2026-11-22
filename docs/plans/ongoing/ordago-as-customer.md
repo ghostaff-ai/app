@@ -27,7 +27,7 @@ Each front gets its own plan when it is designed; this file only keeps the order
 - Ghostaff has: the decision inbox synced from `por-decidir/`, team chat, connectors, the vault, the runner (not deployed).
 - The panel also has: a desk per agent (what waits on you, its goal, three headlines, history, Indicaciones, autonomy, a run button), the board (`tablon/`) for feedback to an agent, and tabs of metrics per area (Redes, SEO, Producto, Finanzas, Correo, Estrategias…).
 
-## Decisions that need both founders
+## Open decisions (either founder)
 
 - Personalisation over departments (changes decision 13).
 - The split of environments was a proposal for Álvaro (build-first-version.md, 2026-11-15); Jaime decided it on 2026-11-22 and starts it.

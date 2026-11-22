@@ -1,7 +1,7 @@
 # One ghostaff.ai: the website for visitors, the app on a desktop layout once you sign in
 
 **Priority:** high — Jaime (2026-11-21): the web is a way in and where the product is sold, and today the app on a computer is the phone app stretched
-**Gate:** decision:both founders on the shape (open questions 1–3)
+**Gate:** decision:either founder on the shape (open questions 1–3)
 **Next:** Álvaro reviews the sketches and the open questions with Jaime; then the desktop shell (sidebar and two columns) behind a width breakpoint
 
 Jaime's request (2026-11-21), after seeing the app on `localhost:8083`: on a computer it is the phone app in a browser window, one 400-px column on a wide screen. He wants one web at `ghostaff.ai` that sells the product to a visitor and, once they sign in, gives them everything the app does, laid out for a computer. Sketches of the desktop screens: [Ghostaff en escritorio](https://claude.ai/artifact/AwAH4NaD8rFB8weuW6TUZA) (Hoy, Equipo, Conexiones).

@@ -1,7 +1,7 @@
 # Notifications: a decision reaches its person without opening the app
 
 **Priority:** high — the product's promise is to bring people the decisions that are theirs, and once Telegram goes off (ordago-agents-in-ghostaff.md, decision 3) nothing leaves the app to tell anyone a decision waits
-**Gate:** decision:both founders — notifications go from our engine straight to Apple and Google and say only how many decisions wait and in which organisation, never the question itself; yes?
+**Gate:** decision:either founder — notifications go from our engine straight to Apple and Google and say only how many decisions wait and in which organisation, never the question itself; yes?
 
 **Goal:** A person gets one notification a day at their hour when something waits for them, and one more when a decision is due today, and a tap lands on that decision; so a decision stops depending on someone remembering to open Ghostaff.
 
