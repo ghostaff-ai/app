@@ -2,7 +2,7 @@
 
 **Priority:** high — production will hold customers' AI keys and mailboxes; today the only engine talks to the beta database, and deploys are run by hand
 **Gate:** none
-**Next:** step 4, the scripts per environment (and, by Jaime, the Google web client's secret in production's Supabase)
+**Next:** Implementation, Task 1 (`scripts/env.sh`); and, by Jaime, the Google web client's secret in production's Supabase
 
 Jaime (2026-11-22): one Google Cloud project and one Supabase per environment, set up as Órdago's: merge to `develop` brings up beta, merge to `main` brings up production. Front 1 of [ordago-as-customer.md](ordago-as-customer.md). It replaces the proposal in [build-first-version.md](build-first-version.md#environments-beta-and-production) of 2026-11-15.
 
@@ -49,3 +49,99 @@ On green CI on each branch, the workflow for that environment: applies Supabase 
 - [x] Auth copied from beta through the Management API: 6-digit codes, sign-ups on, Google (the web client and the iOS client of `ai.ghostaff.app` only), Apple (`ai.ghostaff.app` only), redirect `ghostaff://**` (no `exp://**`: Expo Go has no place in production). Left: **SMTP** (without it production sends through Supabase's default, two emails an hour, and the Free plan refuses a custom template until SMTP is set) and the **Google web client's secret** (needed for Google on the web, not on the phones). Both are secrets, for Jaime to enter in the dashboard.
 - [x] Step 3 (2026-11-22): the 15 migrations of `develop` pushed (`supabase link`, `db push`, `unlink`, so no folder stays linked to production). Checked against beta: same migrations, same 16 tables, all with row-level security, same 27 functions.
 - [x] SMTP (2026-11-22): Jaime set Resend with a key of its own for production (checked: differs from beta's); beta's Spanish sign-in email copied (subject and template, checked equal). Still missing: the Google web client's secret (the provider is on with its client ids, so the phones work; Google on the web fails until it is set).
+
+## Implementation (steps 4–7)
+
+> **For agentic workers:** use superpowers:executing-plans (or subagent-driven-development) task by task; steps use checkboxes.
+
+**Goal:** beta runs entirely in `ghostaff-beta`, production in `ghostaff-prod`, and CI deploys each from its branch.
+
+**Architecture:** one sourced file holds each environment's values; a one-time `setup-env.sh` makes everything a person must grant; `deploy-engine.sh` and `deploy-runner.sh` only build and deploy, and run the same on a laptop and in CI. CI deploys from jobs inside `ci.yml` (not a `workflow_run` workflow: those always run on the default branch, so Google could not tell `main` from `develop` by the token's `ref`).
+
+**Tech stack:** bash, gcloud, docker, the Supabase CLI (`npx supabase`), GitHub Actions with `google-github-actions/auth@v2`.
+
+### Global constraints
+
+- Region `europe-west1` for Cloud Run, Artifact Registry, Scheduler and Secret Manager (user-managed replication there).
+- Project numbers: `ghostaff-beta` 1002624835789, `ghostaff-prod` 664656500315. Engine URLs are deterministic: `https://engine-<number>.europe-west1.run.app`.
+- Supabase: beta `rggvcvnstbitbdptiwtk`, production `krhhndjjqmmkzjmwwazv`.
+- No secret value is ever printed, written to a file, passed on a command line or shown in a chat: secrets go pipe to pipe (`… | gcloud secrets versions add … --data-file=-`).
+- Every script stays safe to re-run.
+- Branch → environment: `develop` → beta, `main` → production, enforced by each project's Workload Identity provider.
+
+### Review focus
+
+1. A run with no or an unknown environment argument must stop before touching any project (`env.sh` exits 2 with usage).
+2. Re-running `setup-env.sh` on a set-up project must change nothing and fail on nothing (every create is behind a describe).
+3. A deploy job on a `develop` push must be refused by `ghostaff-prod` even with every repository secret (checked once by hand: a workflow_dispatch on `develop` asking for prod fails at `auth`).
+4. The beta app must never point at an engine that is not up: the app's URL changes only after the new beta engine answers `/health`.
+5. Removing the old beta from `ghostaff-prod` must not remove anything production then needs (only `engine`, `agent-runner` and `tick` are recreated, by the production deploy).
+
+---
+
+### Task 1: Per-environment values
+
+**Files:** create `scripts/env.sh`, `scripts/env.test.sh`; modify `package.json` (`check` runs the test, as it does `metro-port.test.sh`).
+
+**Produces:** sourcing `scripts/env.sh <beta|prod>` exports `GHOSTAFF_ENV`, `P` (project id), `PROJECT_NUMBER`, `R=europe-west1`, `SUPABASE_REF`, `SUPABASE_URL`, `ENGINE_URL`, `DEPLOY_BRANCH`, `WIF_PROVIDER` (`projects/<number>/locations/global/workloadIdentityPools/github/providers/ghostaff-app`), `DEPLOYER_SA` (`deployer@<P>.iam.gserviceaccount.com`), and the public ids now at the top of `deploy-engine.sh` (Google connectors client id, GitHub App id). Outside CI (`$CI` unset) it also exports `CLOUDSDK_ACTIVE_CONFIG_NAME=${CLOUDSDK_ACTIVE_CONFIG_NAME:-ghostaff-prod}` (the configuration on Jaime's Mac signed in as ghostaff.ai@gmail.com).
+
+- [ ] Write `env.test.sh`: `beta` gives `P=ghostaff-beta`, `ENGINE_URL=https://engine-1002624835789.europe-west1.run.app`, `SUPABASE_URL=https://rggvcvnstbitbdptiwtk.supabase.co`, `DEPLOY_BRANCH=develop`; `prod` gives `P=ghostaff-prod`, `ENGINE_URL=https://engine-664656500315.europe-west1.run.app`, `SUPABASE_URL=https://krhhndjjqmmkzjmwwazv.supabase.co`, `DEPLOY_BRANCH=main`; no argument and `staging` exit 2 with `usage:` on stderr.
+- [ ] Run `bash scripts/env.test.sh`: fails (no `env.sh`).
+- [ ] Write `env.sh`; run the test: passes. `pnpm check` green.
+- [ ] Commit on a branch in a worktree (`git worktree add .claude/worktrees/environments -b feat/environments origin/develop`).
+
+### Task 2: One-time setup per environment
+
+**Files:** create `scripts/setup-env.sh`.
+
+**Consumes:** `env.sh`. **Produces:** in project `$P`: APIs (run, secretmanager, artifactregistry, cloudresourcemanager, iam, iamcredentials, sts, aiplatform, cloudscheduler); service accounts `engine` (`roles/secretmanager.admin` on the project, as today), `scheduler`, `runner` (no roles), `deployer`; Artifact Registry repos `engine` and `runner`; `deployer` gets `roles/run.admin`, `roles/artifactregistry.writer`, `roles/cloudscheduler.admin`, `roles/secretmanager.viewer` (metadata only, for the connector checks) and `roles/iam.serviceAccountUser` on `engine`, `runner` and `scheduler` only; Workload Identity pool `github`, OIDC provider `ghostaff-app` (issuer `https://token.actions.githubusercontent.com`, condition `assertion.repository == 'ghostaff-ai/app' && assertion.ref == 'refs/heads/$DEPLOY_BRANCH'`), and `roles/iam.workloadIdentityUser` for that provider's principal set on `deployer`; secrets:
+  - `SUPABASE_SERVICE_ROLE_KEY`, when missing: `npx supabase projects api-keys --project-ref $SUPABASE_REF -o json` piped through a filter that keeps only the `service_role` key, into `gcloud secrets create … --data-file=-`.
+  - For beta only, when missing: `github-app-registro-key`, `google-oauth-connectors-secret` and any `engine-app-*` copied from `ghostaff-prod` pipe to pipe (`versions access latest | versions add`).
+
+- [ ] Write it; `bash -n scripts/setup-env.sh`.
+- [ ] Run `bash scripts/setup-env.sh beta`; then run it again: the second run creates nothing and exits 0.
+- [ ] Check: `gcloud iam workload-identity-pools providers describe ghostaff-app --location global --workload-identity-pool github --project ghostaff-beta --format 'value(attributeCondition)'` shows `refs/heads/develop`; `gcloud secrets list --project ghostaff-beta` lists the copied secrets and `SUPABASE_SERVICE_ROLE_KEY`.
+- [ ] Commit.
+
+### Task 3: Deploy scripts take the environment
+
+**Files:** modify `scripts/deploy-engine.sh`, `scripts/deploy-runner.sh`, `scripts/connector-app.sh` (first argument the environment), `AGENTS.md` and `README.md` (the commands).
+
+**Consumes:** `env.sh`, and what `setup-env.sh` made. The deploy scripts no longer enable APIs, create accounts, grant roles or read sops. The engine gets `SUPABASE_URL`, `ENGINE_PUBLIC_URL=$ENGINE_URL`, `SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest` and the rest as today; the tick calls `$ENGINE_URL/cron`. Image tags stay the commit's short SHA.
+
+- [ ] Rewrite; `bash -n` on each.
+- [ ] `bash scripts/deploy-runner.sh beta`, then `bash scripts/deploy-engine.sh beta`: `curl -fsS https://engine-1002624835789.europe-west1.run.app/health` answers.
+- [ ] Commit, push the branch, open the PR with Tasks 1–3, label `automerge`.
+
+### Task 4: The beta app moves to the new engine
+
+**Files:** modify `apps/mobile/app.config.ts` (`engineUrlPerEnv.beta` → `https://engine-1002624835789.europe-west1.run.app`, `engineUrlPerEnv.prod` → `https://engine-664656500315.europe-west1.run.app`; the comment above says which project serves which).
+
+- [ ] Only after Task 3's `/health` answers: change, `pnpm check`, PR with `automerge`. Once merged, `beta.yml` publishes the update over the air.
+- [ ] Person steps (Jaime, in consoles): add `https://engine-1002624835789.europe-west1.run.app/connections/oauth/google/callback` to the OAuth client «Ghostaff Conectores» in `ghostaff-prod`, and the beta callback to each maker app already registered (HubSpot, Asana; `connectors.md`).
+- [ ] Check: open the beta app, send a message to an agent; the request shows in `gcloud run services logs read engine --project ghostaff-beta --region europe-west1 --limit 20`.
+
+### Task 5: Old beta out of `ghostaff-prod`
+
+**Files:** none (cloud only); `connectors.md` and this plan updated with the new URLs.
+
+- [ ] Ask Jaime first (deletion). Then delete in `ghostaff-prod`: Cloud Run service `engine`, job `agent-runner`, Scheduler job `tick`, secret `SUPABASE_SERVICE_ROLE_KEY_BETA`. Keep the other secrets, accounts and repos: production uses them.
+
+### Task 6: Production up
+
+**Files:** none in the repo beyond this plan.
+
+- [ ] `bash scripts/setup-env.sh prod` (twice: the second changes nothing).
+- [ ] `bash scripts/deploy-runner.sh prod`, `bash scripts/deploy-engine.sh prod`; `curl -fsS https://engine-664656500315.europe-west1.run.app/health` answers.
+- [ ] Production's anon key (public by design) into EAS's `production` environment as `SUPABASE_ANON_KEY_PROD` (`eas env:create --environment production --visibility plaintext`), piped from the Supabase CLI, so a production build has its config.
+
+### Task 7: CI deploys
+
+**Files:** create `.github/workflows/deploy.yml` (reusable, `on: workflow_call` with input `environment`: `beta` | `prod`); modify `.github/workflows/ci.yml` (a `deploy` job: `needs: [check, database, e2e-android]`, `if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')`, calls `deploy.yml` with `beta` on `develop` and `prod` on `main`, `permissions: id-token: write, contents: read`).
+
+`deploy.yml`, in order: migrations (`npx supabase db push --project-ref <ref> --password "$SUPABASE_DB_PASSWORD"` with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD_BETA` / `_PROD` from repository secrets), then `google-github-actions/auth@v2` with `workload_identity_provider: $WIF_PROVIDER` and `service_account: $DEPLOYER_SA` (read from `env.sh`), `google-github-actions/setup-gcloud@v2`, `bash scripts/deploy-runner.sh <env>`, `bash scripts/deploy-engine.sh <env>`, and `curl -fsS $ENGINE_URL/health`.
+
+- [ ] Jaime adds the repository secrets `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD_BETA`, `SUPABASE_DB_PASSWORD_PROD`.
+- [ ] Write both files; PR with `automerge`. After the merge, the CI run on `develop` deploys beta: the `deploy` job is green and `/health` answers.
+- [ ] Review focus 3 by hand: a `workflow_dispatch` of `deploy.yml` from `develop` asking for `prod` fails at the `auth` step.
+- [ ] Production deploys from CI the first time `develop` is merged into `main`. That merge is the first release (`main` is still the scaffold, 191 commits behind): both founders decide when.
