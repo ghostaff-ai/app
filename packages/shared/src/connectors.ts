@@ -408,7 +408,7 @@ export const CONNECTORS = [
     kind: 'mcp',
     name: 'Notion',
     url: 'https://mcp.notion.com/mcp',
-    title: 'Notion',
+    title: 'Notion: páginas y bases de datos',
     reach: 'Tus agentes podrán buscar, leer, crear y editar páginas y bases de datos de tu Notion.',
   },
   {
@@ -418,7 +418,7 @@ export const CONNECTORS = [
     name: 'Airtable',
     url: 'https://mcp.airtable.com/mcp',
     scopes: ['data.records:read', 'data.records:write', 'schema.bases:read', 'workspacesAndBases:read'],
-    title: 'Airtable',
+    title: 'Airtable: bases de datos',
     reach: 'Tus agentes podrán leer y escribir registros en tus bases de Airtable.',
   },
   {

@@ -1,8 +1,9 @@
 import { completeMention, mentionQuery, mentionSuggestions } from '@ghostaff/shared';
-import * as Haptics from 'expo-haptics';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ArrowUp, Eye, Icon } from '@/components/icons';
+import { tap } from '@/lib/haptics';
 import { usePalette } from '@/lib/theme';
 
 // Where a person writes in a thread (team-chat.md): a growing text box and a
@@ -40,7 +41,7 @@ export function Composer({
     try {
       await onSend(text.trim());
       setText('');
-      if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      tap();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -61,14 +62,14 @@ export function Composer({
                 setText((t) => completeMention(t, n));
                 input.current?.focus();
               }}
-              className="rounded-full border border-line bg-card px-3 py-1.5"
+              className="rounded-full bg-sunk px-3 py-1.5 active:opacity-70"
             >
-              <Text className="text-sm text-ink">@{n}</Text>
+              <Text className="text-footnote text-ink">@{n}</Text>
             </Pressable>
           ))}
         </View>
       ) : null}
-      {error ? <Text className="mb-1 ml-2 text-sm text-no">No se ha enviado. {error}</Text> : null}
+      {error ? <Text className="mb-1 ml-2 text-footnote text-no">No se ha enviado. {error}</Text> : null}
       <View className="flex-row items-end gap-2">
         <TextInput
           ref={input}
@@ -98,7 +99,7 @@ export function Composer({
           onPress={ready ? () => void send() : undefined}
           className={`h-11 w-11 items-center justify-center rounded-full bg-accent ${ready ? '' : 'opacity-30'}`}
         >
-          {busy ? <ActivityIndicator color={c.onAccent} /> : <Text className="text-xl font-semibold text-on-accent">↑</Text>}
+          {busy ? <ActivityIndicator color={c.onAccent} /> : <Icon icon={ArrowUp} size={20} color={c.onAccent} weight="bold" />}
         </Pressable>
       </View>
     </View>
@@ -108,10 +109,12 @@ export function Composer({
 /** What someone with «Ver» sees instead of the text box. */
 export function ReadOnlyComposer({ owner }: { owner: string | null }) {
   const insets = useSafeAreaInsets();
+  const c = usePalette();
   return (
     <View className="border-t border-line bg-surface px-4 pt-3" style={{ paddingBottom: Math.max(16, insets.bottom) }}>
-      <View className="items-center rounded-3xl border border-dashed border-line px-4 py-3">
-        <Text className="text-center text-sm text-muted">Solo lectura{owner ? ` · pide acceso a ${owner}` : ''}</Text>
+      <View className="flex-row items-center justify-center rounded-3xl bg-sunk px-4 py-3">
+        <Icon icon={Eye} size={18} color={c.muted} weight="regular" />
+        <Text className="ml-2 text-center text-footnote text-muted">Solo lectura{owner ? `. Pide acceso a ${owner}` : ''}</Text>
       </View>
     </View>
   );

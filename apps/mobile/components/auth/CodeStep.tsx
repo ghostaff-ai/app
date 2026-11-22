@@ -91,14 +91,14 @@ export function CodeStep({
       <View className="mt-3">
         <Button
           label={wait > 0 ? `Reenviar código en ${wait} s` : 'Reenviar código'}
-          tone="plain"
+          variant="plain"
           disabled={wait > 0 || busy}
           busy={resending}
           onPress={resend}
         />
       </View>
       <View className="mt-3">
-        <Button label="Usar otro correo" tone="plain" onPress={onChangeEmail} />
+        <Button label="Usar otro correo" variant="plain" onPress={onChangeEmail} />
       </View>
     </View>
   );

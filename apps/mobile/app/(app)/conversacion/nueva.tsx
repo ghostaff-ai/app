@@ -51,9 +51,9 @@ export default function NuevaConversacion() {
       <KeyboardColumn offset={headerHeight}>
         <View className="flex-1 items-center justify-center px-8">
           <Image source={g.picture} style={{ width: 120, height: 120 }} resizeMode="contain" />
-          <Text className="mt-3 font-display text-xl text-ink">{agent.name}</Text>
+          <Text className="mt-3 font-display text-title2 text-ink">{agent.name}</Text>
           <Text className="mt-1 text-center text-base text-muted">{g.job}</Text>
-          <Text className="mt-6 text-center text-sm text-muted">Lo que escribas lo verá también quien pueda ver a {agent.name}.</Text>
+          <Text className="mt-6 text-center text-footnote text-muted">Lo que escribas lo verá también quien pueda ver a {agent.name}.</Text>
         </View>
         <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={send} autoFocus />
       </KeyboardColumn>

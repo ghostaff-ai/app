@@ -2,7 +2,8 @@ import type { AgentLevel } from '@ghostaff/shared';
 import { inviteMember, revokeInvitation } from '@ghostaff/shared/services';
 import { useState } from 'react';
 import { Image, ScrollView, Text, View } from 'react-native';
-import { Button, ErrorText, Field, LevelPicker } from '@/components/ui';
+import { CheckCircle, EnvelopeSimple, Icon, UserPlus } from '@/components/icons';
+import { Button, ErrorText, Field, LevelPicker, ListRow, ListSection, RowIcon } from '@/components/ui';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { usePendingInvitations } from '@/lib/hooks/useInvitations';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -57,7 +58,7 @@ export default function Invite() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-6 pt-2 pb-16" keyboardShouldPersistTaps="handled">
+    <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-5 pt-2 pb-16" keyboardShouldPersistTaps="handled">
       <Field
         label={`Invitar a ${active.name}`}
         hint="Al entrar en Ghostaff con este correo verá la invitación."
@@ -70,42 +71,48 @@ export default function Invite() {
         onChangeText={setEmail}
       />
       {agents.items.length > 0 ? (
-        <View className="mt-6">
-          <Text className="text-sm font-semibold text-ink">Qué puede hacer con cada agente</Text>
-          <Text className="mt-1 text-sm text-muted">Con «Ver» lee sus conversaciones; con «Hablar» además le pide trabajo. Lo cambias cuando quieras en la página del agente.</Text>
-          <View className="mt-2 overflow-hidden rounded-2xl border border-line bg-card">
-            {agents.items.map((a, i) => (
-              <View key={a.id} className={`flex-row items-center gap-3 px-4 py-2.5 ${i > 0 ? 'border-t border-line' : ''}`}>
-                <Image source={GHOSTS[a.ghost].picture} className="h-8 w-8" resizeMode="contain" accessibilityIgnoresInvertColors />
-                <Text className="flex-1 text-base text-ink" numberOfLines={1}>{a.name}</Text>
+        <ListSection
+          header="Qué puede hacer con cada agente"
+          footer="Con «Ver» lee sus conversaciones; con «Hablar» además le pide trabajo. Lo cambias cuando quieras en la página del agente."
+        >
+          {agents.items.map((a) => (
+            <ListRow
+              key={a.id}
+              leading={<Image source={GHOSTS[a.ghost].picture} className="h-9 w-9" resizeMode="contain" accessibilityIgnoresInvertColors />}
+              title={a.name}
+              trailing={
                 <LevelPicker
                   label={a.name}
                   value={levels[a.id] ?? a.memberDefault}
-                  onChange={(l) =>
-                    setLevels(({ [a.id]: _, ...rest }) => (l === a.memberDefault ? rest : { ...rest, [a.id]: l }))
-                  }
+                  onChange={(l) => setLevels(({ [a.id]: _, ...rest }) => (l === a.memberDefault ? rest : { ...rest, [a.id]: l }))}
                 />
-              </View>
-            ))}
-          </View>
+              }
+            />
+          ))}
+        </ListSection>
+      ) : null}
+      <View className="mt-6">
+        <Button label="Invitar" icon={UserPlus} disabled={!looksLikeEmail(email)} busy={busy} onPress={() => void invite()} />
+      </View>
+      {sentTo ? (
+        <View className="mt-4 flex-row items-start rounded-2xl bg-card px-4 py-3.5">
+          <Icon icon={CheckCircle} size={20} />
+          <Text className="ml-2.5 flex-1 text-base text-ink">Invitación lista. Avisa a {sentTo} de que entre en Ghostaff.</Text>
         </View>
       ) : null}
-      <View className="mt-4">
-        <Button label="Invitar" disabled={!looksLikeEmail(email)} busy={busy} onPress={() => void invite()} />
-      </View>
-      {sentTo ? <Text className="mt-3 text-sm text-ok">Invitación lista. Avisa a {sentTo} de que entre en Ghostaff.</Text> : null}
       <ErrorText>{error}</ErrorText>
 
       {items.length > 0 ? (
-        <View className="mt-10">
-          <Text className="mb-3 text-sm font-semibold text-ink">Invitaciones pendientes</Text>
+        <ListSection header="Invitaciones pendientes">
           {items.map((i) => (
-            <View key={i.id} className="mb-2 flex-row items-center justify-between rounded-xl border border-line bg-card px-4 py-3">
-              <Text className="flex-1 text-base text-ink">{i.email}</Text>
-              <Button label="Quitar" tone="plain" onPress={() => void revoke(i.id)} />
-            </View>
+            <ListRow
+              key={i.id}
+              leading={<RowIcon icon={EnvelopeSimple} />}
+              title={i.email}
+              trailing={<Button label="Quitar" size="small" variant="plain" onPress={() => void revoke(i.id)} />}
+            />
           ))}
-        </View>
+        </ListSection>
       ) : null}
     </ScrollView>
   );

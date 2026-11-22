@@ -34,9 +34,11 @@ name: A new person creates a company and walks its three tabs
 - assertVisible: ".*(Buenos días|Buenas tardes|Buenas noches), Ana.*"
 - tapOn: "Equipo"
 - extendedWaitUntil:
-    visible: "Vacante · .*"
+    visible:
+      id: "vacancy-.*"
     timeout: 20000
-- tapOn: "Vacante · .*"
+- tapOn:
+    id: "vacancy-.*"
 - extendedWaitUntil:
     visible: "Que empiece"
     timeout: 15000

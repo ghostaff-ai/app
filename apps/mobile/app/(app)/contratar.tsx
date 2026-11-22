@@ -47,12 +47,14 @@ export default function Contratar() {
   return (
     <View className="flex-1 items-center bg-surface px-8 pb-10 pt-8">
       <Image source={g.picture} style={{ width: 140, height: 140 }} resizeMode="contain" />
-      <Text className="mt-2 text-xs uppercase tracking-wide text-muted">{DEPARTMENT_NAMES[g.department]}</Text>
-      <Text className="mt-1 font-display text-2xl text-ink">{g.label}</Text>
-      <Text className="mt-2 text-center text-base text-muted">{g.job}</Text>
-      <View className="mt-8 w-full gap-3">
+      <Text className="mt-3 text-footnote font-medium text-muted">{DEPARTMENT_NAMES[g.department]}</Text>
+      <Text accessibilityRole="header" className="mt-1 font-display text-title text-ink">
+        {g.label}
+      </Text>
+      <Text className="mt-2 max-w-[320px] text-center text-[17px] leading-6 text-muted">{g.job}</Text>
+      <View className="mt-10 w-full gap-1">
         <Button label="Que empiece" busy={busy} onPress={() => void start()} />
-        <Button label="Ahora no" tone="plain" onPress={() => router.back()} />
+        <Button label="Ahora no" variant="plain" onPress={() => router.back()} />
       </View>
       <ErrorText>{error}</ErrorText>
     </View>

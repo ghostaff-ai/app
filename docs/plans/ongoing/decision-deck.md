@@ -30,12 +30,15 @@ Per card: seconds to answer, whether the context was opened, whether the pick wa
 |---|---|---|---|---|---|---|---|
 | 1 | 2026-11-21 | 6 of 9 in the deck, 7–9 in chat («all of your picks») | swipe on odd cards, buttons on even; swipe-to-hire's 4 questions and the deck's own 5 | 10 (first card 237, reading the page) | 6 of 6 | 0 | 0 |
 | 2 | 2026-11-21 | 8 | real decisions from 5 repos, shuffled; 1 high-stakes (your pick first) | 31 | 6 of 8 (1 other option, 1 question) | 2 | 0 |
+| 3 | 2026-11-22 | 8, all in chat | 7 swipe cards for the phone, 1 high-stakes | — | 8 of 8 («I take your recommendation in all») | — | — |
 
 Round 1, first 6 cards: **he never swiped.** On all three swipe cards he pressed «Take my pick →». On the computer with a mouse, the button beside the card won; swipe has to be tried on the phone before it counts. Every pick taken, no context opened: either the cards were clear or the pick was rubber-stamped (open question 1).
 
 Cards 7–9 (Álvaro, 2026-11-21, in chat): keep testing swipe against buttons; keep measuring; and round 2 uses the research's rules. The skill now hides the pick on `stakes: high` cards until he has chosen, then lets him keep his or switch, and decks are seeded shuffled (agent-skills `807e8b1`).
 
 Round 2 ([deck](https://claude.ai/artifact/Nj1j5ogFDJcEogCZy9gtyb)): again **no swipe** (computer). Slower than round 1 (31 s against 10): real decisions take longer than confirmations. On the high-stakes card he chose our pick blind. He went against the pick once (Secretaría starts by herself) and used «Something else…» once, to ask a question rather than answer: a card should make room for «I need to know X first». Every card now offers it by name (agent-skills `a393b99`); it records `choice: "question"`, and the agent answers it in the card's context for the next round.
+
+Round 3 ([deck](https://claude.ai/artifact/YHi5SxCCrJ988v5gkEp74A)): never opened; he took every pick in chat. Swipe is still untested. Four of the eight cards had already been decided by another session the day before: the collector read plans without pulling first (the `decide` wrapper now pulls). Yes/no approvals on already-written plans may not need a deck at all: one message with the picks got the same answers.
 
 ## Open questions an experiment should answer
 

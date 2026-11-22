@@ -21,6 +21,7 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [develop]
+    # A CI run dispatched by automerge.yml after its merge counts like a push.
   workflow_dispatch:
 
 concurrency:
@@ -33,7 +34,7 @@ permissions:
 jobs:
   changes:
     name: Did the app change?
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch'))
     runs-on: ubuntu-latest
     outputs:
       app: ${{ steps.diff.outputs.app }}
