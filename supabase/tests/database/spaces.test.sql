@@ -2,7 +2,7 @@
 -- an organisation, each created with Secretaría already hired. One personal
 -- space per person, and nobody else sees it (invariant 1).
 begin;
-select plan(17);
+select plan(18);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000d1', 'dani@example.com'),
@@ -51,6 +51,10 @@ select is(
 select is(
   (select count(*)::int from public.organizations where kind = 'personal'),
   1, '... so there is still only one');
+
+select throws_ok(
+  $$ select public.invite_member((select id from mine), 'eva@example.com') $$,
+  '42501', 'a personal space has only its owner', 'nobody is invited to a personal space');
 
 reset role;
 select throws_ok(

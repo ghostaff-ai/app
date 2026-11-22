@@ -95,9 +95,15 @@ begin
     raise exception 'too many organisations' using errcode = '54000';
   end if;
 
-  insert into public.organizations (slug, name, created_by, kind)
-  values (public.slug_for('personal'), 'Personal', auth.uid(), 'personal')
-  returning * into o;
+  begin
+    insert into public.organizations (slug, name, created_by, kind)
+    values (public.slug_for('personal'), 'Personal', auth.uid(), 'personal')
+    returning * into o;
+  exception when unique_violation then
+    -- Two taps in the same instant: the other call made it, return that one.
+    select * into o from public.organizations x where x.created_by = auth.uid() and x.kind = 'personal';
+    return o;
+  end;
 
   insert into public.memberships (org_id, user_id, role, display_name)
   values (o.id, auth.uid(), 'owner', me.full_name);
@@ -109,3 +115,22 @@ $$;
 
 revoke execute on function public.create_personal_space() from public, anon;
 grant execute on function public.create_personal_space() to authenticated;
+
+-- A personal space has only its owner: nobody is invited to one, whatever
+-- function writes the invitation.
+create function public.invitations_not_personal()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if (select kind from public.organizations where id = new.org_id) = 'personal' then
+    raise exception 'a personal space has only its owner' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger invitations_not_personal
+  before insert on public.invitations
+  for each row execute function public.invitations_not_personal();
