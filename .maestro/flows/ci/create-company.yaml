@@ -1,5 +1,5 @@
 appId: ${APP_ID}
-name: A new person creates a company and walks its three tabs
+name: A new person creates a company, connects its AI and walks its four tabs
 ---
 # The first thing anyone does after signing up: create their company, be asked
 # to connect an AI account (the step can't be skipped; a stand-in key is written
