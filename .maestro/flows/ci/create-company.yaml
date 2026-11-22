@@ -1,11 +1,11 @@
 appId: ${APP_ID}
 name: A new person creates a company, connects its AI, walks its four tabs and reorders its AI accounts
 ---
-# The first thing anyone does after signing up: create their company, be asked
+# The first thing anyone does after signing up: say it's for their company, name it, be asked
 # to connect an AI account (the step can't be skipped; a stand-in key and a
 # stand-in subscription are written into the local database, scripts/connect-ai.js),
-# land on Hoy, and open Equipo, Registro and Conexiones. Then a vacancy is
-# filled, which opens the agent's page (no engine runs in e2e, so no first
+# land on Hoy, and open Equipo, Registro and Conexiones. Secretaría comes
+# hired with the company; another vacancy is filled, which opens the agent's page (no engine runs in e2e, so no first
 # thread). In Conexiones the owner moves the key below the subscription.
 - evalScript: ${output.email = 'e2e-co-' + Date.now() + '@ghostaff.test'}
 - evalScript: ${output.company = 'Panadería E2E ' + Date.now().toString().slice(-6)}
@@ -14,26 +14,25 @@ name: A new person creates a company, connects its AI, walks its four tabs and r
     env:
       EMAIL: ${output.email}
 - extendedWaitUntil:
-    visible: "Te damos la bienvenida"
+    visible: "¿Cómo te llamas?"
     timeout: 30000
 - tapOn: "Nombre y apellido"
 - inputText: "Ana E2E"
-- hideKeyboard
 - tapOn: "Seguir"
 - extendedWaitUntil:
-    visible: "¿Cómo quieres empezar?"
+    visible: "¿Para qué vas a usar Ghostaff?"
     timeout: 30000
-- tapOn: "Crear una empresa"
+- tapOn: "Para mi empresa.*"
+- tapOn: "Seguir"
 - extendedWaitUntil:
     visible: "Por ejemplo, Panadería Ana"
     timeout: 15000
 - tapOn: "Por ejemplo, Panadería Ana"
 - inputText: ${output.company}
-- hideKeyboard
-- tapOn: "Crear empresa"
+- tapOn: "Crear"
 # An owner connects the team's AI before anything else: offered, not skippable.
 - extendedWaitUntil:
-    visible: "Conecta la IA de tu equipo"
+    visible: "Conecta tu IA"
     timeout: 30000
 - assertVisible:
     id: "connect-ai-claude"

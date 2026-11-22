@@ -1,5 +1,5 @@
 appId: ${APP_ID}
-name: A new person signs up with the emailed code and lands on the welcome
+name: A new person signs up with the emailed code, gives their name and is asked what Ghostaff is for
 ---
 - evalScript: ${output.email = 'e2e-' + Date.now() + '@ghostaff.test'}
 - runFlow:
@@ -7,12 +7,14 @@ name: A new person signs up with the emailed code and lands on the welcome
     env:
       EMAIL: ${output.email}
 - extendedWaitUntil:
-    visible: "Te damos la bienvenida"
+    visible: "¿Cómo te llamas?"
     timeout: 30000
 - tapOn: "Nombre y apellido"
 - inputText: "Prueba E2E"
-- hideKeyboard
+# No hideKeyboard: «Seguir» is pinned above the keyboard (welcome-and-spaces.md).
 - tapOn: "Seguir"
 - extendedWaitUntil:
-    visible: "Hola, Prueba"
+    visible: "¿Para qué vas a usar Ghostaff?"
     timeout: 30000
+- assertVisible: "Para mí.*"
+- assertVisible: "Para mi empresa.*"
