@@ -23,7 +23,7 @@ import { madridNow } from './chat';
 import { Refusal } from './connections';
 import type { FreshRepoToken } from './githubApp';
 import { type AgentJob, indication, type JobDeps, type RunRecord } from './jobs';
-import { secretName, type Vault } from './vault';
+import { readAiSecret, type Vault } from './vault';
 
 /** What an agent on our runner runs with (its row in `agents`). */
 export interface RunnerAgent {
@@ -56,6 +56,8 @@ export interface RunnerStore {
    * hash and was never fetched; the run, or null when any of that fails.
    */
   claimSpec(runId: string, nonceHash: string): Promise<RunRecord | null>;
+  /** Notes which AI account the run works on, so its usage lands on that account's card. */
+  useConnection(runId: string, connectionId: string): Promise<void>;
 }
 
 export interface RunnerDeps {
@@ -115,9 +117,23 @@ class RunnerFailure extends Error {
   }
 }
 
+/**
+ * The Claude subscription a run works on: the first in the owner's order that
+ * has its token (one at a limit that has not reset comes after the others,
+ * chatStore.ts orderAccounts). Our runner is Claude Code, so only subscriptions count.
+ */
+async function pickSubscription(chat: ChatDeps, deps: RunnerDeps, orgId: string): Promise<{ id: string; token: string } | null> {
+  for (const a of await chat.chat.aiAccounts(orgId)) {
+    if (a.provider !== 'claude') continue;
+    const token = await readAiSecret(deps.vault, orgId, a);
+    if (token) return { id: a.id, token };
+  }
+  return null;
+}
+
 /** Why a run cannot work, said to people; null when it can. */
-async function preflight(deps: RunnerDeps, orgId: string): Promise<string | null> {
-  if (!(await deps.vault.get(secretName(orgId, 'claude')))) return NO_SUBSCRIPTION;
+async function preflight(chat: ChatDeps, deps: RunnerDeps, orgId: string): Promise<string | null> {
+  if (!(await pickSubscription(chat, deps, orgId))) return NO_SUBSCRIPTION;
   if (!(await deps.record(orgId))) return NO_RECORD;
   return null;
 }
@@ -169,7 +185,7 @@ export async function askRunner(chat: ChatDeps, deps: JobDeps, thread: ChatThrea
   try {
     const runner = deps.runner;
     if (!runner) throw new Error('our runner is not configured');
-    const why = await preflight(runner, agent.orgId);
+    const why = await preflight(chat, runner, agent.orgId);
     if (why) throw new RunnerFailure(why);
     runId = await launch({ ...deps, runner }, agent, { origin: 'person', requestedBy: userId, threadId: thread.id, messageId: replyId });
     await chat.chat.updateReply(replyId, { steps: ['Trabajando en ello: tardo unos minutos'] });
@@ -215,7 +231,7 @@ export async function startScheduled(chat: ChatDeps, deps: JobDeps): Promise<num
     const agent = await chat.chat.agent(a.id);
     if (!agent) continue;
     try {
-      const why = await preflight(runner, a.orgId);
+      const why = await preflight(chat, runner, a.orgId);
       if (why) {
         const runId = await deps.jobs.startRun({ orgId: a.orgId, agentId: a.id, origin: 'schedule', requestedBy: null, threadId: null, messageId: null });
         await failRun(chat, deps, { id: runId, messageId: null, threadId: null }, agent, why);
@@ -309,11 +325,12 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
     }
     throw new Refusal(409, 'gone', 'the agent no longer runs here');
   }
-  const [claudeToken, record] = await Promise.all([runner.vault.get(secretName(run.orgId, 'claude')), runner.record(run.orgId)]);
-  if (!claudeToken || !record) {
-    await failRun(chat, deps, run, chatAgent, claudeToken ? NO_RECORD : NO_SUBSCRIPTION);
-    throw new Refusal(409, claudeToken ? 'no_record' : 'no_subscription', 'the organisation cannot run this agent now');
+  const [subscription, record] = await Promise.all([pickSubscription(chat, runner, run.orgId), runner.record(run.orgId)]);
+  if (!subscription || !record) {
+    await failRun(chat, deps, run, chatAgent, subscription ? NO_RECORD : NO_SUBSCRIPTION);
+    throw new Refusal(409, subscription ? 'no_record' : 'no_subscription', 'the organisation cannot run this agent now');
   }
+  await runner.store.useConnection(run.id, subscription.id);
 
   let request: { text: string; from: string } | null = null;
   if (run.origin === 'person' && run.threadId) {
@@ -336,7 +353,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
     maxTurns: agent.maxTurns,
     record: { repo: record.repo, token: token.token, expiresAt: token.expiresAt },
     author: { name: `${agent.name} (Ghostaff)`, email: runner.commitEmail },
-    claudeToken,
+    claudeToken: subscription.token,
     decisionsDir: DECISIONS_DIR,
   };
 }

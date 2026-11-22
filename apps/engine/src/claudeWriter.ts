@@ -6,10 +6,15 @@
 // MCP servers, so the connected accounts' tools (accounts.ts) are not available
 // to an agent answering on a subscription. Giving them to it means serving them
 // to Claude Code as an MCP server. Until then, an agent that has tools answers
-// with the organisation's Anthropic key if there is one; without a key it
-// answers on the subscription, told it lacks them (and Conexiones says so).
+// with the organisation's other AI accounts first (chat.ts, orderForTools); on
+// a subscription it is told it lacks them (and Conexiones says so).
+//
+// What Claude Code reports on the way, its `rate_limit_event` lines and the
+// `result` event's usage, goes to the reply's onUsage: the subscription's card
+// shows its 5-hour and weekly limits from them.
 
-import type { ModelTurn, Writer } from './chat';
+import { type Limits, limitsFromEvent, mergeLimits, NO_TOKENS, tokensFromUsage } from '@ghostaff/shared';
+import { AiFailure, type ModelTurn, type Writer } from './chat';
 import { CLAUDE_SLOTS, makeHome, type PrintRunner, type Slots } from './claudeCode';
 
 /** How long one answer may take before Claude Code is stopped. */
@@ -68,11 +73,11 @@ export interface SubscriptionOptions {
 /** A Writer that runs Claude Code on the organisation's subscription. */
 export function subscriptionWriter(token: string, run: PrintRunner, model: string, opts: SubscriptionOptions = {}): Writer {
   const slots = opts.slots ?? CLAUDE_SLOTS;
-  return async ({ system, messages, tools, onText }) => {
+  return async ({ system, messages, tools, onText, onUsage }) => {
     const release = opts.busyFails ? slots.tryTake() : await slots.take(SLOT_WAIT_MS);
-    if (!release) throw new Error('every claude code slot is busy');
+    if (!release) throw new AiFailure('busy', 'every claude code slot is busy');
     try {
-      await runOnce(token, run, model, opts.timeoutMs, { system, messages, tools, onText });
+      await runOnce(token, run, model, opts.timeoutMs, { system, messages, tools, onText, onUsage });
     } finally {
       release();
     }
@@ -84,7 +89,7 @@ async function runOnce(
   run: PrintRunner,
   model: string,
   timeoutMs: number | undefined,
-  { system, messages, tools, onText }: Pick<Parameters<Writer>[0], 'system' | 'messages' | 'tools' | 'onText'>,
+  { system, messages, tools, onText, onUsage }: Pick<Parameters<Writer>[0], 'system' | 'messages' | 'tools' | 'onText' | 'onUsage'>,
 ): Promise<void> {
   const prompt = tools.specs.length ? `${system}\n${NO_TOOLS_LINE}` : system;
   const home = await makeHome();
@@ -94,7 +99,8 @@ async function runOnce(
     timedOut = true;
     void child.kill();
   }, timeoutMs ?? RUN_TIMEOUT_MS);
-  let result: { is_error?: boolean; subtype?: string; api_error_status?: number } | null = null;
+  let result: { is_error?: boolean; subtype?: string; api_error_status?: number; usage?: unknown } | null = null;
+  let limits: Limits | null = null;
   try {
     for await (const line of child.lines) {
       let event: {
@@ -103,6 +109,7 @@ async function runOnce(
         is_error?: boolean;
         subtype?: string;
         api_error_status?: number;
+        usage?: unknown;
       };
       try {
         event = JSON.parse(line);
@@ -112,64 +119,26 @@ async function runOnce(
       if (event.type === 'stream_event' && event.event?.type === 'content_block_delta' && event.event.delta?.type === 'text_delta') {
         const text = event.event.delta.text ?? '';
         if (text) onText(text);
+      } else if (event.type === 'rate_limit_event') {
+        limits = mergeLimits(limits, limitsFromEvent(event));
       } else if (event.type === 'result') {
         result = event;
       }
     }
     const code = await child.done;
-    if (timedOut) throw new Error('claude code took too long');
+    if (timedOut) throw new AiFailure('failed', 'claude code took too long', limits);
     // Never the result's text in the error: only its status.
-    if (!result) throw new Error(`claude code ended without an answer (exit ${code})`);
-    if (result.is_error) throw new Error(`claude code failed (${result.api_error_status ?? result.subtype ?? 'error'})`);
+    if (!result) throw new AiFailure('failed', `claude code ended without an answer (exit ${code})`, limits);
+    if (result.is_error) {
+      const status = result.api_error_status;
+      const atLimit = status === 429 || [limits?.fiveHour, limits?.sevenDay].some((w) => w?.status === 'rejected');
+      const kind = atLimit ? 'limited' : status === 401 || status === 403 ? 'refused' : 'failed';
+      throw new AiFailure(kind, `claude code failed (${status ?? result.subtype ?? 'error'})`, limits);
+    }
+    onUsage?.({ model, tokens: result.usage ? tokensFromUsage(result.usage) : NO_TOKENS, limits });
   } finally {
     clearTimeout(timer);
     await child.kill();
     await home.remove().catch(() => {});
   }
-}
-
-/**
- * Runs `primary`; if it fails before writing anything (a subscription refused,
- * cut off, out of its limits) and there is a fallback, the fallback answers.
- */
-export function withFallback(primary: Writer, fallback: (() => Promise<Writer>) | null): Writer {
-  if (!fallback) return primary;
-  return async (req) => {
-    let wrote = false;
-    try {
-      await primary({
-        ...req,
-        onText: (t) => {
-          wrote = true;
-          req.onText(t);
-        },
-      });
-    } catch (e) {
-      if (wrote) throw e;
-      console.warn('claude subscription failed; answering with the Anthropic key', e instanceof Error ? e.message : typeof e);
-      await (
-        await fallback()
-      )(req);
-    }
-  };
-}
-
-/**
- * How an organisation with a Claude subscription answers: on the subscription,
- * unless the agent has connected accounts' tools and the organisation has an
- * Anthropic key (the subscription path has no tools yet), or the subscription
- * fails or is busy before writing and the key can take over.
- */
-export function claudeAccountWriter(
-  token: string,
-  run: PrintRunner,
-  model: string,
-  fallback: (() => Promise<Writer>) | null,
-  opts: SubscriptionOptions = {},
-): Writer {
-  const onSubscription = withFallback(subscriptionWriter(token, run, model, { ...opts, busyFails: fallback !== null }), fallback);
-  return async (req) => {
-    if (req.tools.specs.length && fallback) return (await fallback())(req);
-    return onSubscription(req);
-  };
 }

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { type AiUsageDay, limitsFromRow } from '../aiUsage';
 import type { AccountProvider } from '../connectors';
 import type {
   AccountConnectResult,
@@ -388,9 +389,14 @@ interface ConnectionRow {
   hint: string;
   settings: Connection['settings'] | null;
   status: Connection['status'];
+  status_reason?: Connection['statusReason'];
   checked_at: string;
   connected_by_name: string;
   updated_at: string;
+  position?: number | null;
+  label?: string | null;
+  limits?: unknown;
+  last_used_at?: string | null;
 }
 
 export function connectionFromRow(r: ConnectionRow): Connection {
@@ -403,14 +409,19 @@ export function connectionFromRow(r: ConnectionRow): Connection {
     hint: r.hint,
     settings: r.settings ?? {},
     status: r.status,
+    statusReason: r.status_reason ?? null,
     checkedAt: r.checked_at,
     connectedByName: r.connected_by_name,
     updatedAt: r.updated_at,
+    position: r.position ?? 0,
+    label: r.label ?? null,
+    limits: limitsFromRow(r.limits),
+    lastUsedAt: r.last_used_at ?? null,
   };
 }
 
 export const CONNECTION_COLUMNS =
-  'id, org_id, kind, provider, method, hint, settings, status, checked_at, connected_by_name, updated_at';
+  'id, org_id, kind, provider, method, hint, settings, status, status_reason, checked_at, connected_by_name, updated_at, position, label, limits, last_used_at';
 
 /** The organisation's connections. Every member sees them; only owners change them. */
 export async function listConnections(client: SupabaseClient, orgId: string): Promise<Connection[]> {
@@ -418,10 +429,55 @@ export async function listConnections(client: SupabaseClient, orgId: string): Pr
     .from('connections')
     .select(CONNECTION_COLUMNS)
     .eq('org_id', orgId)
+    .order('position')
     .order('created_at')
     .returns<ConnectionRow[]>();
   if (error) throw error;
   return (data ?? []).map(connectionFromRow);
+}
+
+/** The organisation's AI accounts in the order the engine tries them. Owners only (`set_ai_order` checks). */
+export async function setAiOrder(client: SupabaseClient, orgId: string, ordered: readonly string[]): Promise<void> {
+  const { error } = await client.rpc('set_ai_order', { target_org: orgId, ordered });
+  if (error) throw error;
+}
+
+/** Names an AI account; an empty name goes back to the provider's. Owners only. */
+export async function renameAiConnection(client: SupabaseClient, connectionId: string, label: string): Promise<void> {
+  const { error } = await client.rpc('rename_ai_connection', { target: connectionId, new_label: label });
+  if (error) throw error;
+}
+
+interface AiUsageDayRow {
+  connection_id: string;
+  agent_id: string | null;
+  day: string;
+  uses: number | string;
+  failures: number | string;
+  input_tokens: number | string;
+  output_tokens: number | string;
+  cache_read_tokens: number | string;
+  cache_write_tokens: number | string;
+  cost_usd: number | string | null;
+  last_at: string;
+}
+
+/** What each AI account did in the last `days` days (Madrid), per agent and day. Members read their own organisation's. */
+export async function listAiUsage(client: SupabaseClient, orgId: string, days = 30, now: Date = new Date()): Promise<AiUsageDay[]> {
+  const since = new Date(now.getTime() - (days - 1) * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+  const { data, error } = await client.rpc('ai_usage_daily', { target_org: orgId, since });
+  if (error) throw error;
+  const n = (v: number | string | null) => (v === null ? 0 : Number(v));
+  return ((data ?? []) as AiUsageDayRow[]).map((r) => ({
+    connectionId: r.connection_id,
+    agentId: r.agent_id,
+    day: r.day,
+    uses: n(r.uses),
+    failures: n(r.failures),
+    tokens: { input: n(r.input_tokens), output: n(r.output_tokens), cacheRead: n(r.cache_read_tokens), cacheWrite: n(r.cache_write_tokens) },
+    costUsd: r.cost_usd === null ? null : Number(r.cost_usd),
+    lastAt: r.last_at,
+  }));
 }
 
 /** How to reach the engine as the signed-in person. */
@@ -466,9 +522,9 @@ export async function connectAi(engine: EngineAccess, input: ConnectAiInput): Pr
   return connectionFromRow(connection);
 }
 
-/** Removes the connection and deletes its key from the vault. */
-export async function disconnectAi(engine: EngineAccess, orgId: string, provider: AiProvider): Promise<void> {
-  await callEngine(engine, 'DELETE', `/connections/ai/${provider}?org=${encodeURIComponent(orgId)}`);
+/** Removes one AI account and deletes its key or token from the vault. */
+export async function disconnectAi(engine: EngineAccess, orgId: string, connectionId: string): Promise<void> {
+  await callEngine(engine, 'DELETE', `/connections/ai/${encodeURIComponent(connectionId)}?org=${encodeURIComponent(orgId)}`);
 }
 
 /** A Claude subscription being connected: the code goes in, or the person gives up. */

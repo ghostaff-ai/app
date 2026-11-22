@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { type AiAccount, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, whoAnswers, type Writer } from '../src/chat';
+import { type AiAccount, AiFailure, type AiUse, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, whoAnswers, type Writer } from '../src/chat';
 import { type AgentTools, NO_TOOLS } from '../src/tools';
 import { MemoryVault } from '../src/vault';
 
@@ -33,8 +33,10 @@ function msg(p: Partial<ChatMessage> & { text: string }): ChatMessage {
 function setup(
   opts: {
     levels?: Record<string, Level>;
-    account?: AiAccount | null;
+    accounts?: AiAccount[];
     write?: Writer;
+    /** A writer per account id; the others write with `write`. */
+    writers?: Record<string, Writer>;
     messages?: ChatMessage[];
     expose?: { messages?: ChatMessage[] };
     tools?: AgentTools;
@@ -46,6 +48,7 @@ function setup(
   const threads: ChatThreadHead[] = [{ id: THREAD, orgId: ORG, agentId: AGENT, title: 'Cierre' }];
   const updates: Array<{ id: string; text?: string; steps?: string[]; state?: string; actions?: unknown[] }> = [];
   const proposed: Array<{ tool: string; input: unknown; label: string; requestedBy: string; messageId: string }> = [];
+  const used: AiUse[] = [];
   let working: string | null = null;
   let startedAt = 0; // where the reply sits: it was created when it started
   const replier = new Map<string, ChatAgent>();
@@ -79,7 +82,10 @@ function setup(
       threads.push({ id, orgId: ORG, agentId, title });
       return id;
     },
-    aiAccount: async () => (opts.account === undefined ? { provider: 'anthropic' } : opts.account),
+    aiAccounts: async () => opts.accounts ?? [{ id: 'key-1', provider: 'anthropic' }],
+    recordAiUse: async (u) => {
+      used.push(u);
+    },
     proposeAction: async (a) => {
       proposed.push(a);
       return `action-${proposed.length}`;
@@ -91,7 +97,7 @@ function setup(
       onText('Vamos ');
       onText('bien.');
     });
-  const asked: Array<{ system: string; messages: unknown }> = [];
+  const asked: Array<{ system: string; messages: unknown; account?: string }> = [];
   const app = createApp({
     store: {} as never,
     vault: new MemoryVault(),
@@ -101,18 +107,124 @@ function setup(
     chat: {
       chat,
       flushMs: 0,
-      writerFor: async () => async (req) => {
-        asked.push(req);
-        await write(req);
+      writerFor: async (_org, account) => async (req) => {
+        asked.push({ ...req, account: account.id });
+        await (opts.writers?.[account.id] ?? write)(req);
       },
+      costOf: (account, _model, tokens) => (account.provider === 'claude' ? null : tokens.output / 1000),
       toolsFor: async () => opts.tools ?? NO_TOOLS,
     },
     accounts: {} as never,
     actions: {} as never,
   });
   const call = (user: string, path: string) => app.request(path, { method: 'POST', headers: { Authorization: `Bearer token-${user}` } });
-  return { call, updates, asked, threads, proposed };
+  return { call, updates, asked, threads, proposed, used };
 }
+
+describe('several AI accounts', () => {
+  const sub1: AiAccount = { id: 'sub-1', provider: 'claude' };
+  const sub2: AiAccount = { id: 'sub-2', provider: 'claude' };
+  const key: AiAccount = { id: 'key-1', provider: 'anthropic' };
+  const quiet = () => {
+    const warn = console.warn;
+    console.warn = () => {};
+    return () => (console.warn = warn);
+  };
+
+  it('the first answers, and its usage lands on its card', async () => {
+    const { call, updates, asked, used } = setup({
+      accounts: [sub1, key],
+      writers: {
+        'sub-1': async ({ onText, onUsage }) => {
+          onText('Hola.');
+          onUsage?.({ model: 'claude-opus-5-5', tokens: { input: 5, output: 50, cacheRead: 0, cacheWrite: 0 }, limits: { sevenDay: { utilization: 0.5, resetsAt: null, status: 'allowed' } } });
+        },
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(asked.map((a) => a.account)).toEqual(['sub-1']);
+    expect(updates.at(-1)).toMatchObject({ text: 'Hola.', state: 'done' });
+    expect(used).toEqual([
+      expect.objectContaining({ connectionId: 'sub-1', outcome: 'ok', costUsd: null, model: 'claude-opus-5-5', source: 'chat', agentId: AGENT, limits: expect.objectContaining({ sevenDay: expect.anything() }) }),
+    ]);
+  });
+
+  it('one at its limit before writing: the next answers, and the first is marked limited', async () => {
+    const restore = quiet();
+    const { call, updates, asked, used } = setup({
+      accounts: [sub1, sub2, key],
+      writers: {
+        'sub-1': async () => {
+          throw new AiFailure('limited', 'claude code failed (429)', { sevenDay: { utilization: 1, resetsAt: null, status: 'rejected' } });
+        },
+        'sub-2': async ({ onText }) => onText('Con la segunda.'),
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    await new Promise((r) => setTimeout(r, 0));
+    restore();
+    expect(asked.map((a) => a.account)).toEqual(['sub-1', 'sub-2']);
+    expect(updates.at(-1)).toMatchObject({ text: 'Con la segunda.', state: 'done' });
+    expect(used.map((u) => [u.connectionId, u.outcome])).toEqual([
+      ['sub-1', 'limited'],
+      ['sub-2', 'ok'],
+    ]);
+    expect(used[0]?.limits?.sevenDay?.status).toBe('rejected');
+  });
+
+  it('a key the provider no longer accepts is marked refused; busy Claude Code is not the account’s fault', async () => {
+    const restore = quiet();
+    const { call, used } = setup({
+      accounts: [key, sub1, sub2],
+      writers: {
+        'key-1': async () => {
+          throw Object.assign(new Error('401'), { status: 401 });
+        },
+        'sub-1': async () => {
+          throw new AiFailure('busy', 'every claude code slot is busy');
+        },
+        'sub-2': async ({ onText }) => onText('Ok.'),
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    await new Promise((r) => setTimeout(r, 0));
+    restore();
+    expect(used.map((u) => [u.connectionId, u.outcome])).toEqual([
+      ['key-1', 'refused'],
+      ['sub-2', 'ok'],
+    ]);
+  });
+
+  it('not once the first has written: the reply fails rather than start over', async () => {
+    const restore = quiet();
+    const errors = console.error;
+    console.error = () => {};
+    const { call, updates, asked } = setup({
+      accounts: [sub1, key],
+      writers: {
+        'sub-1': async ({ onText }) => {
+          onText('Medio');
+          throw new Error('cut');
+        },
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    restore();
+    console.error = errors;
+    expect(asked.map((a) => a.account)).toEqual(['sub-1']);
+    expect(updates.at(-1)?.state).toBe('failed');
+  });
+
+  it('an agent with tools tries the accounts that have them first, then the subscriptions', async () => {
+    const { call, asked } = setup({
+      accounts: [sub1, key],
+      tools: { ...NO_TOOLS, specs: [{ name: 'calendar_list' }] as never },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(asked.map((a) => a.account)).toEqual(['key-1']);
+  });
+});
 
 describe('an agent answering in a thread', () => {
   it('writes the reply as it comes, then finishes it', async () => {
@@ -134,7 +246,7 @@ describe('an agent answering in a thread', () => {
   });
 
   it('says how to connect an AI account when there is none', async () => {
-    const { call, updates } = setup({ account: null });
+    const { call, updates } = setup({ accounts: [] });
     await call('ana', `/threads/${THREAD}/reply`);
     expect(updates[updates.length - 1]?.text).toContain('Conexiones');
     expect(updates[updates.length - 1]?.state).toBe('done');

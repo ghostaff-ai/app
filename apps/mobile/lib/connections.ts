@@ -1,4 +1,13 @@
-import { type AccountConnectResult, type AiProvider, type CatalogueConnector, type Connection, CONNECTOR_AREAS, CONNECTORS } from '@ghostaff/shared';
+import {
+  type AccountConnectResult,
+  type AiProvider,
+  type AiUsageSummary,
+  type CatalogueConnector,
+  type Connection,
+  CONNECTOR_AREAS,
+  CONNECTORS,
+  type LimitWindow,
+} from '@ghostaff/shared';
 import { EngineError } from '@ghostaff/shared/services';
 
 // What the connections screen says, in Spanish. One place, so the engine's
@@ -51,18 +60,88 @@ export const PROVIDERS: Record<AiProvider, ProviderCopy> = {
     dataNote:
       'Tus agentes usan tu plan de Claude (Pro, Max…) a través de Claude Code, el programa de Anthropic. Lo que hagan pasa por Anthropic, en Estados Unidos, y cuenta en los límites de tu plan.',
     warning:
-      'Anthropic puede cortar sin aviso una suscripción usada así. Si pasa, tus agentes siguen con tu clave de Anthropic si has conectado una; si no, dejan de contestar hasta que conectes otra cuenta.',
+      'Anthropic puede cortar sin aviso una suscripción usada así, y más si la usa un equipo entero o si juntas las de varias personas. Si pasa, tus agentes siguen con tu siguiente cuenta de IA; si no tienes otra, dejan de contestar hasta que conectes una.',
     limit:
-      'Por ahora, con la suscripción tus agentes no pueden usar las apps conectadas (Google, Instagram…). Si conectas también tu clave de Anthropic, la usan cuando hace falta una app.',
+      'Por ahora, con la suscripción tus agentes no pueden usar las apps conectadas (Google, Instagram…). Cuando hace falta una app, usan tu clave de Anthropic o tu Google Cloud si has conectado una.',
   },
 };
 
-/** The AI accounts in the order Conexiones lists them: the one that keeps data in Europe first. */
+/** The kinds of AI account, in the order Conexiones offers them to add: the one that keeps data in Europe first. */
 export const AI_ORDER: readonly AiProvider[] = ['vertex', 'claude', 'anthropic', 'openai'];
+
+/** An AI account's name: the one an owner gave it, else its kind's. */
+export const aiAccountName = (c: Pick<Connection, 'label' | 'provider'>) => c.label ?? PROVIDERS[c.provider as AiProvider]?.name ?? c.provider;
+
+/** Why an AI account is failing, in a few words. */
+export function failingText(reason: Connection['statusReason']): string {
+  switch (reason) {
+    case 'limited':
+      return 'Ha llegado a su límite';
+    case 'refused':
+      return 'Ya no la acepta el proveedor: vuelve a conectarla';
+    default:
+      return 'Falló la última vez';
+  }
+}
+
+const nf = (digits: number) => new Intl.NumberFormat('es-ES', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+
+/** Tokens as a person reads them: «850», «12 mil», «1,2 M». */
+export function tokensLabel(n: number): string {
+  if (n < 1000) return `${n}`;
+  if (n < 1_000_000) return `${nf(0).format(Math.round(n / 1000))} mil`;
+  return `${nf(1).format(n / 1_000_000)} M`;
+}
+
+/** An estimated cost: «~0,40 $», «~18 $». */
+export function costLabel(usd: number): string {
+  if (usd > 0 && usd < 0.01) return '<0,01 $';
+  return `~${usd < 10 ? new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(usd) : nf(0).format(usd)} $`;
+}
+
+const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+/** When a limit window starts again: «en 3 h», «en 40 min», «el jueves a las 6:00». */
+export function resetLabel(iso: string, now = new Date()): string {
+  const at = new Date(iso);
+  const minutes = Math.round((at.getTime() - now.getTime()) / 60_000);
+  if (minutes <= 0) return 'ya';
+  if (minutes < 60) return `en ${minutes} min`;
+  if (minutes < 12 * 60) return `en ${Math.round(minutes / 60)} h`;
+  return `el ${WEEKDAYS[at.getDay()]} a las ${at.getHours()}:${String(at.getMinutes()).padStart(2, '0')}`;
+}
+
+/** A limit window's use as a whole percentage, or null when Claude Code did not say. */
+export const percent = (w: LimitWindow | undefined) => (w?.utilization == null ? null : Math.min(100, Math.round(w.utilization * 100)));
+
+/** One window in a line: «Semana 62 %», «5 h · límite alcanzado». */
+function windowLine(name: string, w: LimitWindow | undefined): string | null {
+  if (!w) return null;
+  if (w.status === 'rejected') return `${name}: límite alcanzado`;
+  const p = percent(w);
+  return p === null ? null : `${name} ${p} %`;
+}
+
+/**
+ * What an AI account's row says under its name: why it is failing, else its
+ * usage. A subscription shows its limits; a key or Google Cloud its tokens and
+ * estimated cost in the last 30 days.
+ */
+export function aiUsageLine(c: Connection, usage: AiUsageSummary | null): string {
+  if (c.status === 'failing') return failingText(c.statusReason);
+  if (c.provider === 'claude') {
+    const limits = [windowLine('Semana', c.limits.sevenDay), windowLine('5 h', c.limits.fiveHour)].filter(Boolean);
+    if (limits.length) return limits.join(' · ');
+  }
+  if (!usage || usage.uses === 0) return c.provider === 'openai' ? PROVIDERS.openai.short : 'Sin usar en los últimos 30 días';
+  const parts = [`${usage.uses} ${usage.uses === 1 ? 'uso' : 'usos'}`, `${tokensLabel(usage.tokens)} tokens`];
+  if (usage.costUsd !== null && c.provider !== 'claude') parts.push(costLabel(usage.costUsd));
+  return `30 días: ${parts.join(' · ')}`;
+}
 
 /**
  * The AI accounts the engine runs agents on today (apps/engine/src/chatStore.ts,
- * aiAccount). An OpenAI key is kept but not used yet, so it doesn't count.
+ * orderAccounts). An OpenAI key is kept but not used yet, so it doesn't count.
  */
 export const RUNS_AGENTS: readonly AiProvider[] = ['vertex', 'claude', 'anthropic'];
 

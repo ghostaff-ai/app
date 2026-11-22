@@ -14,9 +14,22 @@ export interface Vault {
   remove(name: string): Promise<void>;
 }
 
-/** Secret IDs allow letters, digits, `-` and `_`. One per organisation and provider. */
-export function secretName(orgId: string, provider: string): string {
+/** Secret IDs allow letters, digits, `-` and `_`. One per AI connection (an organisation may have several). */
+export function aiSecretName(orgId: string, connectionId: string): string {
+  return `org-${orgId}-ai-${connectionId}`.replace(/[^A-Za-z0-9_-]/g, '-');
+}
+
+/**
+ * Before 2026-11-22 an organisation had one AI connection per provider, and
+ * its secret was named after the provider. Connections from then still read it.
+ */
+export function legacyAiSecretName(orgId: string, provider: string): string {
   return `org-${orgId}-ai-${provider}`.replace(/[^A-Za-z0-9_-]/g, '-');
+}
+
+/** An AI connection's key or token: under its own id, else under the name it had before several were allowed. */
+export async function readAiSecret(vault: Pick<Vault, 'get'>, orgId: string, connection: { id: string; provider: string }): Promise<string | null> {
+  return (await vault.get(aiSecretName(orgId, connection.id))) ?? (await vault.get(legacyAiSecretName(orgId, connection.provider)));
 }
 
 /** An outside account's token (Google…), one per organisation and provider. */

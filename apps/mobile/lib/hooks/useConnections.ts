@@ -1,5 +1,5 @@
-import type { Connection } from '@ghostaff/shared';
-import { type EngineAccess, listConnections } from '@ghostaff/shared/services';
+import type { AiUsageDay, Connection } from '@ghostaff/shared';
+import { type EngineAccess, listAiUsage, listConnections } from '@ghostaff/shared/services';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { engineUrl } from '../env';
@@ -57,4 +57,18 @@ export function useEngine(): EngineAccess | null {
   const { session } = useAuth();
   const token = session?.access_token;
   return useMemo(() => (token ? { url: engineUrl, token } : null), [token]);
+}
+
+/** What each of the organisation's AI accounts did in the last 30 days, per agent and day. */
+export function useAiUsage(orgId: string | null) {
+  const [rows, setRows] = useState<AiUsageDay[]>([]);
+  const load = useCallback(async () => {
+    if (!orgId) return setRows([]);
+    // Usage is a nicety on the cards: if it cannot be read, they go on without it.
+    setRows(await listAiUsage(supabase, orgId).catch(() => []));
+  }, [orgId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  return { rows, reload: load };
 }

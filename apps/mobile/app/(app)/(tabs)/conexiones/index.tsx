@@ -1,14 +1,14 @@
-import { type AiProvider, CONNECTOR_AREAS, type ConnectorArea } from '@ghostaff/shared';
-import { listConnectorRequests, requestConnector, type ConnectorRequest } from '@ghostaff/shared/services';
+import { type AiProvider, type Connection, CONNECTOR_AREAS, type ConnectorArea, summarizeUsage } from '@ghostaff/shared';
+import { listConnectorRequests, requestConnector, setAiOrder, type ConnectorRequest } from '@ghostaff/shared/services';
 import { router } from 'expo-router';
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { AskForConnector } from '@/components/connections/AskForConnector';
 import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
-import { LockSimple, Icon } from '@/components/icons';
+import { ArrowDown, ArrowUp, LockSimple, Icon } from '@/components/icons';
 import { Chip, ListRow, ListSection, ScreenTitle, SearchField } from '@/components/ui';
-import { AI_ORDER, connectorSections, connectorWhat, PROVIDERS } from '@/lib/connections';
-import { useConnections } from '@/lib/hooks/useConnections';
+import { AI_ORDER, aiAccountName, aiUsageLine, connectorSections, connectorWhat, PROVIDERS } from '@/lib/connections';
+import { useAiUsage, useConnections } from '@/lib/hooks/useConnections';
 import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
@@ -16,9 +16,11 @@ import { useTabScreenTop } from '@/lib/tabs';
 import { usePalette } from '@/lib/theme';
 
 // The organisation's connections: its accounts on outside services, grouped
-// by area with each service's logo, and its own AI account. A row opens the
-// connection's page (conexiones/[id], conexiones/ia/[provider]), where it is connected,
-// checked or removed. The engine keeps every token and key in the vault; this
+// by area with each service's logo, and its AI accounts. A row opens the
+// connection's page (conexiones/[id], conexiones/ia/[provider]?id=), where it is connected,
+// checked or removed. The AI accounts are listed in the order the agents try
+// them, each with its usage, and an owner moves them up and down; under them,
+// a row per kind adds another (multiple-ai-accounts.md). The engine keeps every token and key in the vault; this
 // screen only ever sees an account's email or a key's last 4 characters.
 // It is the fourth tab on a phone; on a desktop a page of the sidebar
 // (docs/plans/ideas/desktop-web.md), with each section's connections in a grid of three.
@@ -28,7 +30,10 @@ type Filter = 'all' | 'connected' | ConnectorArea;
 export default function Connections() {
   const c = usePalette();
   const { active } = useActiveOrg();
-  const { items } = useConnections(active?.id ?? null);
+  const { items, reload } = useConnections(active?.id ?? null);
+  const usage = useAiUsage(active?.id ?? null);
+  const aiAccounts = useMemo(() => items.filter((i) => i.kind === 'ai'), [items]);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const desktop = useIsDesktop();
   const top = useTabScreenTop();
   const [search, setSearch] = useState('');
@@ -51,6 +56,20 @@ export default function Connections() {
     await loadAsked();
   };
   if (!active) return null;
+  const owner = active.role === 'owner';
+  const move = async (from: number, to: number) => {
+    const ids = aiAccounts.map((a) => a.id);
+    const [moved] = ids.splice(from, 1);
+    if (!moved || !orgId) return;
+    ids.splice(to, 0, moved);
+    setMoveError(null);
+    try {
+      await setAiOrder(supabase, orgId, ids);
+    } catch {
+      setMoveError('No hemos podido cambiar el orden. Inténtalo de nuevo.');
+    }
+    await reload();
+  };
 
   const shown = sections.filter((s) => filter === 'all' || (filter === 'connected' ? s.title === 'Conectadas' : s.title === filter));
   const filters: { value: Filter; label: string }[] = [
@@ -127,26 +146,88 @@ export default function Connections() {
         ))}
         {sections.length > 0 ? <AskForConnector searched="" asked={asked} onAsk={ask} /> : null}
 
-        {!search && (filter === 'all' || filter === 'connected') ? (
-          <Group desktop={desktop} header="IA" footer="Tus agentes trabajan con la cuenta de IA de tu empresa, y su factura llega a tu nombre. Sin una, no pueden contestar.">
-            {AI_ORDER.filter((p) => filter === 'all' || items.some((i) => i.kind === 'ai' && i.provider === p)).map((p: AiProvider) => {
-              const conn = items.find((i) => i.kind === 'ai' && i.provider === p);
-              return (
-                <ListRow
-                  key={p}
-                  leading={<ConnectorLogo id={`ai-${p}`} name={PROVIDERS[p].name} size={36} />}
-                  title={PROVIDERS[p].name}
-                  subtitle={PROVIDERS[p].short}
-                  trailing={conn ? <Text className="text-footnote text-muted">Conectada</Text> : undefined}
-                  chevron
-                  onPress={() => router.push(`/conexiones/ia/${p}`)}
-                />
-              );
-            })}
+        {!search && (filter === 'all' || filter === 'connected') && aiAccounts.length > 0 ? (
+          <Group
+            desktop={desktop}
+            header="IA"
+            footer={
+              moveError ??
+              (aiAccounts.length > 1
+                ? 'Tus agentes usan la primera. Si falla o llega a su límite, siguen con la siguiente.'
+                : 'Tus agentes trabajan con esta cuenta, y su factura llega a tu nombre.')
+            }
+          >
+            {aiAccounts.map((conn, i) => (
+              <ListRow
+                key={conn.id}
+                testID={`ai-account-${i + 1}`}
+                leading={<ConnectorLogo id={`ai-${conn.provider}`} name={aiAccountName(conn)} size={36} />}
+                title={`${i + 1}. ${aiAccountName(conn)}`}
+                subtitle={aiUsageLine(conn, summarizeUsage(usage.rows, conn.id))}
+                trailing={
+                  owner && aiAccounts.length > 1 ? (
+                    <MoveButtons conn={conn} n={i + 1} first={i === 0} last={i === aiAccounts.length - 1} onMove={(by) => void move(i, i + by)} />
+                  ) : conn.status === 'failing' ? (
+                    <Text className="text-footnote font-medium text-no">Revisar</Text>
+                  ) : undefined
+                }
+                chevron
+                onPress={() => router.push(`/conexiones/ia/${conn.provider}?id=${conn.id}`)}
+              />
+            ))}
+          </Group>
+        ) : null}
+        {!search && filter === 'all' ? (
+          <Group
+            desktop={desktop}
+            header={aiAccounts.length ? 'Añadir otra cuenta de IA' : 'IA'}
+            footer={
+              aiAccounts.length
+                ? 'Puedes tener varias, incluso la misma suscripción dos veces. Cada nueva va al final.'
+                : 'Tus agentes trabajan con la cuenta de IA de tu empresa, y su factura llega a tu nombre. Sin una, no pueden contestar.'
+            }
+          >
+            {AI_ORDER.map((p: AiProvider) => (
+              <ListRow
+                key={p}
+                testID={`add-ai-${p}`}
+                leading={<ConnectorLogo id={`ai-${p}`} name={PROVIDERS[p].name} size={36} />}
+                title={PROVIDERS[p].name}
+                subtitle={PROVIDERS[p].short}
+                chevron
+                onPress={() => router.push(`/conexiones/ia/${p}`)}
+              />
+            ))}
           </Group>
         ) : null}
       </View>
     </ScrollView>
+  );
+}
+
+/** Up and down for one AI account: its place in the order the agents try them. */
+function MoveButtons({ conn, n, first, last, onMove }: { conn: Connection; n: number; first: boolean; last: boolean; onMove: (by: -1 | 1) => void }) {
+  const c = usePalette();
+  const name = aiAccountName(conn);
+  const button = (by: -1 | 1, off: boolean) => (
+    <Pressable
+      testID={`ai-${by < 0 ? 'up' : 'down'}-${n}`}
+      accessibilityRole="button"
+      accessibilityLabel={by < 0 ? `Subir ${name}` : `Bajar ${name}`}
+      accessibilityState={{ disabled: off }}
+      disabled={off}
+      hitSlop={6}
+      onPress={() => onMove(by)}
+      className="h-9 w-9 items-center justify-center rounded-full active:bg-sunk"
+    >
+      <Icon icon={by < 0 ? ArrowUp : ArrowDown} size={18} color={off ? c.line : c.muted} weight="regular" />
+    </Pressable>
+  );
+  return (
+    <View className="flex-row">
+      {button(-1, first)}
+      {button(1, last)}
+    </View>
   );
 }
 

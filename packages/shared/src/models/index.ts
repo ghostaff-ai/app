@@ -1,4 +1,5 @@
 import type { AccountProvider } from '../connectors';
+import type { Limits } from '../aiUsage';
 
 // The shapes the app and the sync job share. They mirror the tables in
 // supabase/migrations/; a column added there is added here in the same change.
@@ -124,9 +125,19 @@ export interface Connection {
   /** A cloud project's project and region; an account's granted scopes; empty for a key. */
   settings: { project?: string; region?: string; scopes?: string[] };
   status: 'ok' | 'failing';
+  /** Why it is failing: out of its limits, no longer accepted (key revoked, signed out), or anything else. */
+  statusReason: 'limited' | 'refused' | 'failed' | null;
   checkedAt: string;
   connectedByName: string;
   updatedAt: string;
+  /** An AI account's place in the order the engine tries them (1 first); 0 for an outside account. */
+  position: number;
+  /** The name an owner gave an AI account; null shows the provider's. */
+  label: string | null;
+  /** A Claude subscription's latest usage limits, as Claude Code reported them. */
+  limits: Limits;
+  /** When an agent last worked on it. */
+  lastUsedAt: string | null;
 }
 
 /** What the app sends the engine to connect an AI account. */

@@ -32,7 +32,8 @@ import { Refusal, requireOwner } from './connections';
 import { randomBytes } from 'node:crypto';
 import { CLAUDE_SLOTS, makeHome, parseSignInOutput, type SignInProcess, type SignInSpawner, type Slots } from './claudeCode';
 import { keyHint } from './providers';
-import { secretName, type Vault } from './vault';
+import { randomUUID } from 'node:crypto';
+import { aiSecretName, type Vault } from './vault';
 
 export interface ClaudeSessionDeps {
   store: Store;
@@ -259,15 +260,17 @@ function newSignIn(deps: ClaudeSessionDeps, signIns: Map<string, SignIn>, first:
     }
   };
 
-  /** The token to the vault, then the row. */
+  /** The token to the vault under a new connection's id, then the row: another sign-in adds an account, never replaces one. */
   const persist = async (token: string) => {
-    await deps.vault.put(secretName(orgId, 'claude'), token, {
+    const id = randomUUID();
+    await deps.vault.put(aiSecretName(orgId, id), token, {
       org_id: orgId,
       provider: 'claude',
       kind: 'ai',
     });
     const now = (deps.now ?? (() => new Date()))().toISOString();
-    const connection = await deps.store.upsert({
+    const connection = await deps.store.insert({
+      id,
       org_id: orgId,
       kind: 'ai',
       provider: 'claude',

@@ -10,7 +10,7 @@
 // docs/plans/ongoing/connectors.md) and nothing else yet: no record, no mail. It
 // says so when asked for something that needs them.
 
-import { AGENT_JOBS, type AgentGhost, type ChatMessage, messageText, splitMentions } from '@ghostaff/shared';
+import { AGENT_JOBS, type AgentGhost, type ChatMessage, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
 import type { ActionPart } from '@ghostaff/shared';
 import { previewOf } from './actions';
 import { Refusal } from './connections';
@@ -37,12 +37,50 @@ export interface ChatThreadHead {
   title: string;
 }
 
-/** The organisation's AI account, as the engine uses it. */
+/** One of the organisation's AI accounts, as the engine uses it (its key or token stays in the vault). */
 export type AiAccount =
-  | { provider: 'anthropic' }
-  | { provider: 'vertex'; project: string; region: string }
-  /** Its Claude subscription; `keyFallback` when it also has an Anthropic key to fall back on. */
-  | { provider: 'claude'; keyFallback: boolean };
+  | { id: string; provider: 'anthropic' }
+  | { id: string; provider: 'vertex'; project: string; region: string }
+  /** A Claude subscription, through Claude Code. */
+  | { id: string; provider: 'claude' };
+
+/** How an AI account did on one reply or run, for its card in Conexiones. */
+export interface AiUse {
+  orgId: string;
+  connectionId: string;
+  agentId: string | null;
+  source: 'chat' | 'run';
+  outcome: 'ok' | 'limited' | 'refused' | 'failed';
+  model: string | null;
+  tokens: TokenUsage;
+  /** Our estimate at list price; null on a subscription. */
+  costUsd: number | null;
+  /** A subscription's limits, when Claude Code reported them. */
+  limits: Limits | null;
+}
+
+/** Why an AI account could not answer. `busy` is ours (no free Claude Code slot), not the account's. */
+export type FailureKind = 'busy' | 'limited' | 'refused' | 'failed';
+
+/** A failure an AI account's writer explains, with the limits Claude Code reported if any. */
+export class AiFailure extends Error {
+  constructor(
+    readonly kind: FailureKind,
+    message: string,
+    readonly limits: Limits | null = null,
+  ) {
+    super(message);
+  }
+}
+
+/** What kind of failure an error is: ours, or an HTTP status from the provider's SDK. */
+export function failureKind(e: unknown): FailureKind {
+  if (e instanceof AiFailure) return e.kind;
+  const status = (e as { status?: unknown } | null)?.status;
+  if (status === 429 || status === 529) return 'limited';
+  if (status === 401 || status === 403) return 'refused';
+  return 'failed';
+}
 
 /** The database as the chat needs it (service role). */
 export interface ChatStore {
@@ -73,8 +111,10 @@ export interface ChatStore {
   }): Promise<string>;
   touchThread(threadId: string): Promise<void>;
   createThread(orgId: string, agentId: string, title: string, createdBy: string): Promise<string>;
-  /** The AI account the organisation's agents use, if one is connected. */
-  aiAccount(orgId: string): Promise<AiAccount | null>;
+  /** The organisation's AI accounts in the order to try them: the owner's, with any at a limit that has not reset moved last. */
+  aiAccounts(orgId: string): Promise<AiAccount[]>;
+  /** Records how an account did, and marks it working or failing. */
+  recordAiUse(use: AiUse): Promise<void>;
 }
 
 export interface ModelTurn {
@@ -93,12 +133,19 @@ export type Writer = (req: {
   tools: AgentTools;
   onText: (t: string) => void;
   onTool: (name: string) => void;
+  /** Once, at the end of a reply: the model, the tokens it used and, on a subscription, its limits. */
+  onUsage?: (u: { model: string; tokens: TokenUsage; limits: Limits | null }) => void;
 }) => Promise<void>;
 
 export interface ChatDeps {
   chat: ChatStore;
-  /** A writer for this organisation's AI account. */
-  writerFor(orgId: string, account: AiAccount): Promise<Writer>;
+  /**
+   * A writer for one of the organisation's AI accounts. `busyFails`: when every
+   * Claude Code slot is taken, fail at once (another account can answer) instead of waiting.
+   */
+  writerFor(orgId: string, account: AiAccount, opts: { busyFails: boolean }): Promise<Writer>;
+  /** What tokens cost on an account, in dollars; null when not paid by token (a subscription) or unknown. */
+  costOf?(account: AiAccount, model: string, tokens: TokenUsage): number | null;
   /** The tools of the organisation's connected accounts. */
   toolsFor(orgId: string): Promise<AgentTools>;
   /** Agents that run as jobs (jobs.ts); without it every agent answers with the model. */
@@ -270,32 +317,52 @@ async function writeReply(
     },
   };
   try {
-    const account = await deps.chat.aiAccount(agent.orgId);
-    if (!account) {
+    const accounts = orderForTools(await deps.chat.aiAccounts(agent.orgId), tools.specs.length > 0);
+    if (accounts.length === 0) {
       await deps.chat.updateReply(replyId, { text: NO_ACCOUNT, steps: ['Buscando una cuenta de IA'], state: 'done' });
       return;
     }
-    const write = await deps.writerFor(agent.orgId, account);
     await deps.chat.updateReply(replyId, { steps });
-    await write({
-      system,
-      messages: turns,
-      tools: gated,
-      onTool: (name) => {
-        // The tool's line goes before «Escribiendo»: it is what the agent is doing now.
-        steps.splice(steps.length - 1, 0, tools.stepFor(name));
-        const snapshot = [...steps];
-        pending = pending.then(() => deps.chat.updateReply(replyId, { steps: snapshot })).catch(() => {});
-      },
-      onText: (t) => {
-        text += t;
-        if (now() - flushed >= flushMs) {
-          flushed = now();
-          const snapshot = text;
-          pending = pending.then(() => deps.chat.updateReply(replyId, withActions(snapshot))).catch(() => {});
-        }
-      },
-    });
+    // The first account answers; the next one only if it fails before writing a word or running a tool.
+    for (const [i, account] of accounts.entries()) {
+      const last = i === accounts.length - 1;
+      let started = false;
+      const got: { usage: { model: string; tokens: TokenUsage; limits: Limits | null } | null } = { usage: null };
+      try {
+        const write = await deps.writerFor(agent.orgId, account, { busyFails: !last });
+        await write({
+          system,
+          messages: turns,
+          tools: gated,
+          onUsage: (u) => {
+            got.usage = u;
+          },
+          onTool: (name) => {
+            started = true;
+            // The tool's line goes before «Escribiendo»: it is what the agent is doing now.
+            steps.splice(steps.length - 1, 0, tools.stepFor(name));
+            const snapshot = [...steps];
+            pending = pending.then(() => deps.chat.updateReply(replyId, { steps: snapshot })).catch(() => {});
+          },
+          onText: (t) => {
+            started = true;
+            text += t;
+            if (now() - flushed >= flushMs) {
+              flushed = now();
+              const snapshot = text;
+              pending = pending.then(() => deps.chat.updateReply(replyId, withActions(snapshot))).catch(() => {});
+            }
+          },
+        });
+        void recordUse(deps, agent, account, 'ok', got.usage);
+        break;
+      } catch (e) {
+        const kind = failureKind(e);
+        console.warn('ai account failed', account.provider, kind, e instanceof Error ? e.message.slice(0, 200) : typeof e);
+        if (kind !== 'busy') void recordUse(deps, agent, account, kind, got.usage, e instanceof AiFailure ? e.limits : null);
+        if (started || last) throw e;
+      }
+    }
     await pending;
     const seconds = Math.max(1, Math.round((now() - started) / 1000));
     await deps.chat.updateReply(replyId, { ...withActions(text.trim() || '…'), steps: [...steps, `${seconds} s`], state: 'done' });
@@ -305,6 +372,43 @@ async function writeReply(
     await deps.chat
       .updateReply(replyId, { ...withActions(text.trim() ? `${text.trim()}\n\n${FAILED}` : FAILED), state: 'failed' })
       .catch(() => {});
+  }
+}
+
+/**
+ * The order to try accounts in. A subscription answers through Claude Code
+ * with no tools yet (claudeWriter.ts), so when the agent has tools the other
+ * accounts go first, in the owner's order, and the subscriptions after them.
+ */
+export function orderForTools(accounts: AiAccount[], hasTools: boolean): AiAccount[] {
+  if (!hasTools) return accounts;
+  return [...accounts.filter((a) => a.provider !== 'claude'), ...accounts.filter((a) => a.provider === 'claude')];
+}
+
+/** Records one account's reply; never fails the reply. */
+async function recordUse(
+  deps: ChatDeps,
+  agent: ChatAgent,
+  account: AiAccount,
+  outcome: AiUse['outcome'],
+  usage: { model: string; tokens: TokenUsage; limits: Limits | null } | null,
+  failureLimits: Limits | null = null,
+): Promise<void> {
+  const tokens = usage?.tokens ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  try {
+    await deps.chat.recordAiUse({
+      orgId: agent.orgId,
+      connectionId: account.id,
+      agentId: agent.id,
+      source: 'chat',
+      outcome,
+      model: usage?.model ?? null,
+      tokens,
+      costUsd: usage && deps.costOf ? deps.costOf(account, usage.model, tokens) : null,
+      limits: usage?.limits ?? failureLimits,
+    });
+  } catch (e) {
+    console.error('ai use not recorded', e instanceof Error ? e.message : typeof e);
   }
 }
 

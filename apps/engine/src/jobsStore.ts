@@ -23,7 +23,7 @@ const toAgent = (r: Record<string, string>): ChatAgent => ({
   runner: r.runner as ChatAgent['runner'],
 });
 
-const RUN = 'id, org_id, agent_id, origin, state, thread_id, message_id, requested_by, nonce_hash, spec_fetched_at';
+const RUN = 'id, org_id, agent_id, origin, state, thread_id, message_id, requested_by, nonce_hash, spec_fetched_at, connection_id';
 const toRun = (r: Record<string, string | null>): RunRecord => ({
   id: r.id!,
   orgId: r.org_id!,
@@ -35,6 +35,7 @@ const toRun = (r: Record<string, string | null>): RunRecord => ({
   requestedBy: r.requested_by ?? null,
   nonceHash: r.nonce_hash ?? null,
   specFetched: !!r.spec_fetched_at,
+  connectionId: r.connection_id ?? null,
 });
 
 export const NOTICES_TITLE = 'Avisos';
@@ -192,6 +193,9 @@ export function supabaseRunnerStore(admin: SupabaseClient): RunnerStore {
           .maybeSingle(),
       );
       return r ? toRun(r) : null;
+    },
+    async useConnection(runId, connectionId) {
+      check(await admin.from('agent_runs').update({ connection_id: connectionId }).eq('id', runId));
     },
   };
 }
