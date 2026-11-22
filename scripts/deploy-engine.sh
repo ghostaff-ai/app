@@ -44,10 +44,11 @@ echo "== Deploy to $P"
 # Public URL on purpose: the app calls it, and every call but /health needs a Supabase sign-in token,
 # checked by the engine itself. A 15-minute timeout: a Claude subscription's sign-in is one WebSocket
 # of up to 10 minutes. 2 GiB: the engine runs Claude Code processes (a few hundred MB each, at most
-# ENGINE_CLAUDE_SLOTS at once, 4 by default).
+# ENGINE_CLAUDE_SLOTS at once, 4 by default). Session affinity: a phone drops the sign-in's socket
+# while the person signs in at Anthropic, and its reconnect must reach the instance that holds it.
 gcloud run deploy engine --project "$P" --region "$R" --image "$IMAGE" \
   --service-account "$SA" --allow-unauthenticated --min-instances 0 --max-instances 3 \
-  --timeout 900 --memory 2Gi \
+  --timeout 900 --memory 2Gi --session-affinity \
   --set-env-vars "$ENV_VARS" \
   --set-secrets "$SECRETS"
 

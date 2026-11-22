@@ -154,6 +154,8 @@ export function claudeSignInMessage(code: string): string {
       return 'Anthropic no ha aceptado ese código. Pulsa Conectar y vuelve a empezar; copia el código entero.';
     case 'timeout':
       return 'Ha pasado demasiado tiempo. Pulsa Conectar y vuelve a empezar.';
+    case 'expired':
+      return 'El inicio de sesión de Claude ha caducado. Pulsa Conectar con Claude y vuelve a empezar.';
     case 'claude_unavailable':
       return 'Ahora mismo no podemos abrir el inicio de sesión de Claude. Inténtalo en un momento.';
     case 'not_owner':
