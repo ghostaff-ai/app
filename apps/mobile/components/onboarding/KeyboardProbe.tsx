@@ -9,7 +9,10 @@ import { useKeyboardHandler, useReanimatedKeyboardAnimation } from 'react-native
 import { useAnimatedReaction, useSharedValue } from 'react-native-reanimated';
 import { runOnUI, scheduleOnRN } from 'react-native-worklets';
 
-const f = (n: number) => n.toFixed(2);
+const f = (n: number) => {
+  'worklet';
+  return n.toFixed(2);
+};
 
 export function KeyboardProbe() {
   const provider = useReanimatedKeyboardAnimation();
