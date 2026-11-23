@@ -56,7 +56,7 @@ set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000c", 
 select throws_ok($$ select count(*) from public.account_asks $$, '42501', null, 'another organisation cannot read them either');
 
 reset role;
-select is((select status from public.account_asks), 'open', 'the ask is still open');
+select is((select status from public.account_asks where org_id = '10000000-0000-0000-0000-000000000001'), 'open', 'the ask is still open');
 
 select * from finish();
 rollback;
