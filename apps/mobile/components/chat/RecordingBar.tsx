@@ -16,7 +16,9 @@ export function RecordingBar({ recording, seconds, onCancel }: { recording: bool
         <>
           <View className="flex-row items-center gap-2" accessibilityLabel={`Grabando, ${clock(seconds)}`}>
             <View className="h-2.5 w-2.5 rounded-full bg-no" />
-            <Text className="text-base text-ink">{clock(seconds)}</Text>
+            <Text className="text-base text-ink" style={{ fontVariant: ['tabular-nums'] }}>
+              {clock(seconds)}
+            </Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Cancelar" onPress={onCancel} hitSlop={8} className="active:opacity-70">
             <Text className="text-base text-muted">Cancelar</Text>

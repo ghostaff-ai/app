@@ -133,29 +133,32 @@ export function VoiceNote({
             <View className="absolute inset-x-0 h-1 rounded-full bg-on-accent opacity-30" />
             <View className="h-1 rounded-full bg-on-accent" style={{ width: total > 0 ? `${(at / total) * 100}%` : '0%' }} />
           </Pressable>
-          <Text className="text-caption text-on-accent opacity-80">
+          <Text className="text-caption text-on-accent opacity-80" style={{ fontVariant: ['tabular-nums'] }}>
             {source === 'failed' ? 'No se puede reproducir aquí' : clock(Math.round(started ? at : total))}
           </Text>
         </View>
       </View>
-      {part.transcription === 'done' && transcript ? (
-        <Text className="mt-2 text-base leading-6 text-on-accent" selectable>
-          {transcript}
-        </Text>
-      ) : part.transcription === 'empty' ? (
-        <Text className="mt-2 text-footnote text-on-accent opacity-80">No se ha oído nada.</Text>
-      ) : failed ? (
-        <View className="mt-2 flex-row flex-wrap items-center gap-x-3">
-          <Text className="text-footnote text-on-accent opacity-80">No se ha podido transcribir.</Text>
-          {onRetry ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Reintentar la transcripción" onPress={() => void retry()} hitSlop={8} className="active:opacity-70">
-              <Text className="text-footnote font-semibold text-on-accent underline">Reintentar</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : (
-        <Text className="mt-2 text-footnote text-on-accent opacity-80">Transcribiendo…</Text>
-      )}
+      {/* What came of the transcript is announced as it changes. */}
+      <View aria-live="polite">
+        {part.transcription === 'done' && transcript ? (
+          <Text className="mt-2 text-base leading-6 text-on-accent" selectable>
+            {transcript}
+          </Text>
+        ) : part.transcription === 'empty' ? (
+          <Text className="mt-2 text-footnote text-on-accent opacity-80">No se ha oído nada.</Text>
+        ) : failed ? (
+          <View className="mt-2 flex-row flex-wrap items-center gap-x-3">
+            <Text className="text-footnote text-on-accent opacity-80">No se ha podido transcribir.</Text>
+            {onRetry ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Reintentar la transcripción" onPress={() => void retry()} hitSlop={8} className="active:opacity-70">
+                <Text className="text-footnote font-semibold text-on-accent underline">Reintentar</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <Text className="mt-2 text-footnote text-on-accent opacity-80">Transcribiendo…</Text>
+        )}
+      </View>
     </View>
   );
 }
