@@ -34,7 +34,7 @@ On a computer the purpose shifts: on the phone you come in for two minutes, deci
 
 | | Phone (unchanged) | Desktop (≥ 1024 px) |
 |---|---|---|
-| Navigation | Three tabs (Hoy · Equipo · Registro) and the mic | A fixed sidebar: organisation, Hoy, Equipo, Registro, Conexiones, «Hablar con Secretaría» |
+| Navigation | Three tabs (Hoy · Equipo · Registro) and the mic | A fixed sidebar: organisation, Hoy, Equipo, Conexiones, Registro, «Hablar con Secretaría» |
 | Hoy | One decision card after another | The list on the left, the open decision beside it, «Hecho sin ti» folded under the list |
 | Equipo | Agents → threads → conversation, one screen each | Agents, threads and the conversation side by side |
 | Conexiones | One column of cards | A grid by area with search, and the selected connection's detail beside it (account, what the team can do with it, which agents use it) |

@@ -14,7 +14,7 @@ import { usePalette } from '@/lib/theme';
 // Signed in. The way in has four steps, each a guard: a profile first
 // (bienvenida), then an organisation (empezar: create one or join one), then,
 // for an owner, an AI account the agents can run on (conectar-ia), then the
-// tabs (Hoy, Equipo, Registro, Conexiones). A decision, an agent and the sheets
+// tabs (Hoy, Equipo, Conexiones, Registro). A decision, an agent and the sheets
 // open over the tabs. Creating and joining stay reachable later, from
 // Organizaciones, the sheet behind the organisation's name on Hoy. A member who
 // isn't an owner can't connect one, so they get in and Hoy says what's missing.

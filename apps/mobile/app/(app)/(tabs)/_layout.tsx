@@ -4,7 +4,8 @@ import { Platform } from 'react-native';
 import { useIsDesktop } from '@/lib/layout';
 import { usePalette } from '@/lib/theme';
 
-// The four tabs (app-design.md, decision 1; Conexiones joined on 2026-11-22),
+// The four tabs (app-design.md, decision 1; Conexiones joined on 2026-11-22,
+// before Registro since the same day),
 // drawn by the phone itself (decision 25): the floating Liquid Glass bar on
 // iOS 26, Material 3 on Android, light and dark. Icons are the system's own symbols here (decision 30).
 // Everything else (a decision, an agent, the sheets) opens over the tabs, from
@@ -32,13 +33,13 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: 'person.3', selected: 'person.3.fill' }} md="groups" />
         <NativeTabs.Trigger.Label>Equipo</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="registro">
-        <NativeTabs.Trigger.Icon sf={{ default: 'books.vertical', selected: 'books.vertical.fill' }} md="menu_book" />
-        <NativeTabs.Trigger.Label>Registro</NativeTabs.Trigger.Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="conexiones">
         <NativeTabs.Trigger.Icon sf={{ default: 'wrench.and.screwdriver', selected: 'wrench.and.screwdriver.fill' }} md="build" />
         <NativeTabs.Trigger.Label>Conexiones</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="registro">
+        <NativeTabs.Trigger.Icon sf={{ default: 'books.vertical', selected: 'books.vertical.fill' }} md="menu_book" />
+        <NativeTabs.Trigger.Label>Registro</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
