@@ -1,7 +1,8 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Image, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Icon, Plus, UsersThree, WarningCircle } from '@/components/icons';
+import { SpaceSwitcher } from '@/components/SpaceSwitcher';
 import { EmptyState, ErrorText, ListRow, ListSection, Loading, RowIcon, ScreenTitle } from '@/components/ui';
 import { shortTime, teamRows, visibilityTag } from '@/lib/chat';
 import { canRunAgents } from '@/lib/connections';
@@ -10,6 +11,7 @@ import { useThreads } from '@/lib/hooks/useChat';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { useFirstHello } from '@/lib/hooks/useFirstHello';
 import { useTabScreenTop } from '@/lib/tabs';
 import { GHOSTS } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
@@ -32,12 +34,24 @@ export default function Equipo() {
   const connections = useConnections(orgId);
   const { reload: reloadAgents } = agents;
   const { reload: reloadConnections } = connections;
+  const [focused, setFocused] = useState(true);
   useFocusEffect(
     useCallback(() => {
+      setFocused(true);
       void reloadAgents();
       void reloadThreads();
       void reloadConnections();
+      return () => setFocused(false);
     }, [reloadAgents, reloadThreads, reloadConnections]),
+  );
+  // Secretaría comes hired with a new space and says hello in your chat with her
+  // once its AI is there (welcome-and-spaces.md); her row then shows it, unread.
+  useFirstHello(
+    active,
+    agents.items,
+    connections.loaded && !connections.error && canRunAgents(connections.items),
+    focused,
+    reloadThreads,
   );
   if (!active) return null;
   if (agents.loading && agents.items.length === 0) return <Loading />;
@@ -68,6 +82,8 @@ export default function Equipo() {
         />
       }
     >
+      {/* Where you are, on every tab (welcome-and-spaces.md); on a desktop the sidebar shows it. */}
+      <SpaceSwitcher />
       <ScreenTitle>Equipo</ScreenTitle>
       {noAi ? (
         <View testID="no-ai" className="mt-4 flex-row items-start rounded-2xl bg-card px-4 py-3.5">

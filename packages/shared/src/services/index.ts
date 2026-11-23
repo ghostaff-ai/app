@@ -823,6 +823,13 @@ export async function createAgent(client: SupabaseClient, a: NewAgent): Promise<
   return agentFromRow(data);
 }
 
+/** Whether an agent has ever had a thread you can see: Secretaría's first hello happens only once (welcome-and-spaces.md). */
+export async function agentHasThreads(client: SupabaseClient, agentId: string): Promise<boolean> {
+  const { data, error } = await client.from('threads').select('id').eq('agent_id', agentId).limit(1);
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
 /** Removes an agent from its team. Owners only. */
 export async function deleteAgent(client: SupabaseClient, id: string): Promise<void> {
   const { error } = await client.rpc('delete_agent', { agent_id: id });

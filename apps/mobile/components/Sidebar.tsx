@@ -6,6 +6,7 @@ import { spaceLook, type SpaceLook } from '@ghostaff/shared';
 import { useInbox } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
+import { SpaceAvatar } from '@/components/SpaceAvatar';
 import { usePalette } from '@/lib/theme';
 
 // The desktop's navigation (docs/plans/ideas/desktop-web.md): it stands in for
@@ -88,13 +89,11 @@ export function Sidebar() {
     <View accessibilityRole="navigation" className="w-60 border-r border-line bg-surface px-4 py-5">
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${active?.name ?? ''}. Cambiar de organización`}
+        accessibilityLabel={`${active?.name ?? ''}. Cambiar de espacio`}
         onPress={() => router.push('/organizaciones')}
         className="mb-4 flex-row items-center rounded-xl border border-line bg-card px-3 py-2.5"
       >
-        <View className="h-7 w-7 items-center justify-center rounded-lg bg-accent">
-          <Text className="font-display text-sm text-on-accent">{(active?.name ?? '?')[0]}</Text>
-        </View>
+        {active ? <SpaceAvatar space={active} /> : null}
         <Text className="ml-2.5 flex-1 font-display text-base text-ink" numberOfLines={1}>
           {active?.name}
         </Text>

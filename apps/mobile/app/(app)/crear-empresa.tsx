@@ -1,6 +1,7 @@
 import { createOrganization } from '@ghostaff/shared/services';
 import { router } from 'expo-router';
 import { useState } from 'react';
+import { CloseButton } from '@/components/CloseButton';
 import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { Button, ErrorText, Field } from '@/components/ui';
 import { dismissKeyboard } from '@/lib/keyboard';
@@ -43,7 +44,7 @@ export default function CreateOrganization() {
       of={onTheWayIn ? stepsFor('company') : undefined}
       title="¿Cómo se llama tu empresa?"
       line="La web y lo que hacéis, luego."
-      topRight={onTheWayIn ? undefined : <Button label="Cerrar" variant="plain" size="small" onPress={() => router.back()} />}
+      topRight={onTheWayIn ? undefined : <CloseButton />}
       link={onTheWayIn ? <Button label="Atrás" variant="plain" onPress={() => router.back()} /> : undefined}
       action={
         <>

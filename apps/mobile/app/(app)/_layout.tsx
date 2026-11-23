@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { useRef } from 'react';
 import { View } from 'react-native';
+import { CloseButton } from '@/components/CloseButton';
 import { Sidebar } from '@/components/Sidebar';
 import { Button, Loading, Notice } from '@/components/ui';
 import { canRunAgents } from '@/lib/connections';
@@ -16,7 +17,7 @@ import { usePalette } from '@/lib/theme';
 // for an owner, an AI account the agents can run on (conectar-ia), then the
 // tabs (Equipo, Decisiones, Empresa: three-tabs.md). A chat, a decision, an
 // agent and the sheets open over the tabs. Creating and joining stay reachable
-// later, from Organizaciones, the sheet behind the organisation's name in
+// later, from «Tus espacios», the sheet behind the space's name in
 // Empresa. A member who isn't an owner can't connect one, so they get in and
 // Equipo says what's missing.
 
@@ -24,6 +25,8 @@ export default function AppLayout() {
   const org = useActiveOrg();
   const me = useProfile();
   const header = headerFor(usePalette());
+  // A modal's way out: an X on the right, not a back arrow (welcome-and-spaces.md).
+  const modal = { presentation: 'modal', headerBackVisible: false, headerLeft: () => null, headerRight: () => <CloseButton /> } as const;
   const desktop = useIsDesktop();
   const connections = useConnections(org.active?.id ?? null);
   // Wait for the connections only on the way in: switching or creating an
@@ -69,12 +72,12 @@ export default function AppLayout() {
           name="contratar"
           options={{ title: 'Incorporar', presentation: 'formSheet', sheetAllowedDetents: [0.65, 1], sheetGrabberVisible: true, headerShown: false }}
         />
-        <Stack.Screen name="nuevo-agente" options={{ title: 'Nuevo agente', presentation: 'modal' }} />
+        <Stack.Screen name="nuevo-agente" options={{ ...modal, title: 'Nuevo agente' }} />
         <Stack.Screen
           name="organizaciones"
-          options={{ title: 'Organizaciones', presentation: 'formSheet', sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: false }}
+          options={{ title: 'Tus espacios', presentation: 'formSheet', sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: false }}
         />
-        <Stack.Screen name="invitar" options={{ title: 'Invitar', presentation: 'modal' }} />
+        <Stack.Screen name="invitar" options={{ ...modal, title: 'Invitar' }} />
       </Stack.Protected>
       <Stack.Protected guard={needsAi} redirectTo={step}>
         <Stack.Screen name="conectar-ia" options={{ headerShown: false }} />
@@ -88,7 +91,7 @@ export default function AppLayout() {
       <Stack.Protected guard={hasProfile} redirectTo={step}>
         {/* A step of the way in before any space exists, a modal after (welcome-and-spaces.md). */}
         <Stack.Screen name="crear-empresa" options={{ headerShown: false, presentation: org.organizations.length ? 'modal' : 'card' }} />
-        <Stack.Screen name="unirme" options={{ title: 'Unirme a una empresa', presentation: 'modal' }} />
+        <Stack.Screen name="unirme" options={{ ...modal, title: 'Unirme a una empresa' }} />
       </Stack.Protected>
     </Stack>
   );

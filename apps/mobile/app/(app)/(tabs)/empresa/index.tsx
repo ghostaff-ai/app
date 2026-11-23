@@ -2,6 +2,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Buildings, CaretDown, Icon, LinkSimple, SignOut, Tray, User, UserPlus } from '@/components/icons';
+import { SpaceAvatar } from '@/components/SpaceAvatar';
 import { ListRow, ListSection, RowIcon } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useMembers } from '@/lib/hooks/useChat';
@@ -54,11 +55,14 @@ export default function Empresa() {
       <Pressable
         testID="org-name"
         accessibilityRole="button"
-        accessibilityLabel={`${active.name}. Cambiar de organización`}
+        accessibilityLabel={`${active.name}. Cambiar de espacio`}
         onPress={() => router.push('/organizaciones')}
         hitSlop={8}
         className="min-h-11 flex-row items-center self-start active:opacity-60"
       >
+        <View className="mr-2.5">
+          <SpaceAvatar space={active} size={34} />
+        </View>
         <Text accessibilityRole="header" className="shrink font-display text-title text-ink" numberOfLines={1}>
           {active.name}
         </Text>
@@ -91,7 +95,8 @@ export default function Empresa() {
             value={m.role === 'owner' ? 'Propietario' : undefined}
           />
         ))}
-        {owner ? <ListRow leading={<RowIcon icon={UserPlus} />} title="Invitar a alguien" chevron onPress={() => router.push('/invitar')} /> : null}
+        {/* Nobody is invited to a personal space (welcome-and-spaces.md): the database refuses it too. */}
+        {owner && active.kind === 'company' ? <ListRow leading={<RowIcon icon={UserPlus} />} title="Invitar a alguien" chevron onPress={() => router.push('/invitar')} /> : null}
       </ListSection>
 
       <ListSection>
@@ -101,7 +106,7 @@ export default function Empresa() {
       <ListSection footer={session?.user.email ? `Has entrado como ${session.user.email}` : undefined}>
         <ListRow
           leading={<RowIcon icon={Buildings} />}
-          title={others ? 'Cambiar de organización' : 'Otra empresa'}
+          title={others ? 'Cambiar de espacio' : 'Otra empresa'}
           subtitle={others ? undefined : 'Crear una o unirte a otra'}
           chevron
           onPress={() => router.push('/organizaciones')}

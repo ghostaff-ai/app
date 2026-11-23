@@ -2,7 +2,7 @@
 
 **Priority:** high — every new person goes through it, and Jaime's own first use (a personal assistant) has no way in today
 **Gate:** none
-**Next:** PR 1, the way in and the personal space
+**Next:** land PR 2 (`feat/spaces-on-tabs`); then retire this plan once both are seen on beta
 
 Jaime walked the way in on the web (2026-11-22, local Supabase, a phone-sized window) and found it poor: too much text, the buttons halfway down the screen, sheets you can't close, the organisation only visible on Hoy, and nothing for someone who wants Ghostaff for themselves. **His first use of Ghostaff is a personal assistant**, before any company. He took the mockups below («me gusta más, sí; usa los fantasmas», 2026-11-22). It builds on [entry-flows.md](../ideas/entry-flows.md) and answers its open question 1.
 
@@ -100,6 +100,14 @@ Two pull requests from one worktree, landed in order with `pnpm pr:land`:
 - Ghost sizes and the progress dots' exact look, within the existing tokens.
 - Whether the option cards in step 2 reuse `Choice` with a selected state or are a new `OptionCard`.
 - Test IDs for the new flows.
+
+## After the three tabs (2026-11-23)
+
+Álvaro moved the app to three tabs that morning ([three-tabs.md](three-tabs.md)): Hoy went and the switcher moved to Empresa. PR 1 had already landed; PR 2 was rebuilt on top (branch `feat/spaces-on-tabs`), with Jaime's call (2026-11-23) that **the space stays on top of every tab**:
+
+- `SpaceSwitcher` on top of Equipo and Decisiones; Empresa keeps its big name, with the space's avatar beside it. All three open «Tus espacios».
+- «Tus espacios» is only the switcher (three-tabs.md, decision 11): your spaces, personal first, «Crear tu espacio personal» when you have none, creating and joining a company, and a close. Inviting and signing out stay in Empresa, and «Invitar a alguien» isn't offered in a personal space.
+- Secretaría's first hello runs from Equipo instead of Hoy; it lands in the person's own chat with her (three-tabs.md, decision 3), so her row shows it, unread. The «Secretaría te ha escrito» card on Hoy went with Hoy.
 
 ## Implementation plan
 
