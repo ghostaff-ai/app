@@ -83,7 +83,7 @@ function setup(
       }
     },
     touchThread: async () => {},
-    createThread: async (_o, agentId, title) => {
+    personalChat: async (_o, agentId, title) => {
       const id = '30000000-0000-0000-0000-000000000009';
       threads.push({ id, orgId: ORG, agentId, title });
       return id;
@@ -278,12 +278,12 @@ describe('an agent answering in a thread', () => {
     expect(updates).toEqual([]);
   });
 
-  it('a new agent gets its own thread, and introduces itself there', async () => {
+  it('a new agent opens its chat with the person who added it, and introduces itself there', async () => {
     const { call, updates, threads, asked } = setup({ messages: [] });
     const res = await call('ana', `/agents/${AGENT}/hello`);
     expect(res.status).toBe(201);
     const { threadId } = await res.json();
-    expect(threads.find((t) => t.id === threadId)?.title).toBe('Primeros pasos');
+    expect(threads.find((t) => t.id === threadId)?.title).toBe('Finanzas');
     expect(updates).toEqual([]);
     expect(await (await call('ana', `/threads/${threadId}/reply`)).json()).toEqual({ replied: true });
     expect(JSON.stringify(asked[0]?.messages)).toContain('Preséntate');

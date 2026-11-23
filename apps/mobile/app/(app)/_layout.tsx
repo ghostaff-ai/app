@@ -14,10 +14,11 @@ import { usePalette } from '@/lib/theme';
 // Signed in. The way in has four steps, each a guard: a profile first
 // (bienvenida), then an organisation (empezar: create one or join one), then,
 // for an owner, an AI account the agents can run on (conectar-ia), then the
-// tabs (Hoy, Equipo, Conexiones, Registro). A decision, an agent and the sheets
-// open over the tabs. Creating and joining stay reachable later, from
-// Organizaciones, the sheet behind the organisation's name on Hoy. A member who
-// isn't an owner can't connect one, so they get in and Hoy says what's missing.
+// tabs (Equipo, Decisiones, Empresa: three-tabs.md). A chat, a decision, an
+// agent and the sheets open over the tabs. Creating and joining stay reachable
+// later, from Organizaciones, the sheet behind the organisation's name in
+// Empresa. A member who isn't an owner can't connect one, so they get in and
+// Equipo says what's missing.
 
 export default function AppLayout() {
   const org = useActiveOrg();
@@ -59,7 +60,8 @@ export default function AppLayout() {
         <Stack.Screen name="acceso/[id]" options={{ title: 'Quién puede' }} />
         <Stack.Screen name="herramientas/[id]" options={{ title: 'Herramientas' }} />
         <Stack.Screen name="conversacion/[id]" options={{ title: '' }} />
-        <Stack.Screen name="conversacion/nueva" options={{ title: 'Nueva conversación' }} />
+        <Stack.Screen name="chat/[agent]" options={{ title: '' }} />
+        <Stack.Screen name="anadir-agente" options={{ title: 'Añadir agente' }} />
         <Stack.Screen
           name="contratar"
           options={{ title: 'Incorporar', presentation: 'formSheet', sheetAllowedDetents: [0.65, 1], sheetGrabberVisible: true, headerShown: false }}

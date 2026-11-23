@@ -2,15 +2,14 @@ import { router, usePathname, type Href } from 'expo-router';
 import { useEffect, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { MicGlyph, useTalkTarget } from '@/components/chat/MicButton';
 import { useInbox } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
 import { usePalette } from '@/lib/theme';
 
 // The desktop's navigation (docs/plans/ideas/desktop-web.md): it stands in for
-// the phone's four tabs and the mic. The organisation's name on top opens the
-// switcher, as on Hoy (app-design.md, decision 3).
+// the phone's three tabs (three-tabs.md). The organisation's name on top opens
+// the switcher, as in Empresa.
 
 type Item = { href: Href; label: string; icon: (color: string) => ReactNode; match: (path: string) => boolean };
 
@@ -19,19 +18,8 @@ const stroke = { fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeLin
 const ITEMS: Item[] = [
   {
     href: '/',
-    label: 'Hoy',
-    match: (p) => p === '/' || p.startsWith('/decision'),
-    icon: (c) => (
-      <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
-        <Circle cx={12} cy={12} r={4} />
-        <Path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2" />
-      </Svg>
-    ),
-  },
-  {
-    href: '/equipo',
     label: 'Equipo',
-    match: (p) => p.startsWith('/equipo') || p.startsWith('/agente') || p.startsWith('/conversacion') || p.startsWith('/acceso'),
+    match: (p) => p === '/' || p.startsWith('/chat') || p.startsWith('/agente') || p.startsWith('/conversacion') || p.startsWith('/acceso') || p.startsWith('/anadir-agente'),
     icon: (c) => (
       <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
         <Circle cx={9} cy={8} r={3.5} />
@@ -42,22 +30,23 @@ const ITEMS: Item[] = [
     ),
   },
   {
-    href: '/conexiones',
-    label: 'Conexiones',
-    match: (p) => p.startsWith('/conexiones'),
+    href: '/decisiones',
+    label: 'Decisiones',
+    match: (p) => p.startsWith('/decisiones') || p.startsWith('/decision/'),
     icon: (c) => (
       <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
-        <Path d="M9 7H6a4 4 0 0 0 0 8h3M15 7h3a4 4 0 0 1 0 8h-3M8 11h8" />
+        <Circle cx={12} cy={12} r={9} />
+        <Path d="M8 12.5l2.7 2.7L16 9.8" />
       </Svg>
     ),
   },
   {
-    href: '/registro',
-    label: 'Registro',
-    match: (p) => p.startsWith('/registro'),
+    href: '/empresa',
+    label: 'Empresa',
+    match: (p) => p.startsWith('/empresa') || p.startsWith('/herramientas'),
     icon: (c) => (
       <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
-        <Path d="M4 5h16M4 10h16M4 15h10M4 20h7" />
+        <Path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M2.5 21h19M8 8h3M8 12h3M8 16h3" />
       </Svg>
     ),
   },
@@ -81,7 +70,6 @@ export function Sidebar() {
   // Answering a decision happens on another route: count again on every move.
   useEffect(() => void reload(), [path, reload]);
   const waiting = inbox.decisions.filter((d) => !d.answer).length;
-  const talk = useTalkTarget();
 
   return (
     <View accessibilityRole="navigation" className="w-60 border-r border-line bg-surface px-4 py-5">
@@ -102,7 +90,7 @@ export function Sidebar() {
 
       {ITEMS.map((item) => {
         const on = item.match(path);
-        const badge = item.label === 'Hoy' && waiting > 0 ? waiting : 0;
+        const badge = item.label === 'Decisiones' && waiting > 0 ? waiting : 0;
         return (
           <Pressable
             key={item.label}
@@ -123,18 +111,6 @@ export function Sidebar() {
       })}
 
       <View className="flex-1" />
-
-      {talk ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Hablar con ${talk.name}`}
-          onPress={talk.talk}
-          className="flex-row items-center justify-center rounded-full bg-accent px-4 py-3"
-        >
-          <MicGlyph />
-          <Text className="ml-2.5 text-sm font-semibold text-on-accent">Hablar con {talk.name}</Text>
-        </Pressable>
-      ) : null}
 
       {profile ? (
         <View className="mt-4 flex-row items-center px-1">

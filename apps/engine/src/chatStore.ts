@@ -109,10 +109,20 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
     async touchThread(threadId) {
       check(await admin.from('threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId));
     },
-    async createThread(orgId, agentId, title, createdBy) {
-      const r = check(await admin.from('threads').insert({ org_id: orgId, agent_id: agentId, title, created_by: createdBy }).select('id').single());
-      if (!r) throw new Error('thread not created');
-      return r.id as string;
+    async personalChat(orgId, agentId, title, userId) {
+      const find = async () =>
+        (check(await admin.from('threads').select('id').eq('agent_id', agentId).eq('personal_of', userId).maybeSingle()) as { id: string } | null)?.id;
+      const found = await find();
+      if (found) return found;
+      const { data, error } = await admin
+        .from('threads')
+        .insert({ org_id: orgId, agent_id: agentId, title, created_by: userId, personal_of: userId })
+        .select('id')
+        .single();
+      // Opened meanwhile by the person's first message (chat_with): use that one.
+      if (error?.code === '23505') return (await find()) ?? Promise.reject(new Error('chat not created'));
+      if (error || !data) throw error ?? new Error('chat not created');
+      return data.id as string;
     },
     async aiAccounts(orgId): Promise<AiAccount[]> {
       const rows =

@@ -92,7 +92,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
       if (patch.state && patch.state !== 'working') working = null;
     },
     touchThread: async () => {},
-    createThread: async () => 'x',
+    personalChat: async () => 'x',
     aiAccounts: async (orgId) => [
       ...(orgId === ORG ? [{ id: 'key-1', provider: 'anthropic' as const }] : []),
       { id: subscriptionOf(orgId), provider: 'claude' as const },

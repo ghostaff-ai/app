@@ -65,7 +65,7 @@ function setup(opts: { launchFails?: boolean } = {}) {
       if (patch.state && patch.state !== 'working') working = null;
     },
     touchThread: async () => {},
-    createThread: async () => 'x',
+    personalChat: async () => 'x',
     aiAccounts: async () => [],
     recordAiUse: async () => {},
     proposeAction: async () => 'a',

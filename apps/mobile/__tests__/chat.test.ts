@@ -1,5 +1,5 @@
-import type { Agent, ChatMessage } from '@ghostaff/shared';
-import { shortTime, showAuthors, talkTarget, vacancies } from '@/lib/chat';
+import type { Agent, ChatMessage, ChatThread } from '@ghostaff/shared';
+import { shortTime, showAuthors, teamRows, vacancies } from '@/lib/chat';
 import { addMessage } from '@/lib/hooks/useChat';
 
 const agent = (id: string, ghost: Agent['ghost']): Agent => ({
@@ -71,11 +71,21 @@ describe('the chat rules', () => {
     expect(list[0]?.state).toBe('done');
   });
 
-  it('sends the mic to Secretaría when the person may talk to her', () => {
-    const team = [agent('fin', 'finanzas'), agent('sec', 'secretaria')];
-    expect(talkTarget(team, { fin: 'talk', sec: 'talk' })?.id).toBe('sec');
-    expect(talkTarget(team, { fin: 'talk', sec: 'read' })?.id).toBe('fin');
-    expect(talkTarget(team, { fin: 'read' })).toBeNull();
+  it('lists one row per agent: the main one first, then who spoke last', () => {
+    const team = [agent('fin', 'finanzas'), agent('red', 'redes'), agent('sec', 'secretaria'), agent('inc', 'incorporacion')];
+    const t = (id: string, agentId: string, at: string, more: Partial<ChatThread> = {}): ChatThread => ({
+      id, agentId, title: id, createdAt: at, lastMessageAt: at, lastAuthor: 'Ana', lastText: 'hola', unread: false, personal: true, notices: false, ...more,
+    });
+    const rows = teamRows(team, [
+      t('fin-chat', 'fin', '2026-11-20T10:00:00Z'),
+      t('red-avisos', 'red', '2026-11-22T10:00:00Z', { personal: false, notices: true, unread: true }),
+      t('red-chat', 'red', '2026-11-21T10:00:00Z'),
+      // A shared titled thread of before is history: it neither orders nor marks the row.
+      t('inc-old', 'inc', '2026-11-23T10:00:00Z', { personal: false, unread: true }),
+    ]);
+    expect(rows.map((r) => r.agent.id)).toEqual(['sec', 'red', 'fin', 'inc']);
+    expect(rows[1]?.last?.id).toBe('red-avisos');
+    expect(rows.map((r) => r.unread)).toEqual([false, true, false, false]);
   });
 
   it('lists the jobs nobody does yet', () => {
