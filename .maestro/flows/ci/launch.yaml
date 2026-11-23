@@ -1,8 +1,7 @@
 appId: ${APP_ID}
 name: The sign-in screen offers every way in
 ---
-- launchApp:
-    clearState: true
+- runFlow: ../subflows/launch-clean.yaml
 - extendedWaitUntil:
     visible: "Ghostaff"
     timeout: 60000

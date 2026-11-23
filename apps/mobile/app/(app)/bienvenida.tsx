@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { Button, ErrorText, Field } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { dismissKeyboard } from '@/lib/keyboard';
 import { stepsFor } from '@/lib/onboarding';
 import { useProfile } from '@/lib/profile/ProfileContext';
 
@@ -24,6 +25,8 @@ export default function Welcome() {
     setBusy(true);
     setError(null);
     try {
+      // The next step has no field: it must not start under a closing keyboard.
+      await dismissKeyboard();
       await save({ fullName: name.trim(), occupation: null, heardFrom: null });
       // The layout moves on by itself once the profile exists.
     } catch (e) {

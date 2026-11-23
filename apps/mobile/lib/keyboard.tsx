@@ -10,3 +10,6 @@ export function KeyboardRoot({ children }: { children: ReactNode }) {
 export function KeyboardColumn({ children }: { children: ReactNode; offset?: number }) {
   return <View style={{ flex: 1 }}>{children}</View>;
 }
+
+/** Nothing to close on the web. */
+export async function dismissKeyboard(): Promise<void> {}
