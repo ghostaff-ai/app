@@ -1,5 +1,13 @@
 import { type AiProvider, type Connection, summarizeUsage, VERTEX_EU_REGIONS } from '@ghostaff/shared';
-import { type ClaudeSignIn, connectAi, connectClaudeSubscription, disconnectAi, getEngineIdentity, renameAiConnection } from '@ghostaff/shared/services';
+import {
+  type ClaudeSignIn,
+  connectAi,
+  connectClaudeSubscription,
+  disconnectAi,
+  getEngineIdentity,
+  renameAiConnection,
+  setAiOrder,
+} from '@ghostaff/shared/services';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -8,7 +16,17 @@ import { LimitBars, UsageDetail } from '@/components/connections/AiUsage';
 import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
 import { Icon, WarningCircle } from '@/components/icons';
 import { Button, Chips, ErrorText, Field, ListRow, ListSection, Notice } from '@/components/ui';
-import { AI_ORDER, aiAccountName, claudeSignInMessage, connectErrorMessage, failingText, PROVIDERS, REGION_NAMES } from '@/lib/connections';
+import {
+  AI_ORDER,
+  aiAccountAhead,
+  aiAccountName,
+  aiOrderWithFirst,
+  claudeSignInMessage,
+  connectErrorMessage,
+  failingText,
+  PROVIDERS,
+  REGION_NAMES,
+} from '@/lib/connections';
 import { shortDate } from '@/lib/format';
 import { success } from '@/lib/haptics';
 import { useAgents } from '@/lib/hooks/useAgents';
@@ -26,7 +44,9 @@ import { usePalette } from '@/lib/theme';
 // through Claude Code, which the engine runs: this screen only relays
 // Anthropic's link and the code pasted back. An organisation may have several
 // accounts, even two sign-ins to one subscription; each has its name, its usage
-// and its place in the order (set in Conexiones).
+// and its place in the order (set in Conexiones). A new account goes last, as a
+// spare: while it is not first, its page says which account the agents use
+// before it and lets an owner put it first (Jaime, 2026-11-23).
 
 const regionLabels = VERTEX_EU_REGIONS.map((r) => REGION_NAMES[r] ?? r);
 const regionFromLabel = (label: string | null) => VERTEX_EU_REGIONS.find((r) => (REGION_NAMES[r] ?? r) === label) ?? null;
@@ -40,6 +60,8 @@ export default function AiPage() {
   const desktop = useIsDesktop();
   const engine = useEngine();
   const [busy, setBusy] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!active || !isProvider(provider)) return <Notice title="No encontramos esta conexión" />;
@@ -48,11 +70,27 @@ export default function AiPage() {
   if (id && loaded && !connection) return <Notice title="Esta cuenta de IA ya no está conectada" />;
   const canEdit = active.role === 'owner';
   const sameKind = items.filter((i) => i.kind === 'ai' && i.provider === provider);
+  const ahead = connection ? aiAccountAhead(items, connection.id) : null;
   // The new account's own page from now on: its name, its usage, its place.
   const done = async (made: Connection) => {
     success();
     await reload();
     router.setParams({ id: made.id });
+  };
+
+  const useFirst = async () => {
+    if (!connection) return;
+    setMoving(true);
+    setMoveError(null);
+    try {
+      await setAiOrder(supabase, active.id, aiOrderWithFirst(items, connection.id));
+      success();
+    } catch {
+      setMoveError('No hemos podido cambiar el orden. Inténtalo de nuevo.');
+    } finally {
+      await reload();
+      setMoving(false);
+    }
   };
 
   const remove = async () => {
@@ -95,6 +133,20 @@ export default function AiPage() {
             ? 'Ya tienes una suscripción conectada. Puedes añadir otra, de otra persona o la misma: si es la misma, comparten sus límites.'
             : 'Ya tienes una conectada. Esta se añade como otra cuenta, al final del orden.'}
         </Text>
+      ) : null}
+
+      {ahead ? (
+        <View className="mt-6">
+          <Text testID="ai-used-before" className="px-1 text-base leading-[22px] text-ink">
+            {`Tus agentes usan antes «${aiAccountName(ahead)}». Esta solo entra si las de delante fallan o llegan a su límite.`}
+          </Text>
+          {canEdit ? (
+            <View className="mt-3">
+              <Button testID="ai-use-first" label="Usar esta primero" variant="secondary" busy={moving} onPress={() => void useFirst()} />
+              <ErrorText>{moveError}</ErrorText>
+            </View>
+          ) : null}
+        </View>
       ) : null}
 
       {connection && canEdit ? <NameForm connection={connection} onSaved={reload} /> : null}
