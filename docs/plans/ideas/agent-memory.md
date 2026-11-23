@@ -1,78 +1,92 @@
-# Agent memory: see, correct and delete what an agent remembers
+# Agent memory: stores every agent reads and writes, and a screen to see and fix them
 
-**Priority:** medium — people trust an agent they can check; today the chat agents forget everything outside the thread, so there is nothing to show yet
-**Gate:** decision:Jaime — the six decisions below (where memory lives, whose it is, who sees and edits it, how it learns, the runner agents, limits)
-**Next:** Jaime picks the decisions below; then write the File Structure and Tasks against that day's code and build it in one PR
+**Priority:** medium — people trust an agent they can check and correct; today the chat agents forget everything outside the thread, so there is nothing to show yet
+**Gate:** decision:Jaime — the six decisions below (copy Claude Managed Agents' model or use the service, one kind of agent, the default stores, write access, who edits, the limits)
+**Next:** Jaime picks the decisions below; then write the File Structure and Tasks against that day's code and build it
 
-**Goal:** Each agent keeps what it learns about the organisation and about the person it talks to, and the person sees it in the agent's screen, where they can correct or delete any of it.
+**Goal:** Every agent, whether people talk to it or it runs on a timetable, reads and writes memory stores that outlive a conversation; people see each store in the app and correct or delete what is in it, and feedback given in a chat reaches the agent's next scheduled run.
 
 ## Context
 
-As of `2b76f7c` (2026-11-23). Jaime's Trello card «revisar memoria behind the scenes», clarified: he wants to **see what the agent remembers**.
+As of `7129d4d` (2026-11-23). Jaime's Trello card «revisar memoria behind the scenes»: he wants to **see what the agent remembers**. Reviewing a first draft (decisions per agent and per person, a `recordar` tool, short sentences), he asked (2026-11-23) to model it on Claude Managed Agents: memory per session plus memory stores, read-only or read-write, with limits, and that an agent on a timetable can still be talked to, to change its behaviour or give it feedback.
 
-**There is no persistent memory for the chat agents today.** What each kind of agent knows:
+**What agents remember today.** `agents.runner` decides how an agent runs, and memory depends on it:
 
-- **Chat agents** (`agents.runner = 'chat'`: Secretaría and every agent hired in Equipo). `apps/engine/src/chat.ts` gives the model a fixed system prompt (`systemPrompt`: name, job, the accounts it may use, today's date) and the thread's last 40 messages (`recentMessages(thread.id, 40)`). Nothing is saved between threads: in a new conversation, or in another person's personal chat, the agent knows nothing. On the Claude subscription path, `claudeCode.ts` runs Claude Code in a throwaway `HOME` deleted after the run, so Claude Code's own memory is discarded too. Their prompt says they have no record.
-- **Runner agents** (`runner = 'ordago_job' | 'ghostaff'`: Órdago's twelve, Legal first). Their memory is the record, a git repo: `composePrompt` in `apps/engine/src/runner.ts` tells them to read the record's `AGENTS.md` and `agentes/<slug>/`, and before ending «what should still be true tomorrow, write it, commit and push». That is free-form Markdown, with history, written per the record's own `AGENTS.md`. The app does not show it: Registro (Empresa) shows only what was decided.
-- **Organisations without a record** (every new customer until Ghostaff's own record store exists, ordago-agents-in-ghostaff.md step 6) have nowhere an agent could write files.
+- **Chat agents** (`runner = 'chat'`: Secretaría and every agent hired in Equipo). Each message is one model call from the engine (`apps/engine/src/chat.ts`) with a fixed system prompt and the thread's last 40 messages. No files, no timetable. On the Claude subscription path, `claudeCode.ts` runs Claude Code in a throwaway `HOME`, so its own memory is deleted too. **Nothing survives the thread.**
+- **Runner agents** (`runner = 'ordago_job' | 'ghostaff'`: Órdago's twelve, Legal first). Each message or timetable tick starts a container that clones the record (git), runs Claude Code for minutes and pushes. `composePrompt` (`apps/engine/src/runner.ts`) tells them to read `AGENTS.md` and `agentes/<slug>/` and, before ending, to write «what should still be true tomorrow». **Their memory is free-form Markdown in the record**, and the app does not show it. Only organisations with a GitHub record connector (today, Órdago) can have them.
 
-So «see what the agent remembers» needs two things, in this order: chat agents that remember, and a screen that shows it.
+So the two halves of an agent are split by kind: chat agents can be talked to quickly but forget; runner agents remember and keep a timetable but only where a record exists.
 
-**What it must respect:**
-- Personal chats (`threads.personal_of`, `20261123200000_personal_chats.sql`): only that person and the agent see them. What the agent learns there about the person must not leak to others.
-- Invariant 4: agents work on files with history; the app reads the database. Rule 2: `org_id`, row-level security and a pgTAP test on every table with an organisation's data; the app writes only through `security definer` functions. Rule 6: every new database function is classified in `packages/shared/src/services/settings.ts` (the main agent may propose it, or `never` with a reason).
-- UI: one main action per screen, fold the rest, plain words, every state designed.
+## How Claude Managed Agents does it (read 2026-11-23)
+
+From [Using agent memory](https://platform.claude.com/docs/en/managed-agents/memory) and the scheduled deployments docs:
+
+- **An agent** is one stored config (model, prompt, tools). **A session** is one run of it, a conversation or a scheduled firing; by default a session sees nothing from earlier sessions. **A deployment** adds a cron schedule to an agent: each firing creates a session. The agent is the same whether you talk to it or it runs on a schedule.
+- **A memory store** is a collection of small text documents, each addressed by a path, that outlives sessions. Up to **8 stores per session**; up to **10,000 memories per store**; **100 kB per memory**. The docs advise many small files and focused stores: one per user, one for shared knowledge, one per project.
+- **Stores attach per session**, each `read_write` (the default) or `read_only`, with `instructions` for that session. The agent sees each store as a folder (`/mnt/memory/<store>/`) and uses its ordinary file tools; a note in the system prompt tells it what is mounted.
+- **Every change is a version** (created, modified, deleted), with who made it (a session, the API or a person). A version can be read, rolled back or redacted (for a leaked secret or personal data). Versions are kept 30 days, the recent ones of a live memory always.
+- **Their warning:** an agent that reads untrusted input (mail, web pages, a tool's output) can be prompt-injected into writing to a `read_write` store, and later sessions read that as trusted memory. Use `read_only` wherever the agent need not write.
+- Memory stores are not eligible for zero data retention: they live on Anthropic's servers.
 
 ## Design (with my picks; the decisions are below)
 
-**A memory is a short sentence an agent keeps**, with a scope:
-- **Sobre la organización**: a fact about the organisation («Facturamos por trimestres», «El proveedor de café es Ana»).
-- **Sobre ti**: a fact about one person, learned in their chat («Prefiere resúmenes de tres líneas»). Only that person sees it, and the agent uses it only when talking to that person.
+**Copy the model, on our own storage** (decision 1). The words in the app: «Memoria» for a store, «recuerdo» for one document in it.
 
-Each memory keeps the agent that learnt it, when, and the conversation it came from (a link back to the message).
+**One agent, talkable and optionally on a timetable** (decision 2). As in Managed Agents, an agent is one thing: you can always write to it, and a timetable is an option you add (`agents.schedule`, which exists). Nobody picks «chat or job» when creating an agent; whether a turn runs as a quick model call or in a container is the engine's choice, by what the turn needs. A conversation and a scheduled run are both **sessions**. A session's own memory is its conversation, which exists. This needs its own plan; memory does not wait for it, but it is built so both kinds read and write the same stores.
 
-**Storage:** a table `agent_memories` (`org_id`, `agent_id`, `about_user` null for organisation memories, `body` up to 300 characters, `source_message_id`, `created_at`, `updated_at`), row-level security, pgTAP tests. Reads through `@ghostaff/shared/services`; the app's writes through `edit_memory` and `forget_memory` (`security definer`). The engine writes the agent's own memories with the service role.
+**The stores every organisation gets** (decision 3), created with the organisation, the agent and the person:
 
-**How an agent learns:** a tool `recordar` (and `olvidar`), given to every chat agent through `mergeTools` like the settings tools. No owner approval: it changes nothing outside Ghostaff. When the agent saves something, the reply shows a quiet status line, «Lo recordaré: …», with a tap that opens the memory screen. So nothing is learnt behind the person's back. Saying «recuerda que…» or «olvida que…» in the chat is how a person adds or removes one; no «Añadir» button.
-
-**How an agent uses it:** `systemPrompt` gets a block «Lo que recuerdas» with the agent's organisation memories and, in a personal chat, that person's; capped (see decision 6). In a shared thread, no personal memories at all.
-
-**Where the screen lives:** the agent's screen (`agente/[id]`) gets a row «Memoria» (`Lo que ${agent.name} recuerda`), beside «Quién puede» and «Herramientas», and visible to whoever may read the agent, not only owners. It opens `memoria/[id]`: two short lists, «Sobre ti» first, then «Sobre {organización}»; each row is the sentence and, quieter, «hace 3 días · en vuestra conversación». A tap opens it to correct the text or «Olvidar». Empty state: «{Agente} aún no recuerda nada. Cuando le cuentes algo que deba saber, lo verás aquí».
-
-**Who sees and edits what:**
-
-| Memory | Sees it | Corrects or deletes it |
+| Store | What goes in | Attached to |
 |---|---|---|
-| Sobre ti | only you | only you |
-| Sobre la organización | everyone who may read the agent | owners, and the person whose conversation it came from |
+| **Empresa** | What the organisation is and how it works: customers, suppliers, prices, how it invoices, rules agreed («los pedidos de más de 500 € los aprueba Ana») | every session of every agent |
+| **{Agente}** (one per agent) | How this agent does its job and the feedback it got («el informe, los viernes y en tres líneas», «no cuentes las devoluciones como ventas») | every session of that agent, scheduled runs included |
+| **{Persona}** (one per person) | That person's preferences and context («prefiere audio», «lleva las cuentas de Madrid») | only sessions where that person talks: their personal chat. Never a scheduled run, never a shared thread |
 
-Owners do not see another person's «Sobre ti»: a personal chat is private, and so is what came out of it.
+This is how feedback reaches a scheduled agent: you write to Finanzas «el informe, mejor en tres líneas»; it saves that in its own store; its Friday run reads the store and writes three lines.
+
+**Write access** (decision 4): each agent writes its own store and the person's store in that person's chat; **Empresa is `read_only` for every agent except Secretaría**, which keeps it. Another agent that learns something about the organisation says so in its reply and asks Secretaría (by mention) to keep it. This follows Managed Agents' warning: the agents that read mail, reviews and web pages are exactly the ones that should not write what every other agent trusts.
+
+**Storage:** two tables, `memories` (`org_id`, `store_id`, `path`, `content`, `updated_at`) and `memory_versions` (every create, change and delete, with the actor: an agent's session or a person), plus `memory_stores` (`org_id`, `kind`: `company` | `agent` | `person`, `agent_id` or `user_id`). Row-level security and pgTAP on all three. The app writes only through `security definer` functions (`edit_memory`, `forget_memory`, `restore_memory_version`); the engine writes an agent's memory with the service role. These are files with history, which is what invariant 4 asks of what agents work on; when Ghostaff's own record store exists, a store can become a `memoria/<store>/` folder of the record, with the tables as its projection, as `por-decidir/` is today.
+
+**How agents use it:**
+- **Chat turns:** tools named and shaped like Anthropic's memory tool (`view`, `create`, `str_replace`, `delete` on `/memoria/<store>/…`), served by the engine on our tables, given through `mergeTools` beside the settings tools, so they work on all three paths (Vertex, API key, the subscription's `claude -p`). No owner approval: they change nothing outside Ghostaff. The system prompt lists the attached stores with their access and the paths in each (not the contents), as Managed Agents does.
+- **Runner turns:** the engine adds the attached stores to the run's spec; the runner writes them to `~/memoria/<store>/` before Claude Code starts, makes the `read_only` ones read-only, and sends back what changed when it reports. The engine applies the changes with a precondition on each memory's hash (a concurrent edit wins and the run's change is reported, not lost silently).
+- **The chat shows it:** when a turn wrote to memory, the reply's status line says so («Guardado en tu memoria: informe en tres líneas»), with a tap to the memory. Nothing is learnt behind anyone's back.
+
+**The screens:**
+- Equipo → agent → **Memoria** (a row beside «Quién puede» and «Herramientas»): the stores that agent reads, each with its access («Lee y escribe» / «Solo lee») and how many recuerdos it holds. A store opens a list of its recuerdos (the first line and «hace 3 días · Finanzas, en tu chat»); one opens to read it, correct it or «Olvidar». «Historial» is folded under it, with «Volver a esta versión».
+- Empresa → **Memoria de la empresa**: the Empresa store, the same screens.
+- Empty state: «{Agente} aún no recuerda nada. Lo que le cuentes y deba seguir sabiendo, aparecerá aquí».
+
+**Who sees and edits** (decision 5):
+
+| Store | Sees it | Corrects, deletes, restores |
+|---|---|---|
+| Empresa | every member | owners |
+| {Agente} | whoever may read the agent | owners |
+| {Persona} | only that person | only that person |
+
+Owners do not see someone else's personal store: it comes from a personal chat, which is private.
+
+**Limits** (decision 6): 8 stores per session (as Managed Agents; we use at most 3 today), 1,000 recuerdos per store and 10 kB per recuerdo (smaller than Managed Agents' 10,000 and 100 kB: these are read and corrected on a phone, and a chat turn pays for what it reads). At the limit, a write fails with a message telling the agent to merge or forget first. Versions kept 30 days, as there.
 
 ## Open questions (decisions for Jaime)
 
-1. **Where memory lives.**
-   - **a) A database table now** (my pick): works today for every organisation and every chat agent, and the screen reads it like everything else. When Ghostaff's own record store exists, the record gets a `memoria/` folder in a format defined in `packages/shared/src/record/` and the table becomes its projection, as `por-decidir/` is today.
-   - b) Files in the record from day one: one master and history for free, but only organisations with a GitHub record connector (today, Órdago) would have memory, and chat agents would need record access first.
-2. **Whose memory.**
-   - **a) Each agent its own** (my pick): what the card asks («what each agent has learnt»); Finanzas does not carry Marketing's notes, and deleting one is clear.
-   - b) One organisation memory every agent reads: fewer duplicates, but nobody can say which agent believes what.
-3. **Who corrects or deletes organisation memory.**
-   - **a) Owners, plus the person it came from** (my pick).
-   - b) Anyone who may talk to the agent: faster, but one member can erase what another taught it.
-4. **How it learns.**
-   - **a) An explicit tool, announced in the chat** («Lo recordaré: …») (my pick): visible, testable, and the person can correct it on the spot.
-   - b) An automatic pass at the end of each conversation that extracts facts: remembers more, but behind the scenes, which is what the card wants to undo.
-5. **Runner agents (Órdago's, Legal).**
-   - **a) Out of this first version** (my pick): their memory is free-form Markdown in the record, written by the record's own rules; it comes into the same screen when the record store and `memoria/` exist (decision 1a).
-   - b) Show their `agentes/<slug>/` files read-only in the same screen now: honest, but it is a file viewer, not a list one can correct.
-6. **Limits.** My pick: up to 300 characters per memory and 50 per agent and scope; past that the agent must merge or forget before saving, and the prompt carries all of them (no search). Revisit with real use.
+1. **Copy the model or use the service.**
+   - **a) Copy Managed Agents' model on our own tables** (my pick). Memory is organisation data: invariant 2 wants it in the EU on storage we own, with an export; it must work the same whether the organisation answers with its Claude subscription, its key or Vertex; and the app needs row-level security per person, which a store on Anthropic's side does not know.
+   - b) Use Managed Agents' memory stores themselves: less to build and its versioning for free, but the data sits on Anthropic's servers (not EU-only, not eligible for zero retention), it needs an Anthropic API key per organisation, and our chat agents don't run as Managed Agents sessions.
+2. **One kind of agent, always talkable, timetable optional** (my pick), in its own plan, with memory built for both kinds now; or keep «chat» and «runner» as kinds people pick.
+3. **Three default stores** (my pick: Empresa, one per agent, one per person); or only Empresa and one per agent, with nothing per person.
+4. **Empresa read-only for every agent but Secretaría** (my pick); or read-write for all, every change versioned and revertible (more learning, more exposure to injection).
+5. **Owners edit Empresa and agent stores; each person edits only their own** (my pick); or anyone who may talk to the agent edits its store.
+6. **Limits:** 8 stores per session, 1,000 recuerdos per store, 10 kB each, versions 30 days (my pick); or Managed Agents' own 10,000 and 100 kB.
 
 ## Out of scope
 
-- Memory shared across organisations, or about people outside the organisation (external-parties.md).
-- A memory view across all agents («what Ghostaff knows about me»): a later row in Empresa if people ask for it.
-- Secretaría editing other agents' memory: `edit_memory` and `forget_memory` are classified `never` in `settings.ts`, because a person's correction is theirs and each agent writes only its own.
+- Stores people create and attach by hand (a «Catálogo» store, a project store). The model allows it; the screens come once someone needs one.
+- Memory shared across organisations.
+- Secretaría changing who can read a store or attaching stores: classified `never` in `settings.ts` until stores are something people configure.
 
 ## Testing strategy
 
-pgTAP: a member of another organisation sees and changes nothing; a member never sees another member's «Sobre ti»; a member who may not read the agent sees none of its memories; only owners or the source person edit organisation memories. Vitest in the engine: `recordar`/`olvidar` write the right scope (personal chat → «Sobre ti» allowed; shared thread → organisation only), the cap, and `systemPrompt` never puts personal memories in a shared thread. Jest on the screen's four states. A Maestro flow on a seeded memory (CI runs no engine or model): open the agent, Memoria, correct one, forget it.
+pgTAP: another organisation sees and changes nothing; a member never sees someone else's personal store; a member who may not read an agent sees none of its store; only owners edit Empresa and agent stores; every change writes a version. Vitest in the engine: the tools on each store respect `read_only`; a shared thread never gets a personal store; a scheduled run gets Empresa and its own store only; the limit errors; a run's changes applied with the hash precondition. Runner: the stores written to `~/memoria/`, read-only ones not writable, changes reported. Jest on the screens' four states. A Maestro flow on a seeded store (CI runs no engine or model): open the agent, Memoria, a recuerdo, correct it, forget it.
