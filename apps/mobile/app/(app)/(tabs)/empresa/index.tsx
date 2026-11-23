@@ -11,7 +11,8 @@ import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useTabScreenTop } from '@/lib/tabs';
 import { usePalette } from '@/lib/theme';
 
-// Empresa, the third tab (three-tabs.md, decision 11): the organisation
+// Empresa, the third tab (three-tabs.md, decision 11), called Perfil in a
+// personal space, which is otherwise the same page (spaces.ts): the organisation
 // itself. Its name on top opens the switcher; then Conexiones, first and one
 // tap away; the people in it and inviting more; Registro, what it decided;
 // and at the end, switching and signing out.

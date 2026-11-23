@@ -64,8 +64,7 @@ export default function Conversacion() {
   const level = levels[head.agentId];
   const canTalk = canWriteIn({ visibility: head.visibility, mine }, level);
   const opener = members.find((m) => m.userId === head.createdBy)?.displayName ?? null;
-  // A personal space has nobody else to share with.
-  const showAudience = active?.kind !== 'personal' && !head.personal && agent;
+  const showAudience = !head.personal && agent;
 
   return (
     <View className="flex-1 bg-surface">

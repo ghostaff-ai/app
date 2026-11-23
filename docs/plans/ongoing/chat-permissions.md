@@ -86,7 +86,7 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 - **The opener becomes an owner, or stops being one:** nothing changes on their conversations; owners don't see private conversations either way.
 - **A member is removed from an agent (`none`)** while they had a shared conversation open: the next Realtime event no longer reaches them, the screen says they have lost access.
 - **Two people write at once in a `write` conversation:** the agent answers one message at a time, as today (one `working` reply per thread).
-- **A personal space** (`organizations.kind = 'personal'`) has only its owner: the visibility sheet isn't shown there.
+- ~~**A personal space** has only its owner: the visibility sheet isn't shown there.~~ Since 2026-11-23 a personal space takes invitations like a company (welcome-and-spaces.md), so the visibility sheet shows there too.
 - **An action proposed in someone's private chat** (an approval card, `agent_actions`) needs an owner, who can't see a member's private conversation. This was already so for personal chats (2026-11-23); it waits for the decision model (three-tabs.md, step 3), where a decision raised from a private conversation goes to the deck without its conversation.
 - **The agent is removed:** its conversations go with it, as today (`delete_agent` is `never` for Secretaría for that reason).
 - **Full export** (invariant 2): a private conversation is the organisation's data stored for one person. The export an owner runs leaves out other people's private conversations; each person can export their own (decision 4).
