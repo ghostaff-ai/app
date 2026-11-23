@@ -1,10 +1,48 @@
-# Voice: speak, and it's transcribed into the message
+# Voice: voice notes in the chat, and dictation
 
 **Priority:** medium — people on the go, and many small-business owners, would rather speak than type
-**Gate:** none
-**Next:** run `scripts/setup-env.sh` on beta (Jaime's go-ahead), then a live note in Spanish and English from the beta app (iPhone, Android, web)
+**Gate:** decision:voice notes — Jaime answers the five questions in «Voice notes» (recheck 2026-11-24)
+**Next:** with Jaime's answers, build voice notes on branch `claude/voice-notes-5d8642` (tasks in «Voice notes»), one PR landed with `pnpm pr:land`
 
-Jaime's idea (2026-11-18). On 2026-11-22 he skipped the trial («monta el audio directamente con Gemini, sin la prueba») and approved the design below; it is being built.
+Two pieces, in order:
+
+1. **Dictation** (Jaime's idea, 2026-11-18; built in PR 46 on 2026-11-22): speak, the transcript lands in the message box, you review it and send text. The audio is discarded. Left: `scripts/setup-env.sh` on beta (Jaime's go-ahead), then a live note in Spanish and English from the beta app. Sections «Goal» to «Open questions» below are its record.
+2. **Voice notes** (Trello card «hablar por audios», Jaime, 2026-11-23): as in WhatsApp, you record an audio and send it; it shows in the chat as an audio you can play, with its transcript under it, and the agent answers in text. Not a live voice conversation. Proposed in the next section; waits on Jaime's five answers.
+
+## Voice notes (Jaime, 2026-11-23): proposed
+
+**What changes from dictation.** The audio is the message: it is sent at once (no review of the text first), kept so it can be played back, and drawn as an audio bubble. The transcript is what the agent reads and what the person sees under the audio. The agent always answers in text.
+
+**What is reused.** The engine's transcriber (`apps/engine/src/transcribe.ts`: Gemini 3.5 Transcribe on Vertex AI in `eu`, SMART mode, 10 MB cap, 30 notes an hour per person), the app's recorder (`apps/mobile/lib/hooks/useDictation.ts`, `expo-audio`, 32 kbit/s, 10-minute auto-stop), the recording bar (`components/chat/DictationBar.tsx`) and the agent's reply (`chat.ts`, `replyInThread`). `expo-audio` is already in the app, so this needs no new native module: an over-the-air update, not a build.
+
+### How it works
+
+1. **Recording.** In the chat with an agent, tap the mic: the box turns into the recording bar (red dot, m:ss, «Cancelar») and the send button sends the note. Up to 10 minutes; at 10:00 it stops and is sent. iOS and Android ask for the microphone the first time, as today.
+2. **Sending.** The app sends the audio to the engine, `POST /threads/:id/voice-notes` (raw body, `audio/*`). The engine checks the person may talk in that thread (`thread_level` as them: never someone else's personal chat), applies the same type, size and hourly limits as `/transcribe`, stores the audio, writes the message, answers `201` with it, and carries on in the background: transcribe, put the text into the message, ask the agent to answer. The bubble shows at once with «Transcribiendo…»; the transcript and then the agent's answer arrive live through Realtime, as replies do today.
+3. **Where the audio is kept.** A private Supabase Storage bucket `voice-notes`, in the same project as the messages (Frankfurt: data stays in the EU, on storage we own, invariant 2), at `<org_id>/<thread_id>/<message_id>.<ext>`. Only the engine writes there (service role, rule 3); the app writes nothing to storage or tables (rule 2). Reading: a `storage.objects` select policy lets a person read a note only when `thread_level` of the path's thread isn't `none` for them; the app gets a short-lived signed URL through `@ghostaff/shared/services` (rule 1). pgTAP proves another organisation's member, and another person of the same organisation (personal chats), can't read it.
+4. **The message.** One `person` message whose parts are, in the AI SDK's shape, `{ type: 'file', mediaType, path, durationMs, transcript: 'pending' | 'done' | 'failed' }` and, once transcribed, `{ type: 'text', text }`. `messageText` already reads only text parts, so the agent, the thread list's preview and search read the transcript and need no change. Not `messages.state`: a unique index allows one `working` message per thread, and that one is the agent's reply.
+5. **Who transcribes, and the cost.** As for dictation: Gemini 3.5 Transcribe on Vertex AI in the `eu` multi-region (processing only in EU member states), from Ghostaff's own Google Cloud project, about 0.005 USD a minute; Ghostaff pays, part of the premium plan when it exists. Storage at 32 kbit/s is about 14 MB per hour of audio: Supabase's Free plan (1 GB) holds about 70 hours, Pro (100 GB included) about 7,000. Before production, the same checklist as dictation (Vertex quota cap, budget alert, zero data retention).
+6. **The bubble** (on the right, in the accent colour, like the person's text bubbles): a play/pause button, a progress bar you can drag and the duration (1:24); under it, the transcript in the bubble's text size. While transcribing, «Transcribiendo…»; if it fails, «No se ha podido transcribir · Reintentar» (`POST /voice-notes/:messageId/transcribe`, which re-reads the stored audio), and the agent doesn't answer until there is text. The audio plays even when the transcript failed.
+7. **The agent** reads the transcript as the message's text. It doesn't hear the audio; it answers in text.
+8. **Web and iPhone.** The web records WebM/Opus (Chrome's MediaRecorder); iPhone's player can't play WebM. A note recorded on the computer must play on the phone, so the web records `audio/mp4` where the browser can (Safari, recent Chrome), and the engine converts any other format to AAC in `.m4a` before storing (ffmpeg in the engine's image). To confirm while building: which browsers record mp4, and whether the conversion is needed at all.
+
+### Decisions for Jaime
+
+1. **Dictation and voice notes.** (a) The mic sends voice notes and dictation goes away (one mic, one behaviour, as in WhatsApp): my pick. (b) Both: tap the mic for a voice note, and a second way («Dictar») to get the text into the box. (c) Dictation stays as it is, voice notes are a second button.
+2. **How you record.** (a) Tap to start, then send or cancel: my pick (works the same on the web and with a screen reader, and long notes don't need a finger held down). (b) Hold to record and release to send, slide to cancel, as in WhatsApp.
+3. **How long the audio is kept.** (a) As long as the message: my pick (it is part of the conversation). (b) 30 days, then only the transcript stays.
+4. **The transcript in the bubble.** (a) Always shown under the audio: my pick (it is what you scan when you come back to a chat). (b) Folded behind «Ver transcripción», as in WhatsApp.
+5. **Where.** (a) Only in the chat with an agent (`chat/[agent]`): my pick. (b) Also in the older shared threads (`conversacion/[id]`), where other people would hear it.
+
+Not in this version: agents answering in audio, a live voice conversation, text appearing while you speak, editing a note's transcript, and the mic on Hoy, Equipo and Registro (still opens the chat with Secretaría).
+
+### Tasks (after Jaime's answers; branch `claude/voice-notes-5d8642`, one PR)
+
+1. **Database.** A migration: the private bucket `voice-notes`, the read policy by `thread_level` on the path's thread; the engine writes the message with the service role. pgTAP in `supabase/tests/database/voice_notes.test.sql`: the person reads their note; another member doesn't (personal chat); another organisation doesn't; nobody but the service role writes.
+2. **Engine.** `apps/engine/src/voiceNotes.ts`: `POST /threads/:id/voice-notes` (talk level as the caller, type, 10 MB, limiter shared with `/transcribe`, store, write the message, answer, then transcribe in the background, update the parts, ask the agent) and `POST /voice-notes/:messageId/transcribe` (retry, the author only). Storage and transcriber injected, fakes in Vitest: refusals (no talk, someone else's chat, wrong type, too large, too many), the message's parts before and after, a failed transcription marked `failed` and the agent not asked, a retry.
+3. **Shared.** `sendVoiceNote(engine, threadId, audio, mimeType, durationMs)`, `retryTranscript(engine, messageId)`, `voiceNoteUrl(supabase, path)` in `@ghostaff/shared/services`; `isAudioPart` beside `isActionPart` in `chat.ts`, with tests.
+4. **App.** The recorder hook sends instead of transcribing (or both, per decision 1); `VoiceNote` in `components/chat/` (play/pause, progress, duration, transcript, its states) drawn by `MessageView` for an audio part; the web records mp4 where it can. Jest with the recorder, the player and the services mocked. The Maestro flow of the chat updated if it changes.
+5. **Check.** `pnpm check`, `pnpm db:test`; the web against local Supabase and the engine with a fake transcriber (record, bubble, «Transcribiendo…», the text, the agent's answer, playback, a failed transcription and its retry); then `pnpm pr:land`.
 
 **Price and plan (Jaime, 2026-11-22).** Gemini 3.5 Transcribe on Vertex AI costs about **0.005 USD a minute** (list price of 2026-11-19, research below): a 2-minute note is about 1 cent, 1,000 minutes a month about 5 USD. **Dictation will be part of the premium plan.** No plans or prices exist in the product yet (they belong to the product plan, `ghostaff-producto.md`); until they do, everyone signed in can dictate and Ghostaff pays. When premium exists, the engine's `/transcribe` is where to gate it, by the organisation it receives.
 
@@ -18,7 +56,7 @@ The person speaks instead of typing. The audio is transcribed straight into the 
 - What Jaime means is what he does with Claude: record a long note, it's transcribed automatically, and he sends the text. **It isn't about sending voice notes** to the agents, nor about agents answering in audio.
 - The weekly summary in audio ([app-design.md](../ongoing/app-design.md), decision 15) is a separate thing and doesn't change.
 
-**Confirmed (Jaime, 2026-11-22):** «hablar con los agentes por audio» means exactly this, speech turned into text in the message box, **in Spanish and in English**, the language detected on its own (a note may mix both). Not voice notes kept as audio, not agents answering by voice.
+**Confirmed (Jaime, 2026-11-22):** «hablar con los agentes por audio» means exactly this, speech turned into text in the message box, **in Spanish and in English**, the language detected on its own (a note may mix both). Not voice notes kept as audio, not agents answering by voice. **Widened on 2026-11-23**: Jaime now wants voice notes kept as audio too («Voice notes» above); agents still answer in text.
 
 ## The idea
 
