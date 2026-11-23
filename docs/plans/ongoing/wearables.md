@@ -2,7 +2,7 @@
 
 **Priority:** high — Jaime's Whoop subscription ends soon (2026-11-23) and his history must be in Ghostaff before the API stops answering; his own first use of Ghostaff is personal (welcome-and-spaces.md)
 **Gate:** none
-**Next:** phase 1, task 1: the `health` schema migration and its pgTAP test, on a branch `feat/health-history` in its own worktree
+**Next:** phase 1, task 4: Jaime finishes his Whoop export, exposes `health` on beta's Data API, and the import runs against beta
 
 Jaime (2026-11-23): he is leaving Whoop for a Google band and wants his whole Whoop history kept, read later next to the new band's. He wants Ghostaff to connect health wearables through their APIs so that a personal agent («mi agente de métricas») can do whatever the person asks with that data: a weekly review of trends, a daily dashboard page, cross it with voice notes. The connector does not decide what is done with the data; the person tells the agent.
 
@@ -135,6 +135,12 @@ Each phase adds its line to connectors.md's checklist (kind A) and goes through 
 3. **Unscored records and the current, open cycle** are stored but produce no metric (Task 2 test `skips unscored and open`).
 4. **Naps** are stored but don't count as the night's sleep (Task 2 test `naps are not the night`).
 5. **A company space** can never hold health data, and another organisation's member reads nothing (Task 1 pgTAP).
+
+### Progress
+
+- [x] Tasks 1–3 landed in [#53](https://github.com/ghostaff-ai/app/pull/53) (2026-11-23). Changes from the plan after the final review: records and metrics reference `(source_id, org_id)` together (`sources` has `unique (id, org_id)`), so neither can sit in a space other than its source's; daily metrics are recomputed from every stored record of the source and replaced as a whole through `health.replace_metrics(source, rows jsonb)` (service role only), so a re-import never leaves stale numbers; the body record's id is `body:<YYYY-MM-DD>`, one per export day. An import never deletes records missing from its folder (it may be an older or partial export); deletions come with phase 2's webhooks. A member writing `health.*` gets `42501`. Tried locally with a synthetic 800-day dump, imported twice: same 2,402 records and 15,202 metrics.
+- [ ] Task 4: waits on Jaime's real Whoop export (the field mapping is checked against Whoop's v2 docs, not yet against his data).
+- Deferred minors: pgTAP writes as `postgres`, not `service_role`; Whoop's `step_count` is not mapped to `steps` yet (the payload keeps it); a duplicated id inside one batch would abort an import (dedupe in `whoopRecords`); exposing `health` on hosted projects is manual (could go into `setup-env.sh` through the Management API, keeping `public` and `graphql_public` in the list); no cycle test where the offset alone moves the day.
 
 ### Task 1: The `health` schema
 
