@@ -10,6 +10,7 @@ import { MessageView } from '@/components/chat/Message';
 import { Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { canWriteIn, readOnlyNote, showAuthors } from '@/lib/chat';
+import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useEngine } from '@/lib/hooks/useConnections';
 import { useMembers, useMyLevels, useReaders, useThread } from '@/lib/hooks/useChat';
@@ -29,7 +30,7 @@ export default function Conversacion() {
   const orgId = active?.id ?? null;
   const { head, messages, error, send, reloadHead } = useThread(id ?? null);
   const { readers, reload: reloadReaders } = useReaders(id ?? null, head?.visibility);
-  const { items: agents } = useAgents(orgId);
+  const { items: agents, reload: reloadAgents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels } = useMyLevels(orgId);
   const headerHeight = useHeaderHeight();
@@ -49,6 +50,8 @@ export default function Conversacion() {
   const ghostOf = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a.ghost])), [agents]);
   const owner = members.find((m) => m.role === 'owner' && m.userId !== me)?.displayName ?? null;
   const isOwner = active?.role === 'owner';
+  const owners = useMemo(() => members.filter((m) => m.role === 'owner').map((m) => m.displayName), [members]);
+  const asks = useAccountAsks({ orgId, messages, agents, reloadAgents, owners, isOwner, returnPath: `conversacion/${id}` });
   // The card updates itself when the engine rewrites the message.
   const decide = useMemo(
     () => async (actionId: string, decision: 'approve' | 'reject') => {
@@ -105,6 +108,7 @@ export default function Conversacion() {
               names={names}
               canDecide={isOwner}
               onDecide={decide}
+              asks={asks}
             />
           )}
           estimatedItemSize={64}

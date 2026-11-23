@@ -9,7 +9,7 @@
 // in the app, and giving an agent an account stays an owner's press: nothing
 // here connects or grants anything.
 
-import { type AccountAskPart, CONNECTORS, type CatalogueConnector, isAccountAskPart, type MessagePart } from '@ghostaff/shared';
+import { type AccountAskPart, type AccountStates, accountNeed, CONNECTORS, type CatalogueConnector, isAccountAskPart, type MessagePart } from '@ghostaff/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentTools, ToolOutcome, ToolSpec } from './tools';
 
@@ -17,9 +17,6 @@ export const ASK_TOOL = 'ask_for_account';
 
 /** Cards of this kind one message may carry. */
 export const MAX_ASKS = 3;
-
-/** A connected account's health, by provider. */
-export type AccountStates = ReadonlyMap<string, 'ok' | 'failing'>;
 
 export interface AskRecord {
   id: string;
@@ -74,12 +71,7 @@ export function needFor(
   states: AccountStates,
   agentAccounts: readonly string[] | null | undefined,
 ): AccountAskPart['need'] | 'have' {
-  if (!connector) return 'unsupported';
-  const state = states.get(connector.id);
-  if (!state) return 'connect';
-  if (state === 'failing') return 'reconnect';
-  if (agentAccounts != null && !agentAccounts.includes(connector.id)) return 'grant';
-  return 'have';
+  return accountNeed(connector?.id ?? null, states, agentAccounts);
 }
 
 /** The tool as the model sees it: the catalogue goes in its description, so the model picks the id itself. */

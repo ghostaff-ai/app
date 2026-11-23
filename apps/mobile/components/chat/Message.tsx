@@ -1,8 +1,10 @@
-import { type ActionPart, type ChatMessage, isActionPart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
+import { type ActionPart, type ChatMessage, isAccountAskPart, isActionPart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { AccountAskCard } from '@/components/chat/AccountAskCard';
 import { Markdown } from '@/components/chat/Markdown';
 import { VoiceNote } from '@/components/chat/VoiceNote';
+import type { AskControls } from '@/lib/hooks/useAccountAsks';
 import { GHOSTS, type GhostId } from '@/lib/team';
 
 // One message of a thread (team-chat.md, decision 3): people in bubbles (yours
@@ -195,6 +197,7 @@ export function MessageView({
   canDecide = false,
   onDecide,
   onRetryTranscript,
+  asks,
 }: {
   message: ChatMessage;
   mine: boolean;
@@ -209,9 +212,12 @@ export function MessageView({
   onDecide?: (actionId: string, decision: 'approve' | 'reject') => Promise<void>;
   /** Asks again for a voice note's transcript. */
   onRetryTranscript?: (messageId: string) => Promise<void>;
+  /** What an agent's cards asking for an account can do here (connector-in-chat.md). */
+  asks?: AskControls;
 }) {
   const text = messageText(message.parts);
   const actions = message.parts.filter(isActionPart);
+  const accountAsks = message.parts.filter(isAccountAskPart);
 
   if (message.authorKind === 'agent') {
     return (
@@ -227,6 +233,9 @@ export function MessageView({
         {actions.map((a) => (
           // An action is decided once the agent has finished writing its message.
           <ActionCard key={a.actionId} action={a} canDecide={canDecide && message.state !== 'working'} onDecide={onDecide} />
+        ))}
+        {accountAsks.map((a) => (
+          <AccountAskCard key={a.askId} ask={a} controls={asks} writing={message.state === 'working'} />
         ))}
       </View>
     );

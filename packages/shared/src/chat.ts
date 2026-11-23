@@ -36,8 +36,9 @@ export function isActionPart(p: MessagePart): p is ActionPart & MessagePart {
  * connector-in-chat.md): «Necesito acceso a Notion» and, for an owner, the
  * button that gets it. Once the account is there, the agent goes on
  * (apps/engine/src/accountAsks.ts); the engine trusts its own row, never the part.
+ * A type, not an interface, so a part of a message can be one as it is.
  */
-export interface AccountAskPart {
+export type AccountAskPart = {
   type: 'account_ask';
   askId: string;
   /** The catalogue's id (connectors.ts); absent when the app is not in it. */
@@ -52,7 +53,7 @@ export interface AccountAskPart {
   status: 'open' | 'done';
   /** Who made it possible, once done. */
   doneBy?: string;
-}
+};
 
 export function isAccountAskPart(p: MessagePart): p is AccountAskPart & MessagePart {
   return p.type === 'account_ask' && typeof (p as { askId?: unknown }).askId === 'string';

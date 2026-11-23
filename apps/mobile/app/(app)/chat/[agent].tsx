@@ -9,6 +9,7 @@ import { MessageView } from '@/components/chat/Message';
 import { Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { showAuthors } from '@/lib/chat';
+import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useEngine } from '@/lib/hooks/useConnections';
 import { useAgentChat, useMembers, useMyLevels } from '@/lib/hooks/useChat';
@@ -27,7 +28,7 @@ export default function Chat() {
   const { session } = useAuth();
   const { active } = useActiveOrg();
   const orgId = active?.id ?? null;
-  const { items: agents, loading: agentsLoading } = useAgents(orgId);
+  const { items: agents, loading: agentsLoading, reload: reloadAgents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels, loading: levelsLoading } = useMyLevels(orgId);
   const { messages, loading, error, send, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
@@ -41,6 +42,8 @@ export default function Chat() {
   const ghostOf = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a.ghost])), [agents]);
   const owner = members.find((m) => m.role === 'owner' && m.userId !== me)?.displayName ?? null;
   const isOwner = active?.role === 'owner';
+  const owners = useMemo(() => members.filter((m) => m.role === 'owner').map((m) => m.displayName), [members]);
+  const asks = useAccountAsks({ orgId, messages, agents, reloadAgents, owners, isOwner, returnPath: `chat/${agentId}` });
   // The card updates itself when the engine rewrites the message.
   const decide = useMemo(
     () => async (actionId: string, decision: 'approve' | 'reject') => {
@@ -107,6 +110,7 @@ export default function Chat() {
                 names={names}
                 canDecide={isOwner}
                 onDecide={decide}
+                asks={asks}
                 onRetryTranscript={retryTranscript}
               />
             )}
