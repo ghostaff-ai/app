@@ -160,8 +160,8 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
 
         {decision.answer ? (
           <View testID="answered" className="mt-6 rounded-2xl bg-card p-4">
-            <Text className="text-base font-semibold text-ink">{answerLabel(decision.answer)}</Text>
-            {decision.answer.note ? <Text className="mt-2 text-base text-muted">{decision.answer.note}</Text> : null}
+            <Text className="text-base font-semibold text-ink">{answerLabel(decision.answer, agent)}</Text>
+            {decision.answer.note ? <Text className="mt-2 text-base text-muted">Le dijiste: «{decision.answer.note}»</Text> : null}
             {decision.answer.signedText ? <Text className="mt-2 text-base text-ink">«{decision.answer.signedText}»</Text> : null}
             {canTakeBack ? (
               <Pressable accessibilityRole="button" onPress={busy ? undefined : () => void undo()} className="mt-3 self-start" hitSlop={8}>
@@ -177,8 +177,8 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
           <View className="mt-5">
             {noteOpen ? (
               <TextInput
-                accessibilityLabel={`Nota para ${agent}`}
-                placeholder={`Nota para ${agent}`}
+                accessibilityLabel={`Qué quieres que sepa ${agent}`}
+                placeholder={`Qué quieres que sepa ${agent}`}
                 placeholderTextColor={colors.muted}
                 multiline
                 maxLength={2000}
@@ -190,7 +190,7 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
               />
             ) : (
               <Pressable accessibilityRole="button" onPress={() => setNoteOpen(true)} hitSlop={8} className="self-start">
-                <Text className="text-base text-muted">Añadir una nota para {agent}</Text>
+                <Text className="text-base text-muted">Decirle algo a {agent}</Text>
               </Pressable>
             )}
           </View>

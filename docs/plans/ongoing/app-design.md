@@ -38,6 +38,8 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 12. Order: what waits first, nearest `vence` first, then newest.
 13. «Preguntar» opens a short chat about that decision; the agent answers there.
 
+**The words around an answer** (Jaime, 2026-11-23, all my picks). What goes with an answer is not called a «nota»: the link reads **«Decirle algo a Finanzas»**, the field «Qué quieres que sepa Finanzas», and once answered it shows as «Le dijiste: «…»». Plain words, the chat's tone, no new noun to learn; it still counts as a correction for the autonomy bar («sin corregir»). The answer's line names the agent instead of the record: «OK de Álvaro · Finanzas aún no lo ha recogido», then «· Finanzas ya lo tiene». «Cambiar la respuesta» stays. The record keeps Órdago's `respuesta.nota` (Rules for the code, 4): nobody sees it in the app.
+
 **Rhythm and reach**
 
 14. Notifications: **one a day** at the person's hour, plus a push only for a decision due today or money leaving.
