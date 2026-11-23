@@ -62,7 +62,7 @@ export function KeyboardProbe() {
   );
 
   return (
-    <Text testID="kb-probe" pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, fontSize: 9, color: 'red', zIndex: 99 }}>
+    <Text testID="kb-probe" pointerEvents="none" style={{ position: 'absolute', top: 90, left: 0, right: 0, fontSize: 9, color: 'red', zIndex: 99 }}>
       {text}
     </Text>
   );
