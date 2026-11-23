@@ -2,7 +2,7 @@
 
 **Priority:** high — Jaime (Trello, 2026-11-23): «que si el agente detecta que quiere usar una herramienta pida el acceso y el conector»
 **Gate:** none
-**Next:** build the tasks below on `claude/connector-request-ac0b3c`, then `pnpm pr:land`
+**Next:** land `claude/connector-request-ac0b3c` with `pnpm pr:land`; then Jaime asks an agent for something that needs an account he hasn't connected, on the beta
 
 ## Goal
 
@@ -69,7 +69,7 @@ Drawn in `Message.tsx` as `AccountAskCard`, the same box as `ActionCard` (one ma
 
 - The connector's logo (`ConnectorLogo`), «Necesito acceso a Notion», the `why` line, and the connector's `before` if it has one.
 - **Owner:** the button. It runs the same connect as Conexiones, with the chat as `returnTo`; the flow in `conexiones/[id].tsx` moves into a hook, `useAccountConnect(orgId, provider, returnTo)`, used by both screens so there is one connect in the app.
-- **Member:** no button; «Lo conecta quien es propietario: Ana, Jaime.» (open question 1).
+- **Member:** no button; «Lo conecta quien es propietario: Ana, Jaime.» (decision 1).
 - **Once done:** «Conectada por Ana» in muted text, and the agent's new message follows below it.
 
 ### Picking up the task
@@ -106,7 +106,7 @@ Why not post a message as the person («He conectado Notion») from the app and 
 
 ## File structure
 
-- Create `supabase/migrations/20261125000000_account_asks.sql`, `supabase/tests/database/account_asks.test.sql`.
+- Create `supabase/migrations/20261125100000_account_asks.sql`, `supabase/tests/database/account_asks.test.sql`.
 - Modify `packages/shared/src/chat.ts` (`AccountAskPart`, `isAccountAskPart`), `packages/shared/src/services/index.ts` (`resumeAfterAccount`).
 - Create `apps/engine/src/accountAsks.ts`: the tool, what each state needs, the store over Supabase, resuming.
 - Modify `apps/engine/src/chat.ts` (intercept in `writeReply`, the tool for every agent, `toTurns` reads the card, the prompt, a shared setup for a reply), `chatStore.ts` (`updateReply` takes `cards`), `app.ts` (`POST /threads/:id/resume`), `server.ts` (the store).
@@ -114,9 +114,24 @@ Why not post a message as the person («He conectado Notion») from the app and 
 
 ## Tasks
 
-- [ ] 1. `account_asks`: table, row-level security with no policy, pgTAP proving no member reads or writes it.
-- [ ] 2. Shared: the part and `resumeAfterAccount`.
-- [ ] 3. Engine: `ask_for_account` (tests: each state gives its card or its error, three at most, one per connector, the subscription path lists it), `toTurns` with the card, the prompt line.
-- [ ] 4. Engine: `POST /threads/:id/resume` (tests: resumes once; refuses while not connected, not given, another thread's ask, someone who can't write there; a busy thread leaves the ask open).
-- [ ] 5. App: `useAccountConnect` (Conexiones uses it too), the card for owners and members, «Darle acceso», «Pedirlo», resuming when the account shows connected.
-- [ ] 6. `pnpm check`, `pnpm db:test`, the web against local Supabase with a stand-in model; `pnpm pr:land`.
+- [x] 1. `account_asks`: table, row-level security with no policy, pgTAP proving no member reads or writes it.
+- [x] 2. Shared: the part and `resumeAfterAccount`.
+- [x] 3. Engine: `ask_for_account` (tests: each state gives its card or its error, three at most, one per connector, the subscription path lists it), `toTurns` with the card, the prompt line.
+- [x] 4. Engine: `POST /threads/:id/resume` (tests: resumes once; refuses while not connected, not given, another thread's ask, someone who can't write there; a busy thread leaves the ask open).
+- [x] 5. App: `useAccountConnect` (Conexiones uses it too), the card for owners and members, «Darle acceso», «Pedirlo», resuming when the account shows connected.
+- [x] 6. `pnpm check`, `pnpm db:test`, the web against local Supabase with a stand-in model. `pnpm pr:land` next.
+
+## Progress
+
+Built on `claude/connector-request-ac0b3c` (2026-11-23). Checked on the web against local Supabase, with the engine's real routes and stores and a stand-in model that calls `ask_for_account`:
+
+- An owner asks Redes for meeting notes: the card «Necesito acceso a Notion» with «Conectar Notion». Notion then connected elsewhere (a row written by hand, as if from Conexiones): opening the chat, Redes goes on by itself, the card reads «Conectada por Ana». One resume per ask in the database.
+- Finanzas, limited to no accounts, with Notion connected: «Notion está conectada, pero no la tengo» · «Darle acceso»; pressing it sets `agents.accounts` to `{notion}` and Finanzas goes on.
+- A member: «Lo conecta quien es propietario: Ana.», no button, no owner's hint. Gmail and Trello: «Pedirlo» records the request and the card reads «Pedido…», live and after a reload.
+- Light and dark, desktop and phone width.
+
+Not checked:
+- Pressing «Conectar» through a real provider's sign-in from the chat (needs an account there): the connect itself is the same code as Conexiones (`useAccountConnect`), with the chat as the return address. On Android the return deep link is the chat's own path; worth a look on a phone.
+- A real model choosing to call the tool (Claude through the API or the subscription's MCP server): only the stand-in did.
+
+Seen in passing, not this branch's: on the web at phone width, a chat opens blank until scrolled (the same without this change); once, an agent's first reply in a brand-new chat did not appear until a reload.

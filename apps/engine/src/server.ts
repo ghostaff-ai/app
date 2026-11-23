@@ -6,6 +6,7 @@ import { serve } from '@hono/node-server';
 import { createClient } from '@supabase/supabase-js';
 import { asPersonFactory } from './settings';
 import { GoogleAuth } from 'google-auth-library';
+import { supabaseAskStore } from './accountAsks';
 import { type AccountDeps, accessTokens, supabaseAccountStore, supabaseRefreshLeases, toolsFor } from './accounts';
 import { supabaseActionStore } from './actions';
 import { createApp } from './app';
@@ -162,6 +163,7 @@ const chatDeps: ChatDeps = {
   toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
   asPerson,
   jobs,
+  asks: supabaseAskStore(admin),
 };
 // Voice notes' transcripts: Gemini on Vertex AI in the EU, billed to Ghostaff's own project (transcribe.ts).
 const gcpProject = process.env.GCP_PROJECT;

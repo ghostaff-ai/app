@@ -641,3 +641,25 @@ export function connectorFor(id: AccountProvider): CatalogueConnector {
   if (!c) throw new Error(`unknown connector ${id}`);
   return c;
 }
+
+/** A connected account's health, by provider. */
+export type AccountStates = ReadonlyMap<string, 'ok' | 'failing'>;
+
+/**
+ * What an agent lacks to use a connector (connector-in-chat.md): the account,
+ * a working one, its own access to it, or, for an app not in the catalogue,
+ * everything. `have` when nothing. The engine decides with it; the app uses it
+ * to know when to let the agent go on.
+ */
+export function accountNeed(
+  connector: string | null | undefined,
+  states: AccountStates,
+  agentAccounts: readonly string[] | null | undefined,
+): 'connect' | 'reconnect' | 'grant' | 'unsupported' | 'have' {
+  if (!connector || !(ACCOUNT_PROVIDERS as readonly string[]).includes(connector)) return 'unsupported';
+  const state = states.get(connector);
+  if (!state) return 'connect';
+  if (state === 'failing') return 'reconnect';
+  if (agentAccounts != null && !agentAccounts.includes(connector)) return 'grant';
+  return 'have';
+}

@@ -1,25 +1,22 @@
 import { type CatalogueConnector, CONNECTORS } from '@ghostaff/shared';
-import { disconnectAccount, finishAccountConnect, startAccountConnect } from '@ghostaff/shared/services';
-import * as Linking from 'expo-linking';
+import { disconnectAccount } from '@ghostaff/shared/services';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
 import { ArrowsClockwise, CheckCircle, Icon, LockSimple, WarningCircle } from '@/components/icons';
 import { Button, ListRow, ListSection, Notice } from '@/components/ui';
-import { accountErrorMessage, accountResultMessage, connectorWhat } from '@/lib/connections';
+import { accountErrorMessage, connectorWhat } from '@/lib/connections';
 import { shortDate } from '@/lib/format';
-import { success } from '@/lib/haptics';
+import { useAccountConnect } from '@/lib/hooks/useAccountConnect';
 import { useConnections, useEngine } from '@/lib/hooks/useConnections';
 import { DESKTOP_PAGE, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { usePalette } from '@/lib/theme';
 
 // One outside account (docs/plans/ongoing/connectors.md): what the agents may
-// do with it, the step to take first, and connecting it by signing in there.
-// The engine sends the browser back with the provider's code, which we hand
-// back to finish the connect signed in; or with how it ended (?result=…).
+// do with it, the step to take first, and connecting it by signing in there
+// (useAccountConnect, the same as an agent's card in a chat).
 
 export default function ConnectionPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,6 +26,7 @@ export default function ConnectionPage() {
   const desktop = useIsDesktop();
   const engine = useEngine();
   const c = usePalette();
+  const { connect: connectAccount } = useAccountConnect(active?.id ?? null);
   const [busy, setBusy] = useState<'connect' | 'remove' | null>(null);
   const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
 
@@ -40,29 +38,11 @@ export default function ConnectionPage() {
   const canEdit = active.role === 'owner';
 
   const connect = async () => {
-    if (!engine) return;
     setBusy('connect');
     setNote(null);
-    try {
-      const returnTo = Linking.createURL('conexiones');
-      const { url } = await startAccountConnect(engine, { orgId, provider, returnTo });
-      const res = await WebBrowser.openAuthSessionAsync(url, returnTo);
-      if (res.type === 'success') {
-        const q = Linking.parse(res.url).queryParams ?? {};
-        const result =
-          typeof q.state === 'string' && typeof q.code === 'string'
-            ? await finishAccountConnect(engine, { provider, state: q.state, code: q.code })
-            : q.result;
-        const said = accountResultMessage(typeof result === 'string' ? result : null);
-        if (said.ok) success();
-        setNote(said);
-      }
-      await reload();
-    } catch (e) {
-      setNote({ text: accountErrorMessage(e), ok: false });
-    } finally {
-      setBusy(null);
-    }
+    const said = await connectAccount(provider, 'conexiones');
+    if (said) setNote(said);
+    setBusy(null);
   };
 
   const remove = async () => {
