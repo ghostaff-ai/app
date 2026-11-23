@@ -73,6 +73,7 @@ function setup(
   let working: string | null = null;
   const chat: ChatStore = {
     levelFor: async (_a, u) => levels[u] ?? 'none',
+    threadLevelFor: async (_t, u) => levels[u] ?? 'none',
     thread: async (id) => threads.find((t) => t.id === id) ?? null,
     agent: async (id) => (id === AGENT ? secretaria : null),
     orgAgents: async () => [secretaria],
