@@ -6,7 +6,8 @@
 //   start + 12 h (23:30 on Monday is Tuesday's cycle);
 // - a sleep counts for the day you wake up (local date of its end);
 // - a recovery for its cycle's day; a workout for the day it starts;
-// - the body measurement has no date, so it is dated by the export.
+// - the body measurement has no date, so it is dated by the export (one
+//   record per export day).
 // Only scored records give metrics; a cycle still open (no end) gives none.
 
 import { type DailyMetric, dailyMetric, type HealthRecord, type MetricName } from './metrics';
@@ -59,7 +60,8 @@ function scored(r: Obj): boolean {
 export function whoopRecords(dump: WhoopDump): HealthRecord[] {
   const records: HealthRecord[] = [];
   if (Object.keys(dump.body_measurement).length > 0) {
-    records.push({ kind: 'body', externalId: 'body', startsAt: dump.exportedAt, endsAt: null, payload: dump.body_measurement });
+    // One body record per export day, so each import keeps its own weight.
+    records.push({ kind: 'body', externalId: `body:${dump.exportedAt.slice(0, 10)}`, startsAt: dump.exportedAt, endsAt: null, payload: dump.body_measurement });
   }
   const timed = (kind: HealthRecord['kind'], list: unknown[]) => {
     for (const item of list) {

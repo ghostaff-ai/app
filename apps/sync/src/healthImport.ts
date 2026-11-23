@@ -2,14 +2,18 @@
 // (docs/plans/ongoing/wearables.md, phase 1). Reads the folder the Whoop export
 // script writes (`whoop_export.py`: one JSON per collection plus summary.json)
 // and writes it with the service role into `health.*`, idempotently: running it
-// twice on the same folder leaves the same rows.
+// twice on the same folder leaves the same rows. The records are upserted (a
+// record an earlier import kept stays); the daily metrics are then recomputed
+// from every record the source has and replaced as a whole, so no number
+// outlives the records it came from.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { type WhoopDump, whoopDailyMetrics, whoopRecords } from '@ghostaff/shared/health';
+import { type HealthRecord, type WhoopDump, whoopDailyMetrics, whoopRecords } from '@ghostaff/shared/health';
 
 const BATCH = 500;
+const PAGE = 1000;
 const CONSENT_VERSION = 'import-v1';
 
 function readJson(dir: string, name: string): unknown {
@@ -53,6 +57,32 @@ async function upsertInBatches(db: SupabaseClient, table: string, rows: object[]
   }
 }
 
+interface StoredRecord {
+  kind: HealthRecord['kind'];
+  external_id: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  payload: Record<string, unknown>;
+}
+
+/** Every record the source has, page by page. */
+async function storedRecords(db: SupabaseClient, sourceId: string): Promise<HealthRecord[]> {
+  const out: HealthRecord[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await db
+      .schema('health')
+      .from('records')
+      .select('kind, external_id, starts_at, ends_at, payload')
+      .eq('source_id', sourceId)
+      .order('id')
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as StoredRecord[];
+    out.push(...rows.map((r) => ({ kind: r.kind, externalId: r.external_id, startsAt: r.starts_at, endsAt: r.ends_at, payload: r.payload })));
+    if (rows.length < PAGE) return out;
+  }
+}
+
 function countBy<T>(items: T[], key: (t: T) => string): Record<string, number> {
   const out: Record<string, number> = {};
   for (const item of items) out[key(item)] = (out[key(item)] ?? 0) + 1;
@@ -65,7 +95,6 @@ export async function importHealth(
 ): Promise<{ records: number; metrics: number }> {
   const dump = readWhoopDump(opts.dir);
   const records = whoopRecords(dump);
-  const metrics = whoopDailyMetrics(records);
 
   const org = await db.from('organizations').select('id, kind').eq('slug', opts.org).maybeSingle<{ id: string; kind: string }>();
   if (org.error) throw org.error;
@@ -114,12 +143,9 @@ export async function importHealth(
     })),
     'source_id,kind,external_id',
   );
-  await upsertInBatches(
-    db,
-    'metrics',
-    metrics.map((m) => ({ org_id: orgId, source_id: sourceId, source: opts.provider, day: m.day, metric: m.metric, value: m.value, unit: m.unit })),
-    'source_id,day,metric',
-  );
+  const metrics = whoopDailyMetrics(await storedRecords(db, sourceId));
+  const replaced = await db.schema('health').rpc('replace_metrics', { target_source: sourceId, rows: metrics });
+  if (replaced.error) throw replaced.error;
 
   console.log(`Records by kind: ${JSON.stringify(countBy(records, (r) => r.kind))}`);
   console.log(`Metrics by name: ${JSON.stringify(countBy(metrics, (m) => m.metric))}`);

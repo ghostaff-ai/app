@@ -140,7 +140,7 @@ describe('Whoop daily metrics', () => {
       recoveries: [{ cycle_id: 7, sleep_id: 'a', score_state: 'SCORED', score: {} }],
       body_measurement: { weight_kilogram: 78.4 },
     }));
-    expect(recs.map((r) => [r.kind, r.externalId])).toEqual([['body', 'body'], ['cycle', '7'], ['recovery', '7']]);
+    expect(recs.map((r) => [r.kind, r.externalId])).toEqual([['body', 'body:2026-11-23'], ['cycle', '7'], ['recovery', '7']]);
     expect(recs[0]?.startsAt).toBe('2026-11-23T10:10:10Z');
   });
 

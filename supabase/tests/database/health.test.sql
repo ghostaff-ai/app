@@ -2,7 +2,7 @@
 -- holds it, only the engine (service role) writes it, its person reads it, and
 -- nobody in another organisation sees any of it (invariant 1, AGENTS.md rule 2).
 begin;
-select plan(16);
+select plan(20);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'ana@example.com'),
@@ -51,6 +51,11 @@ select throws_ok($$
   values ('10000000-0000-0000-0000-000000000001', 'whoop', '42', now(), 'import-v1')
 $$, '23505', null, 'one source per band account in a space');
 
+select throws_ok($$
+  insert into health.records (org_id, source_id, provider, kind, external_id, payload, updated_at)
+  values ('10000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000001', 'whoop', 'cycle', '9', '{}', now())
+$$, '23503', null, 'a record cannot claim another space than its source''s');
+
 -- As Ana, in her personal space.
 set local role authenticated;
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';
@@ -63,6 +68,9 @@ select throws_ok($$
 $$, '42501', null, 'she cannot write a metric herself');
 select throws_ok($$ update health.metrics set value = 0 $$, '42501', null, '... nor change one');
 select throws_ok($$ delete from health.records $$, '42501', null, '... nor delete a record');
+select throws_ok(
+  $$ select health.replace_metrics('20000000-0000-0000-0000-000000000001', '[]') $$,
+  '42501', null, '... nor replace her metrics');
 
 -- As Bea, from another organisation.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
@@ -70,8 +78,15 @@ select is((select count(*) from health.sources), 0::bigint, 'Bea sees none of An
 select is((select count(*) from health.records) + (select count(*) from health.metrics), 0::bigint,
   '... records or metrics');
 
--- Back as the engine: deleting the source deletes its history.
+-- Back as the engine: recomputed metrics replace the old ones in one go.
 reset role;
+select health.replace_metrics('20000000-0000-0000-0000-000000000001',
+  '[{"day": "2026-11-12", "metric": "strain", "value": 5, "unit": "score"}]');
+select is((select count(*) from health.metrics), 1::bigint, 'replacing leaves only the new metrics');
+select is((select org_id::text || ' ' || day::text from health.metrics),
+  '10000000-0000-0000-0000-000000000001 2026-11-12', '... in the source''s own space');
+
+-- Deleting the source deletes its history.
 delete from health.sources where id = '20000000-0000-0000-0000-000000000001';
 select is((select count(*) from health.records), 0::bigint, 'deleting a source deletes its records');
 select is((select count(*) from health.metrics), 0::bigint, '... and its metrics');

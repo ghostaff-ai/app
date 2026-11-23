@@ -40,19 +40,37 @@ interface Call {
   options?: Record<string, unknown>;
 }
 
-/** Just enough of supabase-js for the import: records every write. */
-function fakeDb(org: { id: string; kind: string } | null) {
+/**
+ * Just enough of supabase-js for the import: records every write, and answers
+ * the read-back of the source's records with what upserts stored plus `stored`
+ * (records an earlier import left that this folder no longer has).
+ */
+function fakeDb(org: { id: string; kind: string } | null, stored: object[] = []) {
   const calls: Call[] = [];
   const client = (schema: string) => ({
+    rpc: async (fn: string, args: Record<string, unknown>) => {
+      calls.push({ schema, table: fn, op: 'rpc', rows: args.rows as unknown[], options: { target_source: args.target_source } });
+      return { data: null, error: null };
+    },
     from(table: string) {
+      let range: [number, number] | null = null;
       const result = () => {
         if (table === 'organizations') return { data: org, error: null };
         if (table === 'sources') return { data: { id: 'src-1' }, error: null };
+        if (table === 'records' && range) {
+          const all = [...stored, ...calls.filter((c) => c.table === 'records' && c.op === 'upsert').flatMap((c) => c.rows ?? [])];
+          return { data: all.slice(range[0], range[1] + 1), error: null };
+        }
         return { data: null, error: null };
       };
       const builder: Record<string, unknown> = {
         select: () => builder,
         eq: () => builder,
+        order: () => builder,
+        range: (from: number, to: number) => {
+          range = [from, to];
+          return builder;
+        },
         maybeSingle: async () => result(),
         single: async () => result(),
         upsert: (rows: unknown, options?: Record<string, unknown>) => {
@@ -95,11 +113,23 @@ describe('importHealth', () => {
     expect(source?.rows?.[0]).toMatchObject({ org_id: 'org-1', provider: 'whoop', external_user_id: '42', connection_id: null, consent_version: 'import-v1' });
     const records = calls.filter((c) => c.table === 'records');
     expect(records.every((c) => c.schema === 'health' && c.options?.onConflict === 'source_id,kind,external_id')).toBe(true);
-    expect(records[0]?.rows?.[0]).toMatchObject({ org_id: 'org-1', source_id: 'src-1', provider: 'whoop', kind: 'body', external_id: 'body' });
-    const metrics = calls.filter((c) => c.table === 'metrics');
-    expect(metrics.every((c) => c.schema === 'health' && c.options?.onConflict === 'source_id,day,metric')).toBe(true);
-    expect(metrics[0]?.rows?.[0]).toMatchObject({ org_id: 'org-1', source_id: 'src-1', source: 'whoop' });
+    expect(records[0]?.rows?.[0]).toMatchObject({ org_id: 'org-1', source_id: 'src-1', provider: 'whoop', kind: 'body', external_id: 'body:2026-11-23' });
+    expect(calls.some((c) => c.table === 'metrics')).toBe(false);
+    const replaced = calls.filter((c) => c.op === 'rpc');
+    expect(replaced).toHaveLength(1);
+    expect(replaced[0]).toMatchObject({ schema: 'health', table: 'replace_metrics', options: { target_source: 'src-1' } });
+    expect(replaced[0]?.rows).toContainEqual({ day: '2024-01-02', metric: 'strain', value: 10, unit: 'score' });
     expect(counts).toEqual({ records: 4, metrics: 4 });
+  });
+
+  it('metrics come from every stored record, not only this folder', async () => {
+    const earlier = { kind: 'body', external_id: 'body:2026-10-01', starts_at: '2026-10-01T09:00:00+00:00', ends_at: null, payload: { weight_kilogram: 80.1 } };
+    const { db, calls } = fakeDb({ id: 'org-1', kind: 'personal' }, [earlier]);
+    const counts = await importHealth(db, { org: 'personal', provider: 'whoop', dir: exportDir() });
+    const rows = calls.find((c) => c.op === 'rpc')?.rows as { day: string; metric: string; value: number }[];
+    expect(rows).toContainEqual({ day: '2026-10-01', metric: 'weight_kg', value: 80.1, unit: 'kg' });
+    expect(rows).toContainEqual({ day: '2026-11-23', metric: 'weight_kg', value: 78.4, unit: 'kg' });
+    expect(counts.metrics).toBe(5);
   });
 
   it('batches of 500', async () => {
