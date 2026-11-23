@@ -16,6 +16,7 @@ import {
 } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
 import { readProjectAgents } from './agents';
+import { importHealth } from './healthImport';
 import { planSync, type RecordFile } from './plan';
 import { projectUrlFromKey } from './projectUrl';
 
@@ -32,6 +33,8 @@ import { projectUrlFromKey } from './projectUrl';
 //     (those agents move to Ghostaff's own runner: task, model, tools, turns and timetable from their yaml)
 //   … --runner ghostaff --only legal --on-demand
 //     (the same, without the timetable: it runs only when written to, and its old job keeps the timetable)
+//   pnpm --filter @ghostaff/sync org import-health --org <personal slug> --provider whoop --dir ~/Desktop/whoop-export/data/<date>
+//     (a Whoop export into a personal space's kept health history; again with the same folder changes nothing)
 //
 // It writes with the service-role key, which bypasses row-level security, so it
 // runs only on our machines and in the engine, never in the app. The key comes
@@ -207,6 +210,8 @@ async function main() {
       runner: { type: 'string' },
       only: { type: 'string' },
       'on-demand': { type: 'boolean', default: false },
+      provider: { type: 'string' },
+      dir: { type: 'string' },
     },
   });
   const need = (k: keyof typeof values) => {
@@ -232,8 +237,14 @@ async function main() {
       if (role !== 'owner' && role !== 'member') throw new Error('--role is owner or member');
       return addMember({ org: need('org'), email: need('email'), name: need('name'), role });
     }
+    case 'import-health': {
+      if (need('provider') !== 'whoop') throw new Error('--provider is whoop (the only band with an import today)');
+      const counts = await importHealth(admin(), { org: need('org'), provider: 'whoop', dir: need('dir') });
+      console.log(`Imported ${counts.records} records and ${counts.metrics} daily metrics into ${values.org}`);
+      return;
+    }
     default:
-      throw new Error('Commands: por-decidir, add-org, add-member, set-record, add-agents');
+      throw new Error('Commands: por-decidir, add-org, add-member, set-record, add-agents, import-health');
   }
 }
 
