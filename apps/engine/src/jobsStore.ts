@@ -38,8 +38,6 @@ const toRun = (r: Record<string, string | null>): RunRecord => ({
   connectionId: r.connection_id ?? null,
 });
 
-export const NOTICES_TITLE = 'Avisos';
-
 export function supabaseJobStore(admin: SupabaseClient): JobStore {
   return {
     async job(agentId) {
@@ -98,37 +96,8 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
       ) ?? [];
       return rows.map((r) => ({ id: r.id, orgId: r.org_id, agentId: r.agent_id, origin: r.origin, state: r.state, threadId: r.thread_id, messageId: r.message_id }));
     },
-    async noticesThread(agent) {
-      const find = async () =>
-        (check(await admin.from('threads').select('id').eq('agent_id', agent.id).eq('notices', true).maybeSingle()) as { id: string } | null)?.id;
-      let id = await find();
-      if (!id) {
-        const made = await admin
-          .from('threads')
-          .insert({ org_id: agent.orgId, agent_id: agent.id, title: NOTICES_TITLE, created_by: null, notices: true })
-          .select('id')
-          .single();
-        // 23505: another report made it at the same moment (one «Avisos» per agent, an index says so).
-        if (made.error && (made.error as { code?: string }).code !== '23505') throw made.error;
-        id = (made.data as { id: string } | null)?.id ?? (await find());
-      }
-      if (!id) throw new Error('no notices thread');
-      return { id, orgId: agent.orgId, agentId: agent.id, title: NOTICES_TITLE };
-    },
-    async postAgentMessage(thread, agent, text) {
-      check(
-        await admin.from('messages').insert({
-          thread_id: thread.id,
-          org_id: thread.orgId,
-          author_kind: 'agent',
-          author_agent: agent.id,
-          author_name: agent.name,
-          parts: [{ type: 'text', text }],
-          state: 'done',
-          steps: [],
-          finished_at: new Date().toISOString(),
-        }),
-      );
+    async postToPersonalChats(agent, text) {
+      return check(await admin.rpc('post_to_personal_chats', { target_agent: agent.id, body: text })) as number;
     },
   };
 }

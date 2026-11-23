@@ -35,8 +35,8 @@ select is(
   (select id from ids where name = 'bea'), 'writing again stays in the same chat');
 select is((select count(*) from public.messages where thread_id = (select id from ids where name = 'bea')), 2::bigint, '... with both messages');
 select results_eq(
-  $$ select personal, notices from public.my_threads('10000000-0000-0000-0000-000000000001') $$,
-  $$ values (true, false) $$, 'the list marks it as her chat');
+  $$ select personal from public.my_threads('10000000-0000-0000-0000-000000000001') $$,
+  $$ values (true) $$, 'the list marks it as her chat');
 select throws_ok(
   $$ select public.chat_with('20000000-0000-0000-0000-000000000002', 'Hola') $$,
   '42501', null, 'no chat with an agent she may only see');

@@ -118,9 +118,9 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
       return true;
     },
     staleRuns: async () => [],
-    noticesThread: async (agent) => ({ id: 'notices', orgId: agent.orgId, agentId: agent.id, title: 'Avisos' }),
-    postAgentMessage: async (_t, a, text) => {
+    postToPersonalChats: async (a, text) => {
       notices.push(`${a.name}: ${text}`);
+      return 2;
     },
   };
   const store: RunnerStore = {
@@ -404,7 +404,7 @@ describe('our runner’s report', () => {
     expect(t.notices).toEqual([]);
   });
 
-  it('a scheduled run with nothing to say stays out of «Avisos»', async () => {
+  it('a scheduled run with nothing to say reaches nobody', async () => {
     const t = setup();
     const other = await otherOrgRun(t);
     await t.report({ run: other.run, nonce: other.nonce, ok: true, text: 'SIN NOVEDAD', noteworthy: false });
@@ -444,7 +444,7 @@ describe('the timetable', () => {
     expect(t.agents.get(LEGAL)!.lastScheduledAt).toBe('2027-01-15T08:02:00.000Z');
   });
 
-  it('without a subscription, a due run fails into «Avisos» with how to fix it', async () => {
+  it('without a subscription, a due run fails into the people’s chats with how to fix it', async () => {
     const t = setup({ subscribed: false, now: new Date('2027-01-15T08:02:00Z') });
     t.agents.delete(TALLER);
     expect(await startScheduled(t.chatDeps, t.jobDeps)).toBe(0);
@@ -456,7 +456,8 @@ describe('the timetable', () => {
 describe('composePrompt', () => {
   it('a scheduled run is told what its last message is for, and SIN NOVEDAD', () => {
     const p = composePrompt({ agent: spec(legal), orgName: 'Órdago', repo: 'ordago-app/business', now: new Date('2027-01-15T08:00:00Z'), request: null });
-    expect(p).toContain('«Avisos»');
+    expect(p).toContain('en su chat contigo');
+    expect(p).not.toContain('Avisos');
     expect(p).toContain('`SIN NOVEDAD`');
     expect(p).toContain('hora de Madrid');
     expect(p).not.toContain('<indicacion>');

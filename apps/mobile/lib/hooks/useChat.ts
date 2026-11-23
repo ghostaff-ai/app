@@ -13,7 +13,7 @@ import {
   subscribeToThread,
   type ThreadHead,
 } from '@ghostaff/shared/services';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase';
 import { useEngine } from './useConnections';
 
@@ -168,25 +168,18 @@ export function letAgentAnswer(engine: EngineAccess, threadId: string, onError?:
 }
 
 /**
- * The person's one chat with an agent (three-tabs.md, decision 3): their own
- * thread with it and its «Avisos», as one conversation, live. The first
- * message opens the chat; `send` writes in it and asks the agent to answer.
+ * The person's one chat with an agent (three-tabs.md, decision 3), live, with
+ * what the agent did on its own in it too (decision 12). The first message
+ * opens the chat; `send` writes in it and asks the agent to answer.
  */
 export function useAgentChat(orgId: string | null, agentId: string | null) {
   const fetch = useCallback(() => listThreads(supabase, orgId!, agentId!), [orgId, agentId]);
   const { data: threads, loading, reload } = useLoad<ChatThread[]>(orgId && agentId ? fetch : null, []);
   const [opened, setOpened] = useState<string | null>(null);
   const chatId = threads.find((t) => t.personal)?.id ?? opened;
-  const noticesId = threads.find((t) => t.notices)?.id ?? null;
   const chat = useThread(chatId);
-  const notices = useThread(noticesId);
   const engine = useEngine();
   const [error, setError] = useState<string | null>(null);
-
-  const messages = useMemo(
-    () => (noticesId ? [...chat.messages, ...notices.messages].sort((a, b) => a.createdAt.localeCompare(b.createdAt)) : chat.messages),
-    [chat.messages, notices.messages, noticesId],
-  );
 
   const send = useCallback(
     async (body: string) => {
@@ -201,8 +194,8 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
 
   return {
     loading: loading && threads.length === 0,
-    messages,
-    error: error ?? chat.error ?? notices.error,
+    messages: chat.messages,
+    error: error ?? chat.error,
     send,
     reload,
   };

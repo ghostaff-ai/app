@@ -42,4 +42,8 @@ It reverses, on his word, app-design.md decisions 1 (Hoy · Equipo · Registro a
 
 **Step 3, the decision model** — not started.
 
-**No «Avisos»** (decision 12, branch `claude/remove-avisos-7bec6b`): in progress.
+**No «Avisos»** (decision 12, branch `claude/remove-avisos-7bec6b`):
+
+- [x] `supabase/migrations/20261123300000_no_notices.sql`: `post_to_personal_chats(agent, body)` (service role only) writes the agent's message in the chat of every member who may see it, opening the chats; the «Avisos» threads are copied into those chats with their dates and read marks, then deleted with `threads.notices`; `my_threads` loses `notices`. pgTAP: `no_notices.test.sql`. The move checked on a throwaway Postgres with an «Avisos» thread, a chat that existed and one that didn't.
+- [x] Engine: scheduled reports and runs that fail before starting go through `postToPersonalChats`; the scheduled run's prompt no longer names «Avisos».
+- [x] App: the chat is only the person's thread; Equipo's row is that chat.

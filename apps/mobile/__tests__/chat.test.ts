@@ -74,17 +74,16 @@ describe('the chat rules', () => {
   it('lists one row per agent: the main one first, then who spoke last', () => {
     const team = [agent('fin', 'finanzas'), agent('red', 'redes'), agent('sec', 'secretaria'), agent('inc', 'incorporacion')];
     const t = (id: string, agentId: string, at: string, more: Partial<ChatThread> = {}): ChatThread => ({
-      id, agentId, title: id, createdAt: at, lastMessageAt: at, lastAuthor: 'Ana', lastText: 'hola', unread: false, personal: true, notices: false, ...more,
+      id, agentId, title: id, createdAt: at, lastMessageAt: at, lastAuthor: 'Ana', lastText: 'hola', unread: false, personal: true, ...more,
     });
     const rows = teamRows(team, [
       t('fin-chat', 'fin', '2026-11-20T10:00:00Z'),
-      t('red-avisos', 'red', '2026-11-22T10:00:00Z', { personal: false, notices: true, unread: true }),
-      t('red-chat', 'red', '2026-11-21T10:00:00Z'),
+      t('red-chat', 'red', '2026-11-22T10:00:00Z', { unread: true }),
       // A shared titled thread of before is history: it neither orders nor marks the row.
       t('inc-old', 'inc', '2026-11-23T10:00:00Z', { personal: false, unread: true }),
     ]);
     expect(rows.map((r) => r.agent.id)).toEqual(['sec', 'red', 'fin', 'inc']);
-    expect(rows[1]?.last?.id).toBe('red-avisos');
+    expect(rows[1]?.last?.id).toBe('red-chat');
     expect(rows.map((r) => r.unread)).toEqual([false, true, false, false]);
   });
 
