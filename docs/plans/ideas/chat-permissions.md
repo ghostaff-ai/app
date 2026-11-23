@@ -14,8 +14,8 @@ Jaime's Trello card (2026-11-23), «permisos de escritura en chats por otros mie
 - **Per conversation**, two kinds, nothing chosen by the person:
   - the **personal chat** (`threads.personal_of`, three-tabs.md decision 3): one per person and agent, invisible to everyone else, owners included;
   - the **old shared threads** (`personal_of is null`, team-chat.md decision 2, replaced 2026-11-23): read and written by level, still readable on the agent's page.
-  - the agent's **«Avisos»** (`threads.notices`), shared; another session is removing it (everything goes to the agent's normal chat).
-- **The agent** reads only the conversation it answers in (`recentMessages(thread, 40)` in `apps/engine/src/chatStore.ts`). It has no memory across conversations yet; another session (agent-memory) is working on that.
+  - the agent's **«Avisos»** (`threads.notices`), shared; being removed (three-tabs.md decision 12): what an agent does alone goes to the private chat of each person who can see it.
+- **The agent** reads only the conversation it answers in (`recentMessages(thread, 40)` in `apps/engine/src/chatStore.ts`). It has no memory across conversations yet; [agent-memory.md](agent-memory.md) proposes one, scoped by «personal chat» versus «shared thread».
 - **A gap found while reading:** the engine's `replyInThread` (`apps/engine/src/chat.ts`) checks only that the asker may `talk` to the *agent*, not that they may see the *thread*. Someone who knew the id of a colleague's personal chat could make the agent answer in it (they would not see the answer; the id is not guessable and RLS hides it). Closed by this work: the engine asks a `thread_level_for(thread, member)` instead.
 
 ## The model (my proposal)
@@ -64,14 +64,14 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 ### What the agent sees and does
 
 - **In a conversation, the agent reads only that conversation**, as today. In a shared one it answers with the rights of whoever wrote the message it answers (team-chat.md decision 7), and its answer is read by everyone who reads the conversation.
-- **Its memory across conversations** (the agent-memory work) must respect visibility: what it learns in a private conversation it uses only with that person; what it learns in a shared one, with anyone who can see the agent. That session gets this rule as a requirement (decision 5).
+- **Its memory across conversations** ([agent-memory.md](agent-memory.md)) follows visibility, not the kind of thread: where that plan says «personal chat» read «private conversation» (memories «Sobre ti» allowed, used only with that person), and where it says «shared thread» read «shared conversation» (organisation memories only, never anyone's «Sobre ti»). An organisation memory saved from a private conversation is visible to the team, so it is only saved announced in the chat («Lo recordaré para todo el equipo: …»), as that plan's explicit tool already does (decision 5).
 - **What the agent does is not private**: a decision it raises, a change to the record, a mail it sends belong to the organisation and show where they always do, whatever the conversation. Private is the conversation, not the work. The decision card's «Preguntar» opens the conversation it came from only for someone who can see it; others get the agent's chat with the decision quoted.
 - **@agent in a shared conversation**: the agent brought in answers there, and everyone who reads the conversation reads that answer, even someone with `none` on that agent. Accepted: the conversation belongs to its own agent, and the asker must be allowed to talk to the agent they bring in. The @ list warns when the conversation is shared («Lo leerá el equipo de Finanzas»).
 - **@person** offers only people who can see the conversation, as now (team-chat.md decision 9). In a private conversation it offers nobody.
 
 ### Data and row-level security
 
-- `threads.visibility text not null check (visibility in ('private', 'read', 'write'))`, set from what exists: personal chats `private`; old shared threads `write` (they behaved like that: each by their level); «Avisos», if it still exists when this lands, `read`.
+- `threads.visibility text not null check (visibility in ('private', 'read', 'write'))`, set from what exists: personal chats `private`; old shared threads `write` (they behaved like that: each by their level). «Avisos» is gone by then (three-tabs.md decision 12); if not, `read`.
 - `agents.chat_default`, the same values, default `private`. A setting: defined in `packages/shared/src/services/settings.ts` and changeable by Secretaría with an owner's approval (AGENTS.md rule 6).
 - `thread_level(thread)` rewritten as the rule above; it is already the one function every policy and write goes through (threads, messages, read marks, `my_threads`, `post_message`). The threads policy reads `thread_level(id) <> 'none'` instead of repeating the rule.
 - `start_conversation(agent, body, visibility, title)` replaces `start_thread` for the app; `set_conversation_visibility(thread, visibility)`, opener only, with the rules above. Classified in `settings.ts`: `not_a_setting` the first, `never` the second («a conversation's privacy is its opener's alone»).
@@ -96,11 +96,11 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 2. **Several conversations per agent.** (a) Your private chat stays, plus titled conversations with a visibility, opened from the agent's page. (b) Only the one chat per agent, with a visibility switch: simpler, but you can't have a private chat and a shared one with the same agent, which is Jaime's first case. My pick: (a).
 3. **Where shared conversations show.** (a) Equipo shows those you follow, the rest on the agent's page. (b) Equipo shows all shared conversations you can see. (c) Only on the agent's page. My pick: (a).
 4. **Private conversations when someone leaves.** (a) Deleted with the membership; the export leaves them out except for their author. (b) Kept, still invisible, for the organisation. My pick: (a); a private conversation that nobody may read is only risk.
-5. **The agent's memory across conversations** follows visibility (private stays with its person). My pick: yes, as a requirement for the agent-memory work.
+5. **The agent's memory follows visibility** (private → «Sobre ti» and announced organisation memories; shared → organisation only). My pick: yes, as a requirement for the agent-memory work.
 6. **Per-person sharing** («Solo Ana y yo»): out of this card; it needs a list of people per conversation. Revisit if anyone asks.
 
 ## Coordination
 
-- The removal of «Avisos» changes `useAgentChat` (`apps/mobile/lib/hooks/useChat.ts`) and the `notices` column; whichever lands second rebases. Nothing here depends on «Avisos».
+- The removal of «Avisos» (branch `claude/remove-avisos-7bec6b`) changes `useAgentChat` (`apps/mobile/lib/hooks/useChat.ts`) and the `notices` column; whichever lands second rebases. Nothing here depends on «Avisos».
 - Voice notes and the connector card touch the chat screen (`chat/[agent].tsx`, `components/chat/`); the visibility sheet and the «who sees it» line live in their own components to keep the overlap small.
 - team-chat.md decision 6 (levels per agent) and three-tabs.md decision 3 (one private chat per person) stand; this adds the per-conversation layer on top.
