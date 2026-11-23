@@ -8,12 +8,28 @@ import { GHOSTS, type GhostId } from '@/lib/team';
 // and what, when, and an orange dot while someone else's message waits. A row
 // of a ListSection.
 
-export function ThreadRow({ thread, ghost, agentName, onPress }: { thread: ChatThread; ghost?: GhostId; agentName?: string; onPress: () => void }) {
+export function ThreadRow({
+  thread,
+  ghost,
+  agentName,
+  tag,
+  testID,
+  onPress,
+}: {
+  thread: ChatThread;
+  ghost?: GhostId;
+  agentName?: string;
+  /** A word before the preview: who sees it («Compartida», «Solo tú»). */
+  tag?: string;
+  testID?: string;
+  onPress: () => void;
+}) {
   const preview = thread.lastText ? `${thread.lastAuthor ?? ''}: ${thread.lastText}` : '';
   // «Finanzas, Finanzas: …» says the name twice; the agent's own last word needs it once.
-  const lead = agentName && agentName !== thread.lastAuthor ? `${agentName}. ` : '';
+  const lead = `${tag ? `${tag} · ` : ''}${agentName && agentName !== thread.lastAuthor ? `${agentName}. ` : ''}`;
   return (
     <ListRow
+      testID={testID}
       title={thread.title}
       subtitle={`${lead}${preview}` || null}
       emphasis={thread.unread}

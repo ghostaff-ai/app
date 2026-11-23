@@ -77,7 +77,7 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 - `start_thread(agent, body, title, visibility)` gains the visibility (null: the agent's default); `set_conversation_visibility(thread, visibility)`, opener only, with the rules above; `conversation_readers(thread)`, how many people read it, for whoever sees it. Classified in `settings.ts`: `set_conversation_visibility` is `never` («a conversation's privacy is its opener's alone»); `set_agent_chat_default` is the setting, with its tool `settings_agent_chat_default`.
 - `thread_level_for(thread, member)` is the one rule, service role only, for the engine (the gap above); `thread_level(thread)` is it for `auth.uid()`. `replyInThread` checks it.
 - `my_threads` returns `visibility`, `opened_by_me` and `following`. Following comes from authorship, mentions and read marks, without a new table.
-- **Realtime** applies the policies per event, so a conversation made private stops reaching others at once; their open screen reloads to «Ya no tienes acceso a esta conversación».
+- **Realtime** applies the policies per event, so a conversation made private stops reaching others at once (no event tells them; their screen says they have lost access the next time it loads the conversation).
 - pgTAP `supabase/tests/database/chat_permissions.test.sql`: the three visibilities for opener, owner, `talk`, `read` and `none` members; the cap by agent level, the opener's included; nobody but the opener changes visibility; the downgrade rule; nothing across organisations; `thread_level_for` matches `thread_level`.
 
 ## Edge cases
@@ -87,6 +87,7 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 - **A member is removed from an agent (`none`)** while they had a shared conversation open: the next Realtime event no longer reaches them, the screen says they have lost access.
 - **Two people write at once in a `write` conversation:** the agent answers one message at a time, as today (one `working` reply per thread).
 - **A personal space** (`organizations.kind = 'personal'`) has only its owner: the visibility sheet isn't shown there.
+- **An action proposed in someone's private chat** (an approval card, `agent_actions`) needs an owner, who can't see a member's private conversation. This was already so for personal chats (2026-11-23); it waits for the decision model (three-tabs.md, step 3), where a decision raised from a private conversation goes to the deck without its conversation.
 - **The agent is removed:** its conversations go with it, as today (`delete_agent` is `never` for Secretaría for that reason).
 - **Full export** (invariant 2): a private conversation is the organisation's data stored for one person. The export an owner runs leaves out other people's private conversations; each person can export their own (decision 4).
 

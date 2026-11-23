@@ -11,8 +11,8 @@ import { usePalette } from '@/lib/theme';
 // Where a person writes in a thread (team-chat.md): a growing text box and a
 // round send button; typing @ offers the agents and people that can be
 // mentioned. With «onVoiceNote», a plain round mic sits beside send: tap it,
-// speak, and send the voice note (voice.md). With «Ver» it turns into a quiet
-// line saying who to ask.
+// speak, and send the voice note (voice.md). With «Ver», or in a conversation
+// its opener keeps to reading, it turns into a quiet line saying why.
 
 /** What the database takes in one message (post_message). */
 const MAX_LENGTH = 8000;
@@ -170,15 +170,15 @@ export function Composer({
   );
 }
 
-/** What someone with «Ver» sees instead of the text box. */
-export function ReadOnlyComposer({ owner }: { owner: string | null }) {
+/** What someone who can't write sees instead of the text box, with why («Pide acceso a Ana», «La abrió Ana»). */
+export function ReadOnlyComposer({ note }: { note: string | null }) {
   const insets = useSafeAreaInsets();
   const c = usePalette();
   return (
     <View className="border-t border-line bg-surface px-4 pt-3" style={{ paddingBottom: Math.max(16, insets.bottom) }}>
       <View className="flex-row items-center justify-center rounded-3xl bg-sunk px-4 py-3">
         <Icon icon={Eye} size={18} color={c.muted} weight="regular" />
-        <Text className="ml-2 text-center text-footnote text-muted">Solo lectura{owner ? `. Pide acceso a ${owner}` : ''}</Text>
+        <Text className="ml-2 text-center text-footnote text-muted">Solo lectura{note ? `. ${note}` : ''}</Text>
       </View>
     </View>
   );

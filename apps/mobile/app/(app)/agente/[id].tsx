@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { ThreadRow } from '@/components/chat/ThreadRow';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
-import { Eye, LinkSimple, Prohibit } from '@/components/icons';
+import { ChatsCircle, Eye, LinkSimple, Plus, Prohibit } from '@/components/icons';
 import { Button, ErrorText, LEVEL_NAMES, ListRow, ListSection, Loading, Notice, RowIcon } from '@/components/ui';
+import { VISIBILITY_NAMES, visibilityTag } from '@/lib/chat';
 import { useMyLevels, useThreads } from '@/lib/hooks/useChat';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
@@ -14,9 +15,10 @@ import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
 // One agent's page, opened from its name on top of the chat (three-tabs.md,
 // decision 6): live in 3D on top (drag to spin it, tap to make it hop), its
-// job, and the shared conversations of before, read-only history. An owner
-// sets who may use it and which connected accounts it uses, and can remove it
-// (two taps, so not by accident).
+// job, «Nueva conversación» for whoever may talk to it, and every titled
+// conversation with it the person may see (chat-permissions.md). An owner
+// sets who may use it, who reads its new conversations by default and which
+// connected accounts it uses, and can remove it (two taps, so not by accident).
 
 export default function Agente() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -52,8 +54,9 @@ export default function Agente() {
   const g = GHOSTS[agent.ghost];
   const owner = active?.role === 'owner' && active.id === agent.orgId;
   const level = levels[agent.id];
-  // The shared, titled threads of before (team-chat.md, decision 2): history now.
-  const earlier = threads.filter((t) => !t.personal);
+  // Its titled conversations: the person's own and those shared with them.
+  const conversations = threads.filter((t) => !t.personal);
+  const personalSpace = active?.kind === 'personal';
 
   const remove = async () => {
     setBusy(true);
@@ -81,10 +84,28 @@ export default function Agente() {
         </Text>
         <Text className="mt-1.5 text-center text-[17px] leading-6 text-ink">{g.job}</Text>
 
-        {earlier.length > 0 ? (
-          <ListSection header="Conversaciones anteriores" footer="De antes de que cada persona tuviera su propia conversación con cada agente.">
-            {earlier.map((t) => (
-              <ThreadRow key={t.id} thread={t} onPress={() => router.push(`/conversacion/${t.id}`)} />
+        {level === 'talk' ? (
+          <ListSection>
+            <ListRow
+              testID="new-conversation"
+              leading={<RowIcon icon={Plus} />}
+              title="Nueva conversación"
+              subtitle={personalSpace ? null : 'Tú eliges quién la ve'}
+              chevron
+              onPress={() => router.push(`/nueva-conversacion/${agent.id}`)}
+            />
+          </ListSection>
+        ) : null}
+        {conversations.length > 0 ? (
+          <ListSection header="Conversaciones">
+            {conversations.map((t) => (
+              <ThreadRow
+                key={t.id}
+                testID={`conversation-${t.id}`}
+                thread={t}
+                tag={personalSpace ? undefined : visibilityTag(t.visibility)}
+                onPress={() => router.push(`/conversacion/${t.id}`)}
+              />
             ))}
           </ListSection>
         ) : null}
@@ -99,6 +120,16 @@ export default function Agente() {
               chevron
               onPress={() => router.push(`/acceso/${agent.id}`)}
             />
+            {personalSpace ? null : (
+              <ListRow
+                testID="chat-default"
+                leading={<RowIcon icon={ChatsCircle} />}
+                title="Conversaciones nuevas"
+                value={VISIBILITY_NAMES[agent.chatDefault]}
+                chevron
+                onPress={() => router.push(`/conversaciones/${agent.id}`)}
+              />
+            )}
             <ListRow
               leading={<RowIcon icon={LinkSimple} />}
               title="Herramientas"

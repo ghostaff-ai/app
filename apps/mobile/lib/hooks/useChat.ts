@@ -2,6 +2,7 @@ import { type AgentLevel, type ChatMessage, type ChatThread, isVoicePart, messag
 import {
   askAgent,
   chatWith,
+  conversationReaders,
   type EngineAccess,
   getThread,
   listMembers,
@@ -168,7 +169,30 @@ export function useThread(threadId: string | null) {
   /** Shows a message the engine wrote for the person (a voice note) without waiting for Realtime. */
   const add = useCallback((m: ChatMessage) => setMessages((list) => addMessage(list, m)), []);
 
-  return { head, messages, error, send, add };
+  // Who sees it may change (its opener, on another screen): read the head again.
+  const reloadHead = useCallback(async () => {
+    if (!threadId) return;
+    try {
+      setHead(await getThread(supabase, threadId));
+    } catch (e) {
+      setError(message(e));
+    }
+  }, [threadId]);
+
+  return { head, messages, error, send, add, reloadHead };
+}
+
+/** How many people read a conversation, once known; null while loading or if it can't be read. */
+export function useReaders(threadId: string | null, visibility: string | undefined) {
+  const [readers, setReaders] = useState<number | null>(null);
+  const load = useCallback(async () => {
+    if (!threadId || !visibility) return;
+    setReaders(await conversationReaders(supabase, threadId).catch(() => null));
+  }, [threadId, visibility]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  return { readers, reload: load };
 }
 
 /** A short-lived link to play a voice note. */

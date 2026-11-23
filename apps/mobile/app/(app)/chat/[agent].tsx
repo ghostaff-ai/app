@@ -125,7 +125,7 @@ export default function Chat() {
         {canTalk ? (
           <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={send} onVoiceNote={engine ? sendVoice : undefined} />
         ) : (
-          <ReadOnlyComposer owner={owner} />
+          <ReadOnlyComposer note={owner ? `Pide acceso a ${owner}` : null} />
         )}
       </KeyboardColumn>
     </View>

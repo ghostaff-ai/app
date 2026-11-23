@@ -1,36 +1,46 @@
 import { LegendList } from '@legendapp/list/react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Image, Platform, Text, View } from 'react-native';
 import { decideAction } from '@ghostaff/shared/services';
+import { Audience } from '@/components/chat/Audience';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
 import { Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { showAuthors } from '@/lib/chat';
+import { canWriteIn, readOnlyNote, showAuthors } from '@/lib/chat';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useEngine } from '@/lib/hooks/useConnections';
-import { useMembers, useMyLevels, useThread } from '@/lib/hooks/useChat';
+import { useMembers, useMyLevels, useReaders, useThread } from '@/lib/hooks/useChat';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { GHOSTS } from '@/lib/team';
 
-// One thread of the team chat (team-chat.md, decisions 2, 3, 6 and 9): its
-// messages live, newest at the bottom; a text box if the person may talk to
-// the agent, «Solo lectura» if they may only see it.
+// One titled conversation with an agent (team-chat.md, decisions 3, 6 and 9;
+// chat-permissions.md): its messages live, newest at the bottom; under the
+// header who sees it, which its opener can change; a text box if the person
+// may write in it, else «Solo lectura» and why.
 
 export default function Conversacion() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useAuth();
   const { active } = useActiveOrg();
   const orgId = active?.id ?? null;
-  const { head, messages, error, send } = useThread(id ?? null);
+  const { head, messages, error, send, reloadHead } = useThread(id ?? null);
+  const { readers, reload: reloadReaders } = useReaders(id ?? null, head?.visibility);
   const { items: agents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels } = useMyLevels(orgId);
   const headerHeight = useHeaderHeight();
   const engine = useEngine();
+  // Back from changing who sees it.
+  useFocusEffect(
+    useCallback(() => {
+      void reloadHead();
+      void reloadReaders();
+    }, [reloadHead, reloadReaders]),
+  );
 
   const me = session?.user.id;
   const agent = agents.find((a) => a.id === head?.agentId);
@@ -49,8 +59,13 @@ export default function Conversacion() {
   );
 
   if (head === undefined) return <Loading />;
-  if (!head) return <Notice title="No encontramos esta conversación" body={error ?? 'Puede que ya no tengas acceso a este agente.'} />;
-  const canTalk = levels[head.agentId] === 'talk';
+  if (!head) return <Notice title="No encontramos esta conversación" body="Puede que ya no tengas acceso: quien la abrió la ha hecho privada, o ya no puedes ver a este agente." />;
+  const mine = head.personal || head.createdBy === me;
+  const level = levels[head.agentId];
+  const canTalk = canWriteIn({ visibility: head.visibility, mine }, level);
+  const opener = members.find((m) => m.userId === head.createdBy)?.displayName ?? null;
+  // A personal space has nobody else to share with.
+  const showAudience = active?.kind !== 'personal' && !head.personal && agent;
 
   return (
     <View className="flex-1 bg-surface">
@@ -71,6 +86,14 @@ export default function Conversacion() {
         }}
       />
       <KeyboardColumn offset={headerHeight}>
+        {showAudience ? (
+          <Audience
+            visibility={head.visibility}
+            agentName={agent.name}
+            readers={readers}
+            onPress={mine ? () => router.push(`/visibilidad/${head.id}`) : undefined}
+          />
+        ) : null}
         <LegendList
           data={messages}
           keyExtractor={(m) => m.id}
@@ -99,7 +122,7 @@ export default function Conversacion() {
         {canTalk ? (
           <Composer placeholder={agent ? `Escribe a ${agent.name}` : 'Escribe aquí'} names={names} onSend={send} />
         ) : (
-          <ReadOnlyComposer owner={owner} />
+          <ReadOnlyComposer note={readOnlyNote(level, opener, owner)} />
         )}
       </KeyboardColumn>
     </View>

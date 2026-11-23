@@ -1,6 +1,6 @@
 import { Children, createContext, isValidElement, useContext, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
-import { CaretRight, Icon, type IconComponent, MagnifyingGlass, XCircle } from '@/components/icons';
+import { CaretRight, Check, Icon, type IconComponent, MagnifyingGlass, XCircle } from '@/components/icons';
 import { selection } from '@/lib/haptics';
 import { usePalette } from '@/lib/theme';
 
@@ -393,6 +393,7 @@ export function ListRow({
   testID,
   accessibilityLabel,
   accessibilityHint,
+  checked,
 }: {
   title: string;
   subtitle?: string | null;
@@ -410,6 +411,8 @@ export function ListRow({
   testID?: string;
   accessibilityLabel?: string;
   accessibilityHint?: string;
+  /** One of a few choices: read out as a radio button, with a check when chosen. */
+  checked?: boolean;
 }) {
   const { first } = useContext(RowPlace);
   const c = usePalette();
@@ -436,6 +439,11 @@ export function ListRow({
           </Text>
         ) : null}
         {trailing ? <View className="ml-3">{trailing}</View> : null}
+        {checked ? (
+          <View className="ml-3">
+            <Icon icon={Check} size={18} color={c.accent} weight="bold" />
+          </View>
+        ) : null}
         {chevron ? (
           <View className="ml-2">
             <Icon icon={CaretRight} size={15} color={c.muted} weight="bold" />
@@ -454,7 +462,8 @@ export function ListRow({
   return (
     <Pressable
       testID={testID}
-      accessibilityRole="button"
+      accessibilityRole={checked === undefined ? 'button' : 'radio'}
+      accessibilityState={checked === undefined ? undefined : { checked }}
       accessibilityLabel={accessibilityLabel ?? (subtitle ? `${title}. ${subtitle}` : title)}
       accessibilityHint={accessibilityHint}
       onPress={onPress}

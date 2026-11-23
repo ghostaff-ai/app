@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import { Image, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Icon, Plus, UsersThree, WarningCircle } from '@/components/icons';
 import { EmptyState, ErrorText, ListRow, ListSection, Loading, RowIcon, ScreenTitle } from '@/components/ui';
-import { shortTime, teamRows } from '@/lib/chat';
+import { shortTime, teamRows, visibilityTag } from '@/lib/chat';
 import { canRunAgents } from '@/lib/connections';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useThreads } from '@/lib/hooks/useChat';
@@ -17,7 +17,9 @@ import { usePalette } from '@/lib/theme';
 // Equipo, the first tab (three-tabs.md, decisions 2 and 4): one row per agent,
 // as in WhatsApp, Secretaría first and then whoever spoke last, with its last
 // word and an orange dot while it waits unread. A tap opens the chat with it
-// (decision 3). An owner adds agents from the last row (decision 5).
+// (decision 3). Titled conversations the person follows sit among them, like
+// groups (chat-permissions.md, decision 3). An owner adds agents from the last
+// row (decision 5).
 
 export default function Equipo() {
   const { active } = useActiveOrg();
@@ -89,25 +91,42 @@ export default function Equipo() {
         />
       ) : (
         <ListSection>
-          {rows.map(({ agent: a, last, unread }) => {
+          {rows.map((row) => {
+            const { agent: a, last, unread } = row;
             const said = last?.lastText ? (last.lastAuthor && last.lastAuthor !== a.name ? `${last.lastAuthor}: ${last.lastText}` : last.lastText) : null;
+            const trailing = last ? (
+              <View className="items-end">
+                <Text className="text-caption text-muted">{shortTime(last.lastMessageAt)}</Text>
+                {unread ? <View testID="agent-unread" className="mt-1.5 h-2.5 w-2.5 rounded-full bg-waiting" /> : null}
+              </View>
+            ) : undefined;
+            const ghost = <Image source={GHOSTS[a.ghost].picture} style={{ width: 48, height: 48 }} resizeMode="contain" />;
+            if (row.kind === 'conversation') {
+              const tag = active.kind === 'personal' ? a.name : `${a.name} · ${visibilityTag(row.last.visibility)}`;
+              return (
+                <ListRow
+                  key={row.last.id}
+                  testID={`conversation-${row.last.id}`}
+                  accessibilityLabel={`${row.last.title}, con ${a.name}${unread ? ', mensajes sin leer' : ''}`}
+                  leading={ghost}
+                  title={row.last.title}
+                  subtitle={said ? `${tag}. ${said}` : tag}
+                  emphasis={unread}
+                  trailing={trailing}
+                  onPress={() => router.push(`/conversacion/${row.last.id}`)}
+                />
+              );
+            }
             return (
               <ListRow
                 key={a.id}
                 testID={`agent-${a.ghost}`}
                 accessibilityLabel={`${a.name}${unread ? ', mensajes sin leer' : ''}`}
-                leading={<Image source={GHOSTS[a.ghost].picture} style={{ width: 48, height: 48 }} resizeMode="contain" />}
+                leading={ghost}
                 title={a.name}
                 subtitle={said ?? a.description ?? GHOSTS[a.ghost].job}
                 emphasis={unread}
-                trailing={
-                  last ? (
-                    <View className="items-end">
-                      <Text className="text-caption text-muted">{shortTime(last.lastMessageAt)}</Text>
-                      {unread ? <View testID="agent-unread" className="mt-1.5 h-2.5 w-2.5 rounded-full bg-waiting" /> : null}
-                    </View>
-                  ) : undefined
-                }
+                trailing={trailing}
                 onPress={() => router.push(`/chat/${a.id}`)}
               />
             );
