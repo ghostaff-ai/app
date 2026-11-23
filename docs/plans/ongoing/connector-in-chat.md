@@ -106,7 +106,7 @@ Why not post a message as the person («He conectado Notion») from the app and 
 
 ## File structure
 
-- Create `supabase/migrations/20261125000000_account_asks.sql`, `supabase/tests/database/account_asks.test.sql`.
+- Create `supabase/migrations/20261125100000_account_asks.sql`, `supabase/tests/database/account_asks.test.sql`.
 - Modify `packages/shared/src/chat.ts` (`AccountAskPart`, `isAccountAskPart`), `packages/shared/src/services/index.ts` (`resumeAfterAccount`).
 - Create `apps/engine/src/accountAsks.ts`: the tool, what each state needs, the store over Supabase, resuming.
 - Modify `apps/engine/src/chat.ts` (intercept in `writeReply`, the tool for every agent, `toTurns` reads the card, the prompt, a shared setup for a reply), `chatStore.ts` (`updateReply` takes `cards`), `app.ts` (`POST /threads/:id/resume`), `server.ts` (the store).
