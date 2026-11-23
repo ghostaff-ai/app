@@ -115,6 +115,8 @@ export default function Chat() {
               />
             )}
             estimatedItemSize={64}
+            // The cards' state (asked for, going on) lives outside the messages: redraw them when it changes.
+            extraData={asks}
             alignItemsAtEnd
             initialScrollAtEnd
             maintainScrollAtEnd

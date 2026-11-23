@@ -83,8 +83,12 @@ export function AccountAskCard({ ask, controls, writing = false }: { ask: Accoun
         <Text className="ml-2.5 flex-1 text-footnote font-semibold text-ink">{titleOf(ask)}</Text>
       </View>
       {ask.why ? <Text className="mt-1.5 text-caption text-muted">{ask.why}</Text> : null}
-      {connector?.before && ask.need === 'connect' && !done ? <Text className="mt-1 text-caption text-muted">{connector.before}</Text> : null}
-      {status ? <Text className={`mt-2 text-caption ${done ? 'text-ok' : 'text-muted'}`}>{status}</Text> : null}
+      {connector?.before && ask.need === 'connect' && !done && cannot === null ? <Text className="mt-1 text-caption text-muted">{connector.before}</Text> : null}
+      {status ? (
+        <Text accessibilityLiveRegion="polite" className={`mt-2 text-caption ${done ? 'text-ok' : 'text-muted'}`}>
+          {status}
+        </Text>
+      ) : null}
       {canPress ? (
         <Pressable
           accessibilityRole="button"
@@ -96,7 +100,11 @@ export function AccountAskCard({ ask, controls, writing = false }: { ask: Accoun
         </Pressable>
       ) : null}
       {cannot && !done ? <Text className="mt-2 text-caption text-muted">{cannot}</Text> : null}
-      {error ? <Text className="mt-2 text-caption text-no">{error}</Text> : null}
+      {error ? (
+        <Text accessibilityLiveRegion="polite" className="mt-2 text-caption text-no">
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
