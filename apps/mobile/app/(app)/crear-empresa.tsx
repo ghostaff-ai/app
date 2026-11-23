@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { OnboardingStep } from '@/components/onboarding/OnboardingStep';
 import { Button, ErrorText, Field } from '@/components/ui';
+import { dismissKeyboard } from '@/lib/keyboard';
 import { stepsFor } from '@/lib/onboarding';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
@@ -22,6 +23,8 @@ export default function CreateOrganization() {
     setBusy(true);
     setError(null);
     try {
+      // The next screen has no field: it must not start under a closing keyboard.
+      await dismissKeyboard();
       const org = await createOrganization(supabase, { name });
       await enter(org.id);
       // After the layout has re-rendered with the new organisation, so the inbox route exists.
