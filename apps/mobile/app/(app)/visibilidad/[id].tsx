@@ -56,6 +56,7 @@ export default function Visibilidad() {
     <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-5 pb-16">
       <Stack.Screen options={{ title: 'Quién la ve' }} />
       <VisibilityPicker
+        header={null}
         value={chosen}
         agentName={agentName}
         onChange={(v) => {

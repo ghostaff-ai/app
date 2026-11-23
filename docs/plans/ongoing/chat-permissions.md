@@ -2,7 +2,7 @@
 
 **Priority:** high — privacy: who sees what a person says to an agent
 **Gate:** blocked:ghostaff-ai/app#54 (no «Avisos», stacked under this branch; recheck 2026-11-24)
-**Next:** task 1, the migration `threads.visibility` with `thread_level_for` as the one rule, pgTAP first
+**Next:** once #54 has landed, rebase this branch onto `origin/develop` (its copy of #54's commit drops out) and run `pnpm pr:land`
 
 Jaime's Trello card (2026-11-23), «permisos de escritura en chats por otros miembros del equipo»: «esto tiene que ser por agente y por conversación, o sea yo puedo ser owner de un agente y hacer una conversación que quiero que lean o que no, o no ser dueño de un agente y abrir una conversación que no quiero que vean, esto es un tema».
 
@@ -116,8 +116,13 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 
 ## Tasks (branch `claude/chat-permissions-6baf5b`, one PR, stacked on #54)
 
-- [ ] 1. Migration and pgTAP.
-- [ ] 2. Engine: `thread_level_for` in `replyInThread`, with tests.
-- [ ] 3. Shared services, types and the settings classification and tool.
-- [ ] 4. Screens: new conversation with the picker, the audience line and sheet, the agent's page, Equipo's followed rows, the read-only reason.
-- [ ] 5. Check: `pnpm check`, `pnpm db:test`, the web against local Supabase (two people, the three visibilities), `pnpm e2e` for the new flow; then `pnpm pr:land`.
+- [x] 1. Migration and pgTAP (`20261124200000_conversation_visibility.sql`, `chat_permissions.test.sql`; the tests that opened shared threads now say `visibility => 'write'`).
+- [x] 2. Engine: `thread_level_for` in `replyInThread`, with tests.
+- [x] 3. Shared services, types and the settings classification and tool.
+- [x] 4. Screens: new conversation with the picker, the audience line and the «Quién la ve» screen, the agent's page («Nueva conversación», «Conversaciones», «Conversaciones nuevas» for owners), Equipo's followed rows, the read-only reason.
+- [ ] 5. Check: `pnpm check` green; pgTAP 300/300 on a fresh database with every migration; checked on the web against a local Supabase of its own (Bea opens a private conversation, shares it, Dani reads it with «Solo lectura · Pide acceso a Ana», Ana writes, Bea can no longer make it private and is told why; light and dark). Not run: `pnpm e2e` locally (CI runs the new flow `conversation-visibility`); not checked on a phone.
+
+## Handoff
+
+- The branch carries a copy of #54's commit (no «Avisos») underneath, because this migration comes after its `20261123300000_no_notices.sql` and `my_threads` builds on its version. Land #54 first: if this landed first, #54's earlier-dated migration would arrive after this one.
+- The local Supabase shared by the sessions (`supabase_db_ghostaff`) was not touched: pgTAP ran inside rolled-back transactions there, and the web check used a separate stack (`project_id = ghostaff-perm`, ports 553xx) started from a copy of `supabase/`.

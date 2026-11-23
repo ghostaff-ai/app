@@ -16,11 +16,12 @@ export function VisibilityPicker({
   value: ConversationVisibility;
   agentName: string;
   onChange: (v: ConversationVisibility) => void;
-  header?: string;
+  /** Null where the screen's title already says it. */
+  header?: string | null;
   footer?: string;
 }) {
   return (
-    <ListSection header={header} footer={footer}>
+    <ListSection header={header ?? undefined} footer={footer}>
       {CONVERSATION_VISIBILITIES.map((v) => (
         <ListRow
           key={v}

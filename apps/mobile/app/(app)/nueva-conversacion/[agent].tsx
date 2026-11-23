@@ -56,7 +56,7 @@ export default function NuevaConversacion() {
         )}
         <Text className="mt-6 px-4 text-footnote text-muted">Lo primero que escribas le da título.</Text>
       </ScrollView>
-      <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={send} autoFocus />
+      <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={send} />
     </KeyboardColumn>
   );
 }
