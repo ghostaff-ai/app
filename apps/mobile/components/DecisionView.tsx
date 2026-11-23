@@ -1,12 +1,12 @@
 import { RULE_KIND, type DecisionSource } from '@ghostaff/shared';
 import { AUTONOMY_STREAK } from '@ghostaff/shared/services';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Image, Linking, Pressable, Text, TextInput, View } from 'react-native';
 import { Button, ErrorText, Loading, Notice } from '@/components/ui';
 import { answerLabel, dueLabel, kindLabel, shortDate } from '@/lib/format';
 import { success } from '@/lib/haptics';
 import { useDecision } from '@/lib/hooks/useDecisions';
+import { KeyboardForm } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { GHOSTS, agentLabel, ghostFor } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
@@ -22,7 +22,6 @@ import { usePalette } from '@/lib/theme';
 export function DecisionView({ id, onAnswered }: { id: string | undefined; onAnswered?: () => void }) {
   const { decision, loading, error, answer, takeBack, streak } = useDecision(id);
   const { active } = useActiveOrg();
-  const insets = useSafeAreaInsets();
   const colors = usePalette();
   const [note, setNote] = useState('');
   const [noteOpen, setNoteOpen] = useState(false);
@@ -76,7 +75,20 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
 
   return (
     <View className="flex-1 bg-surface">
-      <ScrollView contentContainerClassName="px-5 pb-10 pt-2" keyboardShouldPersistTaps="handled">
+      {/* The note is typed at the bottom of the page: it and the buttons ride on the keyboard. */}
+      <KeyboardForm
+        footer={
+          decision.answer ? null : (
+            <View className="flex-row gap-3 px-5 pt-3">
+              <Button label="No" variant="secondary" busy={busy === 'no'} disabled={!!busy} onPress={() => void send('no')} />
+              <View className="flex-1">
+                <Button label={okLabel} busy={busy === 'ok'} disabled={!!busy || (isRule && !signed.trim())} onPress={() => void send('ok')} />
+              </View>
+            </View>
+          )
+        }
+      >
+      <View className="px-5 pb-10 pt-2">
         <View className="flex-row items-center">
           <Image
             testID="agent-ghost"
@@ -196,16 +208,8 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
           </View>
         )}
         <ErrorText>{actionError}</ErrorText>
-      </ScrollView>
-
-      {decision.answer ? null : (
-        <View className="flex-row gap-3 bg-surface px-5 pt-3" style={{ paddingBottom: Math.max(insets.bottom, 12) }}>
-          <Button label="No" variant="secondary" busy={busy === 'no'} disabled={!!busy} onPress={() => void send('no')} />
-          <View className="flex-1">
-            <Button label={okLabel} busy={busy === 'ok'} disabled={!!busy || (isRule && !signed.trim())} onPress={() => void send('ok')} />
-          </View>
-        </View>
-      )}
+      </View>
+      </KeyboardForm>
     </View>
   );
 }

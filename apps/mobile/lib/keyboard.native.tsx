@@ -1,5 +1,13 @@
-import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, KeyboardController, KeyboardProvider } from 'react-native-keyboard-controller';
+import { useState, type ReactNode } from 'react';
+import { View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  KeyboardAwareScrollView,
+  KeyboardController,
+  KeyboardProvider,
+  KeyboardStickyView,
+} from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // The phone's keyboard, followed frame by frame (react-native-keyboard-controller,
 // team-chat.md decision 1). The web has no on-screen keyboard to follow:
@@ -36,4 +44,42 @@ export async function dismissKeyboard(): Promise<void> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Space between the keyboard and the footer, and between the footer and the field being typed in. */
+const GAP = 12;
+
+/**
+ * A page that scrolls, with fields in it and its buttons pinned to the bottom (a
+ * decision and its note). The buttons ride on top of the keyboard and the field
+ * being typed in, caret included, scrolls into sight above them. A column
+ * (KeyboardColumn) can't do this: it only shrinks, and a field near the end of a
+ * long page stays below the fold, under the keyboard.
+ */
+export function KeyboardForm({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  const [footerHeight, setFooterHeight] = useState(0);
+  // Under the buttons: the home indicator's safe area, or the keyboard once it is up.
+  const bottom = Math.max(insets.bottom, GAP);
+  const lift = bottom - GAP;
+  return (
+    <View style={{ flex: 1 }}>
+      <KeyboardAwareScrollView
+        keyboardShouldPersistTaps="handled"
+        // The buttons stand between the keyboard and the field, and cover the
+        // bottom of the page by their height less the safe area they drop.
+        bottomOffset={footer ? footerHeight - lift + GAP : GAP}
+        extraKeyboardSpace={footer ? -lift : 0}
+      >
+        {children}
+      </KeyboardAwareScrollView>
+      {footer ? (
+        <KeyboardStickyView offset={{ opened: lift }}>
+          <View className="bg-surface" style={{ paddingBottom: bottom }} onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>
+            {footer}
+          </View>
+        </KeyboardStickyView>
+      ) : null}
+    </View>
+  );
 }
