@@ -55,5 +55,5 @@ How it is stored:
 - [x] App: the list in order with arrows, «Añadir otra cuenta de IA», name, usage on each row, the account's page.
 - [x] Maestro: `create-company.yaml` gets a key and a subscription and moves the key down.
 - [x] On beta (2026-11-22): the app over the air on merge; the migration, runner and engine by hand by Álvaro (deploys are not in CI yet, environments.md task 7). Lesson: a PR with a migration breaks the beta app until those three run, so run them right after its merge.
-- [ ] «Usar esta primero» on an account's page (decision 6): branch `claude/fix-claude-account-switch-7301f3`, landing through `pnpm pr:land`.
+- [x] «Usar esta primero» on an account's page (decision 6): PR #55, 2026-11-23.
 - [ ] Tried with a real second Claude sign-in on the beta, and the limit bars filled by a real reply.
