@@ -2,7 +2,7 @@
 
 **Priority:** high — production will hold customers' AI keys and mailboxes; today the only engine talks to the beta database, and deploys are run by hand
 **Gate:** none
-**Next:** once PR #42 merges, the next push to `develop` deploys beta from CI green; Jaime puts `SUPABASE_ANON_KEY_PROD` into EAS; production comes up with the first release
+**Next:** once PR #42 merges, the next push to `develop` deploys beta from CI green; production comes up with the first release
 
 Jaime (2026-11-22): one Google Cloud project and one Supabase per environment, set up as Órdago's: merge to `develop` brings up beta, merge to `main` brings up production. Front 1 of [ordago-as-customer.md](ordago-as-customer.md). It replaces the proposal in [build-first-version.md](build-first-version.md#environments-beta-and-production) of 2026-11-15.
 
@@ -134,7 +134,7 @@ On green CI on each branch, the workflow for that environment: applies Supabase 
 
 - [x] `bash scripts/setup-env.sh prod` (twice: the second changes nothing).
 - [ ] Production's runner and engine come up from CI with the first release (`develop` into `main`), not by hand: a hand deploy now would ship `develop`'s code to production without that decision, and production's Supabase still lacks migration `20261122200000` (several AI accounts), which CI applies first. Until then `ghostaff-prod` runs nothing. Then `curl -fsS https://engine-664656500315.europe-west1.run.app/health` answers.
-- [ ] Production's anon key (public by design) into EAS's `production` environment as `SUPABASE_ANON_KEY_PROD` (`eas env:create --environment production --visibility plaintext`), piped from the Supabase CLI, so a production build has its config. Jaime runs it: the EAS CLI on his Mac is signed in to another account.
+- [x] Production's anon key (public by design) in EAS's `production` environment as `SUPABASE_ANON_KEY_PROD`, plaintext (2026-11-23, from Álvaro's machine: his Expo login is a Developer on `ghostaff.ai`, enough to set it; piped from `supabase projects api-keys`, checked equal, ref `krhhndjjqmmkzjmwwazv`, role anon).
 
 ### Task 7: CI deploys
 
