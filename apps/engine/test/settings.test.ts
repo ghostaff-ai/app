@@ -52,3 +52,13 @@ describe('what the main agent may change (agent-settings.md)', () => {
     await expect(tool.describe!(ctx, { agent_id: self, providers: null })).rejects.toBeInstanceOf(SettingError);
   });
 });
+
+describe('a refused settings change, as people read it', () => {
+  it('is always in Spanish', async () => {
+    const { refusal } = await import('../src/settings');
+    expect(refusal({ code: '42501', message: "only an owner chooses an agent's tools" })).toBe('Solo quien es propietario de la empresa puede hacer este cambio.');
+    expect(refusal({ code: '22023', message: 'tools must be up to 50 provider names' })).toMatch(/^Ese cambio no es válido/);
+    expect(refusal(new SettingError('No hay ningún agente con ese id en esta organización.'))).toBe('No hay ningún agente con ese id en esta organización.');
+    expect(refusal(new Error('fetch failed'))).toBe('No se ha podido hacer el cambio. Prueba otra vez en un momento.');
+  });
+});

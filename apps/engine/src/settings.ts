@@ -33,12 +33,23 @@ export const SETTINGS_PREFIX = 'settings_';
 
 export const isSettingTool = (name: string) => SETTING_TOOLS.some((t) => t.name === name);
 
-/** What a refusal says to the model or on the card: ours as written, the database's as it said it. */
-function refusal(e: unknown): string {
+/** The database's refusals, by Postgres error code, in words a person reads on the card. */
+const REFUSALS: Record<string, string> = {
+  '42501': 'Solo quien es propietario de la empresa puede hacer este cambio.',
+  '22023': 'Ese cambio no es válido. Revisa los datos y vuelve a proponerlo.',
+  '23505': 'Eso ya existe: por ejemplo, esa persona ya está en la empresa.',
+  '23514': 'Ese valor no está permitido.',
+  '54000': 'La empresa ha llegado al límite para esto.',
+};
+
+/** What a refusal says to the model and on the card, always in Spanish: ours as written, the database's by its code. */
+export function refusal(e: unknown): string {
   if (e instanceof SettingError) return e.message;
-  const message = (e as { message?: unknown })?.message;
-  if (typeof message === 'string' && message) return `No se ha podido: ${message.slice(0, 300)}`;
-  return 'No se ha podido hacer el cambio.';
+  const code = (e as { code?: unknown })?.code;
+  const known = typeof code === 'string' ? REFUSALS[code] : undefined;
+  if (known) return known;
+  console.error('settings change failed', typeof code === 'string' ? code : typeof e);
+  return 'No se ha podido hacer el cambio. Prueba otra vez en un momento.';
 }
 
 /** Runs one settings tool; never throws. */
