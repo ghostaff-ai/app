@@ -65,6 +65,8 @@ export interface ImportOptions {
   runner?: 'ghostaff';
   /** Only these slugs. */
   only?: string[];
+  /** No timetable: they run only when someone writes to them (while their old job keeps the timetable). */
+  onDemand?: boolean;
 }
 
 type AgentYaml = { descripcion?: string; horario?: string; prompt?: string; modelo?: string; herramientas?: unknown; max_turnos?: number };
@@ -101,7 +103,7 @@ export function readProjectAgents(projectDir: string, opts: ImportOptions = {}):
     .map((slug): ImportedAgent => {
       const a = parse(readFileSync(join(dir, `${slug}.yaml`), 'utf8')) as AgentYaml;
       const place = PLACES[slug] ?? { name: slug.charAt(0).toUpperCase() + slug.slice(1), ghost: 'base', department: 'direccion' };
-      const base = { slug, ...place, description: sentence(a.descripcion), schedule: typeof a.horario === 'string' ? a.horario : null };
+      const base = { slug, ...place, description: sentence(a.descripcion), schedule: !opts.onDemand && typeof a.horario === 'string' ? a.horario : null };
       if (opts.runner === 'ghostaff') {
         return { ...base, runner: 'ghostaff', ...onOurRunner(slug, a), job_project: null, job_region: null, job_name: null, job_identity: null };
       }

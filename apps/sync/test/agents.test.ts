@@ -66,4 +66,9 @@ describe('readProjectAgents', () => {
   it('refuses to move an agent whose yaml lacks what our runner needs', () => {
     expect(() => readProjectAgents(project(), { runner: 'ghostaff', only: ['desarrollo'] })).toThrow(/prompt/);
   });
+
+  it('on demand, it gets no timetable: its old job keeps it', () => {
+    const [legal] = readProjectAgents(project(), { runner: 'ghostaff', only: ['legal'], onDemand: true });
+    expect(legal).toMatchObject({ slug: 'legal', runner: 'ghostaff', schedule: null });
+  });
 });

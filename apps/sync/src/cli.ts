@@ -30,6 +30,8 @@ import { projectUrlFromKey } from './projectUrl';
 //     (Órdago's agents in Equipo, each running as its job; again to refresh them)
 //   pnpm --filter @ghostaff/sync org add-agents --org ordago --from … --runner ghostaff --only legal
 //     (those agents move to Ghostaff's own runner: task, model, tools, turns and timetable from their yaml)
+//   … --runner ghostaff --only legal --on-demand
+//     (the same, without the timetable: it runs only when written to, and its old job keeps the timetable)
 //
 // It writes with the service-role key, which bypasses row-level security, so it
 // runs only on our machines and in the engine, never in the app. The key comes
@@ -128,10 +130,10 @@ async function setRecord(opts: { org: string; repo: string; installation: string
   console.log(`${opts.org}'s record is ${opts.repo} (installation ${installation}); the engine syncs it on its next tick`);
 }
 
-async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff'; only?: string[] }) {
+async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff'; only?: string[]; onDemand?: boolean }) {
   const db = admin();
   const orgId = await orgBySlug(db, opts.org);
-  const agents = readProjectAgents(opts.from, { runner: opts.runner, only: opts.only });
+  const agents = readProjectAgents(opts.from, { runner: opts.runner, only: opts.only, onDemand: opts.onDemand });
   if (agents.length === 0) throw new Error('No agent to import: check --from and --only');
   // Upsert by (org, slug): running it again refreshes the job and the text, and keeps the agent's
   // threads, runs and access levels. The partial unique index needs the conflict target spelled out.
@@ -154,7 +156,7 @@ async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff';
       ? await db.from('agents').update(row).eq('id', found.id)
       : await db.from('agents').insert({ ...row, org_id: orgId, member_default: 'read' });
     if (error) throw error;
-    const where = a.runner === 'ghostaff' ? `our runner, ${a.model}` : a.job_name;
+    const where = a.runner === 'ghostaff' ? `our runner, ${a.model}${a.schedule ? '' : ', when written to'}` : a.job_name;
     console.log(`${found ? 'updated' : 'added  '} ${a.name.padEnd(11)} ${a.department.padEnd(10)} ${where}`);
   }
 }
@@ -204,6 +206,7 @@ async function main() {
       from: { type: 'string' },
       runner: { type: 'string' },
       only: { type: 'string' },
+      'on-demand': { type: 'boolean', default: false },
     },
   });
   const need = (k: keyof typeof values) => {
@@ -220,7 +223,7 @@ async function main() {
       const runner = values.runner;
       if (runner !== undefined && runner !== 'ghostaff') throw new Error('--runner is ghostaff (or left out: each agent runs as its job)');
       const only = values.only?.split(',').map((s) => s.trim()).filter(Boolean);
-      return addAgents({ org: need('org'), from: need('from'), runner, only });
+      return addAgents({ org: need('org'), from: need('from'), runner, only, onDemand: !!values['on-demand'] });
     }
     case 'set-record':
       return setRecord({ org: need('org'), repo: need('repo'), installation: need('installation') });
