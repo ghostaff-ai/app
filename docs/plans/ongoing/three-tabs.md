@@ -11,8 +11,8 @@ It reverses, on his word, app-design.md decisions 1 (Hoy · Equipo · Registro a
 ## Decisions (Álvaro, 2026-11-23, all my picks)
 
 1. **Registro** stops being a tab and becomes a row in Empresa: the company's memory, beside its details.
-2. **Hoy goes.** The organisation switcher moves to Empresa (its name on top); Secretaría is pinned first in Equipo; «tu equipo aún no puede trabajar» sits on top of Equipo. The greeting, «Hecho sin ti» and the mic go: what an agent did alone is in its chat («Avisos»), and every chat is one tap away.
-3. **One chat per person with each agent**, private like a WhatsApp one-to-one: only that person and the agent see it. The agent's «Avisos» (what it did on its own) stays shared and shows inside every chat with it. The conversation is long to the person and bounded for the model: the engine reads the last 40 messages today; a running summary in the background comes when chats get long enough to need it. The shared titled threads of before stay readable on the agent's page, «Conversaciones anteriores»; nothing is migrated.
+2. **Hoy goes.** The organisation switcher moves to Empresa (its name on top); Secretaría is pinned first in Equipo; «tu equipo aún no puede trabajar» sits on top of Equipo. The greeting, «Hecho sin ti» and the mic go: what an agent did alone is in its chat, and every chat is one tap away.
+3. **One chat per person with each agent**, private like a WhatsApp one-to-one: only that person and the agent see it. What it did on its own lands in that chat too (decision 12). The conversation is long to the person and bounded for the model: the engine reads the last 40 messages today; a running summary in the background comes when chats get long enough to need it. The shared titled threads of before stay readable on the agent's page, «Conversaciones anteriores»; nothing is migrated.
 4. **Equipo is a flat list** ordered by the latest word, as in WhatsApp: ghost, name, last line, time, an orange dot while unread. No department headers.
 5. **«Añadir agente»**, the last row of Equipo for owners, opens the jobs nobody does yet by department and «Agente a medida». The swipe-to-hire deck (swipe-to-hire.md) can live there later.
 6. **The agent's name on top of its chat** opens its page: ghost, job, «Quién puede», «Herramientas», «Quitar del equipo», and the old conversations.
@@ -21,6 +21,8 @@ It reverses, on his word, app-design.md decisions 1 (Hoy · Equipo · Registro a
 9. **Three pull requests**, each landed when green: the tabs, Equipo as chats and Empresa (1–6, 10, 11); the deck (7); the model (8).
 10. The third tab is called **Empresa**: short in the bar, and the app already says «Crear otra empresa».
 11. **Empresa** holds, top to bottom: the name (a tap opens the switcher) and «Firmas como…»; **Conexiones** first, with how many are connected; **Personas** and «Invitar a alguien»; **Registro**; then «Cambiar de organización» (or «Otra empresa» to create or join one) and «Cerrar sesión». The organisation sheet stays only as the switcher, with creating and joining; inviting and signing out moved here.
+
+12. **No «Avisos»** (Jaime, 2026-11-23, Trello «Por qué hablas con avisos y no con los agentes»; it replaces the shared «Avisos» thread of decisions 2 and 3). What an agent does on its own (a scheduled run with something to say, a report, a run that failed) is a message from it in the private chat of **every person who can see the agent** (`agent_level_for` not `none` at that moment: the same people who saw «Avisos»), opening that chat if it doesn't exist. Each person has their own unread mark, and when they answer, the agent has the message in the 40 it reads. The existing «Avisos» threads are migrated, not kept: each message is copied with its date into the chat of every person who can see the agent, then the threads and `threads.notices` go. Someone who joins later doesn't get the past ones.
 
 ## Progress
 
@@ -39,3 +41,5 @@ It reverses, on his word, app-design.md decisions 1 (Hoy · Equipo · Registro a
 **Step 2, the deck** — not started.
 
 **Step 3, the decision model** — not started.
+
+**No «Avisos»** (decision 12, branch `claude/remove-avisos-7bec6b`): in progress.
