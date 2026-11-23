@@ -28,8 +28,8 @@ grant all on ids to authenticated;
 
 -- Ana starts a thread with each agent.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';
-insert into ids select 'correo', id from public.start_thread('20000000-0000-0000-0000-000000000001', '¿Algo urgente?');
-insert into ids select 'cierre', id from public.start_thread('20000000-0000-0000-0000-000000000002', '¿Cerramos octubre?');
+insert into ids select 'correo', id from public.start_thread('20000000-0000-0000-0000-000000000001', '¿Algo urgente?', visibility => 'write');
+insert into ids select 'cierre', id from public.start_thread('20000000-0000-0000-0000-000000000002', '¿Cerramos octubre?', visibility => 'write');
 select is(
   (select count(*) from public.my_threads('10000000-0000-0000-0000-000000000001') where unread),
   0::bigint, 'what you wrote yourself is not unread');

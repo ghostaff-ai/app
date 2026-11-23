@@ -107,7 +107,7 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 
 ## File structure
 
-- `supabase/migrations/20261124000000_conversation_visibility.sql`: `threads.visibility`, `agents.chat_default`, `thread_level_for`, `thread_level`, the threads policy, `start_thread`, `set_conversation_visibility`, `conversation_readers`, `set_agent_chat_default`, `my_threads` (+ `visibility`, `mine`, `following`).
+- `supabase/migrations/20261124200000_conversation_visibility.sql`: `threads.visibility`, `agents.chat_default`, `thread_level_for`, `thread_level`, the threads policy, `start_thread`, `set_conversation_visibility`, `conversation_readers`, `set_agent_chat_default`, `my_threads` (+ `visibility`, `mine`, `following`).
 - `supabase/tests/database/chat_permissions.test.sql`; `team_chat`, `personal_chats` tests adjusted where `start_thread` changed.
 - `packages/shared/src/chat.ts` (`ConversationVisibility`, `ChatThread` fields), `models` (`Agent.chatDefault`), `services/index.ts` (`startThread`, `setConversationVisibility`, `conversationReaders`, `setAgentChatDefault`, `getThread` with visibility and opener), `services/settings.ts` (classification, `settings_agent_chat_default`).
 - `apps/engine/src/chat.ts`, `chatStore.ts`: `threadLevelFor`; tests in `apps/engine/test/chat.test.ts`, `settings.test.ts`.

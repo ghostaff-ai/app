@@ -56,7 +56,7 @@ select throws_ok(
   'P0002', null, '... nor mark it read');
 
 -- A shared thread works as before.
-insert into ids select 'shared', id from public.start_thread('20000000-0000-0000-0000-000000000001', 'Para todos');
+insert into ids select 'shared', id from public.start_thread('20000000-0000-0000-0000-000000000001', 'Para todos', visibility => 'write');
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
 select is((select count(*) from public.my_threads('10000000-0000-0000-0000-000000000001')), 2::bigint, 'Bea sees her chat and the shared thread');
 
