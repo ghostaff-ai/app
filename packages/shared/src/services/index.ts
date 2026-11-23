@@ -720,16 +720,37 @@ export async function decideAction(engine: EngineAccess, actionId: string, decis
 }
 
 /**
- * Dictation: a voice note recorded in the chat's message box, turned into text
- * by the engine (Gemini in the EU). The audio is sent as is and never kept; the
- * text comes back for the person to review before sending. '' when nobody spoke.
+ * A voice note to an agent (docs/plans/ongoing/voice.md): the engine stores the
+ * audio, writes it in the person's own chat with the agent (opening the chat if
+ * needed) and returns the message, still to be transcribed.
  */
-export async function transcribe(engine: EngineAccess, orgId: string, audio: Blob, mimeType: string): Promise<string> {
-  const { text } = await sendToEngine<{ text: string }>(engine, 'POST', `/transcribe?org=${encodeURIComponent(orgId)}`, {
-    type: mimeType,
-    data: audio,
+export async function sendVoiceNote(
+  engine: EngineAccess,
+  agentId: string,
+  note: { audio: Blob; mimeType: string; durationMs: number | null },
+): Promise<ChatMessage> {
+  const duration = note.durationMs === null ? '' : `?durationMs=${Math.round(note.durationMs)}`;
+  const { message } = await sendToEngine<{ message: ChatMessage }>(engine, 'POST', `/agents/${encodeURIComponent(agentId)}/voice-notes${duration}`, {
+    type: note.mimeType,
+    data: note.audio,
   });
-  return text;
+  return message;
+}
+
+/**
+ * Transcribes a voice note the person sent, then lets the agent answer. Answers
+ * once both are done; the transcript and the reply arrive in the chat live.
+ * Also the retry after a failed transcription.
+ */
+export async function transcribeVoiceNote(engine: EngineAccess, messageId: string): Promise<void> {
+  await callEngine(engine, 'POST', `/voice-notes/${encodeURIComponent(messageId)}/transcribe`);
+}
+
+/** A short-lived link to play a voice note; the bucket's policy lets through only people who may read its thread. */
+export async function voiceNoteUrl(client: SupabaseClient, path: string): Promise<string> {
+  const { data, error } = await client.storage.from('voice-notes').createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data.signedUrl;
 }
 
 /** The service account a customer grants Vertex AI access to on their own project. */

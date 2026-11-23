@@ -1,11 +1,10 @@
-// Dictation (docs/plans/ongoing/voice.md): a person records a voice note in the
-// chat's message box, the app sends the audio here, and the text goes back into
-// the box for them to review and send. Gemini 3.5 Transcribe on Vertex AI in
-// the `eu` multi-region does the transcribing, from Ghostaff's own Google Cloud
-// project, whatever AI account the organisation connected. The audio lives only
-// in memory for the call: never written anywhere, never logged, nor is the text.
+// Turning a voice note into text (docs/plans/ongoing/voice.md; the notes
+// themselves are voiceNotes.ts). Gemini 3.5 Transcribe on Vertex AI in the `eu`
+// multi-region does it, from Ghostaff's own Google Cloud project, whatever AI
+// account the organisation connected. Neither the audio nor the text is ever
+// logged; what is logged is a status, a type and a size.
 
-import { Refusal, requireMember, type Store } from './connections';
+import { Refusal } from './connections';
 
 export interface Transcriber {
   /** The note's text, '' when nobody spoke. */
@@ -100,34 +99,24 @@ export function vertexTranscriber(opts: { project: string; model: string; reques
   };
 }
 
-export interface TranscribeDeps {
-  store: Pick<Store, 'membership'>;
-  /** Off when the engine has no Google Cloud project to bill (local work). */
-  transcriber?: Transcriber;
-  /** One per engine; a fresh default limiter when not given. */
-  limiter?: NoteLimiter;
+/**
+ * The audio's bare type from a request's Content-Type, or a 415. Chrome sends
+ * `audio/webm;codecs=opus` and Google's list names `audio/webm`; iOS names an
+ * .m4a `audio/x-m4a`, which Vertex lists as `audio/mp4`.
+ */
+export function audioType(contentType: string | undefined): string {
+  const bare = (contentType ?? '').split(';')[0]!.trim().toLowerCase();
+  const mimeType = bare === 'audio/x-m4a' || bare === 'audio/m4a' ? 'audio/mp4' : bare;
+  if (!/^audio\/[\w.+-]+$/.test(mimeType)) throw new Refusal(415, 'unsupported_media', 'send the audio with an audio/* Content-Type');
+  return mimeType;
 }
 
-/** One voice note from a member of `orgId`, turned into text. */
-export async function transcribeNote(
-  deps: TranscribeDeps,
-  userId: string,
-  orgId: unknown,
-  note: { contentType: string | undefined; contentLength: string | undefined; body: ReadableStream<Uint8Array> | null },
-): Promise<{ text: string }> {
-  await requireMember(deps.store, orgId, userId);
-  if (!deps.transcriber) throw new Refusal(503, 'transcription_off', 'dictation is not configured on this engine');
-  // The bare type/subtype: Chrome sends `audio/webm;codecs=opus`, Google's list of formats names `audio/webm`.
-  let mimeType = (note.contentType ?? '').split(';')[0]!.trim().toLowerCase();
-  // iOS names an .m4a `audio/x-m4a`; Vertex's list has it as `audio/mp4`.
-  if (mimeType === 'audio/x-m4a' || mimeType === 'audio/m4a') mimeType = 'audio/mp4';
-  if (!/^audio\/[\w.+-]+$/.test(mimeType)) throw new Refusal(415, 'unsupported_media', 'send the audio with an audio/* Content-Type');
-  // After membership and the type, before the body is read: a runaway client costs nothing.
-  if (deps.limiter && !deps.limiter.take(userId)) throw new Refusal(429, 'too_many', 'too many voice notes in the last hour');
+/** A request's audio, at most MAX_AUDIO_BYTES (413 beyond, 400 when empty). */
+export async function readAudio(note: { contentLength: string | undefined; body: ReadableStream<Uint8Array> | null }): Promise<Uint8Array> {
   if (Number(note.contentLength) > MAX_AUDIO_BYTES) throw tooLarge();
   const audio = await readAtMost(note.body, MAX_AUDIO_BYTES);
   if (audio.byteLength === 0) throw new Refusal(400, 'bad_request', 'no audio');
-  return { text: await deps.transcriber.transcribe(audio, mimeType) };
+  return audio;
 }
 
 const tooLarge = () => new Refusal(413, 'too_large', `audio over ${MAX_AUDIO_BYTES} bytes`);
