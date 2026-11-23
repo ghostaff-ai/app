@@ -40,7 +40,7 @@ export function DecisionCard({ decision, onPress, selected }: { decision: Decisi
             <Text className="text-footnote text-muted">{shortDate(decision.createdOn)}</Text>
           )}
         </View>
-        {decision.answer ? <Text className="mt-1 text-footnote text-muted">{answerLabel(decision.answer)}</Text> : null}
+        {decision.answer ? <Text className="mt-1 text-footnote text-muted">{answerLabel(decision.answer, agentLabel(decision.proposedBy))}</Text> : null}
       </View>
     </Pressable>
   );

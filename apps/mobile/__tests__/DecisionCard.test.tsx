@@ -45,7 +45,7 @@ describe('DecisionCard', () => {
     };
     await render(<DecisionCard decision={answered} onPress={() => {}} />);
     expect(screen.queryByTestId('waiting-dot')).toBeNull();
-    expect(screen.getByText('OK de Álvaro · llegando al registro')).toBeTruthy();
+    expect(screen.getByText('OK de Álvaro · Redes aún no lo ha recogido')).toBeTruthy();
   });
 });
 
@@ -66,8 +66,8 @@ describe('format', () => {
   });
 
   it('says an answer from the record is with the agent', () => {
-    expect(answerLabel({ answer: 'no', byName: 'Jaime', at: '', note: null, signedText: null, source: 'record', writtenBackAt: '' })).toBe(
-      'No de Jaime · el agente la tiene',
+    expect(answerLabel({ answer: 'no', byName: 'Jaime', at: '', note: null, signedText: null, source: 'record', writtenBackAt: '' }, 'Finanzas')).toBe(
+      'No de Jaime · Finanzas ya lo tiene',
     );
   });
 

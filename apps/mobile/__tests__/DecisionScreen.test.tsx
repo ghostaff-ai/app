@@ -67,6 +67,22 @@ describe('DecisionScreen', () => {
     expect(screen.queryByTestId('streak')).toBeNull();
   });
 
+  it('lets you tell the agent something with the answer, and shows it once answered', async () => {
+    await render(<DecisionScreen />);
+    await fireEvent.press(screen.getByText('Decirle algo a Finanzas'));
+    await fireEvent.changeText(screen.getByLabelText('Qué quieres que sepa Finanzas'), 'Apúntalo a marketing');
+    await fireEvent.press(screen.getByText('Lo pagó la empresa'));
+    expect(mockAnswer).toHaveBeenCalledWith({ answer: 'ok', note: 'Apúntalo a marketing' });
+
+    mockCurrent = {
+      decision: { ...base, answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-17T10:00:00Z', note: 'Apúntalo a marketing', signedText: null, source: 'app', writtenBackAt: null } },
+      streak: 0,
+    };
+    await screen.rerender(<DecisionScreen />);
+    expect(screen.getByText('Le dijiste: «Apúntalo a marketing»')).toBeTruthy();
+    expect(screen.getByText('OK de Álvaro · Finanzas aún no lo ha recogido')).toBeTruthy();
+  });
+
   it('lets whoever answered take it back until the agent has it', async () => {
     mockCurrent = {
       decision: { ...base, answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-17T10:00:00Z', note: null, signedText: null, source: 'app', writtenBackAt: null } },
