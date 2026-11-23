@@ -2,7 +2,7 @@
 
 **Priority:** high — every new person goes through it, and Jaime's own first use (a personal assistant) has no way in today
 **Gate:** none
-**Next:** land PR 2 (`feat/spaces-on-tabs`); then retire this plan once both are seen on beta
+**Next:** both PRs landed (#43, #64): see them on beta on a phone, then retire this plan to docs/decisions/
 
 Jaime walked the way in on the web (2026-11-22, local Supabase, a phone-sized window) and found it poor: too much text, the buttons halfway down the screen, sheets you can't close, the organisation only visible on Hoy, and nothing for someone who wants Ghostaff for themselves. **His first use of Ghostaff is a personal assistant**, before any company. He took the mockups below («me gusta más, sí; usa los fantasmas», 2026-11-22). It builds on [entry-flows.md](../ideas/entry-flows.md) and answers its open question 1.
 
