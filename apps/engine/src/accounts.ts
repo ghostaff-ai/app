@@ -538,6 +538,8 @@ export async function toolsFor(deps: AccountDeps, token: ReturnType<typeof acces
   return {
     specs: tools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
     accounts: reachable.map((a) => `${connectorFor(a.provider).name}, con la cuenta ${a.hint}`),
+    accountProviders: reachable.map((a) => a.provider),
+    providerOf: (name) => byName.get(name)?.provider,
     stepFor: (name) => byName.get(name)?.step ?? 'Trabajando',
     writes: (name) => byName.get(name)?.writes ?? true,
     actionFor: (name) => byName.get(name)?.action ?? byName.get(name)?.step ?? name,

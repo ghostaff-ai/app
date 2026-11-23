@@ -4,6 +4,7 @@
 
 import { serve } from '@hono/node-server';
 import { createClient } from '@supabase/supabase-js';
+import { asPersonFactory } from './settings';
 import { GoogleAuth } from 'google-auth-library';
 import { type AccountDeps, accessTokens, supabaseAccountStore, supabaseRefreshLeases, toolsFor } from './accounts';
 import { supabaseActionStore } from './actions';
@@ -42,6 +43,8 @@ const supabaseUrl = required('SUPABASE_URL');
 const admin = createClient(supabaseUrl, required('SUPABASE_SERVICE_ROLE_KEY'), {
   auth: { persistSession: false, autoRefreshToken: false },
 });
+// The main agent's settings run as a person, never as the service role (settings.ts).
+const asPerson = asPersonFactory(supabaseUrl, required('SUPABASE_SERVICE_ROLE_KEY'));
 
 const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
 const googleRequest: GoogleRequest = async (url, data, opts) => {
@@ -156,6 +159,7 @@ const chatDeps: ChatDeps = {
   writerFor: writerFactory(vault, auth),
   costOf,
   toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
+  asPerson,
   jobs,
 };
 // Dictation: Gemini on Vertex AI in the EU, billed to Ghostaff's own project (transcribe.ts).
@@ -184,7 +188,7 @@ const app = createApp({
   claudeSignIn: { spawn: spawnSetupToken },
   transcriber,
   accounts,
-  actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId) },
+  actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId), asPerson },
   cron: {
     callerFromToken: caller,
     audience: publicUrl,

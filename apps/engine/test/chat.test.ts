@@ -2,7 +2,9 @@ import type { ChatMessage } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { type AiAccount, AiFailure, type AiUse, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, whoAnswers, type Writer } from '../src/chat';
+import type { AsPerson } from '../src/settings';
 import { type AgentTools, NO_TOOLS } from '../src/tools';
+import { fakeSupabase } from './fixtures/fakeSupabase';
 import { MemoryVault } from '../src/vault';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
@@ -40,8 +42,12 @@ function setup(
     messages?: ChatMessage[];
     expose?: { messages?: ChatMessage[] };
     tools?: AgentTools;
+    /** The thread's agent (Finanzas by default). */
+    agent?: ChatAgent;
+    asPerson?: AsPerson;
   } = {},
 ) {
+  const threadAgent = opts.agent ?? finanzas;
   const levels = opts.levels ?? { ana: 'talk', bea: 'read' };
   const messages: ChatMessage[] = opts.messages ?? [msg({ text: '¿Cómo vamos este mes?' })];
   if (opts.expose) opts.expose.messages = messages;
@@ -55,8 +61,8 @@ function setup(
   const chat: ChatStore = {
     levelFor: async (a, u) => levels[a === REDES ? `${u}/redes` : u] ?? 'none',
     thread: async (id) => threads.find((t) => t.id === id) ?? null,
-    agent: async (id) => (id === AGENT ? finanzas : null),
-    orgAgents: async () => [finanzas, redes],
+    agent: async (id) => (id === AGENT ? threadAgent : null),
+    orgAgents: async () => [threadAgent, redes],
     orgName: async () => 'Panadería',
     memberNames: async () => ['Ana', 'Bea'],
     recentMessages: async () => messages,
@@ -113,6 +119,7 @@ function setup(
       },
       costOf: (account, _model, tokens) => (account.provider === 'claude' ? null : tokens.output / 1000),
       toolsFor: async () => opts.tools ?? NO_TOOLS,
+      asPerson: opts.asPerson,
     },
     accounts: {} as never,
     actions: {} as never,
@@ -409,5 +416,89 @@ describe("an agent using its organisation's tools", () => {
     const last = updates[updates.length - 1];
     expect(last).toMatchObject({ text: 'No tienes nada esta semana.', state: 'done' });
     expect(last?.steps?.slice(0, 3)).toEqual(['Leyendo la conversación', 'Mirando el calendario', 'Escribiendo']);
+  });
+});
+
+describe("the main agent changing the organisation's settings (agent-settings.md)", () => {
+  const secretaria: ChatAgent = { id: AGENT, orgId: ORG, name: 'Secretaría', ghost: 'secretaria', department: 'direccion' };
+  const INVITATION = '60000000-0000-0000-0000-000000000001';
+  const google: AgentTools = {
+    specs: [{ name: 'google_calendar_list_events', description: 'Lista eventos', input_schema: { type: 'object', properties: {} } }],
+    accounts: ['Google, con la cuenta ana@panaderia.es'],
+    accountProviders: ['google'],
+    providerOf: (name) => (name.startsWith('google_') ? 'google' : undefined),
+    stepFor: () => 'Mirando el calendario',
+    writes: () => false,
+    actionFor: (name) => name,
+    run: async () => ({ content: '{"events":[]}', isError: false }),
+  };
+
+  it('gives Secretaría the settings tools, read as whoever asked', async () => {
+    const tokens: string[] = [];
+    const { call, asked } = setup({
+      agent: secretaria,
+      tools: google,
+      asPerson: (t) => {
+        tokens.push(t);
+        return fakeSupabase({}).client;
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    const names = (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
+    expect(names).toContain('google_calendar_list_events');
+    expect(names).toContain('settings_read');
+    expect(names).toContain('settings_agent_accounts');
+    expect(tokens).toEqual(['token-ana']);
+    expect(asked[0]?.system).toContain('agente principal');
+  });
+
+  it('gives no other agent the settings', async () => {
+    const { call, asked } = setup({ tools: google, asPerson: () => fakeSupabase({}).client });
+    await call('ana', `/threads/${THREAD}/reply`);
+    const names = (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
+    expect(names.some((n) => n.startsWith('settings_'))).toBe(false);
+    expect(asked[0]?.system).not.toContain('agente principal');
+  });
+
+  it('gives an agent only the accounts an owner let it use', async () => {
+    const { call, asked } = setup({ agent: { ...finanzas, accounts: [] }, tools: google });
+    await call('ana', `/threads/${THREAD}/reply`);
+    const t = (asked[0] as unknown as { tools: AgentTools }).tools;
+    expect(t.specs).toEqual([]);
+    expect(asked[0]?.system).not.toContain('Google, con la cuenta');
+    expect(await t.run('google_calendar_list_events', {})).toMatchObject({ isError: true });
+  });
+
+  it('turns a change into a card saying what it changes, never making it', async () => {
+    const db = fakeSupabase({ invitations: [{ id: INVITATION, email: 'luis@panaderia.es', role: 'member', invited_by_name: 'Ana', created_at: '' }] });
+    let told: unknown;
+    const { call, proposed, updates } = setup({
+      agent: secretaria,
+      asPerson: () => db.client,
+      write: async ({ tools: t, onText }) => {
+        told = await t.run('settings_revoke_invitation', { invitation_id: INVITATION });
+        onText('Queda pendiente.');
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(proposed).toMatchObject([{ tool: 'settings_revoke_invitation', label: 'Retirar la invitación de luis@panaderia.es' }]);
+    expect(told).toMatchObject({ isError: false, content: expect.stringContaining('pendiente de aprobación') });
+    expect(db.rpcs).toEqual([]);
+    expect(updates[updates.length - 1]?.actions).toMatchObject([{ label: 'Retirar la invitación de luis@panaderia.es', preview: '' }]);
+  });
+
+  it('tells the agent when a change is not valid, with no card', async () => {
+    let told: unknown;
+    const { call, proposed } = setup({
+      agent: secretaria,
+      asPerson: () => fakeSupabase({ agents: [{ id: AGENT, org_id: ORG, name: 'Secretaría', ghost: 'secretaria', accounts: null }] }).client,
+      write: async ({ tools: t, onText }) => {
+        told = await t.run('settings_agent_accounts', { agent_id: AGENT, providers: null });
+        onText('Vale.');
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(proposed).toEqual([]);
+    expect(told).toMatchObject({ isError: true, content: expect.stringContaining('tus propias herramientas') });
   });
 });

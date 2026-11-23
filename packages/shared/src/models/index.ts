@@ -206,6 +206,8 @@ export interface Agent {
   description: string | null;
   /** When it works on its own (cron, Madrid time), or null when only when asked. */
   schedule: string | null;
+  /** The connected accounts (providers) it may use; null for every one the organisation connects. */
+  accounts: string[] | null;
   createdAt: string;
 }
 

@@ -73,6 +73,12 @@ export interface AgentTools {
   writes(name: string): boolean;
   /** What the approval card says a writing tool will do. */
   actionFor(name: string): string;
+  /** For a writing tool that can say exactly what it will change (a setting): the card's label and preview. Throws on bad input. */
+  describe?(name: string, input: Record<string, unknown>): Promise<{ label: string; preview: string } | null>;
+  /** The connected account a tool belongs to; undefined for one that belongs to none. */
+  providerOf?(name: string): string | undefined;
+  /** The provider of each line of `accounts`, in the same order. */
+  accountProviders?: string[];
   run(name: string, input: unknown): Promise<ToolOutcome>;
 }
 
@@ -84,3 +90,40 @@ export const NO_TOOLS: AgentTools = {
   actionFor: (name) => name,
   run: async (name) => ({ content: `No existe la herramienta ${name}.`, isError: true }),
 };
+
+/**
+ * Only the tools of the connected accounts one agent may use (agents.accounts,
+ * set by an owner); null leaves every one.
+ */
+export function restrictTo(tools: AgentTools, allowed: readonly string[] | null | undefined): AgentTools {
+  if (allowed == null || !tools.providerOf) return tools;
+  const ok = (name: string) => {
+    const p = tools.providerOf?.(name);
+    return p !== undefined && allowed.includes(p);
+  };
+  const keep = (tools.accountProviders ?? []).map((p) => allowed.includes(p));
+  return {
+    ...tools,
+    specs: tools.specs.filter((s) => ok(s.name)),
+    accounts: tools.accounts.filter((_, i) => keep[i]),
+    accountProviders: tools.accountProviders?.filter((_, i) => keep[i]),
+    run: (name, input) => (ok(name) ? tools.run(name, input) : NO_TOOLS.run(name, input)),
+  };
+}
+
+/** Two sets of tools as one; a name in both keeps the first's. */
+export function mergeTools(a: AgentTools, b: AgentTools): AgentTools {
+  const inA = new Set(a.specs.map((s) => s.name));
+  const pick = (name: string) => (inA.has(name) ? a : b);
+  return {
+    specs: [...a.specs, ...b.specs.filter((s) => !inA.has(s.name))],
+    accounts: [...a.accounts, ...b.accounts],
+    accountProviders: [...(a.accountProviders ?? a.accounts.map(() => '')), ...(b.accountProviders ?? b.accounts.map(() => ''))],
+    stepFor: (name) => pick(name).stepFor(name),
+    writes: (name) => pick(name).writes(name),
+    actionFor: (name) => pick(name).actionFor(name),
+    describe: async (name, input) => (await pick(name).describe?.(name, input)) ?? null,
+    providerOf: (name) => pick(name).providerOf?.(name),
+    run: (name, input) => pick(name).run(name, input),
+  };
+}

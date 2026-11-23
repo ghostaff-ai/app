@@ -750,6 +750,7 @@ interface AgentRow {
   runner: AgentRunner;
   description: string | null;
   schedule: string | null;
+  accounts: string[] | null;
   created_at: string;
 }
 
@@ -764,11 +765,12 @@ export function agentFromRow(r: AgentRow): Agent {
     runner: r.runner ?? 'chat',
     description: r.description ?? null,
     schedule: r.schedule ?? null,
+    accounts: r.accounts ?? null,
     createdAt: r.created_at,
   };
 }
 
-const AGENT_COLUMNS = 'id, org_id, name, ghost, department, member_default, runner, description, schedule, created_at';
+const AGENT_COLUMNS = 'id, org_id, name, ghost, department, member_default, runner, description, schedule, accounts, created_at';
 
 /** The organisation's agents, oldest first. */
 export async function listAgents(client: SupabaseClient, orgId: string): Promise<Agent[]> {
@@ -800,6 +802,12 @@ export async function createAgent(client: SupabaseClient, a: NewAgent): Promise<
 /** Removes an agent from its team. Owners only. */
 export async function deleteAgent(client: SupabaseClient, id: string): Promise<void> {
   const { error } = await client.rpc('delete_agent', { agent_id: id });
+  if (error) throw error;
+}
+
+/** Which connected accounts the agent may use: the providers, or null for every one. Owners only. */
+export async function setAgentAccounts(client: SupabaseClient, agentId: string, providers: readonly string[] | null): Promise<void> {
+  const { error } = await client.rpc('set_agent_accounts', { target_agent: agentId, providers });
   if (error) throw error;
 }
 
@@ -1070,3 +1078,4 @@ export async function listDoneWithoutYou(client: SupabaseClient, orgId: string, 
   if (error) throw error;
   return (data ?? []).map(agentRunFromRow);
 }
+export * from './settings';

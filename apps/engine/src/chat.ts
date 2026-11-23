@@ -6,9 +6,10 @@
 // and writes the reply as it comes: a «working» message with a line of what it
 // is doing, its text growing, then «done». Everyone in the thread sees it live.
 //
-// An agent has the tools of the organisation's connected accounts (accounts.ts,
-// docs/plans/ongoing/connectors.md) and nothing else yet: no record, no mail. It
-// says so when asked for something that needs them.
+// An agent has the tools of the connected accounts an owner lets it use
+// (accounts.ts, docs/plans/ongoing/connectors.md); the main agent also the
+// organisation's settings (settings.ts). No record, no mail yet: it says so
+// when asked for something that needs them.
 
 import { AGENT_JOBS, type AgentGhost, type ChatMessage, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
 import type { ActionPart } from '@ghostaff/shared';
@@ -16,7 +17,9 @@ import { previewOf } from './actions';
 import { Refusal } from './connections';
 import { askJob, type JobDeps } from './jobs';
 import { askRunner } from './runner';
-import type { AgentTools } from './tools';
+import { isMainAgent } from '@ghostaff/shared/services';
+import { type AsPerson, settingsTools } from './settings';
+import { type AgentTools, mergeTools, restrictTo } from './tools';
 
 export type Level = 'none' | 'read' | 'talk';
 
@@ -28,6 +31,8 @@ export interface ChatAgent {
   department: string;
   /** How it runs (supabase/migrations/20261121100000_agent_runners.sql); a job agent answers through its job. */
   runner?: 'chat' | 'ordago_job' | 'ghostaff';
+  /** The connected accounts it may use (agents.accounts); null or absent for every one. */
+  accounts?: string[] | null;
 }
 
 export interface ChatThreadHead {
@@ -148,6 +153,8 @@ export interface ChatDeps {
   costOf?(account: AiAccount, model: string, tokens: TokenUsage): number | null;
   /** The tools of the organisation's connected accounts. */
   toolsFor(orgId: string): Promise<AgentTools>;
+  /** A client signed in as a person: the main agent reads the settings as whoever asked (settings.ts). */
+  asPerson?: AsPerson;
   /** Agents that run as jobs (jobs.ts); without it every agent answers with the model. */
   jobs?: JobDeps;
   /** How often the growing text is written to the database. */
@@ -191,11 +198,18 @@ function reachLines(accounts: string[], today: string): string[] {
   ];
 }
 
+/** What the main agent is told about changing the organisation's settings (agent-settings.md). */
+const SETTINGS_LINES = [
+  'Eres el agente principal: puedes cambiar la configuración de la organización en Ghostaff, lo mismo que una persona propietaria cambia en la app (qué agentes hay, qué cuentas conectadas usa cada uno, quién puede ver o hablar con cada agente, el orden de las cuentas de IA, las invitaciones). Mira antes la configuración con settings_read.',
+  'Cada cambio queda como propuesta hasta que alguien propietario la aprueba. Propón un cambio solo cuando te lo pidan o cuando lo expliques y lo justifiques en la conversación.',
+  'Nunca puedes: conectar o desconectar cuentas ni tocar claves, cambiar propietarios o quitar personas, borrar agentes o datos, ni darte más herramientas a ti. Si te lo piden, explica que eso se hace en la app.',
+];
+
 /** The agent's standing instructions. Spanish, first person, «tú» (app-design.md #17). */
 export function systemPrompt(
   agent: ChatAgent,
   orgName: string,
-  opts: { broughtInto?: string; accounts?: string[]; now?: Date } = {},
+  opts: { broughtInto?: string; accounts?: string[]; now?: Date; settings?: boolean } = {},
 ): string {
   const job = AGENT_JOBS[agent.ghost]?.job ?? '';
   const broughtInto = opts.broughtInto;
@@ -208,6 +222,7 @@ export function systemPrompt(
     'Hablas en una conversación compartida: pueden escribir varias personas de la organización; cada mensaje de una persona empieza con su nombre.',
     'Contesta en español, en primera persona y de tú, breve y concreto, sin fórmulas de cortesía. Usa listas solo si ayudan.',
     ...reachLines(opts.accounts ?? [], madridNow(opts.now ?? new Date())),
+    ...(opts.settings ? SETTINGS_LINES : []),
     'No inventes datos de la organización. Si no sabes algo, pregúntalo.',
     'Cuando algo necesite la decisión de una persona, dilo de forma explícita.',
   ]
@@ -296,7 +311,13 @@ async function writeReply(
         return { content: 'La entrada de la herramienta tiene que ser un objeto.', isError: true };
       }
       if (actions.length >= 5) return { content: 'Ya hay cinco propuestas en este mensaje: espera a que se decidan.', isError: true };
-      const label = tools.actionFor(name);
+      let described: { label: string; preview: string } | null = null;
+      try {
+        described = (await tools.describe?.(name, input as Record<string, unknown>)) ?? null;
+      } catch (e) {
+        return { content: e instanceof Error && e.message ? e.message : 'La propuesta no es válida.', isError: true };
+      }
+      const label = (described?.label ?? tools.actionFor(name)).slice(0, 200);
       const actionId = await deps.chat.proposeAction({
         orgId: agent.orgId,
         threadId: who.threadId,
@@ -307,7 +328,7 @@ async function writeReply(
         label,
         requestedBy: who.userId,
       });
-      actions.push({ type: 'action', actionId, label, preview: previewOf(input), status: 'pending' });
+      actions.push({ type: 'action', actionId, label, preview: described ? described.preview : previewOf(input), status: 'pending' });
       const snapshot = text;
       pending = pending.then(() => deps.chat.updateReply(replyId, withActions(snapshot))).catch(() => {});
       return {
@@ -407,7 +428,7 @@ async function recordUse(
  * if they should, each with the rights of the person who asked. Resolves when
  * the replies are written (Cloud Run keeps the CPU only while a request is open).
  */
-export async function replyInThread(deps: ChatDeps, userId: string, threadId: unknown): Promise<{ replied: boolean }> {
+export async function replyInThread(deps: ChatDeps, userId: string, threadId: unknown, accessToken?: string): Promise<{ replied: boolean }> {
   if (!isUuid(threadId)) throw new Refusal(400, 'bad_request', 'thread must be a uuid');
   const thread = await deps.chat.thread(threadId);
   if (!thread) throw new Refusal(404, 'not_found', 'thread not found');
@@ -421,6 +442,13 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
     deps.chat.orgAgents(thread.orgId),
     deps.toolsFor(thread.orgId),
   ]);
+  // Each agent gets the accounts an owner let it use; the main agent also the settings, read as whoever asked.
+  const toolsOf = (who: ChatAgent): AgentTools => {
+    const own = restrictTo(tools, who.accounts);
+    if (!isMainAgent(who) || !deps.asPerson || !accessToken) return own;
+    return mergeTools(own, settingsTools({ client: deps.asPerson(accessToken), orgId: who.orgId, agentId: who.id }));
+  };
+  const withSettings = (who: ChatAgent) => isMainAgent(who) && !!deps.asPerson && !!accessToken;
   const now = new Date(deps.now ? deps.now() : Date.now());
   let replied = false;
   let handled: string | null = null;
@@ -433,7 +461,17 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
     if (messages.length === 0) {
       const replyId = await deps.chat.startReply(thread, agent, ['Presentándome']);
       if (!replyId) break;
-      await writeReply(deps, replyId, agent, systemPrompt(agent, orgName, { accounts: tools.accounts, now }), [introTurn(orgName)], tools, { threadId: thread.id, userId }, 'Presentándome');
+      const mine = toolsOf(agent);
+      await writeReply(
+        deps,
+        replyId,
+        agent,
+        systemPrompt(agent, orgName, { accounts: mine.accounts, now, settings: withSettings(agent) }),
+        [introTurn(orgName)],
+        mine,
+        { threadId: thread.id, userId },
+        'Presentándome',
+      );
       replied = true;
       continue;
     }
@@ -460,12 +498,14 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
       }
       // A second agent reads the first one's answer too.
       const history = i === 0 ? messages : await deps.chat.recentMessages(thread.id, 40);
+      const mine = toolsOf(who);
       const system = systemPrompt(who, orgName, {
         broughtInto: who.id === agent.id ? undefined : agent.name,
-        accounts: tools.accounts,
+        accounts: mine.accounts,
         now,
+        settings: withSettings(who),
       });
-      await writeReply(deps, replyId, who, system, toTurns(history, who.id), tools, { threadId: thread.id, userId });
+      await writeReply(deps, replyId, who, system, toTurns(history, who.id), mine, { threadId: thread.id, userId });
       replied = true;
     }
   }
