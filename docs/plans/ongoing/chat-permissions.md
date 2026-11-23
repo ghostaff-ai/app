@@ -2,7 +2,7 @@
 
 **Priority:** high — privacy: who sees what a person says to an agent
 **Gate:** none
-**Next:** land #58 with `pnpm pr:land`, then check it on the beta app with two people (a private conversation, a shared one)
+**Next:** check it on the beta app with two people: a private conversation the other can't see, a shared one they read, and the «Solo lectura» reason
 
 Jaime's Trello card (2026-11-23), «permisos de escritura en chats por otros miembros del equipo»: «esto tiene que ser por agente y por conversación, o sea yo puedo ser owner de un agente y hacer una conversación que quiero que lean o que no, o no ser dueño de un agente y abrir una conversación que no quiero que vean, esto es un tema».
 
@@ -120,7 +120,7 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 - [x] 2. Engine: `thread_level_for` in `replyInThread`, with tests.
 - [x] 3. Shared services, types and the settings classification and tool.
 - [x] 4. Screens: new conversation with the picker, the audience line and the «Quién la ve» screen, the agent's page («Nueva conversación», «Conversaciones», «Conversaciones nuevas» for owners), Equipo's followed rows, the read-only reason.
-- [ ] 5. Check: `pnpm check` green; pgTAP 300/300 on a fresh database with every migration; checked on the web against a local Supabase of its own (Bea opens a private conversation, shares it, Dani reads it with «Solo lectura · Pide acceso a Ana», Ana writes, Bea can no longer make it private and is told why; light and dark). Not run: `pnpm e2e` locally (CI runs the new flow `conversation-visibility`); not checked on a phone.
+- [x] 5. Check (landed as #58, 2026-11-23, its CI green with the new e2e flow): `pnpm check` green; pgTAP 331/331 on a fresh database with every migration (health and voice notes included); checked on the web against a local Supabase of its own (Bea opens a private conversation, shares it, Dani reads it with «Solo lectura · Pide acceso a Ana», Ana writes, Bea can no longer make it private and is told why; light and dark). Not run: `pnpm e2e` locally (CI runs the new flow `conversation-visibility`); not checked on a phone.
 
 ## Handoff
 
