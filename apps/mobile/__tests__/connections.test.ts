@@ -3,7 +3,9 @@ import { EngineError } from '@ghostaff/shared/services';
 import {
   accountErrorMessage,
   accountResultMessage,
+  aiAccountAhead,
   aiAccountName,
+  aiOrderWithFirst,
   aiUsageLine,
   canRunAgents,
   claudeSignInMessage,
@@ -166,5 +168,53 @@ describe('an AI account in the list', () => {
     expect(resetLabel('2026-11-22T12:40:00Z', now)).toBe('en 40 min');
     expect(resetLabel('2026-11-22T15:00:00Z', now)).toBe('en 3 h');
     expect(resetLabel('2026-11-22T11:00:00Z', now)).toBe('ya');
+  });
+});
+
+// Jaime (2026-11-23): he added his Claude sign-in and the agents kept using the
+// first account. A new account goes last, as a spare; its page says which one
+// the agents use before it and offers to put it first.
+describe('an AI account that is not first', () => {
+  const account = (id: string, position: number, kind: Connection['kind'] = 'ai'): Connection => ({
+    id,
+    orgId: 'o',
+    kind,
+    provider: kind === 'ai' ? 'claude' : 'google',
+    method: kind === 'ai' ? 'subscription' : 'oauth',
+    hint: 'abcd',
+    settings: {},
+    status: 'ok',
+    statusReason: null,
+    checkedAt: '',
+    connectedByName: 'Ana',
+    updatedAt: '',
+    position,
+    label: `Cuenta ${id}`,
+    limits: {},
+    lastUsedAt: null,
+  } as Connection);
+  // As listConnections returns them: outside accounts (position 0) mixed in.
+  const items = [account('google', 0, 'account'), account('a', 1), account('b', 2), account('c', 3)];
+
+  it('names the account the agents use before it', () => {
+    expect(aiAccountAhead(items, 'b')?.id).toBe('a');
+    expect(aiAccountAhead(items, 'c')?.id).toBe('a');
+  });
+
+  it('has none ahead when it is first, or not an AI account of the list', () => {
+    expect(aiAccountAhead(items, 'a')).toBeNull();
+    expect(aiAccountAhead(items, 'google')).toBeNull();
+    expect(aiAccountAhead(items, 'gone')).toBeNull();
+  });
+
+  it('put first, the others keep their order behind it', () => {
+    expect(aiOrderWithFirst(items, 'c')).toEqual(['c', 'a', 'b']);
+    expect(aiOrderWithFirst(items, 'a')).toEqual(['a', 'b', 'c']);
+  });
+
+  it('follows the owner\'s order, not the order the rows came in', () => {
+    const shuffled = [account('c', 3), account('a', 1), account('b', 2)];
+    expect(aiAccountAhead(shuffled, 'b')?.id).toBe('a');
+    expect(aiOrderWithFirst(shuffled, 'b')).toEqual(['b', 'a', 'c']);
   });
 });

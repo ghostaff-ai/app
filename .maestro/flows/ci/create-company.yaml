@@ -100,6 +100,24 @@ name: A new person creates a company, connects its AI, walks its three tabs and 
     visible: "1. Claude con tu suscripción"
     timeout: 15000
 - assertVisible: "2. Claude con tu clave"
+# An account that is not first says which one the agents use before it, and
+# «Usar esta primero» puts it back on top.
+- tapOn:
+    id: "ai-account-2"
+- extendedWaitUntil:
+    visible: "Tus agentes usan antes «Claude con tu suscripción».*"
+    timeout: 15000
+- tapOn:
+    id: "ai-use-first"
+- extendedWaitUntil:
+    notVisible:
+      id: "ai-used-before"
+    timeout: 15000
+- back
+- extendedWaitUntil:
+    visible: "1. Claude con tu clave"
+    timeout: 15000
+- assertVisible: "2. Claude con tu suscripción"
 # «Añadir conexión» opens everything there is to connect.
 - tapOn:
     id: "add-connection"

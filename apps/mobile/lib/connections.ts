@@ -70,6 +70,27 @@ export const AI_ORDER: readonly AiProvider[] = ['vertex', 'claude', 'anthropic',
 /** An AI account's name: the one an owner gave it, else its kind's. */
 export const aiAccountName = (c: Pick<Connection, 'label' | 'provider'>) => c.label ?? PROVIDERS[c.provider as AiProvider]?.name ?? c.provider;
 
+/** The organisation's AI accounts in the owner's order, the one the agents use first at the top. */
+const aiAccountsInOrder = (items: readonly Connection[]) => items.filter((i) => i.kind === 'ai').sort((a, b) => a.position - b.position);
+
+/**
+ * The account the agents use before this one, or null when it is first (or not
+ * one of the list). A new account goes last, as a spare (multiple-ai-accounts.md):
+ * its page names this one so nobody expects the new one to answer.
+ */
+export function aiAccountAhead(items: readonly Connection[], id: string): Connection | null {
+  const ordered = aiAccountsInOrder(items);
+  if (!ordered.some((c) => c.id === id)) return null;
+  const first = ordered[0];
+  return first && first.id !== id ? first : null;
+}
+
+/** Every AI account's id, this one first and the rest as they were: what «Usar esta primero» saves. */
+export function aiOrderWithFirst(items: readonly Connection[], id: string): string[] {
+  const ids = aiAccountsInOrder(items).map((c) => c.id);
+  return ids.includes(id) ? [id, ...ids.filter((x) => x !== id)] : ids;
+}
+
 /** Why an AI account is failing, in a few words. */
 export function failingText(reason: Connection['statusReason']): string {
   switch (reason) {
