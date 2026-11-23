@@ -90,6 +90,8 @@ export function failureKind(e: unknown): FailureKind {
 /** The database as the chat needs it (service role). */
 export interface ChatStore {
   levelFor(agentId: string, userId: string): Promise<Level>;
+  /** A member's level on one conversation: their level on its agent, lowered by who the conversation is for (chat-permissions.md). */
+  threadLevelFor(threadId: string, userId: string): Promise<Level>;
   thread(id: string): Promise<ChatThreadHead | null>;
   agent(id: string): Promise<ChatAgent | null>;
   /** All the organisation's agents (to find one brought in by an @mention). */
@@ -280,6 +282,11 @@ async function requireTalk(deps: ChatDeps, agentId: string, userId: string) {
   if ((await deps.chat.levelFor(agentId, userId)) !== 'talk') throw new Refusal(403, 'not_allowed', 'you may not talk to this agent');
 }
 
+/** Talking to the agent is not enough: the conversation must be one the person may write in (not someone else's private one). */
+async function requireTalkIn(deps: ChatDeps, threadId: string, userId: string) {
+  if ((await deps.chat.threadLevelFor(threadId, userId)) !== 'talk') throw new Refusal(403, 'not_allowed', 'you may not write in this conversation');
+}
+
 /**
  * Writes one reply into the message `replyId`, streaming. Returns when done;
  * never throws (a failure is written into the message).
@@ -433,7 +440,7 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
   if (!isUuid(threadId)) throw new Refusal(400, 'bad_request', 'thread must be a uuid');
   const thread = await deps.chat.thread(threadId);
   if (!thread) throw new Refusal(404, 'not_found', 'thread not found');
-  await requireTalk(deps, thread.agentId, userId);
+  await requireTalkIn(deps, thread.id, userId);
   const agent = await deps.chat.agent(thread.agentId);
   if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
 

@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ACCOUNT_PROVIDERS, type AccountProvider, connectorFor } from '../connectors';
-import { AGENT_GHOSTS, AGENT_LEVELS, type AgentGhost, type AgentLevel, type Department, DEPARTMENTS } from '../models';
+import { AGENT_GHOSTS, AGENT_LEVELS, type AgentGhost, type AgentLevel, CONVERSATION_VISIBILITIES, type ConversationVisibility, type Department, DEPARTMENTS } from '../models';
 import {
   createAgent,
   inviteMember,
@@ -24,6 +24,7 @@ import {
   revokeInvitation,
   setAgentAccess,
   setAgentAccounts,
+  setAgentChatDefault,
   setAiOrder,
 } from './index';
 
@@ -75,6 +76,12 @@ function oneOf<T extends string>(input: Record<string, unknown>, key: string, al
 }
 
 const LEVEL_WORDS: Record<AgentLevel, string> = { none: 'nada', read: 'ver', talk: 'hablar' };
+
+const VISIBILITY_WORDS: Record<ConversationVisibility, string> = {
+  private: 'solo quien la abre',
+  read: 'el equipo puede leer',
+  write: 'el equipo puede escribir',
+};
 
 const providerName = (p: string) => ((ACCOUNT_PROVIDERS as readonly string[]).includes(p) ? connectorFor(p as AccountProvider).name : p);
 
@@ -133,6 +140,7 @@ export const SETTING_TOOLS: SettingTool[] = [
           you: a.id === ctx.agentId,
           accounts: a.accounts ?? 'all',
           member_default: a.memberDefault,
+          chat_default: a.chatDefault,
           access: access[i]?.filter((p) => p.role !== 'owner').map((p) => ({ user_id: p.userId, name: p.displayName, level: p.level })) ?? undefined,
         })),
         connected_accounts: connections
@@ -234,6 +242,35 @@ export const SETTING_TOOLS: SettingTool[] = [
       const level = oneOf<AgentLevel>(input, 'level', AGENT_LEVELS);
       await setAgentAccess(ctx.client, agent.id, member.userId, level);
       return `${member.displayName} puede ahora ${LEVEL_WORDS[level]} con ${agent.name}.`;
+    },
+  },
+  {
+    name: 'settings_agent_chat_default',
+    description:
+      "Propose who reads a new conversation with one agent unless whoever opens it chooses otherwise: 'private' (only them), 'read' (everyone who may see the agent reads it) or 'write' (they may also write, by their level on the agent). It never changes a conversation already open: those are their openers' alone.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        agent_id: { type: 'string' },
+        visibility: { type: 'string', enum: [...CONVERSATION_VISIBILITIES] },
+      },
+      required: ['agent_id', 'visibility'],
+    },
+    writes: true,
+    step: 'Preparando el cambio de conversaciones',
+    async describe(ctx, input) {
+      const agent = await agentOf(ctx, uuid(input, 'agent_id'));
+      const visibility = oneOf<ConversationVisibility>(input, 'visibility', CONVERSATION_VISIBILITIES);
+      return {
+        label: `Cambiar quién lee las conversaciones nuevas con ${agent.name}`,
+        preview: `Ahora: ${VISIBILITY_WORDS[agent.chatDefault]}\nDespués: ${VISIBILITY_WORDS[visibility]}`,
+      };
+    },
+    async run(ctx, input) {
+      const agent = await agentOf(ctx, uuid(input, 'agent_id'));
+      const visibility = oneOf<ConversationVisibility>(input, 'visibility', CONVERSATION_VISIBILITIES);
+      await setAgentChatDefault(ctx.client, agent.id, visibility);
+      return `Las conversaciones nuevas con ${agent.name}: ${VISIBILITY_WORDS[visibility]}, salvo que quien la abra elija otra cosa.`;
     },
   },
   {
@@ -383,6 +420,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   create_agent: { reach: 'agent', tool: 'settings_create_agent' },
   set_agent_accounts: { reach: 'agent', tool: 'settings_agent_accounts' },
   set_agent_access: { reach: 'agent', tool: 'settings_agent_access' },
+  set_agent_chat_default: { reach: 'agent', tool: 'settings_agent_chat_default' },
   set_ai_order: { reach: 'agent', tool: 'settings_ai_order' },
   rename_ai_connection: { reach: 'agent', tool: 'settings_rename_ai_account' },
   invite_member: { reach: 'agent', tool: 'settings_invite_member' },
@@ -391,6 +429,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   delete_agent: { reach: 'never', why: "it deletes the agent's conversations: the organisation's data" },
   answer_decision: { reach: 'never', why: "a decision is the person's to take" },
   unanswer_decision: { reach: 'never', why: "a decision is the person's to take" },
+  set_conversation_visibility: { reach: 'never', why: "a conversation's privacy is its opener's alone" },
   accept_invitation: { reach: 'never', why: 'a person joins an organisation themselves' },
   save_profile: { reach: 'never', why: "a person's own profile" },
   create_organization: { reach: 'never', why: 'a new organisation is outside this one' },
@@ -401,6 +440,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   ai_usage_daily: { reach: 'not_a_setting' },
   can_hear_voice_note: { reach: 'not_a_setting' },
   chat_with: { reach: 'not_a_setting' },
+  conversation_readers: { reach: 'not_a_setting' },
   connections_place_last: { reach: 'not_a_setting' },
   hire_secretaria: { reach: 'not_a_setting' },
   invitations_not_personal: { reach: 'not_a_setting' },
@@ -420,6 +460,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   start_thread: { reach: 'not_a_setting' },
   take_refresh_lease: { reach: 'not_a_setting' },
   thread_level: { reach: 'not_a_setting' },
+  thread_level_for: { reach: 'not_a_setting' },
 };
 
 /**

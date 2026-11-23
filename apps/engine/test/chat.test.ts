@@ -35,6 +35,8 @@ function msg(p: Partial<ChatMessage> & { text: string }): ChatMessage {
 function setup(
   opts: {
     levels?: Record<string, Level>;
+    /** Each person's level on the thread, when it differs from theirs on the agent (a private conversation). */
+    threadLevels?: Record<string, Level>;
     accounts?: AiAccount[];
     write?: Writer;
     /** A writer per account id; the others write with `write`. */
@@ -60,6 +62,7 @@ function setup(
   const replier = new Map<string, ChatAgent>();
   const chat: ChatStore = {
     levelFor: async (a, u) => levels[a === REDES ? `${u}/redes` : u] ?? 'none',
+    threadLevelFor: async (_t, u) => opts.threadLevels?.[u] ?? levels[u] ?? 'none',
     thread: async (id) => threads.find((t) => t.id === id) ?? null,
     agent: async (id) => (id === AGENT ? threadAgent : null),
     orgAgents: async () => [threadAgent, redes],
@@ -249,6 +252,12 @@ describe('an agent answering in a thread', () => {
     const { call, updates } = setup();
     expect((await call('bea', `/threads/${THREAD}/reply`)).status).toBe(403);
     expect((await call('carla', `/threads/${THREAD}/reply`)).status).toBe(403);
+    expect(updates).toEqual([]);
+  });
+
+  it("refuses someone who talks to the agent but not in this conversation (someone else's private one)", async () => {
+    const { call, updates } = setup({ levels: { ana: 'talk', bea: 'talk' }, threadLevels: { bea: 'none' } });
+    expect((await call('bea', `/threads/${THREAD}/reply`)).status).toBe(403);
     expect(updates).toEqual([]);
   });
 

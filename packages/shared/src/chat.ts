@@ -4,6 +4,8 @@
 // parts in the AI SDK's shape, so the agents can later add tool calls, files or
 // decisions beside the text.
 
+import type { ConversationVisibility } from './models';
+
 export type MessagePart = { type: 'text'; text: string } | { type: string; [key: string]: unknown };
 
 /**
@@ -79,6 +81,12 @@ export interface ChatThread {
   unread: boolean;
   /** The person's own chat with the agent (one per agent). */
   personal: boolean;
+  /** Who besides its opener reads or writes it; a personal chat is always private. */
+  visibility: ConversationVisibility;
+  /** The person opened it (or it is their chat with the agent). */
+  mine: boolean;
+  /** The person opened it, wrote, read or was @mentioned in it: Equipo shows it. */
+  following: boolean;
 }
 
 export interface OrgMember {

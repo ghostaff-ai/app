@@ -51,6 +51,24 @@ describe('what the main agent may change (agent-settings.md)', () => {
     const tool = SETTING_TOOLS.find((t) => t.name === 'settings_agent_accounts')!;
     await expect(tool.describe!(ctx, { agent_id: self, providers: null })).rejects.toBeInstanceOf(SettingError);
   });
+
+  it("proposes an agent's default for new conversations, never an open one's (chat-permissions.md)", async () => {
+    const finanzas = '20000000-0000-0000-0000-000000000002';
+    const rows = [{ id: finanzas, org_id: 'o', name: 'Finanzas', ghost: 'finanzas', department: 'finanzas', member_default: 'read', chat_default: 'private', runner: 'chat', accounts: null, created_at: '' }];
+    const query = { select: () => query, eq: () => query, order: () => query, returns: async () => ({ data: rows, error: null }) };
+    const calls: Array<[string, unknown]> = [];
+    const client = { from: () => query, rpc: async (fn: string, args: unknown) => (calls.push([fn, args]), { data: null, error: null }) } as unknown as SupabaseClient;
+    const ctx: SettingsContext = { client, orgId: 'o', agentId: '20000000-0000-0000-0000-000000000001' };
+    const tool = SETTING_TOOLS.find((t) => t.name === 'settings_agent_chat_default')!;
+    expect(await tool.describe!(ctx, { agent_id: finanzas, visibility: 'read' })).toEqual({
+      label: 'Cambiar quién lee las conversaciones nuevas con Finanzas',
+      preview: 'Ahora: solo quien la abre\nDespués: el equipo puede leer',
+    });
+    await expect(tool.describe!(ctx, { agent_id: finanzas, visibility: 'everyone' })).rejects.toBeInstanceOf(SettingError);
+    await tool.run(ctx, { agent_id: finanzas, visibility: 'read' });
+    expect(calls).toEqual([['set_agent_chat_default', { target_agent: finanzas, new_default: 'read' }]]);
+    expect(DATABASE_FUNCTIONS.set_conversation_visibility?.reach).toBe('never');
+  });
 });
 
 describe('a refused settings change, as people read it', () => {
