@@ -3,17 +3,22 @@ import { File } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
-// Dictation (voice.md): record a note, have the engine turn it into text, hand
-// the text to the caller. Nothing is kept: the recording is deleted once read
-// and the person reviews the text before sending it.
+// Voice notes (voice.md), as in WhatsApp: tap the mic, speak, send. The note
+// goes to the engine as audio, which keeps it and transcribes it. The file on
+// the phone is deleted once read; a note that couldn't go yet stays in memory
+// until it is sent or discarded.
 
-/** A note stops by itself at 10:00, as if «parar» were pressed. */
+/** A note stops by itself at 10:00 and is sent. */
 export const MAX_SECONDS = 600;
 
+/** Shorter than this, the mic was tapped by mistake: nothing is sent. */
+const MIN_MILLIS = 1000;
+
 /**
- * Speech, not music: mono, 16 kHz, 32 kbit/s. AAC in an .m4a on iOS and
- * Android, WebM/Opus on the web (the browser's own MediaRecorder format). Ten
- * minutes come to about 2.4 MB, far under the engine's 20 MB limit.
+ * Speech, not music: mono, 16 kHz, 32 kbit/s, AAC in an .m4a everywhere it can
+ * be, so a note recorded on a computer plays on an iPhone. The web asks the
+ * browser for AAC in MP4 (Chrome, Safari) and gets its own format where it has
+ * none (Firefox's WebM). Ten minutes come to about 2.4 MB, under the engine's 10 MB.
  */
 export const SPEECH: RecordingOptions = {
   extension: '.m4a',
@@ -28,60 +33,63 @@ export const SPEECH: RecordingOptions = {
     linearPCMIsBigEndian: false,
     linearPCMIsFloat: false,
   },
-  web: { mimeType: 'audio/webm', bitsPerSecond: 32000 },
+  web: { mimeType: 'audio/mp4;codecs=mp4a.40.2', bitsPerSecond: 32000 },
 };
 
-export type DictationState = 'idle' | 'recording' | 'transcribing';
+export type VoiceNoteState = 'idle' | 'recording' | 'sending';
 
 /** Between the press and the first sound: permission, audio session, prepare. Internal; the screen sees it as idle. */
-type Phase = DictationState | 'starting';
+type Phase = VoiceNoteState | 'starting';
+
+export interface RecordedNote {
+  audio: Blob;
+  mimeType: string;
+  durationMs: number;
+}
 
 export const DENIED = 'Ghostaff no tiene permiso para usar el micrófono. Actívalo en los ajustes.';
-const NOTHING_HEARD = 'No he oído nada. Inténtalo otra vez.';
-const TOO_MANY = 'Has dictado mucho en la última hora. Espera un poco.';
-const FAILED = 'No he podido transcribirlo. Inténtalo otra vez.';
-const TOO_LONG = 'La nota es demasiado larga.';
 const NOT_RECORDED = 'No he podido grabar. Inténtalo otra vez.';
+const TOO_SHORT = 'La nota es demasiado corta.';
+const NOT_SENT = 'No se ha enviado la nota.';
+const TOO_MANY = 'Has enviado muchas notas de voz en la última hora. Espera un poco.';
+const TOO_LONG = 'La nota es demasiado larga.';
+const STOPPED = 'La nota se ha parado sin enviar.';
 
 /**
  * The recording's bytes and the type to send. A phone's file is always what the
  * preset writes (AAC in an .m4a, `audio/mp4`): the file read may call it
- * `audio/x-m4a`, which Vertex doesn't list. The web hands over a typed blob URL.
+ * `audio/x-m4a`. The web hands over a typed blob URL.
  */
 async function readRecording(uri: string): Promise<{ audio: Blob; mimeType: string }> {
   const audio = await (await fetch(uri)).blob();
   return { audio, mimeType: uri.startsWith('blob:') ? audio.type || 'audio/webm' : 'audio/mp4' };
 }
 
-export function useDictation({
-  onText,
-  transcribe,
-}: {
-  onText: (text: string) => void;
-  transcribe: (audio: Blob, mimeType: string) => Promise<string>;
-}) {
+export function useVoiceNote({ send }: { send: (note: RecordedNote) => Promise<void> }) {
   const recorder = useAudioRecorder(SPEECH);
-  const [state, setState] = useState<DictationState>('idle');
+  const [state, setState] = useState<VoiceNoteState>('idle');
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [canRetry, setCanRetry] = useState(false);
+  /** Whether a note waits to be sent again or discarded. */
+  const [held, setHeld] = useState(false);
 
   // What the callbacks below need to see now, not as of the render that made them.
   const phase = useRef<Phase>('idle');
   const clock = useRef<ReturnType<typeof setInterval> | null>(null);
   const alive = useRef(true);
-  /** A recording whose transcription failed: in memory only (the file is already deleted), for «Reintentar». */
-  const kept = useRef<{ audio: Blob; mimeType: string } | null>(null);
-  const latest = useRef({ onText, transcribe });
-  latest.current = { onText, transcribe };
+  const lastMillis = useRef(0);
+  /** A note that didn't go: in memory only (the file is already deleted), for «Enviar». */
+  const kept = useRef<RecordedNote | null>(null);
+  const latest = useRef(send);
+  latest.current = send;
 
   const go = (next: Phase) => {
     phase.current = next;
     if (alive.current) setState(next === 'starting' ? 'idle' : next);
   };
-  const drop = () => {
-    kept.current = null;
-    if (alive.current) setCanRetry(false);
+  const hold = (note: RecordedNote | null) => {
+    kept.current = note;
+    if (alive.current) setHeld(note !== null);
   };
   const stopClock = () => {
     if (clock.current) clearInterval(clock.current);
@@ -101,65 +109,104 @@ export function useDictation({
   };
   const release = () => setAudioModeAsync({ allowsRecording: false }).catch(() => {});
 
-  /** Sends a recording to be transcribed; on a failure (not silence) it is kept for a retry. */
-  const transcribeNote = async (note: { audio: Blob; mimeType: string }) => {
+  /** Sends a note; on a failure it is kept to send again, unless it can never go. */
+  const deliver = async (note: RecordedNote) => {
     try {
-      const text = (await latest.current.transcribe(note.audio, note.mimeType)).trim();
+      await latest.current(note);
       if (!alive.current) return;
-      drop();
-      if (text) latest.current.onText(text);
-      else setError(NOTHING_HEARD);
+      hold(null);
     } catch (e) {
       if (!alive.current) return;
       const code = (e as { code?: string }).code;
-      setError(code === 'too_large' ? TOO_LONG : code === 'too_many' ? TOO_MANY : FAILED);
-      if (code !== 'too_large') {
-        kept.current = note;
-        setCanRetry(true);
-      } else drop();
+      setError(code === 'too_large' ? TOO_LONG : code === 'too_many' ? TOO_MANY : NOT_SENT);
+      hold(code === 'too_large' ? null : note);
     }
   };
 
-  const stop = useCallback(async () => {
-    if (phase.current !== 'recording') return;
+  /** Stops the recorder and reads the note into memory; null when there is nothing worth keeping. */
+  const finishRecording = async (): Promise<RecordedNote | null> => {
     stopClock();
-    go('transcribing');
+    // The last measure before stopping: after it the recorder reports zero.
+    const durationMs = Math.max(lastMillis.current, recorder.getStatus().durationMillis || 0);
     let uri: string | null = null;
     try {
       await recorder.stop();
       uri = recorder.uri;
       void release();
       if (!uri) throw new Error('no recording');
-      const note = await readRecording(uri);
-      discardFile(uri); // read into memory: the file is not needed any more
-      uri = null;
-      await transcribeNote(note);
+      if (durationMs < MIN_MILLIS) {
+        if (alive.current) setError(TOO_SHORT);
+        return null;
+      }
+      return { ...(await readRecording(uri)), durationMs };
     } catch {
-      if (alive.current) setError(FAILED);
+      if (alive.current) setError(NOT_RECORDED);
+      return null;
     } finally {
-      discardFile(uri);
+      discardFile(uri); // read into memory, or not worth keeping
+    }
+  };
+
+  /** «Enviar» while recording, and the 10:00 limit. */
+  const finish = useCallback(async () => {
+    if (phase.current !== 'recording') return;
+    go('sending');
+    try {
+      const note = await finishRecording();
+      if (note) await deliver(note);
+    } finally {
       go('idle');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorder]);
 
-  const retry = useCallback(async () => {
+  /**
+   * Something else stopped the note (a call took the microphone, the app went
+   * to the background): keep what there is, unsent, for the person to decide.
+   */
+  const interrupt = useCallback(async () => {
+    if (phase.current !== 'recording') return;
+    go('sending');
+    try {
+      const note = await finishRecording();
+      if (note && alive.current) {
+        hold(note);
+        setError(STOPPED);
+      }
+    } finally {
+      go('idle');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recorder]);
+
+  const resend = useCallback(async () => {
     const note = kept.current;
     if (phase.current !== 'idle' || !note) return;
     setError(null);
-    go('transcribing');
+    go('sending');
     try {
-      await transcribeNote(note);
+      await deliver(note);
     } finally {
       go('idle');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const discard = useCallback(() => {
+    setError(null);
+    hold(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Clears a passing message; a note waiting to be sent keeps its line. */
+  const clearError = useCallback(() => {
+    if (!kept.current) setError(null);
+  }, []);
+
   const start = useCallback(async () => {
     if (phase.current !== 'idle') return;
     setError(null);
-    drop();
+    hold(null);
     // Claimed now so a second press can't start another, and so that the
     // background event Android's permission dialog causes finds nothing to stop.
     phase.current = 'starting';
@@ -187,26 +234,28 @@ export function useDictation({
       return;
     }
     const began = Date.now();
+    lastMillis.current = 0;
     setSeconds(0);
     go('recording');
     // The recorder's own clock and state, not JS time: a call or another app
-    // taking the microphone stops it, and what it has is then transcribed.
+    // taking the microphone stops it, and what it has is kept unsent.
     clock.current = setInterval(() => {
       const status = recorder.getStatus();
       const stopped = !status.isRecording && Date.now() - began > 1000;
-      const s = Math.min(MAX_SECONDS, Math.floor(status.durationMillis / 1000));
+      if (status.durationMillis) lastMillis.current = status.durationMillis;
+      const s = Math.min(MAX_SECONDS, Math.floor(lastMillis.current / 1000));
       setSeconds(s);
-      if (stopped || s >= MAX_SECONDS) void stop();
+      if (s >= MAX_SECONDS) void finish();
+      else if (stopped) void interrupt();
     }, 250);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recorder, stop]);
+  }, [recorder, finish, interrupt]);
 
   const cancel = useCallback(async () => {
     if (phase.current !== 'recording') return;
     stopClock();
     go('idle');
     setSeconds(0);
-    drop();
     try {
       await recorder.stop();
     } catch {
@@ -217,21 +266,15 @@ export function useDictation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorder]);
 
-  const clearError = useCallback(() => {
-    setError(null);
-    drop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Recording happens only while the app is open: going to the background
-  // stops the note and transcribes what there is (never sent). While starting
-  // there is nothing to stop yet (Android's permission dialog sends the app there).
+  // stops the note and keeps it unsent. While starting there is nothing to stop
+  // yet (Android's permission dialog sends the app there).
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'background') void stop();
+      if (next === 'background') void interrupt();
     });
     return () => sub.remove();
-  }, [stop]);
+  }, [interrupt]);
 
   // Leaving the screen mid-note stops and discards it.
   useEffect(() => {
@@ -248,5 +291,5 @@ export function useDictation({
     };
   }, [recorder]);
 
-  return { state, seconds, error, canRetry, start, stop, cancel, retry, clearError };
+  return { state, seconds, error, held, start, finish, cancel, resend, discard, clearError };
 }

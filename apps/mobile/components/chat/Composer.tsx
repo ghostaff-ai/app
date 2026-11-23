@@ -1,31 +1,28 @@
 import { completeMention, mentionQuery, mentionSuggestions } from '@ghostaff/shared';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DictationBar } from '@/components/chat/DictationBar';
-import { ArrowUp, Eye, Icon, Microphone, Stop } from '@/components/icons';
+import { RecordingBar } from '@/components/chat/RecordingBar';
+import { ArrowUp, Eye, Icon, Microphone } from '@/components/icons';
 import { tap } from '@/lib/haptics';
-import { appendDictation } from '@/lib/chat';
-import { useDictation } from '@/lib/hooks/useDictation';
+import { type RecordedNote, useVoiceNote } from '@/lib/hooks/useVoiceNote';
 import { usePalette } from '@/lib/theme';
 
 // Where a person writes in a thread (team-chat.md): a growing text box and a
 // round send button; typing @ offers the agents and people that can be
-// mentioned. With «onDictate», a plain round mic sits beside send (speak, and
-// the text is appended to the box to review; nothing is sent on its own). With
-// «Ver» it turns into a quiet line saying who to ask.
+// mentioned. With «onVoiceNote», a plain round mic sits beside send: tap it,
+// speak, and send the voice note (voice.md). With «Ver» it turns into a quiet
+// line saying who to ask.
 
+/** What the database takes in one message (post_message). */
 const MAX_LENGTH = 8000;
-
-/** 8412 as «8 412». */
-const spaced = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 
 export function Composer({
   placeholder,
   names,
   onSend,
   autoFocus,
-  onDictate,
+  onVoiceNote,
 }: {
   placeholder: string;
   /** What @ can complete to. */
@@ -33,8 +30,8 @@ export function Composer({
   /** Resolves once sent; a rejection keeps the text so nothing is lost. */
   onSend: (text: string) => Promise<void>;
   autoFocus?: boolean;
-  /** Turns a recorded note into text; without it there is no mic. */
-  onDictate?: (audio: Blob, mimeType: string) => Promise<string>;
+  /** Sends a recorded voice note; without it there is no mic. A rejection keeps the note to send again. */
+  onVoiceNote?: (note: RecordedNote) => Promise<void>;
 }) {
   const c = usePalette();
   const insets = useSafeAreaInsets();
@@ -42,30 +39,14 @@ export function Composer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<TextInputInstance>(null);
-  const focusWhenBack = useRef(false);
 
-  const dictation = useDictation({
-    onText: (t) => {
-      setText((prev) => appendDictation(prev, t));
-      focusWhenBack.current = true;
-    },
-    transcribe: onDictate ?? (() => Promise.reject(new Error('dictation is off'))),
-  });
-  const dictating = dictation.state !== 'idle';
-  // The box is out of the tree while dictating: focus it once it is back.
-  useEffect(() => {
-    if (!dictating && focusWhenBack.current) {
-      focusWhenBack.current = false;
-      input.current?.focus();
-    }
-  }, [dictating]);
-  const mic = onDictate !== undefined && !busy;
+  const voice = useVoiceNote({ send: onVoiceNote ?? (() => Promise.reject(new Error('voice notes are off'))) });
+  const recording = voice.state !== 'idle';
+  const mic = onVoiceNote !== undefined && !busy;
 
   const query = mentionQuery(text);
   const suggestions = query === null ? [] : mentionSuggestions(query, names);
-  // The database refuses more; the box's own limit doesn't bound a dictated append.
-  const over = text.length > MAX_LENGTH;
-  const ready = text.trim().length > 0 && !busy && !over;
+  const ready = text.trim().length > 0 && !busy;
 
   const send = async () => {
     if (!ready) return;
@@ -74,7 +55,7 @@ export function Composer({
     try {
       await onSend(text.trim());
       setText('');
-      dictation.clearError();
+      voice.clearError();
       tap();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -103,25 +84,25 @@ export function Composer({
           ))}
         </View>
       ) : null}
-      {over ? (
-        <Text className="mb-1 ml-2 text-footnote text-no">
-          El mensaje pasa de {MAX_LENGTH} caracteres; recórtalo antes de enviar. ({spaced(text.length)} / {spaced(MAX_LENGTH)})
-        </Text>
-      ) : null}
       {error ? <Text className="mb-1 ml-2 text-footnote text-no">No se ha enviado. {error}</Text> : null}
-      {dictation.error ? (
+      {voice.error ? (
         <View className="mb-1 ml-2 flex-row flex-wrap items-center gap-x-3">
-          <Text className="text-footnote text-no">{dictation.error}</Text>
-          {dictation.canRetry ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Reintentar" onPress={() => void dictation.retry()} hitSlop={8} className="active:opacity-70">
-              <Text className="text-footnote text-ink underline">Reintentar</Text>
-            </Pressable>
+          <Text className="text-footnote text-no">{voice.error}</Text>
+          {voice.held && !recording ? (
+            <>
+              <Pressable accessibilityRole="button" accessibilityLabel="Enviar la nota" onPress={() => void voice.resend()} hitSlop={8} className="active:opacity-70">
+                <Text className="text-footnote text-ink underline">Enviar</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Descartar la nota" onPress={voice.discard} hitSlop={8} className="active:opacity-70">
+                <Text className="text-footnote text-muted underline">Descartar</Text>
+              </Pressable>
+            </>
           ) : null}
         </View>
       ) : null}
       <View className="flex-row items-end gap-2">
-        {dictating ? (
-          <DictationBar recording={dictation.state === 'recording'} seconds={dictation.seconds} onCancel={() => void dictation.cancel()} />
+        {recording ? (
+          <RecordingBar recording={voice.state === 'recording'} seconds={voice.seconds} onCancel={() => void voice.cancel()} />
         ) : (
           <TextInput
             ref={input}
@@ -131,7 +112,7 @@ export function Composer({
             value={text}
             onChangeText={(t) => {
               setText(t);
-              dictation.clearError();
+              voice.clearError();
             }}
             multiline
             autoFocus={autoFocus}
@@ -148,16 +129,16 @@ export function Composer({
             textAlignVertical="center"
           />
         )}
-        {dictation.state === 'recording' ? (
+        {voice.state === 'recording' ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Parar y transcribir"
-            onPress={() => void dictation.stop()}
+            accessibilityLabel="Enviar nota de voz"
+            onPress={() => void voice.finish()}
             className="h-11 w-11 items-center justify-center rounded-full bg-accent"
           >
-            <Icon icon={Stop} size={20} color={c.onAccent} weight="fill" />
+            <Icon icon={ArrowUp} size={20} color={c.onAccent} weight="bold" />
           </Pressable>
-        ) : dictation.state === 'transcribing' ? (
+        ) : voice.state === 'sending' ? (
           <View className="h-11 w-11 items-center justify-center rounded-full bg-accent opacity-30" accessibilityState={{ disabled: true }}>
             <ActivityIndicator color={c.onAccent} />
           </View>
@@ -166,8 +147,8 @@ export function Composer({
             {mic ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Dictar"
-                onPress={() => void dictation.start()}
+                accessibilityLabel="Grabar nota de voz"
+                onPress={() => void voice.start()}
                 className="h-11 w-11 items-center justify-center rounded-full border border-line bg-card active:opacity-70"
               >
                 <Icon icon={Microphone} size={20} color={c.ink} weight="bold" />
