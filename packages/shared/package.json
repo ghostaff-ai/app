@@ -8,7 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./record": "./src/record/index.ts",
-    "./services": "./src/services/index.ts"
+    "./services": "./src/services/index.ts",
+    "./health": "./src/health/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
