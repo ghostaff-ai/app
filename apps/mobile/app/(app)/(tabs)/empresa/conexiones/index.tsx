@@ -81,7 +81,7 @@ export default function Connections() {
           </Text>
         </View>
         <View className={`mt-4 ${desktop ? 'self-start' : ''}`}>
-          <Button testID="add-connection" label="Añadir conexión" icon={Plus} onPress={() => router.push('/conexiones/anadir')} />
+          <Button testID="add-connection" label="Añadir conexión" icon={Plus} onPress={() => router.push('/empresa/conexiones/anadir')} />
         </View>
       </View>
 
@@ -112,7 +112,7 @@ export default function Connections() {
                   ) : undefined
                 }
                 chevron
-                onPress={() => router.push(`/conexiones/ia/${conn.provider}?id=${conn.id}`)}
+                onPress={() => router.push(`/empresa/conexiones/ia/${conn.provider}?id=${conn.id}`)}
               />
             ))}
           </Group>
@@ -133,7 +133,7 @@ export default function Connections() {
                 subtitle={conn.hint}
                 trailing={conn.status === 'failing' ? <Text className="text-footnote font-medium text-no">Revisar</Text> : undefined}
                 chevron
-                onPress={() => router.push(`/conexiones/${connector.id}`)}
+                onPress={() => router.push(`/empresa/conexiones/${connector.id}`)}
               />
             ))}
           </Group>

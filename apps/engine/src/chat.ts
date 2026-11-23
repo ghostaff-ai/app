@@ -115,7 +115,8 @@ export interface ChatStore {
     requestedBy: string;
   }): Promise<string>;
   touchThread(threadId: string): Promise<void>;
-  createThread(orgId: string, agentId: string, title: string, createdBy: string): Promise<string>;
+  /** The person's own chat with the agent, opened if it isn't yet (supabase/migrations/20261123200000_personal_chats.sql). */
+  personalChat(orgId: string, agentId: string, title: string, userId: string): Promise<string>;
   /** The organisation's AI accounts in the order to try them: the owner's, with any at a limit that has not reset moved last. */
   aiAccounts(orgId: string): Promise<AiAccount[]>;
   /** Records how an account did, and marks it working or failing. */
@@ -523,8 +524,8 @@ function introTurn(orgName: string): ModelTurn {
 }
 
 /**
- * A new agent's first thread (team-chat.md, decision 8). It opens empty and
- * returns at once; the app then asks for a reply, and in an empty thread the
+ * A new agent's first words (team-chat.md, decision 8), in the chat of the
+ * person who added it (three-tabs.md, decision 3). It opens empty and returns at once; the app then asks for a reply, and in an empty thread the
  * agent introduces itself. Owners only (they are the ones who add agents).
  */
 export async function agentHello(deps: ChatDeps, userId: string, agentId: unknown): Promise<{ threadId: string }> {
@@ -532,6 +533,6 @@ export async function agentHello(deps: ChatDeps, userId: string, agentId: unknow
   const agent = await deps.chat.agent(agentId);
   if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
   await requireTalk(deps, agent.id, userId);
-  const threadId = await deps.chat.createThread(agent.orgId, agent.id, 'Primeros pasos', userId);
+  const threadId = await deps.chat.personalChat(agent.orgId, agent.id, agent.name, userId);
   return { threadId };
 }

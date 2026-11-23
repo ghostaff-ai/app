@@ -5,18 +5,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { ThreadRow } from '@/components/chat/ThreadRow';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
-import { Eye, LinkSimple, Plus, Prohibit } from '@/components/icons';
+import { Eye, LinkSimple, Prohibit } from '@/components/icons';
 import { Button, ErrorText, LEVEL_NAMES, ListRow, ListSection, Loading, Notice, RowIcon } from '@/components/ui';
 import { useMyLevels, useThreads } from '@/lib/hooks/useChat';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
 import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
-// One agent of the team: live in 3D on top (drag to spin it, tap to make it
-// hop), its job, and its conversations under it (team-chat.md, decisions 2 and
-// 10), newest first. Whoever may talk to it starts a new one from here. An
-// owner sets who may use it and which connected accounts it uses, and can
-// remove it (two taps, so not by accident).
+// One agent's page, opened from its name on top of the chat (three-tabs.md,
+// decision 6): live in 3D on top (drag to spin it, tap to make it hop), its
+// job, and the shared conversations of before, read-only history. An owner
+// sets who may use it and which connected accounts it uses, and can remove it
+// (two taps, so not by accident).
 
 export default function Agente() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -52,14 +52,16 @@ export default function Agente() {
   const g = GHOSTS[agent.ghost];
   const owner = active?.role === 'owner' && active.id === agent.orgId;
   const level = levels[agent.id];
-  const canTalk = level === 'talk';
+  // The shared, titled threads of before (team-chat.md, decision 2): history now.
+  const earlier = threads.filter((t) => !t.personal && !t.notices);
 
   const remove = async () => {
     setBusy(true);
     setError(null);
     try {
       await deleteAgent(supabase, agent.id);
-      router.back();
+      // Its chat is gone too: back to Equipo, not to it.
+      router.dismissTo('/');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -79,30 +81,14 @@ export default function Agente() {
         </Text>
         <Text className="mt-1.5 text-center text-[17px] leading-6 text-ink">{g.job}</Text>
 
-        <ListSection
-          header={
-            <View className="mb-2 flex-row items-center justify-between px-4">
-              <Text accessibilityRole="header" className="text-footnote font-medium text-muted">
-                Conversaciones
-              </Text>
-              {canTalk ? (
-                <Button label="Nueva" size="small" variant="secondary" icon={Plus} onPress={() => router.push(`/conversacion/nueva?agent=${agent.id}`)} />
-              ) : level ? (
-                <Text className="text-footnote text-muted">Puedes {LEVEL_NAMES[level].toLowerCase()}</Text>
-              ) : null}
-            </View>
-          }
-        >
-          {threads.length === 0 ? (
-            <ListRow
-              title="Aún no hay conversaciones"
-              subtitle={canTalk ? `Empieza una y ${agent.name} la verá, igual que quien pueda verle.` : null}
-            />
-          ) : null}
-          {threads.map((t) => (
-            <ThreadRow key={t.id} thread={t} onPress={() => router.push(`/conversacion/${t.id}`)} />
-          ))}
-        </ListSection>
+        {earlier.length > 0 ? (
+          <ListSection header="Conversaciones anteriores" footer="De antes de que cada persona tuviera su propia conversación con cada agente.">
+            {earlier.map((t) => (
+              <ThreadRow key={t.id} thread={t} onPress={() => router.push(`/conversacion/${t.id}`)} />
+            ))}
+          </ListSection>
+        ) : null}
+        {level && level !== 'talk' ? <Text className="mt-6 text-center text-footnote text-muted">Puedes {LEVEL_NAMES[level].toLowerCase()} a {agent.name}.</Text> : null}
 
         {owner ? (
           <ListSection>

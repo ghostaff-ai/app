@@ -873,6 +873,8 @@ interface ThreadListRow {
   last_author: string | null;
   last_text: string | null;
   unread: boolean;
+  personal: boolean;
+  notices: boolean;
 }
 
 /** Threads the person may see, newest first; with `agentId`, only that agent's. */
@@ -888,6 +890,8 @@ export async function listThreads(client: SupabaseClient, orgId: string, agentId
     lastAuthor: r.last_author,
     lastText: r.last_text,
     unread: r.unread,
+    personal: r.personal,
+    notices: r.notices,
   }));
 }
 
@@ -956,6 +960,13 @@ export async function startThread(client: SupabaseClient, agentId: string, body:
   const { data, error } = await client.rpc('start_thread', { target_agent: agentId, body }).single<{ id: string }>();
   if (error) throw error;
   return data.id;
+}
+
+/** Writes to an agent in the person's own chat with it, opening the chat with the first message. */
+export async function chatWith(client: SupabaseClient, agentId: string, body: string): Promise<ChatMessage> {
+  const { data, error } = await client.rpc('chat_with', { target_agent: agentId, body }).single<MessageRow>();
+  if (error) throw error;
+  return messageFromRow(data);
 }
 
 export async function postMessage(client: SupabaseClient, threadId: string, body: string): Promise<ChatMessage> {

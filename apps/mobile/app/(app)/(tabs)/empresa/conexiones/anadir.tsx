@@ -102,7 +102,7 @@ export default function AddConnection() {
                 title={PROVIDERS[p].name}
                 subtitle={PROVIDERS[p].short}
                 chevron
-                onPress={() => router.push(`/conexiones/ia/${p}`)}
+                onPress={() => router.push(`/empresa/conexiones/ia/${p}`)}
               />
             ))}
           </Group>
@@ -121,7 +121,7 @@ export default function AddConnection() {
                     subtitle={connectorWhat(connector)}
                     trailing={connected.has(connector.id) ? <Text className="text-footnote text-muted">Conectada</Text> : undefined}
                     chevron
-                    onPress={() => router.push(`/conexiones/${connector.id}`)}
+                    onPress={() => router.push(`/empresa/conexiones/${connector.id}`)}
                   />
                 ))}
               </Group>

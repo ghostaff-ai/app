@@ -1,6 +1,7 @@
 import { type AgentLevel, type ChatMessage, type ChatThread, messageText, type OrgMember } from '@ghostaff/shared';
 import {
   askAgent,
+  chatWith,
   type EngineAccess,
   getThread,
   listMembers,
@@ -12,7 +13,7 @@ import {
   subscribeToThread,
   type ThreadHead,
 } from '@ghostaff/shared/services';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../supabase';
 import { useEngine } from './useConnections';
 
@@ -164,4 +165,45 @@ export function useThread(threadId: string | null) {
  */
 export function letAgentAnswer(engine: EngineAccess, threadId: string, onError?: (e: string) => void) {
   askAgent(engine, threadId).catch(() => onError?.('El agente no ha podido contestar ahora. Prueba de nuevo en un momento.'));
+}
+
+/**
+ * The person's one chat with an agent (three-tabs.md, decision 3): their own
+ * thread with it and its «Avisos», as one conversation, live. The first
+ * message opens the chat; `send` writes in it and asks the agent to answer.
+ */
+export function useAgentChat(orgId: string | null, agentId: string | null) {
+  const fetch = useCallback(() => listThreads(supabase, orgId!, agentId!), [orgId, agentId]);
+  const { data: threads, loading, reload } = useLoad<ChatThread[]>(orgId && agentId ? fetch : null, []);
+  const [opened, setOpened] = useState<string | null>(null);
+  const chatId = threads.find((t) => t.personal)?.id ?? opened;
+  const noticesId = threads.find((t) => t.notices)?.id ?? null;
+  const chat = useThread(chatId);
+  const notices = useThread(noticesId);
+  const engine = useEngine();
+  const [error, setError] = useState<string | null>(null);
+
+  const messages = useMemo(
+    () => (noticesId ? [...chat.messages, ...notices.messages].sort((a, b) => a.createdAt.localeCompare(b.createdAt)) : chat.messages),
+    [chat.messages, notices.messages, noticesId],
+  );
+
+  const send = useCallback(
+    async (body: string) => {
+      if (chatId) return chat.send(body);
+      if (!agentId) return;
+      const m = await chatWith(supabase, agentId, body);
+      setOpened(m.threadId);
+      if (engine) letAgentAnswer(engine, m.threadId, setError);
+    },
+    [chatId, chat.send, agentId, engine],
+  );
+
+  return {
+    loading: loading && threads.length === 0,
+    messages,
+    error: error ?? chat.error ?? notices.error,
+    send,
+    reload,
+  };
 }

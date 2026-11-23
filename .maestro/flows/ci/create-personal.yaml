@@ -37,11 +37,14 @@ name: A new person wants Ghostaff for themselves, gets their personal space and 
       SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
 - stopApp
 - launchApp
-# Hoy in the personal space: its name on top, the greeting under it.
+# Equipo, the first tab, with Secretaría; the space's name is on Empresa.
+- extendedWaitUntil:
+    visible: "Secretaría"
+    timeout: 60000
+- tapOn: "Empresa"
 - extendedWaitUntil:
     visible: "Personal"
-    timeout: 60000
-- assertVisible: ".*(Buenos días|Buenas tardes|Buenas noches), Yo.*"
+    timeout: 20000
 - tapOn: "Equipo"
 - extendedWaitUntil:
     visible: "Secretaría"

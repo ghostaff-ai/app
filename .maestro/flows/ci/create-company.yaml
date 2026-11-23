@@ -1,13 +1,12 @@
 appId: ${APP_ID}
-name: A new person creates a company, connects its AI, walks its four tabs and reorders its AI accounts
+name: A new person creates a company, connects its AI, walks its three tabs and reorders its AI accounts
 ---
 # The first thing anyone does after signing up: say it's for their company, name it, be asked
 # to connect an AI account (the step can't be skipped; a stand-in key and a
 # stand-in subscription are written into the local database, scripts/connect-ai.js),
-# land on Hoy, and open Equipo, Registro and Conexiones (only what is
-# connected, then «Añadir conexión»). Secretaría comes
-# hired with the company; another vacancy is filled, which opens the agent's page (no engine runs in e2e, so no first
-# thread). In Conexiones the owner moves the key below the subscription.
+# land on Equipo, fill a vacancy, and open Decisiones, then Empresa's Registro
+# and Conexiones (only what is connected, then «Añadir conexión»). In
+# Conexiones the owner moves the key below the subscription.
 - evalScript: ${output.email = 'e2e-co-' + Date.now() + '@ghostaff.test'}
 - evalScript: ${output.company = 'Panadería E2E ' + Date.now().toString().slice(-6)}
 - runFlow:
@@ -37,7 +36,7 @@ name: A new person creates a company, connects its AI, walks its four tabs and r
     timeout: 30000
 - assertVisible:
     id: "connect-ai-claude"
-- assertNotVisible: "Hoy"
+- assertNotVisible: "Equipo"
 - runScript:
     file: ../../scripts/connect-ai.js
     env:
@@ -47,12 +46,14 @@ name: A new person creates a company, connects its AI, walks its four tabs and r
 # The app reads the connections again on launch and lets the owner in.
 - stopApp
 - launchApp
-# Hoy: the company's name on top, the greeting under it.
+# Equipo first: Secretaría comes hired with the company. «Añadir agente»
+# fills a vacancy, which opens the chat with it (no engine runs in e2e, so it
+# stays quiet).
 - extendedWaitUntil:
-    visible: ${output.company}
+    visible: "Secretaría"
     timeout: 60000
-- assertVisible: ".*(Buenos días|Buenas tardes|Buenas noches), Ana.*"
-- tapOn: "Equipo"
+- tapOn:
+    id: "add-agent"
 - extendedWaitUntil:
     visible:
       id: "vacancy-.*"
@@ -64,13 +65,26 @@ name: A new person creates a company, connects its AI, walks its four tabs and r
     timeout: 15000
 - tapOn: "Que empiece"
 - extendedWaitUntil:
-    visible: "Conversaciones"
+    visible: "Esta conversación es solo entre tú y .*"
     timeout: 20000
 - back
+- back
+- tapOn: "Decisiones"
+- extendedWaitUntil:
+    visible: "Nada que decidir"
+    timeout: 20000
+# Empresa: the company's name on top, then Registro and Conexiones.
+- tapOn: "Empresa"
+- extendedWaitUntil:
+    visible: ${output.company}
+    timeout: 20000
 - tapOn: "Registro"
 - extendedWaitUntil:
     visible: "Lo decidido, lo último primero."
     timeout: 20000
+- back
+- tapOn:
+    id: "open-connections"
 # Conexiones lists only what is connected: the two AI accounts, in the order
 # the agents try them, the key first, as added.
 - tapOn: "Conexiones"
@@ -99,9 +113,9 @@ name: A new person creates a company, connects its AI, walks its four tabs and r
     visible:
       id: "ai-account-1"
     timeout: 15000
-# A cold relaunch keeps the session and comes back to the company, not a crash.
+# A cold relaunch keeps the session and comes back to the company's team, not a crash.
 - stopApp
 - launchApp
 - extendedWaitUntil:
-    visible: ${output.company}
+    visible: "Secretaría"
     timeout: 60000

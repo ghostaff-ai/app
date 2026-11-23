@@ -30,14 +30,10 @@ export default function Contratar() {
     setError(null);
     try {
       const a = await createAgent(supabase, { orgId: active.id, name: g.label, ghost, department: g.department });
-      // Its first thread; if the engine can't be reached, its page instead.
+      // It introduces itself in the person's chat with it; without the engine the chat opens quiet.
       const hello = engine ? await agentHello(engine, a.id).catch(() => null) : null;
-      if (hello && engine) {
-        letAgentAnswer(engine, hello.threadId);
-        router.replace(`/conversacion/${hello.threadId}`);
-      } else {
-        router.replace(`/agente/${a.id}`);
-      }
+      if (hello && engine) letAgentAnswer(engine, hello.threadId);
+      router.replace(`/chat/${a.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);

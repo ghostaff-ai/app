@@ -63,7 +63,7 @@ export default function Herramientas() {
         <Notice
           title="Aún no hay cuentas conectadas"
           body={`Conecta las cuentas de la empresa y elige aquí cuáles usa ${agent.name}.`}
-          action={<Button label="Ir a Conexiones" onPress={() => router.push('/conexiones')} />}
+          action={<Button label="Ir a Conexiones" onPress={() => router.push('/empresa/conexiones')} />}
         />
       ) : (
         <ListSection

@@ -20,7 +20,7 @@ Guidelines that shaped the picks: Slack's agent design (show progress, threads w
 ## Decisions (Álvaro, 2026-11-17, all my picks)
 
 1. **Our own chat on Supabase.** Messages in our database with `org_id` and row-level security, live to everyone in the thread through Realtime; the engine writes the agent's words as they come, the app only reads and writes through `security definer` functions. Libraries only for the hard parts: Legend List (a list pinned to the newest message), react-native-keyboard-controller, a throttled streaming markdown renderer. Message parts follow the AI SDK's shape so the UI can change later.
-2. **Titled threads per agent, shared.** One topic per thread, titled by the agent; everyone with access to that agent sees them and can join. A «Solo yo» lock only if someone asks for it.
+2. **Titled threads per agent, shared.** One topic per thread, titled by the agent; everyone with access to that agent sees them and can join. A «Solo yo» lock only if someone asks for it. **Replaced on 2026-11-23** by one private chat per person with each agent, as in WhatsApp; the old threads stay readable ([three-tabs.md](three-tabs.md), decision 3).
 3. **People in bubbles, agents flat.** Your messages on the right in ink, colleagues on the left with their initials, agents full width with their small ghost. Their text was muted until Jaime changed it to ink on 2026-11-22 (step 5).
 4. **One live line while it works** («Leyendo 14 correos nuevos…»), folding into «3 pasos · 41 s» that opens the steps.
 5. **An OK asked in a chat is the decision card**, the same row as in Hoy: answering in either place answers both, it counts towards earned autonomy, and someone who can't take it sends it to the department's responsible person.
@@ -28,7 +28,7 @@ Guidelines that shaped the picks: Slack's agent design (show progress, threads w
 7. **A new member sees everything and talks to Secretaría.** The rule under it: **an agent acts with the rights of the person who asked.** Secretaría doesn't pass a request to an agent the asker can't talk to; she says who to ask. The database enforces it, not the screens.
 8. **Starting an agent: tap the vacancy and it arrives talking.** Equipo shows each department with its agents and vacancies («Vacante · Redes»); a tap opens a sheet with the ghost and its one-line job and «Que empiece»; you land in its first thread while it writes: it has read the record and proposes a first piece of work with reply chips. Name and ghost come from the department, changeable later on its page. Asking Secretaría in a chat («necesito a alguien para Instagram») calls the same hire step. Today's `nuevo-agente` form stays only for a custom agent with the plain ghost.
 9. **@ to bring others in.** `@Redes` adds that agent to the thread; `@Ana` sends her a push. The list offers only agents the asker can talk to and people who can see the thread's agent.
-10. **Threads live inside Equipo, per agent**, with an unread dot on the agent row and a «Conversaciones» filter at the top of Equipo. No fourth tab. On a computer: agents, threads and the open thread side by side.
+10. **Threads live inside Equipo, per agent**, with an unread dot on the agent row and a «Conversaciones» filter at the top of Equipo. No fourth tab. On a computer: agents, threads and the open thread side by side. **Replaced on 2026-11-23**: an agent's row opens its chat directly ([three-tabs.md](three-tabs.md), decision 4).
 
 ## Progress
 

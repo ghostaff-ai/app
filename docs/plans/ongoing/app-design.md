@@ -21,7 +21,7 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 
 **Shape**
 
-1. Three tabs, **Hoy · Equipo · Registro**, and a mic button that is always there. A fourth, **Conexiones**, joined them (Álvaro, 2026-11-22): everything an organisation connects, its AI account first.
+1. Three tabs, **Hoy · Equipo · Registro**, and a mic button that is always there. A fourth, **Conexiones**, joined them (Álvaro, 2026-11-22): everything an organisation connects, its AI account first. **Replaced on 2026-11-23** by Equipo · Decisiones · Empresa, with no Hoy and no mic ([three-tabs.md](three-tabs.md)).
 2. Talking goes to **Secretaría**, who answers or passes it to the right agent; the agent replies by name.
 3. Switching organisation: the name at the top opens a sheet with how many decisions wait in each.
 4. On a computer: the list and the decision side by side.
@@ -30,11 +30,11 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 
 5. **Five fixed parts:** the question, one quoted source, the sources, «Con el sí / Con el no», and the agent's recommendation. They are optional fields in por-decidir (`recomienda`, `con_si`, `con_no`, `cita`, `fuentes`, plus `vence`), added to [Órdago's README](https://github.com/ordago-app/business/blob/main/por-decidir/README.md) on 2026-11-17; `contexto` stays required and folds behind «Todo el contexto».
 6. The main button **names the action** (`recomienda`), next to «No» and «Preguntar».
-7. **No swipe** to answer.
+7. **No swipe** to answer. **Reversed on 2026-11-23**: swipe right takes the pick, left is «later», never «no» ([three-tabs.md](three-tabs.md), decision 7).
 8. An answer can be **taken back until the agent has it** (until the sync writes it into the record), only by whoever gave it.
 9. A correction becomes a rule the way Órdago does it: the agent proposes it as its own decision, the person edits and signs.
 10. Earned autonomy shows as a **10-step bar on each decision** («6 de 10 OK seguidos sin corregir») and a ladder per kind on the agent's page.
-11. What agents did alone: **one folded line on Hoy**, «Hecho sin ti», opening to a list with undo for a day.
+11. What agents did alone: **one folded line on Hoy**, «Hecho sin ti», opening to a list with undo for a day. **Gone with Hoy on 2026-11-23**: it shows in the agent's chat, as «Avisos» ([three-tabs.md](three-tabs.md), decision 2).
 12. Order: what waits first, nearest `vence` first, then newest.
 13. «Preguntar» opens a short chat about that decision; the agent answers there.
 

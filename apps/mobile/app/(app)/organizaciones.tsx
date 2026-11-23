@@ -1,25 +1,24 @@
 import { router } from 'expo-router';
 import { ScrollView, Text, View } from 'react-native';
-import { Buildings, Check, Icon, Plus, SignOut, UserPlus, UsersThree } from '@/components/icons';
+import { Buildings, Check, Icon, Plus, UsersThree } from '@/components/icons';
 import { Badge, ListRow, ListSection, RowIcon } from '@/components/ui';
-import { useAuth } from '@/lib/auth/AuthContext';
 import { useWaitingCounts } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 
-// A sheet over Hoy, opened from the organisation's name (app-design.md,
-// decision 3): each organisation with how many decisions wait in it, then what
-// belongs to the one you're in, then other ways in, then you.
+// The switcher, a sheet opened from the organisation's name in Empresa
+// (three-tabs.md, decision 11) and the desktop sidebar: each organisation with
+// how many decisions wait in it, then other ways in. What belongs to the one
+// you're in, and signing out, are in Empresa.
 
 // iOS presents a screen from a sheet only once the sheet is gone, so a link
 // here closes the sheet first and then opens where it points.
-function go(path: '/invitar' | '/crear-empresa' | '/unirme') {
+function go(path: '/crear-empresa' | '/unirme') {
   router.back();
   router.push(path);
 }
 
 export default function Organizations() {
   const { organizations, active, choose } = useActiveOrg();
-  const { session, signOut } = useAuth();
   const waiting = useWaitingCounts(organizations.map((o) => o.id));
 
   return (
@@ -54,19 +53,9 @@ export default function Organizations() {
         })}
       </ListSection>
 
-      {active?.role === 'owner' ? (
-        <ListSection header={active.name}>
-          <ListRow leading={<RowIcon icon={UserPlus} />} title="Invitar a alguien" chevron onPress={() => go('/invitar')} />
-        </ListSection>
-      ) : null}
-
       <ListSection>
         <ListRow leading={<RowIcon icon={Plus} />} title="Crear otra empresa" chevron onPress={() => go('/crear-empresa')} />
         <ListRow leading={<RowIcon icon={UsersThree} />} title="Unirme a otra empresa" chevron onPress={() => go('/unirme')} />
-      </ListSection>
-
-      <ListSection footer={session?.user.email ? `Has entrado como ${session.user.email}` : undefined}>
-        <ListRow leading={<RowIcon icon={SignOut} tone="danger" />} title="Cerrar sesión" tone="danger" onPress={() => void signOut()} />
       </ListSection>
     </ScrollView>
   );

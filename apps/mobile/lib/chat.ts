@@ -1,4 +1,5 @@
-import type { Agent, AgentLevel, ChatMessage } from '@ghostaff/shared';
+import type { Agent, ChatMessage, ChatThread } from '@ghostaff/shared';
+import { isMainAgent } from '@ghostaff/shared/services';
 import { shortDate, todayIso } from './format';
 import { GHOST_ORDER, type GhostId } from './team';
 
@@ -27,13 +28,33 @@ export function showAuthors(messages: ChatMessage[]): boolean[] {
   });
 }
 
+/** One agent's row in Equipo: its newest word to the person, from their chat or its «Avisos». */
+export interface TeamRow {
+  agent: Agent;
+  last: ChatThread | null;
+  unread: boolean;
+}
+
 /**
- * Who the mic talks to (app-design.md #2): Secretaría, if the person may talk
- * to her; else the first agent they may talk to; else nobody.
+ * Equipo's list (three-tabs.md, decision 4): one row per agent, as in WhatsApp.
+ * The main agent first, then whoever spoke last, then the quiet ones in the
+ * team's order. The shared titled threads of before don't count: they are
+ * history, on the agent's page.
  */
-export function talkTarget(agents: Agent[], levels: Record<string, AgentLevel>): Agent | null {
-  const talk = agents.filter((a) => levels[a.id] === 'talk');
-  return talk.find((a) => a.ghost === 'secretaria') ?? talk[0] ?? null;
+export function teamRows(agents: Agent[], threads: ChatThread[]): TeamRow[] {
+  const rows = agents.map((agent) => {
+    const mine = threads.filter((t) => t.agentId === agent.id && (t.personal || t.notices) && t.lastText !== null);
+    const last = mine.reduce<ChatThread | null>((a, t) => (!a || t.lastMessageAt > a.lastMessageAt ? t : a), null);
+    return { agent, last, unread: mine.some((t) => t.unread) };
+  });
+  const order = (r: TeamRow) => GHOST_ORDER.indexOf(r.agent.ghost);
+  return rows.sort((a, b) => {
+    const main = Number(isMainAgent(b.agent)) - Number(isMainAgent(a.agent));
+    if (main) return main;
+    if (a.last && b.last) return b.last.lastMessageAt.localeCompare(a.last.lastMessageAt);
+    if (a.last || b.last) return a.last ? -1 : 1;
+    return order(a) - order(b) || a.agent.name.localeCompare(b.agent.name);
+  });
 }
 
 /** The team's jobs nobody does yet, in the order the team is drawn (team-chat.md, decision 8). */
