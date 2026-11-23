@@ -3,12 +3,7 @@ name: Sign in with the emailed code
 ---
 # Usage: runFlow with env EMAIL. A new email signs up; the code comes from
 # Mailpit (scripts/mailpit-code.js), so it only works against the local Supabase.
-- launchApp:
-    clearState: true
-- extendedWaitUntil:
-    visible:
-      id: "signin-email"
-    timeout: 60000
+- runFlow: launch-clean.yaml
 - tapOn:
     id: "signin-email"
 - inputText: ${EMAIL}

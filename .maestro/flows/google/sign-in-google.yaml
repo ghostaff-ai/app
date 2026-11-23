@@ -4,8 +4,7 @@ name: Sign in with Google, the phone's own account sheet
 # Needs a Google account on the emulator (added by hand once, .maestro/README.md)
 # that is a test user of the Google app while it is in Testing, passed as
 # GOOGLE_ACCOUNT. Talks to real Google, so it is not in ci/.
-- launchApp:
-    clearState: true
+- runFlow: ../subflows/launch-clean.yaml
 - extendedWaitUntil:
     visible: "Continuar con Google"
     timeout: 60000

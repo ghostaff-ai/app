@@ -1,0 +1,17 @@
+appId: ${APP_ID}
+name: Launch the app with no data, on the sign-in screen
+---
+# clearState force-stops the app and starts it again at once. Now and then
+# Android is still removing the old task when the new process starts, kills the
+# new one («Destroy timeout of remove-task») and leaves a blank window: the app
+# never attaches. Launching again recovers it; a sign-in screen that never
+# appears in three tries still fails.
+- retry:
+    maxRetries: 2
+    commands:
+      - launchApp:
+          clearState: true
+      - extendedWaitUntil:
+          visible:
+            id: "signin-email"
+          timeout: 45000
