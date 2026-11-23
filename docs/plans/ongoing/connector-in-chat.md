@@ -1,8 +1,8 @@
 # An agent asks for the account it lacks, in the chat
 
 **Priority:** high — Jaime (Trello, 2026-11-23): «que si el agente detecta que quiere usar una herramienta pida el acceso y el conector»
-**Gate:** decision:Jaime's OK on the open questions below (recheck 2026-11-24)
-**Next:** Jaime answers the open questions; then promote to ongoing with the task breakdown and build on `claude/connector-request-ac0b3c`
+**Gate:** none
+**Next:** build the tasks below on `claude/connector-request-ac0b3c`, then `pnpm pr:land`
 
 ## Goal
 
@@ -38,7 +38,7 @@ What the engine answers depends on the account's state for this organisation and
 |---|---|---|
 | In the catalogue, not connected | «Necesito acceso a Notion» · why · «Conectar Notion» | card shown |
 | Connected but failing | «Notion ya no me da acceso» · «Volver a conectar» | card shown |
-| Connected, working, but not given to this agent (`agents.accounts`) | «Notion está conectada, pero no la tengo» · «Darme acceso» (open question 2) | card shown |
+| Connected, working, but not given to this agent (`agents.accounts`) | «Notion está conectada, pero no la tengo» · «Darme acceso» (decision 2) | card shown |
 | Connected and given to it | no card | an error: you already have it, use its tools |
 | Not in the catalogue (Gmail reading, an app we lack) | «Todavía no podemos conectar Gmail» · «Pedirlo» (counts it with `request_connector`) | card shown; say we can't yet |
 
@@ -58,7 +58,8 @@ interface AccountAskPart {
   name: string;
   why: string;
   need: 'connect' | 'reconnect' | 'grant' | 'unsupported';
-  status: 'open' | 'done' | 'requested';
+  /** «done» once the account is there and the agent has gone on; an unsupported app stays open. */
+  status: 'open' | 'done';
   /** Who connected it (or asked for it), once it is. */
   doneBy?: string;
 }
@@ -87,18 +88,35 @@ Why not post a message as the person («He conectado Notion») from the app and 
 ### The rights it keeps
 
 - Connecting stays an owner's act in the app, through the provider's sign-in. The agent can only ask; `connect_account` stays `never` in `settings.ts`.
-- An agent never gives itself an account (`settings_agent_accounts` refuses its own reach). The «grant» card is an owner pressing a button in the app, not an agent's proposal (open question 2).
+- An agent never gives itself an account (`settings_agent_accounts` refuses its own reach). The «grant» card is an owner pressing a button in the app, not an agent's proposal (decision 2).
 - The tool's input never reaches a URL or a query: the card builds the connect from the catalogue id.
 
-## Open questions
+## Decisions (Jaime, 2026-11-23, all my picks)
 
-1. **A member asks and no owner is in the chat.** The member's chat is private, so an owner doesn't see the card. Options: (a) the card only says who can connect it; (b) also mark the connector in Conexiones, for owners, «Lo ha pedido Luis para Redes», from `account_asks`; (c) a push to the owners (notifications are [their own plan](decision-notifications.md)). My pick: **(a) now, (b) as the next step** once Jaime sees it working; (c) when notifications exist.
-2. **Connected but not given to this agent.** Options: (a) an owner's «Darle acceso» on the card sets `agents.accounts` for this agent through the same service function as its tools page; (b) the card only links to the agent's tools page. My pick: **(a)**: one tap, the same function, and it is the owner who presses. It is not the agent changing its own reach; the agent only asked.
-3. **«Ahora no» on the card.** Without it, an open card simply stays; the next message moves on. My pick: **no button in v1** (one main action per screen); add it if people ask.
-4. **Apps we can't connect yet** («Gmail», «Holded» on an engine without it): the card's «Pedirlo» counts it with `request_connector`. My pick: **yes**: it's the demand signal connectors.md wants, already built.
+1. **A member asks:** the card only says who can connect it («Lo conecta quien es propietario: Ana»). Next step, once Jaime sees it working: mark the connector in Conexiones for owners («Lo ha pedido Luis para Redes»), from `account_asks`; a push when notifications exist.
+2. **Connected but not given to this agent:** an owner's «Darle acceso» on the card adds the provider to `agents.accounts` through `setAgentAccounts`, the same service function as the agent's tools page. The agent only asked; the owner presses.
+3. **No «Ahora no»** in v1: an open card simply stays.
+4. **Apps we can't connect:** «Pedirlo» on the card counts it with `requestConnector`; the card reads «Pedido» once the organisation's `connector_requests` has it.
 
 ## Out of scope
 
 - Agents that run as jobs (`ordago_job`, our runner): they report at the end of a run, not in a live reply. Later, the same part.
 - Writes still wait for approval as today: a card to connect does not approve anything.
-- Showing the asks to owners outside the chat (open question 1b).
+- Showing the asks to owners outside the chat (decision 1, its next step).
+
+## File structure
+
+- Create `supabase/migrations/20261125000000_account_asks.sql`, `supabase/tests/database/account_asks.test.sql`.
+- Modify `packages/shared/src/chat.ts` (`AccountAskPart`, `isAccountAskPart`), `packages/shared/src/services/index.ts` (`resumeAfterAccount`).
+- Create `apps/engine/src/accountAsks.ts`: the tool, what each state needs, the store over Supabase, resuming.
+- Modify `apps/engine/src/chat.ts` (intercept in `writeReply`, the tool for every agent, `toTurns` reads the card, the prompt, a shared setup for a reply), `chatStore.ts` (`updateReply` takes `cards`), `app.ts` (`POST /threads/:id/resume`), `server.ts` (the store).
+- Create `apps/mobile/lib/hooks/useAccountConnect.ts` (the connect flow, from `conexiones/[id].tsx`), `apps/mobile/lib/hooks/useAccountAsks.ts` (the card's actions and resuming); modify `components/chat/Message.tsx` (`AccountAskCard`), `chat/[agent].tsx`, `conversacion/[id].tsx`, `conexiones/[id].tsx`.
+
+## Tasks
+
+- [ ] 1. `account_asks`: table, row-level security with no policy, pgTAP proving no member reads or writes it.
+- [ ] 2. Shared: the part and `resumeAfterAccount`.
+- [ ] 3. Engine: `ask_for_account` (tests: each state gives its card or its error, three at most, one per connector, the subscription path lists it), `toTurns` with the card, the prompt line.
+- [ ] 4. Engine: `POST /threads/:id/resume` (tests: resumes once; refuses while not connected, not given, another thread's ask, someone who can't write there; a busy thread leaves the ask open).
+- [ ] 5. App: `useAccountConnect` (Conexiones uses it too), the card for owners and members, «Darle acceso», «Pedirlo», resuming when the account shows connected.
+- [ ] 6. `pnpm check`, `pnpm db:test`, the web against local Supabase with a stand-in model; `pnpm pr:land`.
