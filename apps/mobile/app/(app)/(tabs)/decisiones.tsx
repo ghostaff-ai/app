@@ -1,92 +1,79 @@
-import type { Decision } from '@ghostaff/shared';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { RefreshControl, SectionList, Text, View } from 'react-native';
-import { DecisionCard } from '@/components/DecisionCard';
-import { DecisionView } from '@/components/DecisionView';
+import { useCallback } from 'react';
+import { Text, View } from 'react-native';
+import { DecisionDeck, DeckToast } from '@/components/DecisionDeck';
 import { SealCheck, WarningCircle } from '@/components/icons';
 import { SpaceSwitcher } from '@/components/SpaceSwitcher';
-import { Badge, Button, EmptyState, Loading, Notice, ScreenTitle } from '@/components/ui';
-import { useInbox } from '@/lib/hooks/useDecisions';
+import { Button, EmptyState, ErrorText, Loading, Notice, ScreenTitle } from '@/components/ui';
+import { useDeck } from '@/lib/hooks/useDecisions';
+import { useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
-import { DESKTOP_LIST_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useTabScreenTop } from '@/lib/tabs';
 
-// Decisiones, the middle tab (three-tabs.md): what waits for you, then what
-// you answered and the agent hasn't picked up yet (app-design.md, decision 8:
-// you can still take it back). The list for now; one card at a time, to answer
-// or leave for later, comes next (decision 7). What was decided is in Empresa,
-// Registro.
+// Decisiones, the middle tab (three-tabs.md, decision 7): what waits for you,
+// one card at a time (components/DecisionDeck.tsx). What you put aside comes
+// back tomorrow morning, or now if you ask; what was decided is in Empresa,
+// Registro, where an answer can still be changed until the agent has it.
 
 export default function Decisiones() {
   const top = useTabScreenTop();
   const desktop = useIsDesktop();
   const { active } = useActiveOrg();
-  const { decisions, loading, error, reload } = useInbox(active?.id ?? null);
-  // On a desktop the open decision sits beside the list (desktop-web.md).
-  const [picked, setPicked] = useState<string | null>(null);
+  const deck = useDeck(active?.id ?? null);
+  const { reload, clearLast } = deck;
 
-  // Back from a decision: show its new state.
+  // Back from a decision's own screen: show what changed there.
   useFocusEffect(useCallback(() => void reload(), [reload]));
 
-  if (loading && decisions.length === 0) return <Loading />;
-  if (error) return <Notice icon={WarningCircle} title="No hemos podido cargar las decisiones" body={error} action={<Button label="Reintentar" variant="secondary" onPress={() => void reload()} />} />;
+  if (deck.loading && deck.cards.length === 0 && !deck.last) return <Loading />;
+  if (deck.loadError)
+    return (
+      <Notice
+        icon={WarningCircle}
+        title="No hemos podido cargar las decisiones"
+        body={deck.loadError}
+        action={<Button label="Reintentar" variant="secondary" onPress={() => void reload()} />}
+      />
+    );
 
-  const waiting = decisions.filter((d) => !d.answer);
-  const answered = decisions.filter((d) => d.answer);
-  const sections: { title: string; count?: number; data: Decision[] }[] = [];
-  if (waiting.length > 0) sections.push({ title: 'Te esperan', count: waiting.length, data: waiting });
-  if (answered.length > 0) sections.push({ title: 'Respondidas', data: answered });
-  const selected = picked && decisions.some((d) => d.id === picked) ? picked : (waiting[0]?.id ?? null);
-  const open = (d: Decision) => (desktop ? setPicked(d.id) : router.push(`/decision/${d.id}`));
-
-  const list = (
-    <SectionList
-      className="flex-1 bg-surface"
-      contentContainerStyle={{ paddingHorizontal: desktop ? 40 : 20, paddingBottom: 40, paddingTop: (desktop ? 16 : 12) + top }}
-      contentInsetAdjustmentBehavior="automatic"
-      sections={sections}
-      keyExtractor={(d) => d.id}
-      stickySectionHeadersEnabled={false}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
-      ListHeaderComponent={
-        <>
-          {/* Where you are, on every tab (welcome-and-spaces.md); on a desktop the sidebar shows it. */}
-          <SpaceSwitcher />
-          <ScreenTitle>Decisiones</ScreenTitle>
-        </>
-      }
-      ListEmptyComponent={
-        <EmptyState icon={SealCheck} title="Nada que decidir" body="Cuando un agente necesite tu OK, lo verás aquí." />
-      }
-      renderSectionHeader={({ section }) => (
-        <View className="mb-2.5 mt-6 flex-row items-center">
-          <Text accessibilityRole="header" className="font-display text-title3 text-ink">
-            {section.title}
-          </Text>
-          {section.count ? (
-            <View className="ml-2">
-              <Badge count={section.count} />
-            </View>
-          ) : null}
-        </View>
-      )}
-      renderItem={({ item }) => <DecisionCard decision={item} selected={desktop && item.id === selected} onPress={() => open(item)} />}
-    />
-  );
-
-  if (!desktop) return list;
+  const count = deck.cards.length;
+  const toast = deck.last ? <DeckToast move={deck.last} onUndo={() => void deck.undo()} onClose={clearLast} /> : null;
   return (
-    <View className="flex-1 flex-row bg-surface">
-      <View style={{ width: DESKTOP_LIST_WIDTH }} className="border-r border-line">
-        {list}
-      </View>
-      <View className="flex-1">
-        {selected ? (
-          <DecisionView key={selected} id={selected} onAnswered={() => void reload()} />
+    <View className="flex-1 bg-surface">
+      <View
+        className="flex-1 px-5 pb-6"
+        style={{ paddingTop: (desktop ? 40 : 12) + top, maxWidth: 480, width: '100%', alignSelf: 'center' }}
+      >
+        {/* Where you are, on every tab (welcome-and-spaces.md); on a desktop the sidebar shows it. */}
+        <SpaceSwitcher />
+        <View className="flex-row items-center justify-between">
+          <ScreenTitle>Decisiones</ScreenTitle>
+          {count > 0 ? <Text className="text-footnote text-muted">{count === 1 ? 'Queda 1' : `Quedan ${count}`}</Text> : null}
+        </View>
+        <ErrorText>{deck.error}</ErrorText>
+        {count > 0 ? (
+          <View className="mt-3 flex-1">
+            <DecisionDeck cards={deck.cards} onMove={(d, kind) => void deck.act(d, kind)} toast={toast} />
+          </View>
         ) : (
-          <View className="flex-1 items-center justify-center px-10">
-            <Text className="text-center text-base text-muted">Cuando algo necesite tu OK, lo verás aquí al lado.</Text>
+          <View className="flex-1 justify-center">
+            <EmptyState
+              icon={SealCheck}
+              title="Nada que decidir"
+              body={
+                deck.asideTotal > 0
+                  ? `Dejaste ${deck.asideTotal === 1 ? 'una' : deck.asideTotal} para más tarde. Vuelven mañana por la mañana.`
+                  : 'Cuando un agente necesite tu OK, lo verás aquí.'
+              }
+              action={
+                deck.asideTotal > 0 ? (
+                  <Button testID="deck-show-aside" label="Verlas ahora" variant="secondary" onPress={() => deck.setShowAside(true)} />
+                ) : (
+                  <Button label="Ver lo decidido" variant="plain" onPress={() => router.push('/empresa/registro')} />
+                )
+              }
+            />
+            {toast}
           </View>
         )}
       </View>

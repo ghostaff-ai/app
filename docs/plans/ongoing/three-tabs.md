@@ -2,7 +2,7 @@
 
 **Priority:** high — the shape of the whole app
 **Gate:** none
-**Next:** step 2, the decision deck (decision 7): first 2–3 drawn versions of the card for Álvaro to pick, then build it on today's decisions with «Más tarde»
+**Next:** try the deck on the phone (swipe was never tried on a phone: decision-deck.md); then step 3, the decision model, with its own written plan first
 
 Álvaro asked (2026-11-23) to reorganise the app: no Hoy; **Equipo** as one row per agent that opens a single long chat with it, as in WhatsApp; **Decisiones** in the middle as one card at a time, Tinder style, to answer or leave for later; and decisions properly modelled. He then changed the third tab from Conexiones to **Empresa**, the organisation's own page with Conexiones one tap away. He took all my picks («go», 2026-11-23).
 
@@ -38,7 +38,14 @@ It reverses, on his word, app-design.md decisions 1 (Hoy · Equipo · Registro a
 - [x] Maestro flows `create-company` and `create-personal` walk the new tabs.
 - Checked on the web against local Supabase (a seeded bakery: Equipo's order and unread dot, the chat with «Avisos», writing opens the chat, the agent's page, Decisiones, Empresa, Conexiones, «Añadir agente»). Not yet on a phone.
 
-**Step 2, the deck** — not started.
+**Step 2, the deck** (branch `feat/decision-deck`, 2026-11-24). Álvaro picked version A of the [three drawn cards](https://claude.ai/artifact/68aL77Yj9kP4qfiesmGLjf): a stack, three buttons.
+
+- [x] `supabase/migrations/20261124600000_decision_snoozes.sql`: «Más tarde» per person (`decision_snoozes`, `snooze_decision`, `unsnooze_decision`), only the person reads or changes theirs, within 30 days. pgTAP: `decision_snoozes.test.sql`.
+- [x] The deck (`components/DecisionDeck.tsx`, `lib/deck.ts`, `useDeck`): the card with ghost, due date, question, quote, «Con el sí / Con el no» and the pick; «Más tarde», «No» and the named pick; swipe right takes the pick, left is tomorrow at 8:00; a rule can't be swiped (it is signed on its own screen); a tap opens the whole decision, with «Preguntar»; «Deshacer» for six seconds after each move; reduced motion skips the fly-off. Built with React Native's own PanResponder, so it ships over the air with no new native module.
+- [x] Empty: «Nada que decidir», with «Verlas ahora» for what was put aside, else «Ver lo decidido».
+- [x] The tab's count and the sidebar's follow every answer at once.
+- Not yet: high-stakes cards (no stakes field until step 3); «Preguntar» still goes through the decision's own screen, not straight into the agent's chat with the card quoted.
+- Checked on the web against local Supabase, light and dark: drag, swipe, undo, later, no, a rule opening its screen, the empty state. Not on a phone.
 
 **Step 3, the decision model** — not started.
 
