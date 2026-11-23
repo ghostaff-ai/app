@@ -1,8 +1,8 @@
 # Who reads and writes a conversation
 
 **Priority:** high — privacy: who sees what a person says to an agent
-**Gate:** decision:Jaime approves the model and the open decisions below (recheck 2026-11-24)
-**Next:** with Jaime's OK, move to `ready/`, then write the migration (`threads.visibility`, `thread_level` rewritten) with its pgTAP test first
+**Gate:** blocked:ghostaff-ai/app#54 (no «Avisos», stacked under this branch; recheck 2026-11-24)
+**Next:** task 1, the migration `threads.visibility` with `thread_level_for` as the one rule, pgTAP first
 
 Jaime's Trello card (2026-11-23), «permisos de escritura en chats por otros miembros del equipo»: «esto tiene que ser por agente y por conversación, o sea yo puedo ser owner de un agente y hacer una conversación que quiero que lean o que no, o no ser dueño de un agente y abrir una conversación que no quiero que vean, esto es un tema».
 
@@ -15,10 +15,10 @@ Jaime's Trello card (2026-11-23), «permisos de escritura en chats por otros mie
   - the **personal chat** (`threads.personal_of`, three-tabs.md decision 3): one per person and agent, invisible to everyone else, owners included;
   - the **old shared threads** (`personal_of is null`, team-chat.md decision 2, replaced 2026-11-23): read and written by level, still readable on the agent's page.
   - the agent's **«Avisos»** (`threads.notices`), shared; being removed (three-tabs.md decision 12): what an agent does alone goes to the private chat of each person who can see it.
-- **The agent** reads only the conversation it answers in (`recentMessages(thread, 40)` in `apps/engine/src/chatStore.ts`). It has no memory across conversations yet; [agent-memory.md](agent-memory.md) proposes one, scoped by «personal chat» versus «shared thread».
+- **The agent** reads only the conversation it answers in (`recentMessages(thread, 40)` in `apps/engine/src/chatStore.ts`). It has no memory across conversations yet; [agent-memory.md](../ideas/agent-memory.md) proposes one, scoped by «personal chat» versus «shared thread».
 - **A gap found while reading:** the engine's `replyInThread` (`apps/engine/src/chat.ts`) checks only that the asker may `talk` to the *agent*, not that they may see the *thread*. Someone who knew the id of a colleague's personal chat could make the agent answer in it (they would not see the answer; the id is not guessable and RLS hides it). Closed by this work: the engine asks a `thread_level_for(thread, member)` instead.
 
-## The model (my proposal)
+## The model (Jaime, «OK a todo», 2026-11-23)
 
 ### A conversation has a visibility, set by whoever opened it
 
@@ -58,13 +58,13 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 
 - **Your chat with each agent** stays as Álvaro set it (three-tabs.md decision 3): the agent's row in Equipo, always private. It doesn't get a visibility switch: it is the private one, and a shared conversation is a separate one.
 - **«Nueva conversación»**, from the agent's page, opens a titled conversation with a visibility chosen right there, preselected to the agent's default. That brings back several conversations per agent, which three-tabs.md decision 3 had narrowed to one; only titled ones, beside the chat (decision 2).
-- **Equipo** keeps one row per agent, plus a row for each shared conversation you **follow**: you opened it, wrote in it, or were @mentioned. Those look like WhatsApp groups: the agent's ghost, the conversation's title, «Compartida». Shared conversations you don't follow wait on the agent's page under «Conversaciones del equipo», so an owner with ten agents doesn't get a flooded Equipo (decision 3).
-- **Inside a shared conversation** a line under the title says who sees it («Lo ve el equipo de Finanzas · 4 personas»), and the composer of someone who can only read says why («Solo lectura · la abrió Ana»).
+- **Equipo** keeps one row per agent, plus a row for each titled conversation you **follow**: you opened it, wrote in it, read it, or were @mentioned. Those look like WhatsApp groups: the agent's ghost, the conversation's title, «Compartida» or «Solo tú». The rest wait on the agent's page under «Conversaciones», so an owner with ten agents doesn't get a flooded Equipo (decision 3). The shared threads of before are conversations like any other (`write`): the page's «Conversaciones anteriores» becomes that list.
+- **Inside a titled conversation** a line under the header says who sees it («Solo tú y Finanzas», «La lee el equipo de Finanzas · 4 personas», «La escribe el equipo de Finanzas · 4 personas»); for the opener it opens the visibility sheet. The composer of someone who can only read says why («Solo lectura · la abrió Ana»).
 
 ### What the agent sees and does
 
 - **In a conversation, the agent reads only that conversation**, as today. In a shared one it answers with the rights of whoever wrote the message it answers (team-chat.md decision 7), and its answer is read by everyone who reads the conversation.
-- **Its memory across conversations** ([agent-memory.md](agent-memory.md)) follows visibility, not the kind of thread: where that plan says «personal chat» read «private conversation» (memories «Sobre ti» allowed, used only with that person), and where it says «shared thread» read «shared conversation» (organisation memories only, never anyone's «Sobre ti»). An organisation memory saved from a private conversation is visible to the team, so it is only saved announced in the chat («Lo recordaré para todo el equipo: …»), as that plan's explicit tool already does (decision 5).
+- **Its memory across conversations** ([agent-memory.md](../ideas/agent-memory.md)) follows visibility, not the kind of thread: where that plan says «personal chat» read «private conversation» (memories «Sobre ti» allowed, used only with that person), and where it says «shared thread» read «shared conversation» (organisation memories only, never anyone's «Sobre ti»). An organisation memory saved from a private conversation is visible to the team, so it is only saved announced in the chat («Lo recordaré para todo el equipo: …»), as that plan's explicit tool already does (decision 5).
 - **What the agent does is not private**: a decision it raises, a change to the record, a mail it sends belong to the organisation and show where they always do, whatever the conversation. Private is the conversation, not the work. The decision card's «Preguntar» opens the conversation it came from only for someone who can see it; others get the agent's chat with the decision quoted.
 - **@agent in a shared conversation**: the agent brought in answers there, and everyone who reads the conversation reads that answer, even someone with `none` on that agent. Accepted: the conversation belongs to its own agent, and the asker must be allowed to talk to the agent they bring in. The @ list warns when the conversation is shared («Lo leerá el equipo de Finanzas»).
 - **@person** offers only people who can see the conversation, as now (team-chat.md decision 9). In a private conversation it offers nobody.
@@ -74,8 +74,8 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 - `threads.visibility text not null check (visibility in ('private', 'read', 'write'))`, set from what exists: personal chats `private`; old shared threads `write` (they behaved like that: each by their level). «Avisos» is gone by then (three-tabs.md decision 12); if not, `read`.
 - `agents.chat_default`, the same values, default `private`. A setting: defined in `packages/shared/src/services/settings.ts` and changeable by Secretaría with an owner's approval (AGENTS.md rule 6).
 - `thread_level(thread)` rewritten as the rule above; it is already the one function every policy and write goes through (threads, messages, read marks, `my_threads`, `post_message`). The threads policy reads `thread_level(id) <> 'none'` instead of repeating the rule.
-- `start_conversation(agent, body, visibility, title)` replaces `start_thread` for the app; `set_conversation_visibility(thread, visibility)`, opener only, with the rules above. Classified in `settings.ts`: `not_a_setting` the first, `never` the second («a conversation's privacy is its opener's alone»).
-- `thread_level_for(thread, member)`, service role only, for the engine (the gap above). `replyInThread` and the @agent loop check it.
+- `start_thread(agent, body, title, visibility)` gains the visibility (null: the agent's default); `set_conversation_visibility(thread, visibility)`, opener only, with the rules above; `conversation_readers(thread)`, how many people read it, for whoever sees it. Classified in `settings.ts`: `set_conversation_visibility` is `never` («a conversation's privacy is its opener's alone»); `set_agent_chat_default` is the setting, with its tool `settings_agent_chat_default`.
+- `thread_level_for(thread, member)` is the one rule, service role only, for the engine (the gap above); `thread_level(thread)` is it for `auth.uid()`. `replyInThread` checks it.
 - `my_threads` returns `visibility`, `opened_by_me` and `following`. Following comes from authorship, mentions and read marks, without a new table.
 - **Realtime** applies the policies per event, so a conversation made private stops reaching others at once; their open screen reloads to «Ya no tienes acceso a esta conversación».
 - pgTAP `supabase/tests/database/chat_permissions.test.sql`: the three visibilities for opener, owner, `talk`, `read` and `none` members; the cap by agent level, the opener's included; nobody but the opener changes visibility; the downgrade rule; nothing across organisations; `thread_level_for` matches `thread_level`.
@@ -90,7 +90,7 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 - **The agent is removed:** its conversations go with it, as today (`delete_agent` is `never` for Secretaría for that reason).
 - **Full export** (invariant 2): a private conversation is the organisation's data stored for one person. The export an owner runs leaves out other people's private conversations; each person can export their own (decision 4).
 
-## Open decisions (my pick first)
+## Decisions (Jaime, «OK a todo», 2026-11-23: all my picks, the first option of each)
 
 1. **Who is «owner de un agente».** (a) The organisation's owners, as today: they set «Quién puede» on every agent; no new role. (b) A new per-agent owner (a fourth level, `own`, or `agents.owner_id`), who manages that agent's access without being an org owner: useful when a department head runs Finanzas. My pick: (a) now; (b) as its own card when a team asks for heads of department, since the visibility model works the same either way.
 2. **Several conversations per agent.** (a) Your private chat stays, plus titled conversations with a visibility, opened from the agent's page. (b) Only the one chat per agent, with a visibility switch: simpler, but you can't have a private chat and a shared one with the same agent, which is Jaime's first case. My pick: (a).
@@ -104,3 +104,19 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 - The removal of «Avisos» (branch `claude/remove-avisos-7bec6b`) changes `useAgentChat` (`apps/mobile/lib/hooks/useChat.ts`) and the `notices` column; whichever lands second rebases. Nothing here depends on «Avisos».
 - Voice notes and the connector card touch the chat screen (`chat/[agent].tsx`, `components/chat/`); the visibility sheet and the «who sees it» line live in their own components to keep the overlap small.
 - team-chat.md decision 6 (levels per agent) and three-tabs.md decision 3 (one private chat per person) stand; this adds the per-conversation layer on top.
+
+## File structure
+
+- `supabase/migrations/20261124000000_conversation_visibility.sql`: `threads.visibility`, `agents.chat_default`, `thread_level_for`, `thread_level`, the threads policy, `start_thread`, `set_conversation_visibility`, `conversation_readers`, `set_agent_chat_default`, `my_threads` (+ `visibility`, `mine`, `following`).
+- `supabase/tests/database/chat_permissions.test.sql`; `team_chat`, `personal_chats` tests adjusted where `start_thread` changed.
+- `packages/shared/src/chat.ts` (`ConversationVisibility`, `ChatThread` fields), `models` (`Agent.chatDefault`), `services/index.ts` (`startThread`, `setConversationVisibility`, `conversationReaders`, `setAgentChatDefault`, `getThread` with visibility and opener), `services/settings.ts` (classification, `settings_agent_chat_default`).
+- `apps/engine/src/chat.ts`, `chatStore.ts`: `threadLevelFor`; tests in `apps/engine/test/chat.test.ts`, `settings.test.ts`.
+- `apps/mobile`: `lib/chat.ts` (`teamRows` with followed conversations, visibility words), `components/chat/VisibilityPicker.tsx`, `components/chat/Audience.tsx`, `app/(app)/nueva-conversacion/[agent].tsx`, `conversacion/[id].tsx` (audience line, sheet, read-only reason), `agente/[id].tsx` («Nueva conversación», «Conversaciones», the default for owners), `(tabs)/index.tsx` (followed rows); Jest tests; a Maestro flow `.maestro/flows/ci/shared-conversation.yaml`.
+
+## Tasks (branch `claude/chat-permissions-6baf5b`, one PR, stacked on #54)
+
+- [ ] 1. Migration and pgTAP.
+- [ ] 2. Engine: `thread_level_for` in `replyInThread`, with tests.
+- [ ] 3. Shared services, types and the settings classification and tool.
+- [ ] 4. Screens: new conversation with the picker, the audience line and sheet, the agent's page, Equipo's followed rows, the read-only reason.
+- [ ] 5. Check: `pnpm check`, `pnpm db:test`, the web against local Supabase (two people, the three visibilities), `pnpm e2e` for the new flow; then `pnpm pr:land`.
