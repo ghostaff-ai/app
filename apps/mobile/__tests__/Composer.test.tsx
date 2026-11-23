@@ -5,6 +5,8 @@ import { Composer } from '@/components/chat/Composer';
 // expo-audio is a native module: a recorder that records nothing and a permission we can flip.
 let mockRecording = false;
 let mockStartedAt = 0;
+/** What the recorder reports at least, so a quick test isn't a too-short note. */
+let mockMinMillis = 4200;
 const mockRecorder = {
   uri: 'file:///cache/ExpoAudio/note.m4a' as string | null,
   prepareToRecordAsync: jest.fn(async () => {}),
@@ -15,7 +17,7 @@ const mockRecorder = {
   stop: jest.fn(async () => {
     mockRecording = false;
   }),
-  getStatus: () => ({ isRecording: mockRecording, durationMillis: mockRecording ? Date.now() - mockStartedAt : 0 }),
+  getStatus: () => ({ isRecording: mockRecording, durationMillis: mockRecording ? Math.max(mockMinMillis, Date.now() - mockStartedAt) : 0 }),
 };
 const mockPermission = jest.fn(async () => ({ granted: true }));
 const mockDelete = jest.fn();
@@ -37,8 +39,9 @@ jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({
 const names = ['Ana'];
 const onSend = jest.fn(() => Promise.resolve());
 
-const setup = async (onDictate?: (audio: Blob, mimeType: string) => Promise<string>) => {
-  await render(<Composer placeholder="Escribe aquí" names={names} onSend={onSend} onDictate={onDictate} />);
+type Note = { audio: Blob; mimeType: string; durationMs: number };
+const setup = async (onVoiceNote?: (note: Note) => Promise<void>) => {
+  await render(<Composer placeholder="Escribe aquí" names={names} onSend={onSend} onVoiceNote={onVoiceNote} />);
 };
 
 const press = async (label: string) => {
@@ -52,328 +55,275 @@ const settle = async () => {
   });
 };
 
-describe('Composer dictation', () => {
+const record = async () => {
+  await press('Grabar nota de voz');
+  await settle();
+};
+
+const recordAndSend = async () => {
+  await record();
+  await press('Enviar nota de voz');
+  await settle();
+};
+
+const backgroundOnDemand = () => {
+  let onChange: (s: string) => void = () => {};
+  jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, h: (s: string) => void) => {
+    onChange = h;
+    return { remove: jest.fn() };
+  }) as never);
+  return (s: string) => act(async () => onChange(s));
+};
+
+describe('Composer voice notes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRecording = false;
+    mockMinMillis = 4200;
     mockPermission.mockResolvedValue({ granted: true });
     mockRecorder.uri = 'file:///cache/ExpoAudio/note.m4a';
     globalThis.fetch = jest.fn(async () => ({ blob: async () => new Blob(['voz'], { type: '' }) })) as unknown as typeof fetch;
   });
 
-  it('has no mic without onDictate', async () => {
+  it('has no mic without onVoiceNote', async () => {
     await setup();
-    expect(screen.queryByLabelText('Dictar')).toBeNull();
+    expect(screen.queryByLabelText('Grabar nota de voz')).toBeNull();
     expect(screen.getByLabelText('Enviar')).toBeTruthy();
   });
 
   it('keeps the mic beside send, with or without text', async () => {
     await setup(jest.fn());
-    expect(screen.getByLabelText('Dictar')).toBeTruthy();
-    expect(screen.getByLabelText('Enviar')).toBeTruthy();
+    expect(screen.getByLabelText('Grabar nota de voz')).toBeTruthy();
     await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'Hola');
-    expect(screen.getByLabelText('Dictar')).toBeTruthy();
+    expect(screen.getByLabelText('Grabar nota de voz')).toBeTruthy();
     expect(screen.getByLabelText('Enviar')).toBeTruthy();
   });
 
-  it('appends the transcript to what is already written: «Hola» + «qué tal»', async () => {
-    await setup(jest.fn(async () => 'qué tal'));
-    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'Hola');
-    await press('Dictar');
-    await settle();
-    await press('Parar y transcribir');
-    await settle();
-    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('Hola qué tal');
-    expect(onSend).not.toHaveBeenCalled();
-  });
-
-  it('a double press of stop transcribes once', async () => {
-    const onDictate = jest.fn(async () => 'x');
-    await setup(onDictate);
-    await press('Dictar');
-    await settle();
-    const stop = screen.getByLabelText('Parar y transcribir');
-    await fireEvent.press(stop);
-    await fireEvent.press(stop);
-    await settle();
-    expect(onDictate).toHaveBeenCalledTimes(1);
-  });
-
-  it('discards the file and stays quiet when the screen is left while transcribing', async () => {
-    let finish: (t: string) => void = () => {};
-    const onDictate = jest.fn(() => new Promise<string>((r) => (finish = r)));
-    await setup(onDictate);
-    await press('Dictar');
-    await settle();
-    await press('Parar y transcribir');
-    await settle();
-    await screen.unmount();
-    await act(async () => finish('tarde'));
-    expect(mockDelete).toHaveBeenCalled();
-    expect(onDictate).toHaveBeenCalledTimes(1);
-  });
-
-  it('survives the permission dialog sending the app to the background', async () => {
-    let onChange: (s: string) => void = () => {};
-    jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, h: (s: string) => void) => {
-      onChange = h;
-      return { remove: jest.fn() };
-    }) as never);
-    let allow: (r: { granted: boolean }) => void = () => {};
-    mockPermission.mockImplementationOnce(() => new Promise((r) => (allow = r)));
-    const onDictate = jest.fn(async () => 'tras el diálogo');
-    await setup(onDictate);
-    await press('Dictar');
-    await act(async () => onChange('background')); // Android's dialog
-    await act(async () => allow({ granted: true }));
-    await settle();
+  it('records and sends the note as audio, with its length, leaving the text box alone', async () => {
+    const onVoiceNote = jest.fn(async (_: Note) => {});
+    await setup(onVoiceNote);
+    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'a medias');
+    await record();
+    expect(screen.getByText('0:00')).toBeTruthy();
     expect(screen.getByText('Cancelar')).toBeTruthy();
-    await press('Parar y transcribir');
+    await press('Enviar nota de voz');
     await settle();
-    expect(onDictate).toHaveBeenCalledTimes(1);
-    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('tras el diálogo');
-    jest.restoreAllMocks();
+    expect(onVoiceNote).toHaveBeenCalledTimes(1);
+    const note = onVoiceNote.mock.calls[0]![0];
+    expect(note.audio).toBeInstanceOf(Blob);
+    expect(note.mimeType).toBe('audio/mp4');
+    expect(note.durationMs).toBeGreaterThanOrEqual(4200);
+    expect(onSend).not.toHaveBeenCalled();
+    expect(mockDelete).toHaveBeenCalled();
+    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('a medias');
   });
 
   it('sends audio/mp4 for a phone recording whatever type the file read gives', async () => {
     globalThis.fetch = jest.fn(async () => ({ blob: async () => new Blob(['voz'], { type: 'audio/x-m4a' }) })) as unknown as typeof fetch;
-    const onDictate = jest.fn(async () => 'ok');
-    await setup(onDictate);
-    await press('Dictar');
-    await settle();
-    await press('Parar y transcribir');
-    await settle();
-    expect((onDictate.mock.calls as unknown[][])[0]?.[1]).toBe('audio/mp4');
+    const onVoiceNote = jest.fn(async (_: Note) => {});
+    await setup(onVoiceNote);
+    await recordAndSend();
+    expect(onVoiceNote.mock.calls[0]![0].mimeType).toBe('audio/mp4');
   });
 
-  it('keeps a transcript over 8000 characters whole, says so with the count, and blocks send', async () => {
-    await setup(jest.fn(async () => 'x'.repeat(8412)));
-    await press('Dictar');
-    await settle();
-    await press('Parar y transcribir');
-    await settle();
-    expect(screen.getByLabelText('Escribe aquí').props.value).toHaveLength(8412);
-    expect(screen.getByText(/El mensaje pasa de 8000 caracteres; recórtalo antes de enviar\./)).toBeTruthy();
-    expect(screen.getByText(/8 412 \/ 8 000/)).toBeTruthy();
-    expect(screen.getByLabelText('Enviar').props.accessibilityState.disabled).toBe(true);
-    await fireEvent.press(screen.getByLabelText('Enviar'));
-    expect(onSend).not.toHaveBeenCalled();
+  it('sends the browser’s own type for a web recording and releases it', async () => {
+    mockRecorder.uri = 'blob:http://localhost/1';
+    const revoke = jest.fn();
+    const URLWithRevoke = URL as unknown as { revokeObjectURL?: (u: string) => void };
+    const saved = URLWithRevoke.revokeObjectURL;
+    URLWithRevoke.revokeObjectURL = revoke;
+    globalThis.fetch = jest.fn(async () => ({ blob: async () => new Blob(['voz'], { type: 'audio/webm' }) })) as unknown as typeof fetch;
+    const onVoiceNote = jest.fn(async (_: Note) => {});
+    await setup(onVoiceNote);
+    await recordAndSend();
+    expect(onVoiceNote.mock.calls[0]![0].mimeType).toBe('audio/webm');
+    expect(revoke).toHaveBeenCalledWith('blob:http://localhost/1');
+    URLWithRevoke.revokeObjectURL = saved;
   });
 
-  it('retries a failed transcription with the same recording', async () => {
-    const onDictate = jest.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce('a la segunda');
-    await setup(onDictate);
-    await press('Dictar');
+  it('a double press of send sends once', async () => {
+    const onVoiceNote = jest.fn(async (_: Note) => {});
+    await setup(onVoiceNote);
+    await record();
+    const send = screen.getByLabelText('Enviar nota de voz');
+    await fireEvent.press(send);
+    await fireEvent.press(send);
     await settle();
-    await press('Parar y transcribir');
-    await settle();
-    expect(screen.getByText('No he podido transcribirlo. Inténtalo otra vez.')).toBeTruthy();
-    expect(mockDelete).toHaveBeenCalledTimes(1);
-    await press('Reintentar');
-    await settle();
-    expect(onDictate).toHaveBeenCalledTimes(2);
-    expect(onDictate.mock.calls[1]?.[0]).toBe(onDictate.mock.calls[0]?.[0]);
-    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('a la segunda');
-    expect(screen.queryByText('Reintentar')).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(1); // the file is not read again
+    expect(onVoiceNote).toHaveBeenCalledTimes(1);
   });
 
-  it('offers no retry for silence, and drops the recording on a new one', async () => {
-    const onDictate = jest.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce('');
-    await setup(onDictate);
-    await press('Dictar');
-    await settle();
-    await press('Parar y transcribir');
-    await settle();
-    expect(screen.getByText('Reintentar')).toBeTruthy();
-    await press('Dictar');
-    await settle();
-    expect(screen.queryByText('Reintentar')).toBeNull();
-    await press('Parar y transcribir');
-    await settle();
-    expect(screen.getByText('No he oído nada. Inténtalo otra vez.')).toBeTruthy();
-    expect(screen.queryByText('Reintentar')).toBeNull();
-  });
-
-  it('says so when dictation was used too much', async () => {
-    await setup(jest.fn(async () => Promise.reject(Object.assign(new Error('x'), { code: 'too_many' }))));
-    await press('Dictar');
-    await settle();
-    await press('Parar y transcribir');
-    await settle();
-    expect(screen.getByText('Has dictado mucho en la última hora. Espera un poco.')).toBeTruthy();
-  });
-
-  it('clears the dictation error when the person types', async () => {
-    await setup(jest.fn(async () => ''));
-    await press('Dictar');
-    await settle();
-    await press('Parar y transcribir');
-    await settle();
-    expect(screen.getByText('No he oído nada. Inténtalo otra vez.')).toBeTruthy();
-    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'a');
-    expect(screen.queryByText('No he oído nada. Inténtalo otra vez.')).toBeNull();
-  });
-
-  it('shows a spinner, not a stop icon, on the disabled button while transcribing', async () => {
-    await setup(() => new Promise<string>(() => {}));
-    await press('Dictar');
-    await settle();
-    await press('Parar y transcribir');
-    await settle();
-    expect(screen.queryByLabelText('Parar y transcribir')).toBeNull();
+  it('shows «Enviando…» and a spinner while it goes', async () => {
+    let done: () => void = () => {};
+    await setup(() => new Promise<void>((r) => (done = r)));
+    await recordAndSend();
+    expect(screen.getByText('Enviando…')).toBeTruthy();
+    expect(screen.queryByLabelText('Enviar nota de voz')).toBeNull();
     expect(JSON.stringify(screen.toJSON()).match(/ActivityIndicator/g)).toHaveLength(2); // the bar's and the button's
+    await act(async () => done());
+    expect(screen.queryByText('Enviando…')).toBeNull();
+    expect(screen.getByLabelText('Escribe aquí')).toBeTruthy();
   });
 
-  it('stops and transcribes when the app goes to the background', async () => {
-    let onChange: (s: string) => void = () => {};
-    jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, h: (s: string) => void) => {
-      onChange = h;
-      return { remove: jest.fn() };
-    }) as never);
-    const onDictate = jest.fn(async () => 'de fondo');
-    await setup(onDictate);
-    await press('Dictar');
+  it('keeps a note that did not go, and sends the same recording again', async () => {
+    const onVoiceNote = jest.fn<Promise<void>, [Note]>().mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(undefined);
+    await setup(onVoiceNote);
+    await recordAndSend();
+    expect(screen.getByText('No se ha enviado la nota.')).toBeTruthy();
+    expect(mockDelete).toHaveBeenCalledTimes(1); // the file is gone; the note is in memory
+    await press('Enviar la nota');
     await settle();
-    await act(async () => onChange('active'));
-    expect(onDictate).not.toHaveBeenCalled();
-    await act(async () => onChange('background'));
-    await settle();
-    expect(onDictate).toHaveBeenCalledTimes(1);
-    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('de fondo');
-    jest.restoreAllMocks();
+    expect(onVoiceNote).toHaveBeenCalledTimes(2);
+    expect(onVoiceNote.mock.calls[1]![0]).toBe(onVoiceNote.mock.calls[0]![0]);
+    expect(screen.queryByText('No se ha enviado la nota.')).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1); // not read again
   });
 
-  it('records, transcribes and puts the text in the box without sending it', async () => {
-    const onDictate = jest.fn(async () => 'qué tal');
-    await setup(onDictate);
-    await press('Dictar');
-    await settle();
-    expect(screen.getByText('0:00')).toBeTruthy();
-    expect(screen.getByText('Cancelar')).toBeTruthy();
-    await press('Parar y transcribir');
-    await settle();
-    expect(onDictate).toHaveBeenCalledTimes(1);
-    const [audio, mime] = onDictate.mock.calls[0] as unknown as [Blob, string];
-    expect(audio).toBeInstanceOf(Blob);
-    expect(mime).toBe('audio/mp4');
-    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('qué tal');
-    expect(onSend).not.toHaveBeenCalled();
+  it('discards a note that did not go', async () => {
+    const onVoiceNote = jest.fn<Promise<void>, [Note]>().mockRejectedValue(new Error('boom'));
+    await setup(onVoiceNote);
+    await recordAndSend();
+    await press('Descartar la nota');
+    expect(screen.queryByText('No se ha enviado la nota.')).toBeNull();
+    expect(screen.queryByLabelText('Enviar la nota')).toBeNull();
+  });
+
+  it('typing keeps a waiting note’s line, and clears a passing message', async () => {
+    await setup(jest.fn<Promise<void>, [Note]>().mockRejectedValue(new Error('boom')));
+    await recordAndSend();
+    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'a');
+    expect(screen.getByText('No se ha enviado la nota.')).toBeTruthy();
+    await press('Descartar la nota');
+    mockPermission.mockResolvedValue({ granted: false });
+    await record();
+    expect(screen.getByText(/no tiene permiso/)).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'ab');
+    expect(screen.queryByText(/no tiene permiso/)).toBeNull();
+  });
+
+  it('says so when too many notes were sent, and keeps the note for later', async () => {
+    await setup(jest.fn(async () => Promise.reject(Object.assign(new Error('x'), { code: 'too_many' }))));
+    await recordAndSend();
+    expect(screen.getByText('Has enviado muchas notas de voz en la última hora. Espera un poco.')).toBeTruthy();
+    expect(screen.getByLabelText('Enviar la nota')).toBeTruthy();
+  });
+
+  it('says so when the note is too long, with nothing to send again', async () => {
+    await setup(jest.fn(async () => Promise.reject(Object.assign(new Error('x'), { code: 'too_large' }))));
+    await recordAndSend();
+    expect(screen.getByText('La nota es demasiado larga.')).toBeTruthy();
+    expect(screen.queryByLabelText('Enviar la nota')).toBeNull();
+  });
+
+  it('sends nothing for a tap by mistake', async () => {
+    mockMinMillis = 300;
+    const onVoiceNote = jest.fn(async (_: Note) => {});
+    await setup(onVoiceNote);
+    await recordAndSend();
+    expect(onVoiceNote).not.toHaveBeenCalled();
+    expect(screen.getByText('La nota es demasiado corta.')).toBeTruthy();
     expect(mockDelete).toHaveBeenCalled();
   });
 
-  it('shows «Transcribiendo…» while the engine works', async () => {
-    let finish: (t: string) => void = () => {};
-    await setup(() => new Promise<string>((r) => (finish = r)));
-    await press('Dictar');
-    await settle();
-    await press('Parar y transcribir');
-    await settle();
-    expect(screen.getByText('Transcribiendo…')).toBeTruthy();
-    await act(async () => finish('listo'));
-    expect(screen.queryByText('Transcribiendo…')).toBeNull();
-    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('listo');
-  });
-
-  it('cancelling goes back to the empty box and never calls onDictate', async () => {
-    const onDictate = jest.fn(async () => 'x');
-    await setup(onDictate);
-    await press('Dictar');
-    await settle();
+  it('cancelling goes back to the box and never sends', async () => {
+    const onVoiceNote = jest.fn(async (_: Note) => {});
+    await setup(onVoiceNote);
+    await record();
     await press('Cancelar');
     await settle();
     expect(screen.getByLabelText('Escribe aquí')).toBeTruthy();
-    expect(screen.getByLabelText('Dictar')).toBeTruthy();
-    expect(onDictate).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Grabar nota de voz')).toBeTruthy();
+    expect(onVoiceNote).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
   });
 
   it('says so when the microphone is not allowed', async () => {
     mockPermission.mockResolvedValue({ granted: false });
     await setup(jest.fn());
-    await press('Dictar');
-    await settle();
+    await record();
     expect(screen.getByText('Ghostaff no tiene permiso para usar el micrófono. Actívalo en los ajustes.')).toBeTruthy();
     expect(mockRecorder.record).not.toHaveBeenCalled();
   });
 
-  it('says so when the transcription fails', async () => {
-    await setup(jest.fn(async () => Promise.reject(new Error('boom'))));
-    await press('Dictar');
+  it('going to the background stops the note and keeps it unsent', async () => {
+    const goTo = backgroundOnDemand();
+    const onVoiceNote = jest.fn(async (_: Note) => {});
+    await setup(onVoiceNote);
+    await record();
+    await goTo('active');
+    expect(screen.getByText('Cancelar')).toBeTruthy();
+    await goTo('background');
     await settle();
-    await press('Parar y transcribir');
+    expect(onVoiceNote).not.toHaveBeenCalled();
+    expect(screen.getByText('La nota se ha parado sin enviar.')).toBeTruthy();
+    await press('Enviar la nota');
     await settle();
-    expect(screen.getByText('No he podido transcribirlo. Inténtalo otra vez.')).toBeTruthy();
-    expect(mockDelete).toHaveBeenCalled();
+    expect(onVoiceNote).toHaveBeenCalledTimes(1);
+    jest.restoreAllMocks();
   });
 
-  it('says so when the note is too long', async () => {
-    await setup(jest.fn(async () => Promise.reject(Object.assign(new Error('x'), { code: 'too_large' }))));
-    await press('Dictar');
+  it('survives the permission dialog sending the app to the background', async () => {
+    const goTo = backgroundOnDemand();
+    let allow: (r: { granted: boolean }) => void = () => {};
+    mockPermission.mockImplementationOnce(() => new Promise((r) => (allow = r)));
+    const onVoiceNote = jest.fn(async (_: Note) => {});
+    await setup(onVoiceNote);
+    await press('Grabar nota de voz');
+    await goTo('background'); // Android's dialog
+    await act(async () => allow({ granted: true }));
     await settle();
-    await press('Parar y transcribir');
+    expect(screen.getByText('Cancelar')).toBeTruthy();
+    await press('Enviar nota de voz');
     await settle();
-    expect(screen.getByText('La nota es demasiado larga.')).toBeTruthy();
-  });
-
-  it('says so when nobody spoke', async () => {
-    await setup(jest.fn(async () => ''));
-    await press('Dictar');
-    await settle();
-    await press('Parar y transcribir');
-    await settle();
-    expect(screen.getByText('No he oído nada. Inténtalo otra vez.')).toBeTruthy();
-    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('');
+    expect(onVoiceNote).toHaveBeenCalledTimes(1);
+    jest.restoreAllMocks();
   });
 
   describe('with a clock', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
 
-    it('transcribes what is there when the recorder stops by itself', async () => {
-      const onDictate = jest.fn(async () => 'cortado');
-      await setup(onDictate);
-      await press('Dictar');
-      await settle();
+    it('keeps the note unsent when the recorder stops by itself (a call took the microphone)', async () => {
+      const onVoiceNote = jest.fn(async (_: Note) => {});
+      await setup(onVoiceNote);
+      await record();
       await act(async () => {
         jest.advanceTimersByTime(3000);
       });
-      mockRecording = false; // a phone call took the microphone
+      mockRecording = false;
       await act(async () => {
         jest.advanceTimersByTime(500);
       });
       await settle();
-      expect(onDictate).toHaveBeenCalledTimes(1);
-      expect(screen.getByLabelText('Escribe aquí').props.value).toBe('cortado');
+      expect(onVoiceNote).not.toHaveBeenCalled();
+      expect(screen.getByText('La nota se ha parado sin enviar.')).toBeTruthy();
     });
 
-    it('counts the seconds and stops by itself at 10:00', async () => {
-      const onDictate = jest.fn(async () => 'largo');
-      await setup(onDictate);
-      await press('Dictar');
-      await settle();
+    it('counts the seconds and sends by itself at 10:00', async () => {
+      mockMinMillis = 0;
+      const onVoiceNote = jest.fn(async (_: Note) => {});
+      await setup(onVoiceNote);
+      await record();
       await act(async () => {
         jest.advanceTimersByTime(65_000);
       });
       expect(screen.getByText('1:05')).toBeTruthy();
-      expect(onDictate).not.toHaveBeenCalled();
+      expect(onVoiceNote).not.toHaveBeenCalled();
       await act(async () => {
         jest.advanceTimersByTime(535_000);
       });
       await settle();
-      expect(onDictate).toHaveBeenCalledTimes(1);
-      expect(screen.getByLabelText('Escribe aquí').props.value).toBe('largo');
+      expect(onVoiceNote).toHaveBeenCalledTimes(1);
+      expect(onVoiceNote.mock.calls[0]![0].durationMs).toBeGreaterThanOrEqual(600_000);
     });
   });
 
   it('discards a recording when the screen is left', async () => {
-    const onDictate = jest.fn(async () => 'x');
-    await setup(onDictate);
-    await press('Dictar');
-    await settle();
+    const onVoiceNote = jest.fn(async (_: Note) => {});
+    await setup(onVoiceNote);
+    await record();
     await screen.unmount();
     await settle();
     expect(mockRecorder.stop).toHaveBeenCalled();
-    expect(onDictate).not.toHaveBeenCalled();
+    expect(onVoiceNote).not.toHaveBeenCalled();
   });
 });

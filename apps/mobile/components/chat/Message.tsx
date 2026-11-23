@@ -1,14 +1,16 @@
-import { type ActionPart, type ChatMessage, isActionPart, messageText, splitMentions } from '@ghostaff/shared';
+import { type ActionPart, type ChatMessage, isActionPart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { Markdown } from '@/components/chat/Markdown';
+import { VoiceNote } from '@/components/chat/VoiceNote';
 import { GHOSTS, type GhostId } from '@/lib/team';
 
 // One message of a thread (team-chat.md, decision 3): people in bubbles (yours
 // on the right in ink, colleagues on the left with their initials), agents
 // flat and full width in ink with their small ghost (app-design.md #18, changed
 // 2026-11-22), their replies' markdown rendered. Consecutive messages from the same
-// author drop the name.
+// author drop the name. A voice note of yours is drawn as its audio with the
+// transcript under it (voice.md).
 // An agent's reply carries one status line (decision 4): what it is doing
 // while it writes, then «Hecho · 3 s», which unfolds into its steps.
 
@@ -192,6 +194,7 @@ export function MessageView({
   names,
   canDecide = false,
   onDecide,
+  onRetryTranscript,
 }: {
   message: ChatMessage;
   mine: boolean;
@@ -204,6 +207,8 @@ export function MessageView({
   /** Whether the viewer may approve the agent's proposed actions (owners). */
   canDecide?: boolean;
   onDecide?: (actionId: string, decision: 'approve' | 'reject') => Promise<void>;
+  /** Asks again for a voice note's transcript. */
+  onRetryTranscript?: (messageId: string) => Promise<void>;
 }) {
   const text = messageText(message.parts);
   const actions = message.parts.filter(isActionPart);
@@ -228,10 +233,20 @@ export function MessageView({
   }
 
   if (mine) {
+    const voice = message.parts.find(isVoicePart);
     return (
       <View className={`flex-row justify-end px-4 ${showAuthor ? 'pt-4' : 'pt-1'}`}>
         <View className="max-w-[80%] rounded-2xl rounded-br-md bg-accent px-3.5 py-2">
-          <Body text={text} names={names} className="text-base leading-6 text-on-accent" />
+          {voice ? (
+            <VoiceNote
+              part={voice}
+              transcript={text}
+              createdAt={message.createdAt}
+              onRetry={onRetryTranscript ? () => onRetryTranscript(message.id) : undefined}
+            />
+          ) : (
+            <Body text={text} names={names} className="text-base leading-6 text-on-accent" />
+          )}
         </View>
       </View>
     );

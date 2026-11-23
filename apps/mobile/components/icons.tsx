@@ -21,7 +21,9 @@ export { LinkSimpleIcon as LinkSimple } from 'phosphor-react-native/src/icons/Li
 export { LockSimpleIcon as LockSimple } from 'phosphor-react-native/src/icons/LockSimple';
 export { MagnifyingGlassIcon as MagnifyingGlass } from 'phosphor-react-native/src/icons/MagnifyingGlass';
 export { MicrophoneIcon as Microphone } from 'phosphor-react-native/src/icons/Microphone';
+export { PauseIcon as Pause } from 'phosphor-react-native/src/icons/Pause';
 export { PencilSimpleIcon as PencilSimple } from 'phosphor-react-native/src/icons/PencilSimple';
+export { PlayIcon as Play } from 'phosphor-react-native/src/icons/Play';
 export { PlusIcon as Plus } from 'phosphor-react-native/src/icons/Plus';
 export { ProhibitIcon as Prohibit } from 'phosphor-react-native/src/icons/Prohibit';
 export { SealCheckIcon as SealCheck } from 'phosphor-react-native/src/icons/SealCheck';

@@ -3,7 +3,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useMemo } from 'react';
 import { Image, Platform, Pressable, Text, View } from 'react-native';
-import { decideAction, transcribe } from '@ghostaff/shared/services';
+import { decideAction } from '@ghostaff/shared/services';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
 import { Loading, Notice } from '@/components/ui';
@@ -20,7 +20,7 @@ import { GHOSTS } from '@/lib/team';
 // straight from its row in Equipo: one long conversation, as in WhatsApp, with
 // what the agent did on its own in it too (decision 12). Only the person and
 // the agent see it. The agent's name on top opens its page and settings
-// (decision 6).
+// (decision 6). The mic sends voice notes (voice.md), here only: no engine, no mic.
 
 export default function Chat() {
   const { agent: agentId } = useLocalSearchParams<{ agent: string }>();
@@ -30,7 +30,7 @@ export default function Chat() {
   const { items: agents, loading: agentsLoading } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels, loading: levelsLoading } = useMyLevels(orgId);
-  const { messages, loading, error, send } = useAgentChat(orgId, agentId ?? null);
+  const { messages, loading, error, send, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
   const headerHeight = useHeaderHeight();
   const engine = useEngine();
 
@@ -41,11 +41,6 @@ export default function Chat() {
   const ghostOf = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a.ghost])), [agents]);
   const owner = members.find((m) => m.role === 'owner' && m.userId !== me)?.displayName ?? null;
   const isOwner = active?.role === 'owner';
-  // No engine, no mic.
-  const dictate = useMemo(
-    () => (engine && orgId ? (audio: Blob, mimeType: string) => transcribe(engine, orgId, audio, mimeType) : undefined),
-    [engine, orgId],
-  );
   // The card updates itself when the engine rewrites the message.
   const decide = useMemo(
     () => async (actionId: string, decision: 'approve' | 'reject') => {
@@ -112,6 +107,7 @@ export default function Chat() {
                 names={names}
                 canDecide={isOwner}
                 onDecide={decide}
+                onRetryTranscript={retryTranscript}
               />
             )}
             estimatedItemSize={64}
@@ -127,7 +123,7 @@ export default function Chat() {
         )}
         {error ? <Text className="px-4 pb-1 text-footnote text-no">{error}</Text> : null}
         {canTalk ? (
-          <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={send} onDictate={dictate} />
+          <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={send} onVoiceNote={engine ? sendVoice : undefined} />
         ) : (
           <ReadOnlyComposer owner={owner} />
         )}

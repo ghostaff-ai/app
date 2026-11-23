@@ -1,4 +1,4 @@
-import { type AgentLevel, type ChatMessage, type ChatThread, messageText, type OrgMember } from '@ghostaff/shared';
+import { type AgentLevel, type ChatMessage, type ChatThread, isVoicePart, messageText, type OrgMember } from '@ghostaff/shared';
 import {
   askAgent,
   chatWith,
@@ -10,12 +10,16 @@ import {
   markThreadRead,
   myAgentLevels,
   postMessage,
+  sendVoiceNote,
   subscribeToThread,
   type ThreadHead,
+  transcribeVoiceNote,
+  voiceNoteUrl,
 } from '@ghostaff/shared/services';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase';
 import { useEngine } from './useConnections';
+import type { RecordedNote } from './useVoiceNote';
 
 // The team chat's data for the screens (docs/plans/ongoing/team-chat.md). All
 // of it goes through @ghostaff/shared/services; row-level security decides what
@@ -74,8 +78,13 @@ export function useMyLevels(orgId: string | null) {
   return { levels: data, ...rest };
 }
 
+const transcription = (m: ChatMessage) => m.parts.find(isVoicePart)?.transcription;
+
 /** Whether `next` is a later version of the same message than `prev` (an agent's reply changes as it is written). */
 function isNewer(prev: ChatMessage, next: ChatMessage): boolean {
+  // A voice note's transcript, once there (or once it is known nobody spoke), is never undone by an older copy.
+  const before = transcription(prev);
+  if ((before === 'done' || before === 'empty') && transcription(next) === 'pending') return false;
   if (prev.state !== 'working') return next.state !== 'working';
   if (next.state !== 'working') return true;
   return messageText(next.parts).length >= messageText(prev.parts).length;
@@ -156,8 +165,14 @@ export function useThread(threadId: string | null) {
     [threadId, engine],
   );
 
-  return { head, messages, error, send };
+  /** Shows a message the engine wrote for the person (a voice note) without waiting for Realtime. */
+  const add = useCallback((m: ChatMessage) => setMessages((list) => addMessage(list, m)), []);
+
+  return { head, messages, error, send, add };
 }
+
+/** A short-lived link to play a voice note. */
+export const voiceNoteLink = (path: string) => voiceNoteUrl(supabase, path);
 
 /**
  * Asks the thread's agent to answer, without waiting: the reply arrives in the
@@ -192,11 +207,37 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
     [chatId, chat.send, agentId, engine],
   );
 
+  /**
+   * A voice note (voice.md): the engine stores it in the chat (opening it with
+   * the first note) and answers at once; then it is transcribed and the agent
+   * answers, both arriving live. A failed transcript shows on the note itself.
+   */
+  const sendVoice = useCallback(
+    async (note: RecordedNote) => {
+      if (!engine || !agentId) throw new Error('not signed in');
+      const m = await sendVoiceNote(engine, agentId, note);
+      if (chatId) chat.add(m);
+      else setOpened(m.threadId);
+      void transcribeVoiceNote(engine, m.id).catch(() => {});
+    },
+    [engine, agentId, chatId, chat.add],
+  );
+
+  const retryTranscript = useCallback(
+    async (messageId: string) => {
+      if (!engine) throw new Error('not signed in');
+      await transcribeVoiceNote(engine, messageId);
+    },
+    [engine],
+  );
+
   return {
     loading: loading && threads.length === 0,
     messages: chat.messages,
     error: error ?? chat.error,
     send,
+    sendVoice,
+    retryTranscript,
     reload,
   };
 }

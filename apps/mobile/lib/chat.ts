@@ -61,9 +61,3 @@ export function vacancies(agents: Agent[]): GhostId[] {
   const taken = new Set(agents.map((a) => a.ghost));
   return GHOST_ORDER.filter((g) => g !== 'base' && !taken.has(g));
 }
-
-/** `text` with the transcript after it: a space between, none in an empty box. */
-export function appendDictation(text: string, transcript: string): string {
-  if (text.trim() === '') return transcript;
-  return /\s$/.test(text) ? text + transcript : `${text} ${transcript}`;
-}

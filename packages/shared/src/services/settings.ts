@@ -399,6 +399,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   agent_level: { reach: 'not_a_setting' },
   agent_level_for: { reach: 'not_a_setting' },
   ai_usage_daily: { reach: 'not_a_setting' },
+  can_hear_voice_note: { reach: 'not_a_setting' },
   chat_with: { reach: 'not_a_setting' },
   connections_place_last: { reach: 'not_a_setting' },
   hire_secretaria: { reach: 'not_a_setting' },

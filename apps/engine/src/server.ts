@@ -32,6 +32,7 @@ import type { ChatDeps } from './chat';
 import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
 import { type RunnerDeps, startScheduled } from './runner';
 import { DEFAULT_TRANSCRIBE_MODEL, type GoogleRequest, vertexTranscriber } from './transcribe';
+import { supabaseVoiceNoteStore } from './voiceNotes';
 
 function required(name: string): string {
   const v = process.env[name];
@@ -162,9 +163,9 @@ const chatDeps: ChatDeps = {
   asPerson,
   jobs,
 };
-// Dictation: Gemini on Vertex AI in the EU, billed to Ghostaff's own project (transcribe.ts).
+// Voice notes' transcripts: Gemini on Vertex AI in the EU, billed to Ghostaff's own project (transcribe.ts).
 const gcpProject = process.env.GCP_PROJECT;
-if (!gcpProject) console.warn('dictation off: set GCP_PROJECT.');
+if (!gcpProject) console.warn('voice notes off: set GCP_PROJECT.');
 const transcriber = gcpProject
   ? vertexTranscriber({ project: gcpProject, model: process.env.TRANSCRIBE_MODEL || DEFAULT_TRANSCRIBE_MODEL, request: googleRequest })
   : undefined;
@@ -186,6 +187,7 @@ const app = createApp({
   chat: chatDeps,
   reports: { callerFromToken: caller, audience: publicUrl },
   claudeSignIn: { spawn: spawnSetupToken },
+  voice: supabaseVoiceNoteStore(admin),
   transcriber,
   accounts,
   actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId), asPerson },

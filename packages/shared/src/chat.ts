@@ -29,6 +29,28 @@ export function isActionPart(p: MessagePart): p is ActionPart & MessagePart {
   return p.type === 'action' && typeof (p as { actionId?: unknown }).actionId === 'string';
 }
 
+/**
+ * A voice note (docs/plans/ongoing/voice.md): the audio a person recorded, kept
+ * in the private «voice-notes» bucket. Once transcribed, a text part follows
+ * it with the transcript, which is what the agent and the lists read. A type,
+ * not an interface, so a part of a message can be one as it is.
+ */
+export type VoicePart = {
+  type: 'voice';
+  /** In the bucket: <org_id>/<thread_id>/<message_id>.<ext>. */
+  path: string;
+  /** The audio's type, e.g. «audio/mp4». */
+  mediaType: string;
+  /** How long it lasts, as the app measured it; null when unknown. */
+  durationMs: number | null;
+  /** «empty» when nobody spoke. */
+  transcription: 'pending' | 'done' | 'empty' | 'failed';
+};
+
+export function isVoicePart(p: MessagePart): p is VoicePart & MessagePart {
+  return p.type === 'voice' && typeof (p as { path?: unknown }).path === 'string';
+}
+
 export interface ChatMessage {
   id: string;
   threadId: string;
