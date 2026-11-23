@@ -29,10 +29,11 @@ export function KeyboardColumn({ children, offset = 0 }: { children: ReactNode; 
 /**
  * Closes the keyboard and waits until it is gone, before moving on to another
  * screen. A KeyboardColumn that mounts while the keyboard is still closing can
- * miss its last event and keep the keyboard's padding after it has gone (the
- * library reads the starting state from the JS thread, which can lag the UI
- * thread; react-native-keyboard-controller 1.22.7 to 1.24.0): the next screen
- * stays squeezed into the top half. Never waits more than a second.
+ * miss its last event and keep the keyboard's padding after it has gone: the
+ * library takes the keyboard's state when it mounts, but its event handler
+ * only reaches the UI thread later, and the events in between are lost
+ * (react-native-keyboard-controller 1.22.7 to 1.24.0, issue #1800). The next
+ * screen stays squeezed into the top half. Never waits more than a second.
  */
 export async function dismissKeyboard(): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
