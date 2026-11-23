@@ -457,6 +457,8 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   release_refresh_lease: { reach: 'not_a_setting' },
   request_connector: { reach: 'not_a_setting' },
   slug_for: { reach: 'not_a_setting' },
+  snooze_decision: { reach: 'not_a_setting' },
+  unsnooze_decision: { reach: 'not_a_setting' },
   start_thread: { reach: 'not_a_setting' },
   take_refresh_lease: { reach: 'not_a_setting' },
   thread_level: { reach: 'not_a_setting' },
