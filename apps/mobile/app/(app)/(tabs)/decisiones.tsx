@@ -5,6 +5,7 @@ import { RefreshControl, SectionList, Text, View } from 'react-native';
 import { DecisionCard } from '@/components/DecisionCard';
 import { DecisionView } from '@/components/DecisionView';
 import { SealCheck, WarningCircle } from '@/components/icons';
+import { SpaceSwitcher } from '@/components/SpaceSwitcher';
 import { Badge, Button, EmptyState, Loading, Notice, ScreenTitle } from '@/components/ui';
 import { useInbox } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -48,7 +49,13 @@ export default function Decisiones() {
       keyExtractor={(d) => d.id}
       stickySectionHeadersEnabled={false}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
-      ListHeaderComponent={<ScreenTitle>Decisiones</ScreenTitle>}
+      ListHeaderComponent={
+        <>
+          {/* Where you are, on every tab (welcome-and-spaces.md); on a desktop the sidebar shows it. */}
+          <SpaceSwitcher />
+          <ScreenTitle>Decisiones</ScreenTitle>
+        </>
+      }
       ListEmptyComponent={
         <EmptyState icon={SealCheck} title="Nada que decidir" body="Cuando un agente necesite tu OK, lo verás aquí." />
       }

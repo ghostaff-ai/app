@@ -17,7 +17,7 @@ import { usePalette } from '@/lib/theme';
 // for an owner, an AI account the agents can run on (conectar-ia), then the
 // tabs (Equipo, Decisiones, Empresa: three-tabs.md). A chat, a decision, an
 // agent and the sheets open over the tabs. Creating and joining stay reachable
-// later, from Organizaciones, the sheet behind the organisation's name in
+// later, from «Tus espacios», the sheet behind the space's name in
 // Empresa. A member who isn't an owner can't connect one, so they get in and
 // Equipo says what's missing.
 
@@ -75,7 +75,7 @@ export default function AppLayout() {
         <Stack.Screen name="nuevo-agente" options={{ ...modal, title: 'Nuevo agente' }} />
         <Stack.Screen
           name="organizaciones"
-          options={{ title: 'Organizaciones', presentation: 'formSheet', sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: false }}
+          options={{ title: 'Tus espacios', presentation: 'formSheet', sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: false }}
         />
         <Stack.Screen name="invitar" options={{ ...modal, title: 'Invitar' }} />
       </Stack.Protected>
