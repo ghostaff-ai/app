@@ -119,6 +119,12 @@ What matters: Spanish from Spain and English (Jaime, 2026-11-22), notes of 2–5
 4. **Cloud**: `scripts/setup-env.sh` enables `aiplatform.googleapis.com` and grants the engine `roles/aiplatform.user` in its own project; `TRANSCRIBE_MODEL` passed by `scripts/deploy-engine.sh` if not defaulted. Running setup on beta or prod is Jaime's go-ahead.
 5. **Check**: the engine locally against Vertex with a generated Spanish and English note (`say -o`), then the web against local Supabase (mic button, states, text landing), then `pnpm pr:land`.
 
+**Live check (2026-11-23, against `ghostaff-beta` as ghostaff.ai@gmail.com).** The engine's service account already had `roles/aiplatform.user` and Vertex AI was on in `ghostaff-beta`, so nothing had to be run. Same request as the engine (`gemini-3.5-transcribe`, SMART, `eu`), three generated notes, each answered 200 in about a second:
+- Spanish m4a (`audio/mp4`, AAC 16 kHz 32 kbit/s): «Hola, eh, quería decirte que la reunión es el martes, no, perdona, el miércoles a las diez. O sea, avisa a Álvaro…» → «Hola, quería decirte que la reunión es el miércoles a las 10. Avisa a Álvaro, por favor.»
+- English m4a: «Hi, um, can you send the invoice to the client on Monday, sorry, I mean Tuesday? Thanks.» → «Hi, can you send the invoice to the client on Tuesday? Thanks.»
+- The Spanish note as webm/opus (`audio/webm`, the web's format): the same transcript.
+Not yet checked: a real voice with noise, a 10-minute note against the 120 s timeout, and recording on a phone (needs the new beta build).
+
 ## Open questions
 
 Questions 1, 3 and 4 below were settled by the design above (2026-11-22); 2 too: up to 10 minutes, the text all at once at the end.
