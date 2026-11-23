@@ -26,6 +26,9 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
     async levelFor(agentId, userId) {
       return check(await admin.rpc('agent_level_for', { target_agent: agentId, member: userId })) as Level;
     },
+    async threadLevelFor(threadId, userId) {
+      return check(await admin.rpc('thread_level_for', { target_thread: threadId, member: userId })) as Level;
+    },
     async thread(id) {
       const r = check(await admin.from('threads').select('id, org_id, agent_id, title').eq('id', id).maybeSingle());
       return r ? { id: r.id, orgId: r.org_id, agentId: r.agent_id, title: r.title } : null;

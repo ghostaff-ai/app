@@ -14,6 +14,7 @@ import type {
   Answer,
   ConnectAiInput,
   Connection,
+  ConversationVisibility,
   Decision,
   DecisionSource,
   Department,
@@ -768,6 +769,7 @@ interface AgentRow {
   ghost: AgentGhost;
   department: Department;
   member_default: AgentLevel;
+  chat_default?: ConversationVisibility;
   runner: AgentRunner;
   description: string | null;
   schedule: string | null;
@@ -783,6 +785,7 @@ export function agentFromRow(r: AgentRow): Agent {
     ghost: r.ghost,
     department: r.department,
     memberDefault: r.member_default,
+    chatDefault: r.chat_default ?? 'private',
     runner: r.runner ?? 'chat',
     description: r.description ?? null,
     schedule: r.schedule ?? null,
@@ -791,7 +794,7 @@ export function agentFromRow(r: AgentRow): Agent {
   };
 }
 
-const AGENT_COLUMNS = 'id, org_id, name, ghost, department, member_default, runner, description, schedule, accounts, created_at';
+const AGENT_COLUMNS = 'id, org_id, name, ghost, department, member_default, chat_default, runner, description, schedule, accounts, created_at';
 
 /** The organisation's agents, oldest first. */
 export async function listAgents(client: SupabaseClient, orgId: string): Promise<Agent[]> {
@@ -870,8 +873,9 @@ export async function myAgentLevels(client: SupabaseClient, orgId: string): Prom
 }
 
 // The team chat (docs/plans/ongoing/team-chat.md). What a person sees follows
-// their level on each agent; they write only through start_thread and
-// post_message, and new messages arrive through Realtime under the same rules.
+// their level on each agent and who each conversation is for (chat-permissions.md);
+// they write only through start_thread, chat_with and post_message, and new
+// messages arrive through Realtime under the same rules.
 
 /** The organisation's members, by name: for «pide acceso a …» and @mentions. */
 export async function listMembers(client: SupabaseClient, orgId: string): Promise<OrgMember[]> {
@@ -895,6 +899,9 @@ interface ThreadListRow {
   last_text: string | null;
   unread: boolean;
   personal: boolean;
+  visibility: ConversationVisibility;
+  mine: boolean;
+  following: boolean;
 }
 
 /** Threads the person may see, newest first; with `agentId`, only that agent's. */
@@ -911,6 +918,9 @@ export async function listThreads(client: SupabaseClient, orgId: string, agentId
     lastText: r.last_text,
     unread: r.unread,
     personal: r.personal,
+    visibility: r.visibility,
+    mine: r.mine,
+    following: r.following,
   }));
 }
 
@@ -919,16 +929,39 @@ export interface ThreadHead {
   orgId: string;
   agentId: string;
   title: string;
+  visibility: ConversationVisibility;
+  /** Who opened it: they alone change who sees it. Null when an agent opened it. */
+  createdBy: string | null;
+  /** A person's chat with the agent, always private. */
+  personal: boolean;
 }
 
+interface ThreadHeadRow {
+  id: string;
+  org_id: string;
+  agent_id: string;
+  title: string;
+  visibility: ConversationVisibility;
+  created_by: string | null;
+  personal_of: string | null;
+}
+
+const threadHead = (r: ThreadHeadRow): ThreadHead => ({
+  id: r.id,
+  orgId: r.org_id,
+  agentId: r.agent_id,
+  title: r.title,
+  visibility: r.visibility,
+  createdBy: r.created_by,
+  personal: r.personal_of !== null,
+});
+
+const THREAD_HEAD_COLUMNS = 'id, org_id, agent_id, title, visibility, created_by, personal_of';
+
 export async function getThread(client: SupabaseClient, id: string): Promise<ThreadHead | null> {
-  const { data, error } = await client
-    .from('threads')
-    .select('id, org_id, agent_id, title')
-    .eq('id', id)
-    .maybeSingle<{ id: string; org_id: string; agent_id: string; title: string }>();
+  const { data, error } = await client.from('threads').select(THREAD_HEAD_COLUMNS).eq('id', id).maybeSingle<ThreadHeadRow>();
   if (error) throw error;
-  return data ? { id: data.id, orgId: data.org_id, agentId: data.agent_id, title: data.title } : null;
+  return data ? threadHead(data) : null;
 }
 
 interface MessageRow {
@@ -974,11 +1007,42 @@ export async function listMessages(client: SupabaseClient, threadId: string, lim
   return (data ?? []).map(messageFromRow).reverse();
 }
 
-/** Starts a thread with an agent the person may talk to; returns its id. */
-export async function startThread(client: SupabaseClient, agentId: string, body: string): Promise<string> {
-  const { data, error } = await client.rpc('start_thread', { target_agent: agentId, body }).single<{ id: string }>();
+/**
+ * Opens a titled conversation with an agent the person may talk to, with their
+ * first message; without a visibility it takes the agent's default. Returns its id.
+ */
+export async function startThread(client: SupabaseClient, agentId: string, body: string, visibility?: ConversationVisibility): Promise<string> {
+  const { data, error } = await client
+    .rpc('start_thread', { target_agent: agentId, body, ...(visibility ? { visibility } : {}) })
+    .single<{ id: string }>();
   if (error) throw error;
   return data.id;
+}
+
+/** Thrown when a conversation others wrote in would be made private again: it can only be closed to reading. */
+export class OthersHaveWrittenError extends Error {}
+
+/** Its opener changes who reads or writes a conversation (chat-permissions.md). */
+export async function setConversationVisibility(client: SupabaseClient, threadId: string, visibility: ConversationVisibility): Promise<ThreadHead> {
+  const { data, error } = await client
+    .rpc('set_conversation_visibility', { target_thread: threadId, new_visibility: visibility })
+    .select(THREAD_HEAD_COLUMNS)
+    .single<ThreadHeadRow>();
+  if (error) throw error.code === '55000' ? new OthersHaveWrittenError(error.message) : error;
+  return threadHead(data);
+}
+
+/** How many people read a conversation, its opener included. */
+export async function conversationReaders(client: SupabaseClient, threadId: string): Promise<number> {
+  const { data, error } = await client.rpc('conversation_readers', { target_thread: threadId });
+  if (error) throw error;
+  return data as number;
+}
+
+/** An owner sets who reads new conversations with an agent unless their opener says otherwise. */
+export async function setAgentChatDefault(client: SupabaseClient, agentId: string, visibility: ConversationVisibility): Promise<void> {
+  const { error } = await client.rpc('set_agent_chat_default', { target_agent: agentId, new_default: visibility });
+  if (error) throw error;
 }
 
 /** Writes to an agent in the person's own chat with it, opening the chat with the first message. */

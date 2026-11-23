@@ -48,6 +48,7 @@ function setup(opts: { launchFails?: boolean } = {}) {
   let working: string | null = null;
   const chat: ChatStore = {
     levelFor: async (_a, u) => (u === 'ana' ? 'talk' : 'read'),
+    threadLevelFor: async (_t, u) => (u === 'ana' ? 'talk' : 'read'),
     thread: async (id) => (id === THREAD ? thread : null),
     agent: async (id) => (id === LEGAL ? legal : null),
     orgAgents: async () => [legal, seo],

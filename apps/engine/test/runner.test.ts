@@ -75,6 +75,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
   let minted = 0;
   const chat: ChatStore = {
     levelFor: async () => 'talk',
+    threadLevelFor: async () => 'talk',
     thread: async (id) => (id === THREAD ? thread : null),
     agent: async (id) => (id === LEGAL ? legal : id === TALLER ? taller : null),
     orgAgents: async () => [legal],

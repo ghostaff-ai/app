@@ -1,0 +1,95 @@
+appId: ${APP_ID}
+name: An owner opens a conversation the team can read, then makes it private
+---
+# Who reads a conversation is chosen by whoever opens it (docs/plans/ongoing/chat-permissions.md).
+# A new owner opens Secretaría's page, starts a conversation «El equipo puede
+# leer», sees under its header who reads it, makes it «Solo yo», and finds it in
+# Equipo among the agents. No engine runs in e2e, so the agent stays quiet.
+- evalScript: ${output.email = 'e2e-vis-' + Date.now() + '@ghostaff.test'}
+- evalScript: ${output.company = 'Taller E2E ' + Date.now().toString().slice(-6)}
+- runFlow:
+    file: ../subflows/sign-in-email.yaml
+    env:
+      EMAIL: ${output.email}
+- extendedWaitUntil:
+    visible: "¿Cómo te llamas?"
+    timeout: 30000
+- tapOn: "Nombre y apellido"
+- inputText: "Olga E2E"
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "¿Para qué vas a usar Ghostaff?"
+    timeout: 30000
+- tapOn: "Para mi empresa.*"
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "Por ejemplo, Panadería Ana"
+    timeout: 15000
+- tapOn: "Por ejemplo, Panadería Ana"
+- inputText: ${output.company}
+- tapOn: "Crear"
+- extendedWaitUntil:
+    visible: "Conecta tu IA"
+    timeout: 30000
+- runScript:
+    file: ../../scripts/connect-ai.js
+    env:
+      COMPANY: ${output.company}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "agent-secretaria"
+    timeout: 60000
+# Secretaría's chat, then her page from the name on top.
+- tapOn:
+    id: "agent-secretaria"
+- extendedWaitUntil:
+    visible:
+      id: "chat-agent"
+    timeout: 20000
+- tapOn:
+    id: "chat-agent"
+- extendedWaitUntil:
+    visible:
+      id: "new-conversation"
+    timeout: 20000
+- assertVisible:
+    id: "chat-default"
+- tapOn:
+    id: "new-conversation"
+# Private comes preselected; she chooses that the team may read it.
+- extendedWaitUntil:
+    visible: "Quién la ve"
+    timeout: 15000
+- tapOn:
+    id: "visibility-read"
+- tapOn: "Escribe a Secretaría"
+- inputText: "Plan de vacaciones del taller"
+- tapOn: "Enviar"
+- extendedWaitUntil:
+    visible: "La lee el equipo de Secretaría.*"
+    timeout: 20000
+# Only the opener changes it: back to «Solo yo».
+- tapOn:
+    id: "audience"
+- extendedWaitUntil:
+    visible:
+      id: "visibility-private"
+    timeout: 15000
+- tapOn:
+    id: "visibility-private"
+- tapOn:
+    id: "visibility-save"
+- extendedWaitUntil:
+    visible: "Solo tú y Secretaría"
+    timeout: 15000
+# Equipo shows it among the agents, like a group.
+- back
+- back
+- back
+- extendedWaitUntil:
+    visible: "Plan de vacaciones del taller"
+    timeout: 20000

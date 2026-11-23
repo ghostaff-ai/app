@@ -47,7 +47,7 @@ select throws_ok(
 select throws_ok(
   $$ select public.set_agent_access('20000000-0000-0000-0000-000000000009', '00000000-0000-0000-0000-00000000000c', 'none') $$,
   '42501', null, 'an owner cannot set levels on another organisation''s agent');
-insert into ids select 'hilo', id from public.start_thread((select id from ids where name = 'finanzas'), '  ¿Cerramos   octubre? ');
+insert into ids select 'hilo', id from public.start_thread((select id from ids where name = 'finanzas'), '  ¿Cerramos   octubre? ', visibility => 'write');
 select isnt((select id from ids where name = 'hilo'), null, 'an owner starts a thread with Finanzas');
 select is((select title from public.threads), '¿Cerramos octubre?', '... titled from its first message, trimmed');
 select is(
@@ -69,7 +69,7 @@ select throws_ok(
   $$ select public.start_thread((select id from ids where name = 'finanzas'), 'hola') $$,
   '42501', null, '... nor start one with Finanzas');
 select lives_ok(
-  $$ select public.start_thread((select id from ids where name = 'secretaria'), '¿Algo urgente en el correo?') $$,
+  $$ select public.start_thread((select id from ids where name = 'secretaria'), '¿Algo urgente en el correo?', visibility => 'write') $$,
   '... but starts one with Secretaría');
 select throws_ok(
   $$ select public.set_agent_access((select id from ids where name = 'finanzas'), '00000000-0000-0000-0000-00000000000b', 'talk') $$,

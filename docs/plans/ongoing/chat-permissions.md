@@ -1,8 +1,8 @@
 # Who reads and writes a conversation
 
 **Priority:** high — privacy: who sees what a person says to an agent
-**Gate:** blocked:ghostaff-ai/app#54 (no «Avisos», stacked under this branch; recheck 2026-11-24)
-**Next:** task 1, the migration `threads.visibility` with `thread_level_for` as the one rule, pgTAP first
+**Gate:** none
+**Next:** land #58 with `pnpm pr:land`, then check it on the beta app with two people (a private conversation, a shared one)
 
 Jaime's Trello card (2026-11-23), «permisos de escritura en chats por otros miembros del equipo»: «esto tiene que ser por agente y por conversación, o sea yo puedo ser owner de un agente y hacer una conversación que quiero que lean o que no, o no ser dueño de un agente y abrir una conversación que no quiero que vean, esto es un tema».
 
@@ -77,7 +77,7 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 - `start_thread(agent, body, title, visibility)` gains the visibility (null: the agent's default); `set_conversation_visibility(thread, visibility)`, opener only, with the rules above; `conversation_readers(thread)`, how many people read it, for whoever sees it. Classified in `settings.ts`: `set_conversation_visibility` is `never` («a conversation's privacy is its opener's alone»); `set_agent_chat_default` is the setting, with its tool `settings_agent_chat_default`.
 - `thread_level_for(thread, member)` is the one rule, service role only, for the engine (the gap above); `thread_level(thread)` is it for `auth.uid()`. `replyInThread` checks it.
 - `my_threads` returns `visibility`, `opened_by_me` and `following`. Following comes from authorship, mentions and read marks, without a new table.
-- **Realtime** applies the policies per event, so a conversation made private stops reaching others at once; their open screen reloads to «Ya no tienes acceso a esta conversación».
+- **Realtime** applies the policies per event, so a conversation made private stops reaching others at once (no event tells them; their screen says they have lost access the next time it loads the conversation).
 - pgTAP `supabase/tests/database/chat_permissions.test.sql`: the three visibilities for opener, owner, `talk`, `read` and `none` members; the cap by agent level, the opener's included; nobody but the opener changes visibility; the downgrade rule; nothing across organisations; `thread_level_for` matches `thread_level`.
 
 ## Edge cases
@@ -87,6 +87,7 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 - **A member is removed from an agent (`none`)** while they had a shared conversation open: the next Realtime event no longer reaches them, the screen says they have lost access.
 - **Two people write at once in a `write` conversation:** the agent answers one message at a time, as today (one `working` reply per thread).
 - **A personal space** (`organizations.kind = 'personal'`) has only its owner: the visibility sheet isn't shown there.
+- **An action proposed in someone's private chat** (an approval card, `agent_actions`) needs an owner, who can't see a member's private conversation. This was already so for personal chats (2026-11-23); it waits for the decision model (three-tabs.md, step 3), where a decision raised from a private conversation goes to the deck without its conversation.
 - **The agent is removed:** its conversations go with it, as today (`delete_agent` is `never` for Secretaría for that reason).
 - **Full export** (invariant 2): a private conversation is the organisation's data stored for one person. The export an owner runs leaves out other people's private conversations; each person can export their own (decision 4).
 
@@ -107,7 +108,7 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 
 ## File structure
 
-- `supabase/migrations/20261124000000_conversation_visibility.sql`: `threads.visibility`, `agents.chat_default`, `thread_level_for`, `thread_level`, the threads policy, `start_thread`, `set_conversation_visibility`, `conversation_readers`, `set_agent_chat_default`, `my_threads` (+ `visibility`, `mine`, `following`).
+- `supabase/migrations/20261124200000_conversation_visibility.sql`: `threads.visibility`, `agents.chat_default`, `thread_level_for`, `thread_level`, the threads policy, `start_thread`, `set_conversation_visibility`, `conversation_readers`, `set_agent_chat_default`, `my_threads` (+ `visibility`, `mine`, `following`).
 - `supabase/tests/database/chat_permissions.test.sql`; `team_chat`, `personal_chats` tests adjusted where `start_thread` changed.
 - `packages/shared/src/chat.ts` (`ConversationVisibility`, `ChatThread` fields), `models` (`Agent.chatDefault`), `services/index.ts` (`startThread`, `setConversationVisibility`, `conversationReaders`, `setAgentChatDefault`, `getThread` with visibility and opener), `services/settings.ts` (classification, `settings_agent_chat_default`).
 - `apps/engine/src/chat.ts`, `chatStore.ts`: `threadLevelFor`; tests in `apps/engine/test/chat.test.ts`, `settings.test.ts`.
@@ -115,8 +116,13 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 
 ## Tasks (branch `claude/chat-permissions-6baf5b`, one PR, stacked on #54)
 
-- [ ] 1. Migration and pgTAP.
-- [ ] 2. Engine: `thread_level_for` in `replyInThread`, with tests.
-- [ ] 3. Shared services, types and the settings classification and tool.
-- [ ] 4. Screens: new conversation with the picker, the audience line and sheet, the agent's page, Equipo's followed rows, the read-only reason.
-- [ ] 5. Check: `pnpm check`, `pnpm db:test`, the web against local Supabase (two people, the three visibilities), `pnpm e2e` for the new flow; then `pnpm pr:land`.
+- [x] 1. Migration and pgTAP (`20261124200000_conversation_visibility.sql`, `chat_permissions.test.sql`; the tests that opened shared threads now say `visibility => 'write'`).
+- [x] 2. Engine: `thread_level_for` in `replyInThread`, with tests.
+- [x] 3. Shared services, types and the settings classification and tool.
+- [x] 4. Screens: new conversation with the picker, the audience line and the «Quién la ve» screen, the agent's page («Nueva conversación», «Conversaciones», «Conversaciones nuevas» for owners), Equipo's followed rows, the read-only reason.
+- [ ] 5. Check: `pnpm check` green; pgTAP 300/300 on a fresh database with every migration; checked on the web against a local Supabase of its own (Bea opens a private conversation, shares it, Dani reads it with «Solo lectura · Pide acceso a Ana», Ana writes, Bea can no longer make it private and is told why; light and dark). Not run: `pnpm e2e` locally (CI runs the new flow `conversation-visibility`); not checked on a phone.
+
+## Handoff
+
+- This migration builds on #54's `my_threads` (no «Avisos»), which landed first.
+- The local Supabase shared by the sessions (`supabase_db_ghostaff`) was not touched: pgTAP ran inside rolled-back transactions there, and the web check used a separate stack (`project_id = ghostaff-perm`, ports 553xx) started from a copy of `supabase/`.
