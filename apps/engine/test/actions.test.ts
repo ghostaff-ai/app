@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { type ActionRecord, type ActionStore, approveAction, previewOf, rejectAction } from '../src/actions';
 import { createApp } from '../src/app';
 import type { Membership } from '../src/connections';
-import type { AgentTools } from '../src/tools';
+import { type AgentTools, NO_TOOLS } from '../src/tools';
+import { fakeSupabase } from './fixtures/fakeSupabase';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 const ACTION = '50000000-0000-0000-0000-000000000001';
@@ -18,6 +19,7 @@ function setup(opts: { state?: 'working' | 'done'; fails?: boolean } = {}) {
     orgId: ORG,
     threadId: 't',
     messageId: 'm',
+    agentId: null,
     tool: 'instagram_publish',
     input: { kind: 'reel' },
     label: 'Publicar en Instagram',
@@ -111,5 +113,64 @@ describe('approving what an agent proposes', () => {
   it('the card shows the input field by field, long values cut', () => {
     expect(previewOf({ caption: 'Hola', media: ['https://a/1.jpg'] })).toBe('caption: Hola\nmedia: ["https://a/1.jpg"]');
     expect(previewOf({ text: 'x'.repeat(500) }).length).toBeLessThan(420);
+  });
+});
+
+describe('approving a settings change (agent-settings.md)', () => {
+  const INVITATION = '60000000-0000-0000-0000-000000000001';
+  function store(record: ActionRecord): ActionStore {
+    return {
+      membership: async (_o, u) => (u === 'ana' ? { role: 'owner', displayName: 'Ana' } : null),
+      action: async () => record,
+      claim: async (_id, to) => {
+        record.status = to;
+        return true;
+      },
+      settle: async (_id, status) => {
+        record.status = status;
+      },
+      updateCard: async () => {},
+    };
+  }
+  const record = (): ActionRecord => ({
+    id: ACTION,
+    orgId: ORG,
+    threadId: 't',
+    messageId: 'm',
+    agentId: '20000000-0000-0000-0000-000000000001',
+    tool: 'settings_revoke_invitation',
+    input: { invitation_id: INVITATION },
+    label: 'Retirar la invitación de luis@panaderia.es',
+    status: 'pending',
+    messageState: 'done',
+  });
+
+  it("runs as the owner who approved, through the app's own function", async () => {
+    const db = fakeSupabase({ invitations: [{ id: INVITATION, email: 'luis@panaderia.es', role: 'member', invited_by_name: 'Ana', created_at: '' }] });
+    const tokens: string[] = [];
+    const out = await approveAction(
+      {
+        actions: store(record()),
+        toolsFor: async () => {
+          throw new Error('a setting never goes through the connected accounts');
+        },
+        asPerson: (t) => {
+          tokens.push(t);
+          return db.client;
+        },
+      },
+      'ana',
+      ACTION,
+      'jwt-of-ana',
+    );
+    expect(out).toEqual({ status: 'done', result: 'Invitación de luis@panaderia.es retirada.' });
+    expect(tokens).toEqual(['jwt-of-ana']);
+    expect(db.rpcs).toEqual([{ name: 'revoke_invitation', args: { invitation_id: INVITATION } }]);
+  });
+
+  it("is refused without the owner's session, and stays pending", async () => {
+    const r = record();
+    await expect(approveAction({ actions: store(r), toolsFor: async () => NO_TOOLS }, 'ana', ACTION)).rejects.toMatchObject({ status: 503 });
+    expect(r.status).toBe('pending');
   });
 });

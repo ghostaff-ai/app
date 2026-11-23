@@ -57,6 +57,11 @@ Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm pr:lan
    Órdago's `por-decidir/` format exactly as the Órdago panel does; a change to the format starts there, in
    `ordago-app/business/por-decidir/README.md`.
 5. Code and comments in English; everything a person sees in the app in Spanish.
+6. **No setting ships unless the main agent can change it too** (Álvaro, 2026-11-23). Each setting is defined once, in
+   `packages/shared/src/services/settings.ts`. The screen and Secretaría's tool both call the same service function, and
+   a change runs only after an owner approves it, as that owner. A new database function is classified there: the agent
+   may propose it, or `never`, with the reason. A function left unclassified fails `apps/engine/test/settings.test.ts`.
+   The hard limits, and why, are in [agent-settings.md](docs/plans/ongoing/agent-settings.md).
 
 ## Branches
 

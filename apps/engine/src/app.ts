@@ -54,7 +54,7 @@ export interface AppDeps extends Deps {
   transcribeLimiter?: NoteLimiter;
 }
 
-type Env = { Variables: { userId: string } };
+type Env = { Variables: { userId: string; accessToken: string } };
 
 /** The engine's routes; `injectWebSocket` hooks the WebSocket route into the Node server. */
 export function createApp(deps: AppDeps) {
@@ -169,6 +169,7 @@ export function createApp(deps: AppDeps) {
     const userId = token ? await deps.userFromToken(token).catch(() => null) : null;
     if (!userId) return c.json({ error: 'unauthorized', message: 'sign in first' }, 401);
     c.set('userId', userId);
+    c.set('accessToken', token!);
     await next();
   });
 
@@ -202,12 +203,12 @@ export function createApp(deps: AppDeps) {
   });
 
   // Answers when the action has run: Cloud Run keeps the CPU only while a request is open.
-  app.post('/actions/:id/approve', async (c) => c.json(await approveAction(deps.actions, c.get('userId'), c.req.param('id'))));
+  app.post('/actions/:id/approve', async (c) => c.json(await approveAction(deps.actions, c.get('userId'), c.req.param('id'), c.get('accessToken'))));
 
   app.post('/actions/:id/reject', async (c) => c.json(await rejectAction(deps.actions, c.get('userId'), c.req.param('id'))));
 
   // Answers when the reply is written: Cloud Run keeps the CPU only while a request is open.
-  app.post('/threads/:id/reply', async (c) => c.json(await replyInThread(deps.chat, c.get('userId'), c.req.param('id'))));
+  app.post('/threads/:id/reply', async (c) => c.json(await replyInThread(deps.chat, c.get('userId'), c.req.param('id'), c.get('accessToken'))));
 
   // A voice note in, its text out; the audio is never kept (transcribe.ts).
   const limiter = deps.transcribeLimiter ?? new NoteLimiter();

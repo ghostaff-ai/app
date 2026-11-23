@@ -12,6 +12,7 @@
 import { type ActionPart, isActionPart, type MessagePart } from '@ghostaff/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type Membership, Refusal, requireOwner } from './connections';
+import { type AsPerson, isSettingTool, runSetting } from './settings';
 import type { AgentTools } from './tools';
 
 export interface ActionRecord {
@@ -19,6 +20,8 @@ export interface ActionRecord {
   orgId: string;
   threadId: string;
   messageId: string;
+  /** The agent that proposed it. */
+  agentId: string | null;
   tool: string;
   input: Record<string, unknown>;
   label: string;
@@ -40,6 +43,8 @@ export interface ActionStore {
 export interface ActionDeps {
   actions: ActionStore;
   toolsFor(orgId: string): Promise<AgentTools>;
+  /** A client signed in as the approving owner: a settings change runs as them (settings.ts). */
+  asPerson?: AsPerson;
 }
 
 const isUuid = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f-]{36}$/i.test(s);
@@ -56,8 +61,15 @@ async function decidable(deps: ActionDeps, userId: string, id: unknown) {
 }
 
 /** Runs the action as stored, with the organisation's connected account, and shows how it went. */
-export async function approveAction(deps: ActionDeps, userId: string, id: unknown): Promise<{ status: 'done' | 'failed'; result: string }> {
+export async function approveAction(
+  deps: ActionDeps,
+  userId: string,
+  id: unknown,
+  accessToken?: string,
+): Promise<{ status: 'done' | 'failed'; result: string }> {
   const { a, owner } = await decidable(deps, userId, id);
+  const setting = isSettingTool(a.tool);
+  if (setting && (!deps.asPerson || !accessToken || !a.agentId)) throw new Refusal(503, 'unavailable', 'settings changes are off here');
   if (!(await deps.actions.claim(a.id, 'running', userId, owner.displayName))) {
     throw new Refusal(409, 'already_decided', 'this action was already decided');
   }
@@ -65,8 +77,11 @@ export async function approveAction(deps: ActionDeps, userId: string, id: unknow
   let status: 'done' | 'failed' = 'failed';
   let result = 'No se ha podido hacer.';
   try {
-    const tools = await deps.toolsFor(a.orgId);
-    const outcome = await tools.run(a.tool, a.input);
+    // A setting changes as the owner who approved, through the function the app's screen calls.
+    const outcome =
+      setting && deps.asPerson && accessToken && a.agentId
+        ? await runSetting({ client: deps.asPerson(accessToken), orgId: a.orgId, agentId: a.agentId }, a.tool, a.input)
+        : await (await deps.toolsFor(a.orgId)).run(a.tool, a.input);
     status = outcome.isError ? 'failed' : 'done';
     result = outcome.content.slice(0, 4000);
   } finally {
@@ -112,7 +127,7 @@ export function supabaseActionStore(admin: SupabaseClient): ActionStore {
       const r = check(
         await admin
           .from('agent_actions')
-          .select('id, org_id, thread_id, message_id, tool, input, label, status, messages(state)')
+          .select('id, org_id, thread_id, message_id, agent_id, tool, input, label, status, messages(state)')
           .eq('id', id)
           .maybeSingle(),
       ) as Record<string, any> | null;
@@ -123,6 +138,7 @@ export function supabaseActionStore(admin: SupabaseClient): ActionStore {
         orgId: r.org_id,
         threadId: r.thread_id,
         messageId: r.message_id,
+        agentId: r.agent_id ?? null,
         tool: r.tool,
         input: r.input,
         label: r.label,

@@ -12,6 +12,7 @@ const agent = (id: string, ghost: Agent['ghost']): Agent => ({
   description: null,
   schedule: null,
   memberDefault: 'read',
+  accounts: null,
   createdAt: '2026-11-17T00:00:00Z',
 });
 

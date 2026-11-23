@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { ThreadRow } from '@/components/chat/ThreadRow';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
-import { Eye, Plus, Prohibit } from '@/components/icons';
+import { Eye, LinkSimple, Plus, Prohibit } from '@/components/icons';
 import { Button, ErrorText, LEVEL_NAMES, ListRow, ListSection, Loading, Notice, RowIcon } from '@/components/ui';
 import { useMyLevels, useThreads } from '@/lib/hooks/useChat';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -15,7 +15,8 @@ import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 // One agent of the team: live in 3D on top (drag to spin it, tap to make it
 // hop), its job, and its conversations under it (team-chat.md, decisions 2 and
 // 10), newest first. Whoever may talk to it starts a new one from here. An
-// owner sets who may use it, and can remove it (two taps, so not by accident).
+// owner sets who may use it and which connected accounts it uses, and can
+// remove it (two taps, so not by accident).
 
 export default function Agente() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -111,6 +112,13 @@ export default function Agente() {
               subtitle={`Ver o hablar con ${agent.name}, persona a persona`}
               chevron
               onPress={() => router.push(`/acceso/${agent.id}`)}
+            />
+            <ListRow
+              leading={<RowIcon icon={LinkSimple} />}
+              title="Herramientas"
+              subtitle={`Qué cuentas conectadas usa ${agent.name}`}
+              chevron
+              onPress={() => router.push(`/herramientas/${agent.id}`)}
             />
             <ListRow
               leading={<RowIcon icon={Prohibit} tone="danger" />}
