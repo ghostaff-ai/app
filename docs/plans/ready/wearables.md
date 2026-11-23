@@ -1,8 +1,8 @@
 # Wearables: health data from any band, for the agents and the pages a person asks for
 
-**Priority:** medium — Jaime's own first use of Ghostaff is personal (welcome-and-spaces.md) and he is moving from Whoop to a Google band now; no customer has asked yet
-**Gate:** decision:Jaime approves this design
-**Next:** Jaime approves or corrects this design; then phase 1 (Whoop, «solo cuando lo pida») gets its implementation plan
+**Priority:** high — Jaime's Whoop subscription ends soon (2026-11-23) and his history must be in Ghostaff before the API stops answering; his own first use of Ghostaff is personal (welcome-and-spaces.md)
+**Gate:** none
+**Next:** write the implementation plan for phase 1 (`health.*` and importing Jaime's Whoop dump), moving this file to `ongoing/`
 
 Jaime (2026-11-23): he is leaving Whoop for a Google band and wants his whole Whoop history kept, read later next to the new band's. He wants Ghostaff to connect health wearables through their APIs so that a personal agent («mi agente de métricas») can do whatever the person asks with that data: a weekly review of trends, a daily dashboard page, cross it with voice notes. The connector does not decide what is done with the data; the person tells the agent.
 
@@ -45,7 +45,7 @@ A person connects their band in Conexiones with one button, and from then on the
 ### Connecting
 
 - A card per maker in Conexiones (`packages/shared/src/connectors.ts`), only in a personal space (decision 2). Connecting is the usual flow: one-time state, PKCE where the maker takes it, tokens in the vault, `connections` row with `kind = 'account'`, the account's name and scopes.
-- After the maker's consent, one screen in the app: «¿Guardamos tu histórico de salud?» with what it means in one line each (we keep a copy in the EU; you can delete it at any time; without it, agents ask the band only when needed). Default **no**. Saying yes creates the account's row in `health.sources` (below), with the consent's timestamp and wording version: history mode is on exactly while that row exists. It can be turned on later from the card.
+- After the maker's consent, one screen in the app: «¿Guardamos tu histórico de salud?» with what it means in one line each (we keep a copy in the EU; you can delete it at any time; without it, agents ask the band only when needed; whatever an agent reads is processed by the AI account the space has connected, which may be outside the EU: decision 6). Default **no**. Saying yes creates the account's row in `health.sources` (below), with the consent's timestamp and wording version: history mode is on exactly while that row exists. It can be turned on later from the card. It is a setting in the sense of AGENTS.md rule 6: defined in `packages/shared/src/services/settings.ts`, so Secretaría or the metrics agent can propose turning it on and it runs only once the person approves.
 
 ### Mode «Solo cuando lo pida» (default)
 
@@ -83,10 +83,15 @@ If a task needs the past (a trend, «compárame con hace tres meses») and the c
 
 ## Phases
 
-1. **Whoop, on demand.** The card, OAuth, the three tools calling Whoop live, the normalisation. Proven with Jaime's personal space on the local stack and beta.
-2. **Whoop, history.** The consent screen, `health.*` with its pgTAP, the backfill with its limiter, the webhook (registered in Whoop's dashboard for beta), the reconcile, delete and CSV export. Production gets its own Whoop app (Claude's call): a Whoop app has one webhook address `[unknown: confirm in Whoop's dashboard]`, and one app per environment keeps beta's tests out of production's rate limit. Jaime's Whoop dump imported into his space before his subscription ends.
-3. **Google Health API**, once Jaime has the band: on our Google OAuth (decision 3), Jaime as a test user; the mapping into the same metric names. Then Jaime's agent compares both.
-4. **On demand:** Oura, Withings, Polar (open OAuth APIs); Garmin (partner programme approval); Apple Health (HealthKit in the iOS app, a connector of another kind).
+Ordered by Jaime's deadline (2026-11-23: his Whoop subscription ends soon), so storage and his history come before the live connector.
+
+1. **Storage and Jaime's history.** `health.*` with its pgTAP, the Whoop normalisation into `health.metrics`, and an import of the export script's dump (`~/Desktop/whoop-export/data/<date>/*.json`) into Jaime's personal space by hand (a script with the service role, run once per environment). Nothing in the app yet. Done when his whole Whoop history is in beta's `health.*`, before the subscription ends.
+2. **Whoop connector, both modes.** The card, OAuth, the consent screen and the setting, the three tools (live and from storage), the backfill with its limiter, the webhook (registered in Whoop's dashboard for beta), the reconcile, delete and CSV export. Jaime's imported source is joined to his connection when he connects (same Whoop `user_id`); if his subscription has ended by then, the import alone is his history. Production gets its own Whoop app (Claude's call): a Whoop app has one webhook address `[unknown: confirm in Whoop's dashboard]`, and one app per environment keeps beta's tests out of production's rate limit.
+3. **Scheduled agents get the connected accounts' tools** (Jaime, 2026-11-23: «la gracia es poder setear agentes que corran con scheduler con estos accesos»). Today only chat replies get them (`claudeWriter.ts` serves `AgentTools` to Claude Code through `toolServer.ts`); a scheduled run on our runner (`apps/runner/`) gets only Claude Code's own tools and the record. The runner gets the same per-run MCP server, reached from its Cloud Run job, with the run's organisation fixed by the engine and writes still gated by an owner's approval. It also closes the runner's known gap before anyone but Órdago uses it: the Claude subscription token readable from the agent's environment (ordago-agents-in-ghostaff.md, «Known gap»). Every connector benefits, not only health; Órdago's migrated agents too. Done when Jaime's metrics agent, on a weekly timetable, reads his health tools and writes its report to his record.
+4. **Google Health API**, once Jaime has the band: on our Google OAuth (decision 3), Jaime as a test user; the mapping into the same metric names. Then Jaime's agent compares both.
+5. **On demand:** Oura, Withings, Polar (open OAuth APIs); Garmin (partner programme approval); Apple Health (HealthKit in the iOS app, a connector of another kind).
+
+Phase 3 depends on nothing here but the record existing for Jaime's personal space; it can run beside phases 1 and 2.
 
 Each phase adds its line to connectors.md's checklist (kind A) and goes through its four steps there.
 
@@ -96,6 +101,8 @@ Each phase adds its line to connectors.md's checklist (kind A) and goes through 
 2. **Personal spaces only** (Claude's call, to confirm): health data is about one person; in a company space every member would read it. A company feature, if ever, needs its own privacy design.
 3. **Google Health on which OAuth client** `[open]`: its restricted scopes put a security review on whatever client asks for them. If it shares «Ghostaff Conectores», that review may hold up verification of the other Google cards. Likely a separate client (or project) for Google Health; decide in phase 3.
 4. **Default mode «Solo cuando lo pida»** (Claude's recommendation, Jaime asked for the option that scales best): stores nothing unasked, and what does scale (history, pages) is one tap away.
+5. **Scheduled agents get connectors in this plan** (Jaime, 2026-11-23), phase 3.
+6. **Health data may reach an AI provider outside the EU** (Jaime, 2026-11-23): what an agent reads goes to the space's connected AI account (a Claude subscription, an Anthropic or OpenAI key), as mail or Notion already does; only Vertex AI keeps it in the EU. The storage stays in the EU (invariant 2); the consent screen says the processing may not.
 
 ## Open questions
 
