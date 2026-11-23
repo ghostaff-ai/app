@@ -874,7 +874,6 @@ interface ThreadListRow {
   last_text: string | null;
   unread: boolean;
   personal: boolean;
-  notices: boolean;
 }
 
 /** Threads the person may see, newest first; with `agentId`, only that agent's. */
@@ -891,7 +890,6 @@ export async function listThreads(client: SupabaseClient, orgId: string, agentId
     lastText: r.last_text,
     unread: r.unread,
     personal: r.personal,
-    notices: r.notices,
   }));
 }
 

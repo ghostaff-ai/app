@@ -7,8 +7,9 @@
 // message in the thread. When the job ends it reports to POST /runs/report,
 // proving who it is with a Google ID token for its own service account; the
 // engine writes the answer into that message. A run its timetable started
-// reports the same way: it lands in «Hecho sin ti», and in the agent's «Avisos»
-// thread when it has something to tell people. Every report syncs the
+// reports the same way: when it has something to tell people, it lands in the
+// private chat of each person who can see the agent (three-tabs.md, decision
+// 12). Every report syncs the
 // organisation's record, so a decision the agent opened is in the inbox at once.
 
 import { atLimit, type ChatMessage, type Limits, limitsFromEvent, messageText, type TokenUsage, tokensFromUsage } from '@ghostaff/shared';
@@ -51,12 +52,14 @@ export interface JobStore {
   run(id: string): Promise<RunRecord | null>;
   /** Closes a run still «running»; false when it was already closed (a report sent twice, or expired). */
   finishRun(id: string, patch: { state: 'done' | 'failed'; summary: string | null; noteworthy: boolean; decisionsOpened: number }): Promise<boolean>;
-  /** The agent's «Avisos» thread, created the first time. */
-  noticesThread(agent: ChatAgent): Promise<ChatThreadHead>;
+  /**
+   * A finished message from the agent in the chat of every person who may see
+   * it, opening the chats that don't exist yet (three-tabs.md, decision 12).
+   * Returns how many chats it reached.
+   */
+  postToPersonalChats(agent: ChatAgent, text: string): Promise<number>;
   /** Runs still «running» that started before `before`: their job died without reporting. */
   staleRuns(before: Date): Promise<RunRecord[]>;
-  /** A finished message from the agent in a thread. */
-  postAgentMessage(thread: ChatThreadHead, agent: ChatAgent, text: string): Promise<void>;
 }
 
 /** Starts one execution of a job with these environment variables. */
@@ -268,11 +271,7 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
     await chat.chat.touchThread(run.threadId).catch(() => {});
     return { run: run.id, threadId: run.threadId };
   }
-  if (noteworthy) {
-    const thread = await deps.jobs.noticesThread(agent);
-    await deps.jobs.postAgentMessage(thread, agent, text);
-    await chat.chat.touchThread(thread.id).catch(() => {});
-  }
+  if (noteworthy) await deps.jobs.postToPersonalChats(agent, text);
   return { run: run.id, threadId: null };
 }
 

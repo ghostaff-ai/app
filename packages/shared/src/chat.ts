@@ -57,8 +57,6 @@ export interface ChatThread {
   unread: boolean;
   /** The person's own chat with the agent (one per agent). */
   personal: boolean;
-  /** The agent's «Avisos»: what it did on its own, shown inside every chat with it. */
-  notices: boolean;
 }
 
 export interface OrgMember {

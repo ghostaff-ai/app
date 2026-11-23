@@ -28,7 +28,7 @@ export function showAuthors(messages: ChatMessage[]): boolean[] {
   });
 }
 
-/** One agent's row in Equipo: its newest word to the person, from their chat or its «Avisos». */
+/** One agent's row in Equipo: the person's chat with it, with its newest word. */
 export interface TeamRow {
   agent: Agent;
   last: ChatThread | null;
@@ -43,9 +43,8 @@ export interface TeamRow {
  */
 export function teamRows(agents: Agent[], threads: ChatThread[]): TeamRow[] {
   const rows = agents.map((agent) => {
-    const mine = threads.filter((t) => t.agentId === agent.id && (t.personal || t.notices) && t.lastText !== null);
-    const last = mine.reduce<ChatThread | null>((a, t) => (!a || t.lastMessageAt > a.lastMessageAt ? t : a), null);
-    return { agent, last, unread: mine.some((t) => t.unread) };
+    const last = threads.find((t) => t.agentId === agent.id && t.personal && t.lastText !== null) ?? null;
+    return { agent, last, unread: last?.unread ?? false };
   });
   const order = (r: TeamRow) => GHOST_ORDER.indexOf(r.agent.ghost);
   return rows.sort((a, b) => {

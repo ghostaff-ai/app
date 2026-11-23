@@ -86,9 +86,9 @@ function setup(opts: { launchFails?: boolean } = {}) {
       return true;
     },
     staleRuns: async () => [...runs.values()].filter((r) => r.state === 'running' && r.messageId),
-    noticesThread: async (agent) => ({ id: 'notices', orgId: ORG, agentId: agent.id, title: 'Avisos' }),
-    postAgentMessage: async (_t, a, text) => {
+    postToPersonalChats: async (a, text) => {
       notices.push(`${a.name}: ${text}`);
+      return 2;
     },
   };
   const app = createApp({
@@ -180,7 +180,7 @@ describe('an agent that runs as a job', () => {
     expect(t.updates.at(-1)).toMatchObject({ state: 'failed', text: 'No he podido acabar.' });
   });
 
-  it('a run its timetable started goes to «Avisos» only when it has something to say', async () => {
+  it('a run its timetable started reaches the people’s chats only when it has something to say', async () => {
     const t = setup();
     await t.report('ordago-seo@ordago-agents.iam.gserviceaccount.com', { ok: true, text: 'SIN NOVEDAD', noteworthy: false });
     expect(t.notices).toEqual([]);

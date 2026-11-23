@@ -36,7 +36,7 @@ As of `339f87e` (2026-11-22).
 - **Due today.** A decision whose `due_on` is today, still unanswered: «Órdago: una decisión vence hoy», once per decision and person. If it is already due when the daily one goes out, the daily one says so («…, una vence hoy») and no second one follows. One that appears later in the day is sent on the next tick, never between 22:00 and 08:00 local.
 - **Tapping** opens that decision (`/decision/<id>`), or Hoy for the daily one, in the right organisation (the payload carries the organisation's id and the decision's uuid, nothing else from the record).
 - **Asking permission** happens once, after the person answers their first decision, with our own line first («¿Te aviso cuando haya algo tuyo? Una vez al día como mucho.») and only then the phone's dialog. Never at launch.
-- **«Notificaciones»**, a small screen (not «Avisos»: that is already the name of each agent's thread for what it did on its own, `NOTICES_TITLE` in `apps/engine/src/jobsStore.ts`): the hour, a switch for the daily one, a switch for «vence hoy». The first native picker and switches, so it brings in Expo UI (app-design decision 33).
+- **«Notificaciones»**, a small screen: the hour, a switch for the daily one, a switch for «vence hoy». The first native picker and switches, so it brings in Expo UI (app-design decision 33).
 - **Who.** Every member of the organisation, because a decision has no person yet. When decisions get one, the sender narrows to them.
 - The web gets nothing here: `pushClient.web.ts` answers «unsupported».
 
@@ -70,7 +70,7 @@ As of `339f87e` (2026-11-22).
 
 **Build order:** database and services; the engine's planner and transports (testable with no phone); the app; then one real decision due today on a founder's phone on the beta. Build it after #36 (environments) lands, since both change `scripts/deploy-engine.sh` and `apps/mobile/app.config.ts`. Once Task 7 of [environments.md](../ongoing/environments.md) is in (CI deploys migrations, engine and runner), the migration and the engine go out from the same push as the app, and «run `scripts/deploy-engine.sh`» drops out of part 5.
 
-**Not in this plan:** the push for «money leaving» (no por-decidir field says a decision moves money; by rule 4 that field starts in Órdago's `por-decidir/README.md`, and the planner takes it as one more rule once it exists); the push for `@Ana` (team-chat decision 9; one more kind on the same sender); a push when an agent writes in its «Avisos» thread (the daily one counts decisions only; whether a report deserves a notification is a product decision nobody has taken); the weekly summary and the widget (their own plans).
+**Not in this plan:** the push for «money leaving» (no por-decidir field says a decision moves money; by rule 4 that field starts in Órdago's `por-decidir/README.md`, and the planner takes it as one more rule once it exists); the push for `@Ana` (team-chat decision 9; one more kind on the same sender); a push when an agent writes in someone's chat on its own (the daily one counts decisions only; whether a report deserves a notification is a product decision nobody has taken); the weekly summary and the widget (their own plans).
 
 **Alternatives considered:**
 
@@ -111,7 +111,7 @@ No path here is a hard stop. The founder-only steps are in part 5 of the design.
 ## Out of scope
 
 - The push for «money leaving» (decision 14's third trigger): no `por-decidir` field marks it, and by rule 4 that field starts in Órdago's `por-decidir/README.md`.
-- The push for `@Ana` (team-chat decision 9) and a push for a new message in an agent's «Avisos» thread: more kinds on the same sender, each its own decision.
+- The push for `@Ana` (team-chat decision 9) and a push for what an agent writes on its own in a person's chat: more kinds on the same sender, each its own decision.
 - The weekly summary and the widget (app-design's checklist: each its own plan).
 - Web notifications, email, and the question's text in the notification.
 - Assigning a decision to a person.

@@ -34,7 +34,7 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 8. An answer can be **taken back until the agent has it** (until the sync writes it into the record), only by whoever gave it.
 9. A correction becomes a rule the way Órdago does it: the agent proposes it as its own decision, the person edits and signs.
 10. Earned autonomy shows as a **10-step bar on each decision** («6 de 10 OK seguidos sin corregir») and a ladder per kind on the agent's page.
-11. What agents did alone: **one folded line on Hoy**, «Hecho sin ti», opening to a list with undo for a day. **Gone with Hoy on 2026-11-23**: it shows in the agent's chat, as «Avisos» ([three-tabs.md](three-tabs.md), decision 2).
+11. What agents did alone: **one folded line on Hoy**, «Hecho sin ti», opening to a list with undo for a day. **Gone with Hoy on 2026-11-23**: it shows in each person's chat with the agent ([three-tabs.md](three-tabs.md), decisions 2 and 12).
 12. Order: what waits first, nearest `vence` first, then newest.
 13. «Preguntar» opens a short chat about that decision; the agent answers there.
 

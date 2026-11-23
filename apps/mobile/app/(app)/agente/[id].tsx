@@ -53,7 +53,7 @@ export default function Agente() {
   const owner = active?.role === 'owner' && active.id === agent.orgId;
   const level = levels[agent.id];
   // The shared, titled threads of before (team-chat.md, decision 2): history now.
-  const earlier = threads.filter((t) => !t.personal && !t.notices);
+  const earlier = threads.filter((t) => !t.personal);
 
   const remove = async () => {
     setBusy(true);

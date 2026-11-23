@@ -412,6 +412,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   my_invitations: { reach: 'not_a_setting' },
   my_threads: { reach: 'not_a_setting' },
   post_message: { reach: 'not_a_setting' },
+  post_to_personal_chats: { reach: 'not_a_setting' },
   release_refresh_lease: { reach: 'not_a_setting' },
   request_connector: { reach: 'not_a_setting' },
   slug_for: { reach: 'not_a_setting' },

@@ -140,7 +140,8 @@ async function preflight(chat: ChatDeps, deps: RunnerDeps, orgId: string): Promi
 
 /**
  * Closes a run that could not work, saying why where people will see it: in
- * the message that waits for it, or in the agent's «Avisos» for a scheduled run.
+ * the message that waits for it, or for a scheduled run in the chat of everyone
+ * who can see the agent.
  */
 async function failRun(chat: ChatDeps, deps: JobDeps, run: Pick<RunRecord, 'id' | 'messageId' | 'threadId'>, agent: ChatAgent, said: string) {
   const took = await deps.jobs.finishRun(run.id, { state: 'failed', summary: said, noteworthy: true, decisionsOpened: 0 }).catch(() => false);
@@ -151,9 +152,7 @@ async function failRun(chat: ChatDeps, deps: JobDeps, run: Pick<RunRecord, 'id' 
     return;
   }
   try {
-    const thread = await deps.jobs.noticesThread(agent);
-    await deps.jobs.postAgentMessage(thread, agent, said);
-    await chat.chat.touchThread(thread.id).catch(() => {});
+    await deps.jobs.postToPersonalChats(agent, said);
   } catch (e) {
     console.error('notice not posted', e instanceof Error ? e.message : typeof e);
   }
@@ -280,7 +279,7 @@ export function composePrompt(p: {
     );
   } else {
     parts.push(
-      'Te ha lanzado tu horario. Tu último mensaje llega a las personas en tu hilo «Avisos» de Ghostaff: escríbelo para ellas. ' +
+      'Te ha lanzado tu horario. Tu último mensaje llega a cada persona que trabaja contigo, en su chat contigo en Ghostaff: escríbelo para ellas. ' +
         `Si no hay nada que contarles, tu último mensaje es exactamente \`${NOTHING_NEW}\`, sin nada más, y no les llega nada.`,
     );
   }

@@ -18,7 +18,7 @@ import { GHOSTS } from '@/lib/team';
 
 // The person's one chat with an agent (three-tabs.md, decision 3), opened
 // straight from its row in Equipo: one long conversation, as in WhatsApp, with
-// what the agent did on its own («Avisos») in its place. Only the person and
+// what the agent did on its own in it too (decision 12). Only the person and
 // the agent see it. The agent's name on top opens its page and settings
 // (decision 6).
 
