@@ -2,12 +2,12 @@
 
 **Priority:** medium — people on the go, and many small-business owners, would rather speak than type
 **Gate:** none
-**Next:** on beta, run `scripts/setup-env.sh` (Vertex AI for the engine; Jaime's go-ahead), then send a voice note in Spanish and one in English from the beta app on iPhone, Android and the web, and play each on another device
+**Next:** send a voice note in Spanish and one in English from the beta app on iPhone, Android and the web, and play each on another device
 
 Two pieces, in order:
 
 1. **Dictation** (Jaime's idea, 2026-11-18; built in PR 46 on 2026-11-22): speak, the transcript lands in the message box, you review it and send text. **Replaced by voice notes on 2026-11-23** (decision 1 below): the mic now sends the note, and the engine's `/transcribe` is gone. Sections «Goal» to «Open questions» below are its record, and the research on who transcribes still holds.
-2. **Voice notes** (Trello card «hablar por audios», Jaime, 2026-11-23): as in WhatsApp, you record an audio and send it; it shows in the chat as an audio you can play, with its transcript under it, and the agent answers in text. Not a live voice conversation. Designed in the next section; Jaime took all five picks on 2026-11-23; built on branch `claude/voice-notes-5d8642`.
+2. **Voice notes** (Trello card «hablar por audios», Jaime, 2026-11-23): as in WhatsApp, you record an audio and send it; it shows in the chat as an audio you can play, with its transcript under it, and the agent answers in text. Not a live voice conversation. Designed in the next section; Jaime took all five picks on 2026-11-23; landed in PR 57 the same day.
 
 ## Voice notes (Jaime, 2026-11-23)
 
@@ -39,14 +39,16 @@ All five picks taken: one mic that sends voice notes (dictation goes), tap to st
 
 Not in this version: agents answering in audio, a live voice conversation, text appearing while you speak, editing a note's transcript, and the mic on Hoy, Equipo and Registro (still opens the chat with Secretaría).
 
-### Progress (branch `claude/voice-notes-5d8642`, one PR)
+### Progress (PR 57, landed 2026-11-23)
 
 - [x] Database: `supabase/migrations/20261124500000_voice_notes.sql` (bucket, `can_hear_voice_note`, the read policy), pgTAP `voice_notes.test.sql` (11 checks).
 - [x] Engine: `voiceNotes.ts` and its routes; `/transcribe` and dictation's flow removed, `transcribe.ts` keeps the transcriber and the audio checks. Vitest `voiceNotes.test.ts`.
 - [x] Shared: `VoicePart`, `isVoicePart`, `sendVoiceNote`, `transcribeVoiceNote`, `voiceNoteUrl`, with tests.
 - [x] App: `useVoiceNote`, `RecordingBar`, the composer's mic, `VoiceNote` in `MessageView`, wired in `chat/[agent]`; the mic is gone from `conversacion/[id]`. Jest for the composer and the bubble; `expo-audio` stood in for in `test/setup.ts`.
 - [x] Checked on the web against local Supabase, with the real routes and stores and a stand-in transcriber and writer (this machine has no Vertex access): a note sent as `audio/mp4`, stored, its bubble, playing it from the bucket through the signed link, a failed transcript live, «Reintentar», the text, the agent's answer; light, dark, phone width. The microphone itself is blocked in that browser: recording is covered by the unit tests only.
-- [ ] On beta and on phones (Next above): real recording, Gemini's transcript, playback across devices.
+- [x] Beta set up (2026-11-23, Jaime's go-ahead): `setup-env.sh beta` granted the engine `roles/aiplatform.user`; the migration and the engine `51a0313` deployed by CI. Vertex on `ghostaff-beta`, location `eu`, model `gemini-3.5-transcribe`, the engine's exact request: a synthetic note in Spanish and one in English came back word for word, under a second each.
+- [ ] On phones (Next above): real recording, the whole loop through the beta engine, playback across devices.
+- [ ] Prod: `setup-env.sh prod` once this reaches `main`.
 
 Tasks as planned:
 
