@@ -1,0 +1,30 @@
+appId: ${APP_ID}
+name: TEMPORARY keyboard probe, name step to empezar, repeated
+---
+- repeat:
+    times: 8
+    commands:
+      - evalScript: ${output.email = 'e2e-kb-' + Date.now() + '@ghostaff.test'}
+      - runFlow:
+          file: ../subflows/sign-in-email.yaml
+          env:
+            EMAIL: ${output.email}
+      - extendedWaitUntil:
+          visible: "¿Cómo te llamas?"
+          timeout: 30000
+      - copyTextFrom:
+          id: "kb-probe"
+      - evalScript: ${console.log('PROBE bienvenida ' + maestro.copiedText)}
+      - tapOn: "Nombre y apellido"
+      - inputText: "Prueba E2E"
+      - copyTextFrom:
+          id: "kb-probe"
+      - evalScript: ${console.log('PROBE typed ' + maestro.copiedText)}
+      - tapOn: "Seguir"
+      - extendedWaitUntil:
+          visible: "¿Para qué vas a usar Ghostaff?"
+          timeout: 30000
+      - copyTextFrom:
+          id: "kb-probe"
+      - evalScript: ${console.log('PROBE empezar ' + maestro.copiedText)}
+      - takeScreenshot: ${'probe-' + Date.now()}

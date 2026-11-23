@@ -3,6 +3,7 @@ import { ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
 import { KeyboardColumn } from '@/lib/keyboard';
+import { KeyboardProbe } from './KeyboardProbe';
 import { DESKTOP_PAGE, useIsDesktop } from '@/lib/layout';
 import type { GhostId } from '@/lib/team';
 
@@ -61,6 +62,7 @@ export function OnboardingStep({
           {link ?? null}
         </View>
       </KeyboardColumn>
+      <KeyboardProbe />
     </SafeAreaView>
   );
 }
