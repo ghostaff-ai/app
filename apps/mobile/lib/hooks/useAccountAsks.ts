@@ -97,6 +97,8 @@ export function useAccountAsks(opts: {
       } catch (e) {
         const code = e instanceof EngineError ? e.code : 'failed';
         if (code === 'already_done') return null;
+        // Not theirs to make the agent go on (they may only read here): don't ask again.
+        if (code === 'not_allowed') return 'Solo puede hacerlo quien escribe en esta conversación.';
         // Worth another go later: the agent was answering, or the connection hadn't reached the engine.
         tried.current.delete(askId);
         if (code === 'busy') return 'Está contestando otra cosa. Vuelve a pulsar cuando acabe.';
