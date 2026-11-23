@@ -2,7 +2,7 @@
 
 **Priority:** high — Ghostaff uses Ghostaff: until Órdago's agents run through it, the platform is a chat with no work behind it
 **Gate:** blocked:ordago-as-customer (Jaime, 2026-11-22: the agents move only once the rest of the architecture is ready). Meanwhile Legal runs in both (Álvaro, 2026-11-23): the old job keeps its timetable and Telegram, Ghostaff's runner answers it in the chat
-**Next:** once #50's `--on-demand` lands, `org add-agents --org ordago --from … --runner ghostaff --only legal --on-demand` (before 15 January, or Legal's yearly review runs twice); the move itself waits on the gate
+**Next:** nothing for Legal until the gate lifts: it runs in both (old job on its timetable; Ghostaff's Legal imported `--on-demand` on 2026-11-23, no timetable, answers when written to). Then the move: `org add-agents … --runner ghostaff --only legal` and pause `ordago-legal`
 
 Álvaro asked (2026-11-21) how close Ghostaff is to running all of Órdago's agents, then to build what is missing. Where we stood that day: the app (sign-in, organisations, decision inbox, team chat, connectors, vault) is on the beta; the agents still run entirely in `ghostaff-ai/agents` (Claude Code in a container on Cloud Run Jobs in `ordago-agents`, on a timetable, working in `ordago-app/business`, reporting by Telegram), and the engine here only answers in chat. He took my picks with four changes («go», 2026-11-21).
 
