@@ -1,6 +1,7 @@
 -- Spaces (welcome-and-spaces.md): a company or your own personal space, each
 -- an organisation, each created with Secretaría already hired. One personal
--- space per person, and nobody else sees it (invariant 1).
+-- space per person, which works like a company: nobody else sees it unless
+-- its owner invites them (invariant 1).
 begin;
 select plan(18);
 
@@ -52,9 +53,9 @@ select is(
   (select count(*)::int from public.organizations where kind = 'personal'),
   1, '... so there is still only one');
 
-select throws_ok(
+select lives_ok(
   $$ select public.invite_member((select id from mine), 'eva@example.com') $$,
-  '42501', 'a personal space has only its owner', 'nobody is invited to a personal space');
+  'a personal space takes invitations, like a company');
 
 reset role;
 select throws_ok(

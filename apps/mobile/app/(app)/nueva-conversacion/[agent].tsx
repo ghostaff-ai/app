@@ -35,9 +35,7 @@ export default function NuevaConversacion() {
 
   if (!agent && loading) return <Loading />;
   if (!agent) return <Notice title="No encontramos este agente" body="Puede que ya no esté en el equipo, o que no tengas acceso." />;
-  // A personal space has nobody else to share with.
-  const personal = active?.kind === 'personal';
-  const visibility = personal ? 'private' : (choice ?? agent.chatDefault);
+  const visibility = choice ?? agent.chatDefault;
 
   const send = async (body: string) => {
     const id = await startThread(supabase, agent.id, body, visibility);
@@ -49,11 +47,7 @@ export default function NuevaConversacion() {
     <KeyboardColumn offset={headerHeight}>
       <Stack.Screen options={{ title: 'Nueva conversación' }} />
       <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-5 pb-8" keyboardShouldPersistTaps="handled">
-        {personal ? (
-          <Text className="mt-7 text-center text-footnote text-muted">Esta conversación es solo entre tú y {agent.name}.</Text>
-        ) : (
-          <VisibilityPicker value={visibility} agentName={agent.name} onChange={setChoice} />
-        )}
+        <VisibilityPicker value={visibility} agentName={agent.name} onChange={setChoice} />
         <Text className="mt-6 px-4 text-footnote text-muted">Lo primero que escribas le da título.</Text>
       </ScrollView>
       <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={send} />

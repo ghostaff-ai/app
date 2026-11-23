@@ -37,11 +37,12 @@ name: A new person wants Ghostaff for themselves, gets their personal space and 
       SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
 - stopApp
 - launchApp
-# Equipo, the first tab, with Secretaría; the space's name is on Empresa.
+# Equipo, the first tab, with Secretaría; the space's name is on its own page,
+# called Perfil in a personal space (spaces.ts).
 - extendedWaitUntil:
     visible: "Secretaría"
     timeout: 60000
-- tapOn: "Empresa"
+- tapOn: "Perfil"
 - extendedWaitUntil:
     visible: "Personal"
     timeout: 20000

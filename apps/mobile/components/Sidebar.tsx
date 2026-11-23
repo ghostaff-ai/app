@@ -2,6 +2,7 @@ import { router, usePathname, type Href } from 'expo-router';
 import { useEffect, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { spaceLook, type SpaceLook } from '@ghostaff/shared';
 import { useInbox } from '@/lib/hooks/useDecisions';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
@@ -9,7 +10,7 @@ import { usePalette } from '@/lib/theme';
 
 // The desktop's navigation (docs/plans/ideas/desktop-web.md): it stands in for
 // the phone's three tabs (three-tabs.md). The organisation's name on top opens
-// the switcher, as in Empresa.
+// the switcher, as in the space's own page (Empresa or Perfil).
 
 type Item = { href: Href; label: string; icon: (color: string) => ReactNode; match: (path: string) => boolean };
 
@@ -40,17 +41,29 @@ const ITEMS: Item[] = [
       </Svg>
     ),
   },
-  {
-    href: '/empresa',
-    label: 'Empresa',
-    match: (p) => p.startsWith('/empresa') || p.startsWith('/herramientas'),
-    icon: (c) => (
-      <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
-        <Path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M2.5 21h19M8 8h3M8 12h3M8 16h3" />
-      </Svg>
-    ),
-  },
 ];
+
+const SPACE_ICONS: Record<SpaceLook['icon'], (color: string) => ReactNode> = {
+  building: (c) => (
+    <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
+      <Path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M2.5 21h19M8 8h3M8 12h3M8 16h3" />
+    </Svg>
+  ),
+  person: (c) => (
+    <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
+      <Circle cx={12} cy={8} r={4} />
+      <Path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" />
+    </Svg>
+  ),
+};
+
+// The third item is the space's own page: «Perfil» or «Empresa» (spaces.ts).
+const spaceItem = (look: SpaceLook): Item => ({
+  href: '/empresa',
+  label: look.tab,
+  match: (p) => p.startsWith('/empresa') || p.startsWith('/herramientas'),
+  icon: SPACE_ICONS[look.icon],
+});
 
 const initials = (name: string | null | undefined) =>
   (name ?? '')
@@ -88,7 +101,7 @@ export function Sidebar() {
         <Text className="text-sm text-muted">▾</Text>
       </Pressable>
 
-      {ITEMS.map((item) => {
+      {[...ITEMS, spaceItem(spaceLook(active?.kind))].map((item) => {
         const on = item.match(path);
         const badge = item.label === 'Decisiones' && waiting > 0 ? waiting : 0;
         return (

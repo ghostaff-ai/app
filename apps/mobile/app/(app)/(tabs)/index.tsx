@@ -102,7 +102,7 @@ export default function Equipo() {
             ) : undefined;
             const ghost = <Image source={GHOSTS[a.ghost].picture} style={{ width: 48, height: 48 }} resizeMode="contain" />;
             if (row.kind === 'conversation') {
-              const tag = active.kind === 'personal' ? a.name : `${a.name} · ${visibilityTag(row.last.visibility)}`;
+              const tag = `${a.name} · ${visibilityTag(row.last.visibility)}`;
               return (
                 <ListRow
                   key={row.last.id}

@@ -64,7 +64,8 @@ The native app is not held back by the web: the tabs are the system's own (`Nati
 - `create_organization` stays as is and creates `kind = 'company'`.
 - pgTAP: another person can't see or change your personal space; a second call returns the same space; a second personal space can't be inserted.
 - `Organization` / `MyOrganization` gain `kind`. `createPersonalSpace(client)` joins `@ghostaff/shared/services`.
-- In a personal space: «Invitar» is hidden (you're alone in it). Copy that says «empresa» says «tu espacio» instead (conectar-ia, Hoy's no-AI notice).
+- ~~In a personal space: «Invitar» is hidden (you're alone in it).~~ **Replaced (Álvaro, 2026-11-23): a personal space works exactly like a company.** Its owner may invite people, choose who sees each conversation, and has everything else a company has (`20261125000000_personal_spaces_like_any.sql` drops the invitation block). What differs is only words and looks, all in one map, `packages/shared/src/spaces.ts`: the third tab is **Perfil** (a person icon) in a personal space and **Empresa** in a company, and later the agent templates each kind offers ([agent-templates.md](../ideas/agent-templates.md)). Screens read that map and never check `kind` themselves. Copy that says «empresa» says «tu espacio» instead (conectar-ia).
+- **The word** for either is **espacio** («Tus espacios», «tu espacio personal»): under your user, one personal space and any number of companies you belong to.
 
 ### Where you are, and switching
 

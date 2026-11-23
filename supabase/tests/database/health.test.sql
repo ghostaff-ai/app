@@ -2,7 +2,7 @@
 -- holds it, only the engine (service role) writes it, its person reads it, and
 -- nobody in another organisation sees any of it (invariant 1, AGENTS.md rule 2).
 begin;
-select plan(20);
+select plan(22);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'ana@example.com'),
@@ -77,6 +77,16 @@ set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", 
 select is((select count(*) from health.sources), 0::bigint, 'Bea sees none of Ana''s sources');
 select is((select count(*) from health.records) + (select count(*) from health.metrics), 0::bigint,
   '... records or metrics');
+
+-- Bea, invited into Ana's personal space, still doesn't read Ana's health.
+reset role;
+insert into public.memberships (org_id, user_id, role, display_name) values
+  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000b', 'owner', 'Bea');
+set local role authenticated;
+set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
+select is((select count(*) from health.sources), 0::bigint, 'Bea, a member of Ana''s personal space, sees none of her sources');
+select is((select count(*) from health.records) + (select count(*) from health.metrics), 0::bigint,
+  '... records or metrics: health is only its own person''s');
 
 -- Back as the engine: recomputed metrics replace the old ones in one go.
 reset role;

@@ -56,7 +56,6 @@ export default function Agente() {
   const level = levels[agent.id];
   // Its titled conversations: the person's own and those shared with them.
   const conversations = threads.filter((t) => !t.personal);
-  const personalSpace = active?.kind === 'personal';
 
   const remove = async () => {
     setBusy(true);
@@ -90,7 +89,7 @@ export default function Agente() {
               testID="new-conversation"
               leading={<RowIcon icon={Plus} />}
               title="Nueva conversación"
-              subtitle={personalSpace ? null : 'Tú eliges quién la ve'}
+              subtitle="Tú eliges quién la ve"
               chevron
               onPress={() => router.push(`/nueva-conversacion/${agent.id}`)}
             />
@@ -103,7 +102,7 @@ export default function Agente() {
                 key={t.id}
                 testID={`conversation-${t.id}`}
                 thread={t}
-                tag={personalSpace ? undefined : visibilityTag(t.visibility)}
+                tag={visibilityTag(t.visibility)}
                 onPress={() => router.push(`/conversacion/${t.id}`)}
               />
             ))}
@@ -120,16 +119,14 @@ export default function Agente() {
               chevron
               onPress={() => router.push(`/acceso/${agent.id}`)}
             />
-            {personalSpace ? null : (
-              <ListRow
-                testID="chat-default"
-                leading={<RowIcon icon={ChatsCircle} />}
-                title="Conversaciones nuevas"
-                value={VISIBILITY_NAMES[agent.chatDefault]}
-                chevron
-                onPress={() => router.push(`/conversaciones/${agent.id}`)}
-              />
-            )}
+            <ListRow
+              testID="chat-default"
+              leading={<RowIcon icon={ChatsCircle} />}
+              title="Conversaciones nuevas"
+              value={VISIBILITY_NAMES[agent.chatDefault]}
+              chevron
+              onPress={() => router.push(`/conversaciones/${agent.id}`)}
+            />
             <ListRow
               leading={<RowIcon icon={LinkSimple} />}
               title="Herramientas"
