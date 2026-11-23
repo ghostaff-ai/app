@@ -2,7 +2,7 @@
 
 **Priority:** high — the shape of the whole app
 **Gate:** none
-**Next:** try the deck on the phone (swipe was never tried on a phone: decision-deck.md); then step 3, the decision model, with its own written plan first
+**Next:** step 3, the decision model: its plan is [decision-model.md](../ready/decision-model.md), waiting for Álvaro's picks
 
 Álvaro asked (2026-11-23) to reorganise the app: no Hoy; **Equipo** as one row per agent that opens a single long chat with it, as in WhatsApp; **Decisiones** in the middle as one card at a time, Tinder style, to answer or leave for later; and decisions properly modelled. He then changed the third tab from Conexiones to **Empresa**, the organisation's own page with Conexiones one tap away. He took all my picks («go», 2026-11-23).
 
@@ -47,7 +47,7 @@ It reverses, on his word, app-design.md decisions 1 (Hoy · Equipo · Registro a
 - Not yet: high-stakes cards (no stakes field until step 3); «Preguntar» still goes through the decision's own screen, not straight into the agent's chat with the card quoted.
 - Checked on the web against local Supabase, light and dark: drag, swipe, undo, later, no, a rule opening its screen, the empty state. Not on a phone.
 
-**Step 3, the decision model** — not started.
+**Step 3, the decision model** — planned in [decision-model.md](../ready/decision-model.md).
 
 **No «Avisos»** (decision 12, branch `claude/remove-avisos-7bec6b`):
 
