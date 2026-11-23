@@ -32,6 +32,33 @@ export function isActionPart(p: MessagePart): p is ActionPart & MessagePart {
 }
 
 /**
+ * An agent asking, in its message, for an account it lacks (docs/plans/ongoing/
+ * connector-in-chat.md): «Necesito acceso a Notion» and, for an owner, the
+ * button that gets it. Once the account is there, the agent goes on
+ * (apps/engine/src/accountAsks.ts); the engine trusts its own row, never the part.
+ */
+export interface AccountAskPart {
+  type: 'account_ask';
+  askId: string;
+  /** The catalogue's id (connectors.ts); absent when the app is not in it. */
+  connector?: string;
+  /** The app's name as the person reads it. */
+  name: string;
+  /** Why the agent needs it, in one line. */
+  why: string;
+  /** What is missing: the account, a working one, this agent's access to it, or an app we can't connect yet. */
+  need: 'connect' | 'reconnect' | 'grant' | 'unsupported';
+  /** «done» once the account is there and the agent has gone on. */
+  status: 'open' | 'done';
+  /** Who made it possible, once done. */
+  doneBy?: string;
+}
+
+export function isAccountAskPart(p: MessagePart): p is AccountAskPart & MessagePart {
+  return p.type === 'account_ask' && typeof (p as { askId?: unknown }).askId === 'string';
+}
+
+/**
  * A voice note (docs/plans/ongoing/voice.md): the audio a person recorded, kept
  * in the private «voice-notes» bucket. Once transcribed, a text part follows
  * it with the transcript, which is what the agent and the lists read. A type,

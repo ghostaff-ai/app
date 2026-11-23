@@ -2,6 +2,7 @@ import type { ChatMessage } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { type AiAccount, AiFailure, type AiUse, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, whoAnswers, type Writer } from '../src/chat';
+import type { AskRecord, AskStore } from '../src/accountAsks';
 import type { AsPerson } from '../src/settings';
 import { type AgentTools, NO_TOOLS } from '../src/tools';
 import { fakeSupabase } from './fixtures/fakeSupabase';
@@ -47,6 +48,7 @@ function setup(
     /** The thread's agent (Finanzas by default). */
     agent?: ChatAgent;
     asPerson?: AsPerson;
+    asks?: AskStore;
   } = {},
 ) {
   const threadAgent = opts.agent ?? finanzas;
@@ -54,7 +56,7 @@ function setup(
   const messages: ChatMessage[] = opts.messages ?? [msg({ text: '¿Cómo vamos este mes?' })];
   if (opts.expose) opts.expose.messages = messages;
   const threads: ChatThreadHead[] = [{ id: THREAD, orgId: ORG, agentId: AGENT, title: 'Cierre' }];
-  const updates: Array<{ id: string; text?: string; steps?: string[]; state?: string; actions?: unknown[] }> = [];
+  const updates: Array<{ id: string; text?: string; steps?: string[]; state?: string; cards?: unknown[] }> = [];
   const proposed: Array<{ tool: string; input: unknown; label: string; requestedBy: string; messageId: string }> = [];
   const used: AiUse[] = [];
   let working: string | null = null;
@@ -123,11 +125,17 @@ function setup(
       costOf: (account, _model, tokens) => (account.provider === 'claude' ? null : tokens.output / 1000),
       toolsFor: async () => opts.tools ?? NO_TOOLS,
       asPerson: opts.asPerson,
+      asks: opts.asks,
     },
     accounts: {} as never,
     actions: {} as never,
   });
-  const call = (user: string, path: string) => app.request(path, { method: 'POST', headers: { Authorization: `Bearer token-${user}` } });
+  const call = (user: string, path: string, body?: unknown) =>
+    app.request(path, {
+      method: 'POST',
+      headers: { Authorization: `Bearer token-${user}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
   return { call, updates, asked, threads, proposed, used };
 }
 
@@ -403,7 +411,7 @@ describe("an agent using its organisation's tools", () => {
     expect(told).toMatchObject({ isError: false, content: expect.stringContaining('pendiente de aprobación') });
     const last = updates[updates.length - 1];
     expect(last).toMatchObject({ state: 'done', text: 'Lo dejo para que lo apruebes.' });
-    expect(last?.actions).toEqual([
+    expect(last?.cards).toEqual([
       { type: 'action', actionId: 'action-1', label: 'Publicar en Instagram', preview: 'kind: reel\nmedia: ["https://cdn.example/v.mp4"]', status: 'pending' },
     ]);
   });
@@ -493,7 +501,7 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     expect(proposed).toMatchObject([{ tool: 'settings_revoke_invitation', label: 'Retirar la invitación de luis@panaderia.es' }]);
     expect(told).toMatchObject({ isError: false, content: expect.stringContaining('pendiente de aprobación') });
     expect(db.rpcs).toEqual([]);
-    expect(updates[updates.length - 1]?.actions).toMatchObject([{ label: 'Retirar la invitación de luis@panaderia.es', preview: '' }]);
+    expect(updates[updates.length - 1]?.cards).toMatchObject([{ label: 'Retirar la invitación de luis@panaderia.es', preview: '' }]);
   });
 
   it('tells the agent when a change is not valid, with no card', async () => {
@@ -509,5 +517,231 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     await call('ana', `/threads/${THREAD}/reply`);
     expect(proposed).toEqual([]);
     expect(told).toMatchObject({ isError: true, content: expect.stringContaining('tus propias herramientas') });
+  });
+});
+
+describe('an agent asking for an account it lacks (connector-in-chat.md)', () => {
+  const ASK = '50000000-0000-0000-0000-000000000001';
+
+  /** The asks in memory, with the organisation's accounts as given. */
+  function memoryAsks(states: Record<string, 'ok' | 'failing'> = {}) {
+    const records = new Map<string, AskRecord>();
+    const cards: Array<{ messageId: string; askId: string; patch: unknown }> = [];
+    const store: AskStore = {
+      accountStates: async () => new Map(Object.entries(states)),
+      propose: async (a) => {
+        const id = records.size === 0 ? ASK : `50000000-0000-0000-0000-00000000000${records.size + 1}`;
+        records.set(id, { id, ...a, status: 'open', messageState: 'done' });
+        return id;
+      },
+      ask: async (id) => records.get(id) ?? null,
+      claim: async (id) => {
+        const r = records.get(id);
+        if (!r || r.status !== 'open') return false;
+        r.status = 'done';
+        return true;
+      },
+      reopen: async (id) => {
+        const r = records.get(id);
+        if (r) r.status = 'open';
+      },
+      updateCard: async (messageId, askId, patch) => {
+        cards.push({ messageId, askId, patch });
+      },
+      memberName: async (_o, u) => (u === 'ana' ? 'Ana' : 'Bea'),
+    };
+    return { store, records, cards, states };
+  }
+
+  const asking = (connector: string, why = 'Para ver tus citas') => {
+    const told: unknown[] = [];
+    const write: Writer = async ({ tools: t, onText }) => {
+      told.push(await t.run('ask_for_account', { connector, why }));
+      onText('Cuando lo conectes, miro tus citas.');
+    };
+    return { told, write };
+  };
+
+  it('offers every agent the tool, with the catalogue, and tells it to ask instead of saying it cannot', async () => {
+    const { store } = memoryAsks();
+    const { call, asked } = setup({ asks: store });
+    await call('ana', `/threads/${THREAD}/reply`);
+    const spec = (asked[0] as unknown as { tools: AgentTools }).tools.specs.find((s) => s.name === 'ask_for_account');
+    expect(spec?.description).toContain('google: Google');
+    expect(spec?.description).toContain('notion: Notion');
+    expect(asked[0]?.system).toContain('ask_for_account');
+  });
+
+  it('without the store, agents keep today\'s words and get no tool', async () => {
+    const { call, asked } = setup();
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect((asked[0] as unknown as { tools: AgentTools }).tools.specs.map((s) => s.name)).not.toContain('ask_for_account');
+    expect(asked[0]?.system).not.toContain('ask_for_account');
+  });
+
+  it('turns the ask into a card in the message for an account not connected', async () => {
+    const { store, records } = memoryAsks();
+    const { told, write } = asking('notion', 'Para leer tus notas');
+    const { call, updates } = setup({ asks: store, write });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(told[0]).toMatchObject({ isError: false, content: expect.stringContaining('conectar Notion') });
+    expect(updates[updates.length - 1]).toMatchObject({
+      state: 'done',
+      text: 'Cuando lo conectes, miro tus citas.',
+      cards: [{ type: 'account_ask', askId: ASK, connector: 'notion', name: 'Notion', why: 'Para leer tus notas', need: 'connect', status: 'open' }],
+    });
+    expect(records.get(ASK)).toMatchObject({ orgId: ORG, threadId: THREAD, agentId: AGENT, connector: 'notion', need: 'connect', requestedBy: 'ana' });
+  });
+
+  it('knows the connector by its name too, and what is missing in each state', async () => {
+    for (const [states, accounts, need] of [
+      [{ notion: 'failing' }, null, 'reconnect'],
+      [{ notion: 'ok' }, ['google'], 'grant'],
+    ] as const) {
+      const { store } = memoryAsks(states);
+      const { write } = asking('Notion');
+      const { call, updates } = setup({ asks: store, write, agent: { ...finanzas, accounts: accounts ? [...accounts] : null } });
+      await call('ana', `/threads/${THREAD}/reply`);
+      expect(updates[updates.length - 1]?.cards).toMatchObject([{ connector: 'notion', need }]);
+    }
+  });
+
+  it('an app we lack becomes a card to ask for it', async () => {
+    const { store, records } = memoryAsks();
+    const { told, write } = asking('Gmail');
+    const { call, updates } = setup({ asks: store, write });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(told[0]).toMatchObject({ isError: false, content: expect.stringContaining('Todavía no podemos conectar Gmail') });
+    expect(updates[updates.length - 1]?.cards).toEqual([
+      { type: 'account_ask', askId: ASK, name: 'Gmail', why: 'Para ver tus citas', need: 'unsupported', status: 'open' },
+    ]);
+    expect(records.get(ASK)?.connector).toBeNull();
+  });
+
+  it('an account the agent already has: no card, use its tools', async () => {
+    const { store } = memoryAsks({ notion: 'ok' });
+    const { told, write } = asking('notion');
+    const { call, updates } = setup({ asks: store, write });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(told[0]).toMatchObject({ isError: true, content: expect.stringContaining('Ya tienes Notion') });
+    expect(updates[updates.length - 1]?.cards).toBeUndefined();
+  });
+
+  it('one card per app, three at most per message', async () => {
+    const { store } = memoryAsks();
+    const told: unknown[] = [];
+    const write: Writer = async ({ tools: t, onText }) => {
+      for (const c of ['notion', 'Notion', 'holded', 'stripe', 'airtable']) told.push(await t.run('ask_for_account', { connector: c, why: '' }));
+      onText('Necesito estas.');
+    };
+    const { call, updates } = setup({ asks: store, write });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect((updates[updates.length - 1]?.cards as Array<{ name: string }>).map((c) => c.name)).toEqual(['Notion', 'Holded', 'Stripe']);
+    expect(told[1]).toMatchObject({ isError: true, content: expect.stringContaining('Ya has pedido Notion') });
+    expect(told[4]).toMatchObject({ isError: true });
+  });
+
+  it('reads its own card back as a line, so it knows where it stopped', () => {
+    const turns = toTurns(
+      [
+        msg({ text: '¿Qué notas tengo?' }),
+        msg({
+          authorKind: 'agent',
+          authorAgentId: AGENT,
+          authorUserId: null,
+          authorName: 'Finanzas',
+          text: 'Necesito Notion.',
+          parts: [
+            { type: 'text', text: 'Necesito Notion.' },
+            { type: 'account_ask', askId: ASK, connector: 'notion', name: 'Notion', why: '', need: 'connect', status: 'done' },
+          ],
+        }),
+      ],
+      AGENT,
+    );
+    expect(turns[1]).toEqual({ role: 'assistant', content: 'Necesito Notion.\n\n[Pedí acceso a Notion: ya la tengo.]' });
+  });
+
+  /** A thread where Finanzas asked for Notion; the account is in `states`. */
+  async function asked(states: Record<string, 'ok' | 'failing'>, agent: ChatAgent = finanzas) {
+    const asks = memoryAsks(states);
+    const first = asking('notion');
+    let write: Writer = first.write;
+    const expose: { messages?: ChatMessage[] } = {};
+    const s = setup({ asks: asks.store, agent, expose, write: (req) => write(req) });
+    await s.call('ana', `/threads/${THREAD}/reply`);
+    return {
+      ...asks,
+      ...s,
+      expose,
+      answerWith: (w: Writer) => {
+        write = w;
+      },
+    };
+  }
+
+  it('goes on once the account is connected, once, with a word from who connected it', async () => {
+    const t = await asked({});
+    t.states.notion = 'ok';
+    const said: string[] = [];
+    t.answerWith(async ({ messages, onText }) => {
+      said.push(messages[messages.length - 1]?.content ?? '');
+      onText('Ya veo tus notas.');
+    });
+    const res = await t.call('ana', `/threads/${THREAD}/resume`, { askId: ASK });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ resumed: true });
+    expect(t.cards).toEqual([{ messageId: expect.any(String), askId: ASK, patch: { status: 'done', doneBy: 'Ana' } }]);
+    expect(said[0]).toContain('Ana: Ya tienes acceso a Notion. Sigue con lo que se te pidió.');
+    expect(t.updates[t.updates.length - 1]).toMatchObject({ state: 'done', text: 'Ya veo tus notas.' });
+    const again = await t.call('ana', `/threads/${THREAD}/resume`, { askId: ASK });
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({ error: 'already_done' });
+  });
+
+  it('refuses while the account is not there, failing, or not given to the agent', async () => {
+    for (const [states, accounts] of [
+      [{}, null],
+      [{ notion: 'failing' }, null],
+      [{ notion: 'ok' }, ['google']],
+    ] as const) {
+      const t = await asked({}, { ...finanzas, accounts: accounts ? [...accounts] : null });
+      Object.assign(t.states, states);
+      const res = await t.call('ana', `/threads/${THREAD}/resume`, { askId: ASK });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: 'not_yet' });
+      expect(t.records.get(ASK)?.status).toBe('open');
+    }
+  });
+
+  it('refuses someone who may not write in the conversation, and an ask of another thread', async () => {
+    const t = await asked({});
+    t.states.notion = 'ok';
+    expect((await t.call('bea', `/threads/${THREAD}/resume`, { askId: ASK })).status).toBe(403);
+    t.records.get(ASK)!.threadId = '30000000-0000-0000-0000-000000000099';
+    expect((await t.call('ana', `/threads/${THREAD}/resume`, { askId: ASK })).status).toBe(404);
+    expect((await t.call('ana', `/threads/${THREAD}/resume`, { askId: 'nope' })).status).toBe(400);
+  });
+
+  it('leaves the ask open when the agent is busy answering', async () => {
+    const t = await asked({});
+    t.states.notion = 'ok';
+    let release: () => void = () => {};
+    t.answerWith(async ({ onText }) => {
+      await new Promise<void>((r) => {
+        release = r;
+      });
+      onText('Hecho.');
+    });
+    // A message of the person's starts a reply that is still being written.
+    t.expose.messages?.push(msg({ text: '¿Y bien?' }));
+    const replying = t.call('ana', `/threads/${THREAD}/reply`);
+    await new Promise((r) => setTimeout(r, 10));
+    const res = await t.call('ana', `/threads/${THREAD}/resume`, { askId: ASK });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'busy' });
+    expect(t.records.get(ASK)?.status).toBe('open');
+    release();
+    await replying;
   });
 });

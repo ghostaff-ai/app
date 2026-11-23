@@ -12,7 +12,7 @@ import { type ClaudeSession, type ClaudeSessionDeps, claudeSession, MAX_MESSAGE 
 import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromProvider, startAccountConnect } from './accounts';
 import { type ActionDeps, approveAction, rejectAction } from './actions';
 import { CONNECTORS } from '@ghostaff/shared';
-import { agentHello, type ChatDeps, replyInThread } from './chat';
+import { agentHello, type ChatDeps, replyInThread, resumeAfterAccount } from './chat';
 import { reportRun } from './jobs';
 import { runRecordToken, runSpec } from './runner';
 import { clientMetadataDocument } from './mcp';
@@ -212,6 +212,12 @@ export function createApp(deps: AppDeps) {
 
   // Answers when the reply is written: Cloud Run keeps the CPU only while a request is open.
   app.post('/threads/:id/reply', async (c) => c.json(await replyInThread(deps.chat, c.get('userId'), c.req.param('id'), c.get('accessToken'))));
+
+  // The agent goes on once the account it asked for is there; answers when its reply is written.
+  app.post('/threads/:id/resume', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    return c.json(await resumeAfterAccount(deps.chat, c.get('userId'), c.req.param('id'), body, c.get('accessToken')));
+  });
 
   // Voice notes (voiceNotes.ts): the note in, the message out at once; then its transcript and the agent's answer.
   const voice = { chat: deps.chat, voice: deps.voice, transcriber: deps.transcriber, limiter: deps.transcribeLimiter ?? new NoteLimiter() };

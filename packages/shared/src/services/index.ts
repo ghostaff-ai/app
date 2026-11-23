@@ -721,6 +721,15 @@ export async function decideAction(engine: EngineAccess, actionId: string, decis
 }
 
 /**
+ * Lets the agent go on once the account it asked for is there (docs/plans/
+ * ongoing/connector-in-chat.md). The engine checks it really is, and goes on
+ * once whoever asks; a second call is refused with `already_done`.
+ */
+export async function resumeAfterAccount(engine: EngineAccess, threadId: string, askId: string): Promise<{ resumed: boolean }> {
+  return callEngine(engine, 'POST', `/threads/${encodeURIComponent(threadId)}/resume`, { askId });
+}
+
+/**
  * A voice note to an agent (docs/plans/ongoing/voice.md): the engine stores the
  * audio, writes it in the person's own chat with the agent (opening the chat if
  * needed) and returns the message, still to be transcribed.

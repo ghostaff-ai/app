@@ -81,7 +81,7 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
     },
     async updateReply(id, patch) {
       const row: Record<string, unknown> = {};
-      if (patch.text !== undefined) row.parts = [...text(patch.text), ...(patch.actions ?? [])];
+      if (patch.text !== undefined) row.parts = [...text(patch.text), ...(patch.cards ?? [])];
       if (patch.steps) row.steps = patch.steps;
       if (patch.state) {
         row.state = patch.state;
