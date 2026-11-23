@@ -1,8 +1,8 @@
 # Who reads and writes a conversation
 
 **Priority:** high — privacy: who sees what a person says to an agent
-**Gate:** blocked:ghostaff-ai/app#54 (no «Avisos», stacked under this branch; recheck 2026-11-24)
-**Next:** once #54 has landed, rebase this branch onto `origin/develop` (its copy of #54's commit drops out) and run `pnpm pr:land`
+**Gate:** none
+**Next:** land #58 with `pnpm pr:land`, then check it on the beta app with two people (a private conversation, a shared one)
 
 Jaime's Trello card (2026-11-23), «permisos de escritura en chats por otros miembros del equipo»: «esto tiene que ser por agente y por conversación, o sea yo puedo ser owner de un agente y hacer una conversación que quiero que lean o que no, o no ser dueño de un agente y abrir una conversación que no quiero que vean, esto es un tema».
 
@@ -124,5 +124,5 @@ Examples, in a bakery with Ana (owner) and Bea (member, `read` on Finanzas):
 
 ## Handoff
 
-- The branch carries a copy of #54's commit (no «Avisos») underneath, because this migration comes after its `20261123300000_no_notices.sql` and `my_threads` builds on its version. Land #54 first: if this landed first, #54's earlier-dated migration would arrive after this one.
+- This migration builds on #54's `my_threads` (no «Avisos»), which landed first.
 - The local Supabase shared by the sessions (`supabase_db_ghostaff`) was not touched: pgTAP ran inside rolled-back transactions there, and the web check used a separate stack (`project_id = ghostaff-perm`, ports 553xx) started from a copy of `supabase/`.
