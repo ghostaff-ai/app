@@ -1,5 +1,5 @@
 import type { Decision } from '@ghostaff/shared';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import DecisionScreen from '@/app/(app)/decision/[id]';
 
 const base: Decision = {
@@ -35,6 +35,18 @@ jest.mock('@/lib/hooks/useDecisions', () => ({
   useDecision: () => ({ ...mockCurrent, loading: false, error: null, answer: mockAnswer, takeBack: mockTakeBack }),
 }));
 jest.mock('@/lib/org/ActiveOrgContext', () => ({ useActiveOrg: () => ({ active: { id: 'o1', displayName: 'Álvaro' } }) }));
+// The page that rides on the phone's keyboard, made visible to the test.
+jest.mock('@/lib/keyboard', () => {
+  const { View } = require('react-native');
+  return {
+    KeyboardForm: ({ children, footer }: { children: unknown; footer?: unknown }) => (
+      <View>
+        <View testID="keyboard-page">{children}</View>
+        {footer ? <View testID="keyboard-footer">{footer}</View> : null}
+      </View>
+    ),
+  };
+});
 
 describe('DecisionScreen', () => {
   beforeEach(() => {
@@ -57,6 +69,15 @@ describe('DecisionScreen', () => {
 
     await fireEvent.press(screen.getByText('Lo pagó la empresa'));
     expect(mockAnswer).toHaveBeenCalledWith({ answer: 'ok', note: '' });
+  });
+
+  // The note is typed at the bottom of the page: unless the page is a
+  // KeyboardForm with the buttons as its footer, the keyboard covers the note
+  // and the buttons, and you can't see what you type.
+  it('rides the answer buttons on the keyboard, the decision scrolling above them', async () => {
+    await render(<DecisionScreen />);
+    expect(within(screen.getByTestId('keyboard-page')).getByText(base.question)).toBeTruthy();
+    expect(within(screen.getByTestId('keyboard-footer')).getByText('Lo pagó la empresa')).toBeTruthy();
   });
 
   it('shows the context directly for a decision written as prose, with OK', async () => {
