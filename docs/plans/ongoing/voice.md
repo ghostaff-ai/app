@@ -1,15 +1,15 @@
 # Voice: voice notes in the chat, and dictation
 
 **Priority:** medium — people on the go, and many small-business owners, would rather speak than type
-**Gate:** decision:voice notes — Jaime answers the five questions in «Voice notes» (recheck 2026-11-24)
-**Next:** with Jaime's answers, build voice notes on branch `claude/voice-notes-5d8642` (tasks in «Voice notes»), one PR landed with `pnpm pr:land`
+**Gate:** none
+**Next:** build voice notes on branch `claude/voice-notes-5d8642` (tasks in «Voice notes»), one PR landed with `pnpm pr:land`
 
 Two pieces, in order:
 
 1. **Dictation** (Jaime's idea, 2026-11-18; built in PR 46 on 2026-11-22): speak, the transcript lands in the message box, you review it and send text. The audio is discarded. Left: `scripts/setup-env.sh` on beta (Jaime's go-ahead), then a live note in Spanish and English from the beta app. Sections «Goal» to «Open questions» below are its record.
-2. **Voice notes** (Trello card «hablar por audios», Jaime, 2026-11-23): as in WhatsApp, you record an audio and send it; it shows in the chat as an audio you can play, with its transcript under it, and the agent answers in text. Not a live voice conversation. Proposed in the next section; waits on Jaime's five answers.
+2. **Voice notes** (Trello card «hablar por audios», Jaime, 2026-11-23): as in WhatsApp, you record an audio and send it; it shows in the chat as an audio you can play, with its transcript under it, and the agent answers in text. Not a live voice conversation. Designed in the next section; Jaime took all five picks on 2026-11-23 and it is being built.
 
-## Voice notes (Jaime, 2026-11-23): proposed
+## Voice notes (Jaime, 2026-11-23)
 
 **What changes from dictation.** The audio is the message: it is sent at once (no review of the text first), kept so it can be played back, and drawn as an audio bubble. The transcript is what the agent reads and what the person sees under the audio. The agent always answers in text.
 
@@ -26,7 +26,10 @@ Two pieces, in order:
 7. **The agent** reads the transcript as the message's text. It doesn't hear the audio; it answers in text.
 8. **Web and iPhone.** The web records WebM/Opus (Chrome's MediaRecorder); iPhone's player can't play WebM. A note recorded on the computer must play on the phone, so the web records `audio/mp4` where the browser can (Safari, recent Chrome), and the engine converts any other format to AAC in `.m4a` before storing (ffmpeg in the engine's image). To confirm while building: which browsers record mp4, and whether the conversion is needed at all.
 
-### Decisions for Jaime
+### Decisions (Jaime, 2026-11-23: «todas las a»)
+
+All five picks taken: one mic that sends voice notes (dictation goes), tap to start, audio kept as long as the message, transcript always shown, only in the chat with an agent.
+
 
 1. **Dictation and voice notes.** (a) The mic sends voice notes and dictation goes away (one mic, one behaviour, as in WhatsApp): my pick. (b) Both: tap the mic for a voice note, and a second way («Dictar») to get the text into the box. (c) Dictation stays as it is, voice notes are a second button.
 2. **How you record.** (a) Tap to start, then send or cancel: my pick (works the same on the web and with a screen reader, and long notes don't need a finger held down). (b) Hold to record and release to send, slide to cancel, as in WhatsApp.
@@ -36,7 +39,7 @@ Two pieces, in order:
 
 Not in this version: agents answering in audio, a live voice conversation, text appearing while you speak, editing a note's transcript, and the mic on Hoy, Equipo and Registro (still opens the chat with Secretaría).
 
-### Tasks (after Jaime's answers; branch `claude/voice-notes-5d8642`, one PR)
+### Tasks (branch `claude/voice-notes-5d8642`, one PR)
 
 1. **Database.** A migration: the private bucket `voice-notes`, the read policy by `thread_level` on the path's thread; the engine writes the message with the service role. pgTAP in `supabase/tests/database/voice_notes.test.sql`: the person reads their note; another member doesn't (personal chat); another organisation doesn't; nobody but the service role writes.
 2. **Engine.** `apps/engine/src/voiceNotes.ts`: `POST /threads/:id/voice-notes` (talk level as the caller, type, 10 MB, limiter shared with `/transcribe`, store, write the message, answer, then transcribe in the background, update the parts, ask the agent) and `POST /voice-notes/:messageId/transcribe` (retry, the author only). Storage and transcriber injected, fakes in Vitest: refusals (no talk, someone else's chat, wrong type, too large, too many), the message's parts before and after, a failed transcription marked `failed` and the agent not asked, a retry.
