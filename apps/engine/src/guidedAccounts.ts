@@ -12,6 +12,13 @@
 // reach only paths under the access's base and only public addresses
 // (fetchPublic). A GET reads; any other method writes, so the chat turns it
 // into a card an owner approves (chat.ts, actions.ts).
+//
+// «A GET reads» is an assumption about the app, not something HTTP enforces.
+// The known way around it is a method override: WordPress's REST API honours
+// `?_method=DELETE` on any verb (WP_REST_Server::serve_request), so a query
+// key that PHP reads as `_method` is refused for every method. The other
+// override, the X-HTTP-Method-Override header, is out of reach because the
+// model cannot set headers; keep it that way.
 
 import { type GuideAuth, type GuideField, type GuideLanding, normaliseBase } from '@ghostaff/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -138,7 +145,24 @@ export function underBase(base: string, path: unknown, query?: unknown): URL {
       else throw new ToolError(`query.${k} tiene que ser un texto, un número o una lista de ellos.`);
     }
   }
+  for (const k of url.searchParams.keys()) {
+    if (isMethodOverride(k)) {
+      throw new ToolError('No se puede usar _method: di el método de verdad en method (y si cambia algo, esperará la aprobación).');
+    }
+  }
   return url;
+}
+
+/**
+ * Whether a query key could reach PHP as `_method`. PHP cuts a name at a NUL
+ * and at its array brackets, may drop leading spaces, and turns spaces, dots
+ * and `[` into `_`. Every reading is tried, case aside, to err on refusing.
+ * The key arrives already percent-decoded.
+ */
+function isMethodOverride(key: string): boolean {
+  const name = (key.split('\0')[0] ?? '').toLowerCase();
+  const php = (k: string) => k.replace(/[ .[]/g, '_');
+  return [name, name.trimStart()].some((n) => php(n) === '_method' || php(n.replace(/\[.*$/, '')) === '_method');
 }
 
 /**
@@ -305,6 +329,30 @@ function requestOf(access: GuidedAccess, input: unknown): { method: Method; url:
   return { method, url, body: JSON.stringify(input.body) };
 }
 
+/**
+ * The credential the vault holds, when it has the fields `auth` needs; null
+ * otherwise. Never throws: a parse error's message would carry part of the value.
+ */
+function secretOf(auth: GuideAuth, raw: string | null): GuidedSecret | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+  const text = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+  switch (auth) {
+    case 'basic':
+      return text(parsed.username) && text(parsed.password) ? { username: parsed.username, password: parsed.password } : null;
+    case 'bearer':
+      return text(parsed.token) ? { token: parsed.token } : null;
+    case 'header':
+      return text(parsed.key) ? { key: parsed.key } : null;
+  }
+}
+
 function requestSpec(name: string, access: GuidedAccess): ToolSpec {
   const { app, base } = access.settings;
   return {
@@ -375,9 +423,8 @@ export async function guidedToolsFor(store: GuidedStore, vault: Vault, orgId: st
       } catch (e) {
         return { content: e instanceof ToolError ? e.message : 'La petición no es válida.', isError: true };
       }
-      const raw = await vault.get(guidedSecretName(orgId, guideId));
-      if (!raw) return { content: `El acceso a ${app} ya no está guardado: quien es propietario tiene que volver a darlo.`, isError: true };
-      const secret = JSON.parse(raw) as GuidedSecret;
+      const secret = secretOf(auth, await vault.get(guidedSecretName(orgId, guideId)));
+      if (!secret) return { content: `El acceso a ${app} ya no está guardado: quien es propietario tiene que volver a darlo.`, isError: true };
       const forms = secretForms(auth, headerName, secret);
       let res: Response;
       try {

@@ -330,6 +330,43 @@ describe('guidedToolsFor', () => {
     expect(moved.content).toContain('302');
   });
 
+  it('a method override (_method) is refused for every method and route, with nothing fetched', async () => {
+    const { f, calls } = fakeFetch(() => json({}));
+    const tools = await guidedToolsFor(store, vault, ORG, FINANZAS, f);
+    const inputs = [
+      { method: 'GET', path: '/wp/v2/posts/1', query: { _method: 'DELETE', force: true } },
+      { method: 'GET', path: '/wp/v2/posts?_method=POST&title=X&status=publish' },
+      { method: 'GET', path: '/wp/v2/posts?%5Fmethod=POST' },
+      { method: 'GET', path: '/wp/v2/posts', query: { '.method': 'DELETE' } },
+      { method: 'GET', path: '/wp/v2/posts', query: { ' method': 'DELETE' } },
+      { method: 'GET', path: '/wp/v2/posts', query: { _METHOD: 'DELETE' } },
+      { method: 'GET', path: '/wp/v2/posts?_method[]=DELETE' },
+      { method: 'POST', path: '/wp/v2/posts', query: { _method: 'DELETE' } },
+    ];
+    for (const input of inputs) {
+      const out = await tools.run('xwordpress_request', input);
+      expect(out.isError, JSON.stringify(input)).toBe(true);
+      expect(out.content).toContain('_method');
+    }
+    await expect(tools.describe?.('xwordpress_request', { method: 'POST', path: '/wp/v2/posts', query: { _method: 'DELETE' } })).rejects.toThrow(/_method/);
+    expect(calls).toHaveLength(0);
+    // A key that only looks alike is fine.
+    expect(underBase('https://miweb.com/wp-json', '/wp/v2/posts', { method_x: 1, my_method: 2 }).search).toBe('?method_x=1&my_method=2');
+  });
+
+  it('a credential in the vault that is not JSON, or lacks its password, is "no longer kept", never echoed, nothing fetched', async () => {
+    const { f, calls } = fakeFetch(() => json({}));
+    for (const raw of ['secreto-que-no-es-json abcd', JSON.stringify({ username: access.hint })]) {
+      const broken = new MemoryVault();
+      await broken.put(guidedSecretName(ORG, GUIDE), raw, {});
+      const tools = await guidedToolsFor(store, broken, ORG, FINANZAS, f);
+      const out = await tools.run('xwordpress_request', { method: 'GET', path: '/wp/v2/posts' });
+      expect(out).toEqual({ content: 'El acceso a WordPress ya no está guardado: quien es propietario tiene que volver a darlo.', isError: true });
+      expect(out.content).not.toContain(raw);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
   it('a missing credential in the vault is an error, with nothing fetched', async () => {
     const { f, calls } = fakeFetch(() => json({}));
     const tools = await guidedToolsFor(store, new MemoryVault(), ORG, FINANZAS, f);
