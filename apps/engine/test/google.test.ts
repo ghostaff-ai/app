@@ -177,6 +177,32 @@ describe('the model writer with tools', () => {
     });
   });
 
+  it("sends a turn's images as image blocks before its text", async () => {
+    const { client, requests } = fakeClient([{ text: 'Veo tu pantalla.' }]);
+    await streamWith(client as never)({
+      system: 's',
+      messages: [
+        { role: 'user', content: 'antes' },
+        { role: 'assistant', content: 'vale' },
+        { role: 'user', content: 'mira', images: [{ mediaType: 'image/jpeg', data: 'AAAA' }] },
+      ],
+      tools: { specs: [], accounts: [], stepFor: () => '', writes: () => false, actionFor: () => '', run: async () => ({ content: '', isError: true }) },
+      onText: () => {},
+      onTool: () => {},
+    });
+    expect(requests[0]?.messages).toEqual([
+      { role: 'user', content: 'antes' },
+      { role: 'assistant', content: 'vale' },
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } },
+          { type: 'text', text: 'mira' },
+        ],
+      },
+    ]);
+  });
+
   it('sends no tools when the organisation has none', async () => {
     const { client, requests } = fakeClient([{ text: 'Hola.' }]);
     await streamWith(client as never)({

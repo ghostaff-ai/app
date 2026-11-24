@@ -141,6 +141,8 @@ export type Card = ActionPart | AccountAskPart;
 export interface ModelTurn {
   role: 'user' | 'assistant';
   content: string;
+  /** Pictures that go with this turn, before its text (a guide's photo of the person's screen). */
+  images?: { mediaType: 'image/jpeg'; data: string }[];
 }
 
 /**

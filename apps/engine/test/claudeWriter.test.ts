@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { AiFailure, type Writer } from '../src/chat';
 import { type PrintRunner, Slots } from '../src/claudeCode';
 import { costOf, orderAccounts } from '../src/chatStore';
-import { subscriptionWriter, transcript } from '../src/claudeWriter';
+import { claudeArgs, subscriptionWriter, transcript } from '../src/claudeWriter';
 import { type AgentTools, NO_TOOLS } from '../src/tools';
 
 const TOKEN = `sk-ant-oat01-${'t'.repeat(90)}`;
@@ -165,6 +165,53 @@ describe('an agent answering on the Claude subscription', () => {
   it('fails when Claude Code ends without an answer', async () => {
     const r = fakeRunner([], 1);
     await expect(ask(subscriptionWriter(TOKEN, r.run, 'm'))).rejects.toThrow(/without an answer/);
+  });
+
+  it('claudeArgs with a photo allows Read and nothing else', () => {
+    const photo = '/tmp/claude-x/photo-1.jpg';
+    const args = claudeArgs('m', 'Eres la guía.', '/tmp/claude-x/mcp.json', [photo]);
+    expect(args[args.indexOf('--tools') + 1]).toBe('Read');
+    expect(args[args.indexOf('--allowedTools') + 1]).toBe(`mcp__ghostaff,Read(/${photo})`);
+    expect(args.filter((a) => a === '--tools' || a === '--allowedTools')).toHaveLength(2);
+    const without = claudeArgs('m', 'Eres la guía.', '/tmp/claude-x/mcp.json');
+    expect(without[without.indexOf('--tools') + 1]).toBe('');
+    expect(without[without.indexOf('--allowedTools') + 1]).toBe('mcp__ghostaff');
+  });
+
+  it("gives Claude Code the person's photo as a file in its HOME, named in the prompt, and removes it after", async () => {
+    let seen: { files: string[]; photo: Buffer | null } = { files: [], photo: null };
+    const r = toolRunner(async ({ home }) => {
+      const files = await readdir(home);
+      const name = files.find((f) => f.endsWith('.jpg'));
+      seen = { files, photo: name ? await readFile(join(home, name)) : null };
+    });
+    const data = Buffer.from('a jpeg, honest').toString('base64');
+    await subscriptionWriter(TOKEN, r.run, 'm')({
+      system: 'Eres la guía.',
+      messages: [
+        { role: 'user', content: 'La guía hasta ahora.' },
+        { role: 'assistant', content: 'show_step {}' },
+        { role: 'user', content: 'Corrígelo.', images: [{ mediaType: 'image/jpeg', data }] },
+      ],
+      tools: NO_TOOLS,
+      onText: () => {},
+      onTool: () => {},
+    });
+    const [call] = r.calls;
+    const home = call?.home ?? '';
+    const photoPath = join(home, seen.files.find((f) => f.endsWith('.jpg')) ?? 'missing');
+    expect(seen.photo?.toString()).toBe('a jpeg, honest');
+    expect(call?.args[call.args.indexOf('--tools') + 1]).toBe('Read');
+    expect(call?.args[call.args.indexOf('--allowedTools') + 1]).toBe(`Read(/${photoPath})`);
+    expect(r.calls[0]?.args).not.toContain('--mcp-config');
+    expect(existsSync(home)).toBe(false);
+  });
+
+  it('names the photo file in the prompt, on the turn that carries it', () => {
+    const t = transcript([{ role: 'user', content: 'Mira.', images: [{ mediaType: 'image/jpeg', data: 'x' }] }], ['/h/photo-1.jpg']);
+    expect(t).toContain('Mira.');
+    expect(t).toContain('/h/photo-1.jpg');
+    expect(t).toMatch(/Read/);
   });
 
   it('gives the conversation as one signed transcript', () => {

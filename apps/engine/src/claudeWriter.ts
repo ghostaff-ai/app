@@ -7,6 +7,10 @@
 // on loopback, behind a token written only into the run's throwaway HOME,
 // serving the reply's gated tools, so a write still waits for an owner.
 //
+// A turn's images (a guide's photo of the person's screen) are written into
+// the throwaway HOME, the prompt names each file, and Claude Code gets its
+// `Read` tool allowed on those files only.
+//
 // What Claude Code reports on the way, its `rate_limit_event` lines and the
 // `result` event's usage, goes to the reply's onUsage: the subscription's card
 // shows its 5-hour and weekly limits from them.
@@ -21,11 +25,20 @@ import { MCP_SERVER_NAME, startToolServer, type ToolServer } from './toolServer'
 /** How long one answer may take before Claude Code is stopped. */
 const RUN_TIMEOUT_MS = 5 * 60_000;
 
-/** The conversation as one prompt: Claude Code in print mode takes a single message on stdin. */
-export function transcript(messages: ModelTurn[]): string {
-  const [only] = messages;
-  if (messages.length === 1 && only?.role === 'user') return only.content;
-  const lines = messages.map((m) => (m.role === 'assistant' ? `Tú: ${m.content}` : m.content));
+/**
+ * The conversation as one prompt: Claude Code in print mode takes a single
+ * message on stdin. `photoPaths` are where the turns' images were written, in
+ * the order they appear; each turn with images names its files.
+ */
+export function transcript(messages: ModelTurn[], photoPaths: string[] = []): string {
+  let next = 0;
+  const turns = messages.map((m) => {
+    const paths = (m.images ?? []).map(() => photoPaths[next++]).filter((p): p is string => !!p);
+    return paths.length ? { ...m, content: `${m.content}\n\n${photoLine(paths)}` } : m;
+  });
+  const [only] = turns;
+  if (turns.length === 1 && only?.role === 'user') return only.content;
+  const lines = turns.map((m) => (m.role === 'assistant' ? `Tú: ${m.content}` : m.content));
   return [
     'La conversación hasta ahora, en orden; cada mensaje empieza con quién lo escribe («Tú» eres tú):',
     '',
@@ -37,8 +50,18 @@ export function transcript(messages: ModelTurn[]): string {
   ].join('\n');
 }
 
-/** Claude Code's arguments; with `mcpConfigPath`, the reply's tools server and leave to use it. */
-export function claudeArgs(model: string, system: string, mcpConfigPath?: string): string[] {
+function photoLine(paths: string[]): string {
+  const files = paths.map((p) => `«${p}»`).join(', ');
+  return `Con este mensaje va una foto de la pantalla de la persona. Ábrela con tu herramienta Read antes de contestar: ${files}.`;
+}
+
+/**
+ * Claude Code's arguments; with `mcpConfigPath`, the reply's tools server and
+ * leave to use it; with `readable`, its `Read` tool on those files and no other.
+ */
+export function claudeArgs(model: string, system: string, mcpConfigPath?: string, readable: string[] = []): string[] {
+  // Absolute paths in a permission rule start with «//».
+  const allowed = [...(mcpConfigPath ? [`mcp__${MCP_SERVER_NAME}`] : []), ...readable.map((p) => `Read(/${p})`)];
   return [
     '-p',
     '--output-format',
@@ -49,14 +72,15 @@ export function claudeArgs(model: string, system: string, mcpConfigPath?: string
     model,
     '--system-prompt',
     system,
-    // No built-in tools, no MCP server but ours, nothing kept on disk.
+    // No built-in tools (Read only for a photo), no MCP server but ours, nothing kept on disk.
     '--tools',
-    '',
+    readable.length ? 'Read' : '',
     '--strict-mcp-config',
     '--no-session-persistence',
     '--effort',
     'low',
-    ...(mcpConfigPath ? ['--mcp-config', mcpConfigPath, '--allowedTools', `mcp__${MCP_SERVER_NAME}`] : []),
+    ...(mcpConfigPath ? ['--mcp-config', mcpConfigPath] : []),
+    ...(allowed.length ? ['--allowedTools', allowed.join(',')] : []),
   ];
 }
 
@@ -99,7 +123,8 @@ async function runOnce(
       server = await startToolServer(tools, onTool);
       configPath = await writeMcpConfig(home.path, server);
     }
-    const child = run(claudeArgs(model, system, configPath), { home: home.path, token, stdin: transcript(messages) });
+    const photos = await writePhotos(home.path, messages);
+    const child = run(claudeArgs(model, system, configPath, photos), { home: home.path, token, stdin: transcript(messages, photos) });
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -151,6 +176,18 @@ async function runOnce(
     await server?.close();
     await home.remove().catch(() => {});
   }
+}
+
+/** Each turn's images as files in the run's HOME, in the order they appear; removed with it. */
+async function writePhotos(home: string, messages: ModelTurn[]): Promise<string[]> {
+  const images = messages.flatMap((m) => m.images ?? []);
+  const paths: string[] = [];
+  for (const [i, image] of images.entries()) {
+    const path = join(home, `photo-${i + 1}.jpg`);
+    await writeFile(path, Buffer.from(image.data, 'base64'), { mode: 0o600 });
+    paths.push(path);
+  }
+  return paths;
 }
 
 /** Where Claude Code finds the reply's tools server: a file only the run's HOME holds, never an argument. */
