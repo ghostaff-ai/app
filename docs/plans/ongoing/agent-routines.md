@@ -2,7 +2,7 @@
 
 **Priority:** high — «runs its routine work» is half of what Ghostaff promises, and today no customer can make an agent work on a timetable: only we can, by CLI
 **Gate:** none
-**Next:** verify the Context against that day's code, write the File Structure and Tasks (data and tick first, then the clock, then the settings tool), and move to `ongoing/`
+**Next:** build it on `feat/agent-routines` (worktree `.claude/worktrees/agent-routines`): migration and pgTAP first, then shared, engine, settings tools, app
 
 **Goal:** Anyone who talks to an agent can give it routines («cada viernes a las 9, mándame el resumen de ventas»), from a clock on top of its chat or by asking, and each routine's answer lands in their chat with that agent as if they had written to it at that hour.
 
@@ -52,11 +52,34 @@ Routines are settings: defined once in `packages/shared/src/services/settings.ts
 
 ### Data
 
-- A table `agent_routines`: `id`, `org_id`, `agent_id`, `created_by`, `audience` (`me` | `team`), `instruction`, `schedule` (cron, stored from the fields), `timezone`, `paused`, `last_fired_at`, `created_at`. Row-level security and a pgTAP test (rule 2): a member sees their own routines and the team's of the agents they can see; another organisation sees nothing.
-- Written only through `security definer` functions (`create_routine`, `update_routine`, `pause_routine`, `delete_routine`), each classified in `settings.ts`.
-- `agent_runs` gets `routine_id`, so «Hecho sin ti» and a routine's history can say which one ran.
-- **The tick** fires routines instead of agents: `startScheduled` reads due routines (any runner), claims each by moving `last_fired_at` atomically as it does `last_scheduled_at` today, and starts a chat turn or a runner run with the routine's instruction as the request. A `me` routine answers in its creator's chat; a `team` routine, in everyone's who can see the agent.
-- **`agents.schedule` becomes a routine**: each agent with one (Órdago's, moved by `org add-agents`) gets a `team` routine whose instruction is «tu tarea habitual», and the column goes once the tick no longer reads it.
+- A table `agent_routines`: `id`, `org_id`, `agent_id`, `created_by`, `audience` (`me` | `team`), `title`, `instruction`, the timetable as fields (`kind` `days` | `monthly`, `weekdays` ISO 1–7, `month_day` 1–28, `hour`, `minute`), `timezone`, `paused`, `paused_reason`, `last_fired_at`. The cron is built from the fields in one place (`packages/shared/src/routines.ts`), never stored. Row-level security and a pgTAP test (rule 2): a member sees their own routines and the team's of the agents they can see; another organisation sees nothing.
+- Written only through `security definer` functions (`create_routine`, `update_routine`, `set_routine_paused`, `delete_routine`), each classified in `settings.ts`.
+- `agent_runs` gets `routine_id` and the origin `routine`; a run of someone's «Solo para mí» routine is read only by them. `messages` gets `routine_id`, which the chat draws as «🕘 Rutina · Resumen de ventas» above the answer.
+- **The tick** fires due routines beside `startScheduled`, claiming each by moving `last_fired_at` atomically as `last_scheduled_at` is today. A chat agent answers with a chat turn in its creator's chat; an agent on our runner with a run whose request is the instruction. A `team` routine's answer also reaches, as a copy, everyone else who can see the agent.
+- **`agents.schedule` stays**, as the agent's own timetable from its definition (Órdago's yaml, through `org add-agents`), read-only in the app. *Changed while building (2026-11-24):* the plan made it a routine, but Órdago's crons don't fit the routine's fields without loss (`0 2-5 * * *`, `30 9 2 * 1`, `0 9 15 1 *`), and those agents' timetables are their definition's, not a person's.
+- **No hourly routines in this version.** The fields allow once a day at most, which keeps decision 2 by construction; hourly, with a window of hours, when someone asks for it.
+- **Agents still run as Órdago's jobs (`ordago_job`) take no routines** until they move to our runner.
+
+## File Structure
+
+- `supabase/migrations/20261126000000_agent_routines.sql` (new): the table, its policy, the four functions, `agent_runs.routine_id`, `messages.routine_id`, `post_routine_copies` and `notify_owners` for the engine.
+- `supabase/tests/database/agent_routines.test.sql` (new).
+- `packages/shared/src/routines.ts` (new): the `Routine` model, `routineCron`, `nextFire`, `describeWhen` («Cada viernes, 9:00»).
+- `packages/shared/src/services/index.ts`: `listRoutines`, `createRoutine`, `updateRoutine`, `setRoutinePaused`, `deleteRoutine`; `routineId` on messages; «Hecho sin ti» counts routine runs.
+- `packages/shared/src/services/settings.ts`: `settings_create_routine`, `settings_update_routine`, `settings_pause_routine`; `delete_routine` is `never`.
+- `apps/engine/src/routines.ts` (new): the tick's `startRoutines`, the routine's chat turn and runner run, pausing a routine whose creator left.
+- `apps/engine/src/chat.ts`, `chatStore.ts`, `jobs.ts`, `jobsStore.ts`, `runner.ts`, `actions.ts`, `server.ts`: the routine's turn, its run and its report; a «Solo para mí» routine's card is approved by its receiver; every agent gets the routine tools for itself, Secretaría for any agent.
+- `apps/mobile/app/(app)/chat/[agent].tsx`: the clock in the header. `apps/mobile/app/(app)/rutinas/[agent].tsx` (new): the list. `apps/mobile/app/(app)/rutina.tsx` (new): new or edit. `agente/[id].tsx`: the «Rutinas» row. `components/chat/Message.tsx`: the routine line.
+
+## Tasks
+
+- [ ] Migration and pgTAP test
+- [ ] Shared: model, timetable helpers with unit tests, services
+- [ ] Engine: tick, chat turn, runner run, report, pause on creator gone, with unit tests
+- [ ] Settings tools and approval by the receiver, with tests
+- [ ] App: clock, list, form, agent page row, routine line in the chat
+- [ ] End-to-end flow in `.maestro/flows/ci/`
+- [ ] Landed on beta and checked with a real routine
 
 ## Decisions
 
