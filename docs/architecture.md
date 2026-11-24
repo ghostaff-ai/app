@@ -141,6 +141,12 @@ What this accepts: every agent of an organisation shares that organisation's gra
 
 Other secrets an agent needs (a mailbox password, a social network's token, a voice API key) follow the same shape: a secret per organisation in the vault, handed only to the runs of the agents that need it, and in the end a connector of their own rather than a loose variable.
 
+### Principle: the agent asks a person for the access it lacks
+
+Ghostaff will never have a connector for every system a customer uses, and it does not need one (Jaime, 2026-11-24). An agent that hits a wall it cannot pass (a 403 from BigQuery, a bucket it cannot write, an API that answers 401) does not fail and stop: it works out the least access that would let it go on, and **asks a person for it**, with the organisation's identity already filled in and the grant written out in the form that fits (commands, console steps, or Terraform for a customer who keeps IAM in code). An owner in the conversation is asked there; anyone else is told an owner has been asked; a scheduled run asks the owners in their own chats and waits. Once granted, Ghostaff checks the access **as the organisation's identity** and the work resumes where it stopped. Every grant asked for is kept: what, for which agent, why, by whom granted, so it can be reviewed and withdrawn.
+
+**The agent proposes, the customer grants. Ghostaff never grants itself anything**, and never asks for a role that would let it (IAM admin on a customer's project). That is what lets this work for any system without a connector for it. Built connectors stay worth having for what is common, as fewer steps, not as the only way in. The design is [agent-access-requests.md](plans/ideas/agent-access-requests.md).
+
 ## Known gaps
 
 - **The Claude token is readable inside a run.** It sits in Claude Code's environment, so the agent can print it with Bash, and so can anyone who can talk to the agent. Accepted while only Órdago's own agents use the runner; the fix is a local proxy that holds it out of the agent's reach (`apps/runner/src/lib.ts`, `agentEnv`).
