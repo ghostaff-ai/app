@@ -4,8 +4,10 @@ import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
 import { Markdown } from '@/components/chat/Markdown';
 import { VoiceNote } from '@/components/chat/VoiceNote';
+import { Clock, Icon } from '@/components/icons';
 import type { AskControls } from '@/lib/hooks/useAccountAsks';
 import { GHOSTS, type GhostId } from '@/lib/team';
+import { usePalette } from '@/lib/theme';
 
 // One message of a thread (team-chat.md, decision 3): people in bubbles (yours
 // on the right in ink, colleagues on the left with their initials), agents
@@ -14,7 +16,8 @@ import { GHOSTS, type GhostId } from '@/lib/team';
 // author drop the name. A voice note of yours is drawn as its audio with the
 // transcript under it (voice.md).
 // An agent's reply carries one status line (decision 4): what it is doing
-// while it writes, then «Hecho · 3 s», which unfolds into its steps.
+// while it writes, then «Hecho · 3 s», which unfolds into its steps. One a
+// routine started says so above it, «Rutina · Resumen de ventas» (agent-routines.md).
 
 const AVATAR_COLOURS = ['#5B6CB8', '#3E8A8A', '#8A5B9E', '#B0703A', '#4F7D3E', '#A0506A'];
 
@@ -39,6 +42,19 @@ export function Avatar({ name, id, size = 28 }: { name: string; id: string; size
     >
       <Text style={{ fontSize: size * 0.4 }} className="font-semibold text-white">
         {initials(name)}
+      </Text>
+    </View>
+  );
+}
+
+/** Why the agent spoke without being written to: one of the viewer's routines, or the team's. */
+function RoutineLine({ title }: { title: string | null }) {
+  const c = usePalette();
+  return (
+    <View className="mb-1 flex-row items-center" accessibilityLabel={title ? `Rutina: ${title}` : 'Rutina'}>
+      <Icon icon={Clock} size={14} color={c.muted} weight="regular" />
+      <Text className="ml-1 text-caption text-muted" numberOfLines={1}>
+        {title ? `Rutina · ${title}` : 'Rutina'}
       </Text>
     </View>
   );
@@ -198,6 +214,8 @@ export function MessageView({
   onDecide,
   onRetryTranscript,
   asks,
+  routineTitle,
+  me,
 }: {
   message: ChatMessage;
   mine: boolean;
@@ -214,6 +232,10 @@ export function MessageView({
   onRetryTranscript?: (messageId: string) => Promise<void>;
   /** What an agent's cards asking for an account can do here (connector-in-chat.md). */
   asks?: AskControls;
+  /** The title of the routine that started this answer, when the viewer sees it. */
+  routineTitle?: string | null;
+  /** The viewer: their own «Solo para mí» routine's card is theirs to decide, owner or not. */
+  me?: string;
 }) {
   const text = messageText(message.parts);
   const actions = message.parts.filter(isActionPart);
@@ -228,11 +250,17 @@ export function MessageView({
             <Text className="ml-1.5 text-footnote font-semibold text-ink">{message.authorName}</Text>
           </View>
         ) : null}
+        {message.routineId ? <RoutineLine title={routineTitle ?? null} /> : null}
         <StatusLine message={message} />
         {text ? <Markdown text={text} names={names} /> : null}
         {actions.map((a) => (
           // An action is decided once the agent has finished writing its message.
-          <ActionCard key={a.actionId} action={a} canDecide={canDecide && message.state !== 'working'} onDecide={onDecide} />
+          <ActionCard
+            key={a.actionId}
+            action={a}
+            canDecide={(a.decider === 'requester' ? !!me && a.requestedBy === me : canDecide) && message.state !== 'working'}
+            onDecide={onDecide}
+          />
         ))}
         {accountAsks.map((a) => (
           <AccountAskCard key={a.askId} ask={a} controls={asks} writing={message.state === 'working'} />

@@ -66,7 +66,7 @@ export function invalidWhen(w: RoutineWhen): string | null {
 
 const sortedDays = (days: readonly Weekday[]): Weekday[] => [...new Set(days)].sort((a, b) => a - b) as Weekday[];
 
-const DAY_NAMES: Record<Weekday, string> = { 1: 'lunes', 2: 'martes', 3: 'miércoles', 4: 'jueves', 5: 'viernes', 6: 'sábado', 7: 'domingo' };
+export const DAY_NAMES: Record<Weekday, string> = { 1: 'lunes', 2: 'martes', 3: 'miércoles', 4: 'jueves', 5: 'viernes', 6: 'sábado', 7: 'domingo' };
 export const DAY_SHORT: Record<Weekday, string> = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom' };
 /** One letter per day, as the day picker shows them. */
 export const DAY_LETTER: Record<Weekday, string> = { 1: 'L', 2: 'M', 3: 'X', 4: 'J', 5: 'V', 6: 'S', 7: 'D' };
