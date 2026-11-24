@@ -2,7 +2,7 @@
 
 **Priority:** medium — people trust an agent they can check and correct; today the chat agents forget everything outside the conversation, so there is nothing to show yet
 **Gate:** blocked:record-store — every organisation needs a record first (decision 2) (recheck 2026-12-01)
-**Next:** once [record-store.md](../ideas/record-store.md) gives every organisation a record, write the File Structure and Tasks against that day's code, Empresa and agent stores first (decision 7)
+**Next:** once [record-store.md](../ready/record-store.md) gives every organisation a record, write the File Structure and Tasks against that day's code, Empresa and agent stores first (decision 7)
 
 **Goal:** Every agent, whether people talk to it or it runs on a timetable, reads and writes memory stores that outlive a conversation; the organisation's and each agent's stores are folders of its record (git), a person's own store is private to them; people see each store in the app and correct or delete what is in it, and feedback given in a chat reaches the agent's next scheduled run. Each agent's instructions are a file of the same record, beside its memory.
 

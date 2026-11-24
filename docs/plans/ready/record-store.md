@@ -1,8 +1,8 @@
 # Ghostaff's own record store: one Forgejo per environment, a repo per organisation
 
 **Priority:** high — every organisation needs a record before agents can remember anything or have instructions of their own ([agent-memory.md](../ready/agent-memory.md), decision 2)
-**Gate:** decision:Jaime — the six decisions below (where Forgejo runs, how it is reached, who pushes as whom, when a repo is made, backups, GitHub's place)
-**Next:** Jaime picks the decisions below; then write the File Structure and Tasks against that day's code
+**Gate:** none
+**Next:** write the File Structure and Tasks against that day's code: the VM and its disk in `scripts/setup-env.sh`, then the engine's record interface with a Forgejo implementation
 
 **Goal:** Every organisation, personal spaces included, gets a record (a git repo) on storage we own in the EU when it is created; the engine and our runner read and write it as they do Órdago's GitHub record today; an agent can push only what it may write.
 
@@ -12,7 +12,7 @@ As of `2b52551` (2026-11-24). The product plan puts the record in «Forgejo on a
 
 Jaime decided on 2026-11-24 that memory lives in the record ([agent-memory.md](../ready/agent-memory.md)) and so does each agent's prompt (`agentes/<slug>/AGENTS.md`), with this store built first. Without it, only Órdago could have either.
 
-## Design (with my picks; the decisions are below)
+## Design
 
 ### Where it runs (decision 1)
 
@@ -40,7 +40,7 @@ Jaime decided on 2026-11-24 that memory lives in the record ([agent-memory.md](.
 
 **The engine reads and writes a record through one interface with two implementations**: Forgejo for every organisation, and the GitHub App for one that brings its own repo as master, which today is only Órdago during its migration. When Órdago's master flips into Ghostaff (ordago-agents-in-ghostaff.md decision 2), GitHub becomes what the product plan says it is: a push mirror, the live copy an organisation may switch on.
 
-## Decisions (for Jaime)
+## Decisions (Jaime, «todo ok», 2026-11-24: every pick, the first option of each)
 
 1. **Where Forgejo runs.** (a) A Compute Engine VM per environment with its disk and SQLite (my pick). (b) Cloud Run with Cloud SQL and Filestore: more managed, several times the price, and the same Forgejo underneath. (c) A hosted Forgejo (Codeberg or a paid host): nothing to run, but the data is on someone else's storage, against invariant 2.
 2. **Internal only** (my pick), with a public, authenticated door later when a member clones; or public from the start behind Forgejo's sign-in.
@@ -48,6 +48,25 @@ Jaime decided on 2026-11-24 that memory lives in the record ([agent-memory.md](.
 4. **A repo with every organisation, at creation** (my pick); or only once someone uses memory or edits an agent's instructions: fewer repos, but every feature then checks whether the record exists.
 5. **Daily snapshots, 30 days, a monthly restore check** (my pick); or hourly, at a higher price, if losing a day of an organisation's record is too much.
 6. **GitHub as master only for Órdago until its flip, then a push mirror** (my pick); or keep «bring your own GitHub repo as master» as a product option for customers who want it, at the price of two ways of writing a record forever.
+
+## Cost and capacity (estimated 2026-11-24, check in Google's pricing calculator before building)
+
+| Per environment, a month | |
+|---|---|
+| VM `e2-small` (2 shared vCPU, 2 GB) in `europe-west1` | about 13.5 $ |
+| 20 GB `pd-balanced` disk | about 2 $ |
+| Daily snapshots kept 30 days (incremental) | 1–2 $ |
+| **Total** | **about 16–18 $**; beta and production together about 35 $ (beta could run on an `e2-micro`) |
+
+The price does not grow per repo. Órdago's record, 900 commits, is about 30 MB of git history, so 20 GB holds some 600 records of its size and thousands of new ones. More disk is about 1 $ a month per 10 GB, resized without stopping the VM; when the machine falls short, an `e2-medium` (about 27 $) after a restart. The load is one clone and one push per agent run plus the engine's reads; hundreds of organisations is an estimate, not a measurement.
+
+## Inventory, once built
+
+What this adds, to keep [architecture.md](../../architecture.md) and `secrets/inventory.yml` true in the same change that creates it:
+
+- Per project: the VM `record-store` and its disk, the snapshot schedule, a firewall rule letting only the VPC reach Forgejo, Direct VPC egress on the `engine` service and the `agent-runner` job.
+- Secret Manager: `FORGEJO_ADMIN_TOKEN` (the engine's admin token), listed in `secrets/inventory.yml` with how to renew it.
+- In Forgejo: a user per agent (`agent-<id>`), a repo per organisation, the pre-receive hook and branch protection on each repo.
 
 ## Out of scope
 

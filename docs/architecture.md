@@ -67,7 +67,7 @@ A run on our runner, end to end:
 
 ### Target: the record
 
-Decided 2026-11-24 ([agent-memory.md](plans/ready/agent-memory.md), [record-store.md](plans/ideas/record-store.md)); not built. The rule is invariant 4: what agents work on are files with history, and the app reads the database.
+Decided 2026-11-24 ([agent-memory.md](plans/ready/agent-memory.md), [record-store.md](plans/ready/record-store.md)); not built. The rule is invariant 4: what agents work on are files with history, and the app reads the database.
 
 **What an agent is made of**, and where each part lives:
 
@@ -82,7 +82,20 @@ Decided 2026-11-24 ([agent-memory.md](plans/ready/agent-memory.md), [record-stor
 
 «Sobre ti» stays out of the record because every run of every agent clones it, so nothing in it can be private to one person. Access stays on the row because row-level security, not a file anyone with a clone could change, is what enforces it.
 
-**Where the record is** (proposed in record-store.md, waiting for Jaime's decisions there; the table above is decided). One Forgejo per environment, on a Compute Engine VM in the environment's project, with no public address: the engine and `agent-runner` reach it through Direct VPC egress. A repo is made with every organisation. The engine is its admin (like the service-role key for the database); each agent is a Forgejo user with write on its organisation's repo only, and a run gets a token for that user, deleted when it reports. A server-side hook refuses, by pusher, what an agent may not write (Empresa unless Secretaría, another agent's memory, any `AGENTS.md`). An organisation that brings its own GitHub repo as master (Órdago, until its migration ends) is read and written through the same interface with the GitHub App; afterwards GitHub is only a push mirror, the live copy.
+**Where the record is.** One Forgejo per environment, on a Compute Engine VM in the environment's project, with no public address: the engine and `agent-runner` reach it through Direct VPC egress. A repo is made with every organisation. The engine is its admin (like the service-role key for the database); each agent is a Forgejo user with write on its organisation's repo only, and a run gets a token for that user, deleted when it reports. A server-side hook refuses, by pusher, what an agent may not write (Empresa unless Secretaría, another agent's memory, any `AGENTS.md`). An organisation that brings its own GitHub repo as master (Órdago, until its migration ends) is read and written through the same interface with the GitHub App; afterwards GitHub is only a push mirror, the live copy.
+
+**What it adds to each environment's project**, and what it costs (estimated 2026-11-24 in `europe-west1`; check Google's pricing calculator before building):
+
+| Resource | What for | A month |
+|---|---|---|
+| VM `record-store`, `e2-small` (2 shared vCPU, 2 GB), Forgejo's container | Every organisation's repo and Forgejo's SQLite database | about 13.5 $ |
+| Its `pd-balanced` disk, 20 GB | The repos; resized without stopping the VM, about 1 $ per 10 GB more | about 2 $ |
+| A snapshot schedule: daily, 30 days, stored in the EU; a monthly restore check | Backups | 1–2 $ |
+| A firewall rule (the VPC only) and Direct VPC egress on `engine` and `agent-runner` | No public address | — |
+| `FORGEJO_ADMIN_TOKEN` in Secret Manager (listed in `secrets/inventory.yml` when created) | The engine as Forgejo's admin | — |
+| In Forgejo: a repo per organisation, a user per agent (`agent-<id>`), branch protection and the pre-receive hook on each repo | Separation and write rules | — |
+
+About 16–18 $ per environment, 35 $ for beta and production, whatever the number of repos: Órdago's record (900 commits) is about 30 MB, so 20 GB holds some 600 of its size and thousands of new ones. Past that it grows by disk and by a larger machine (`e2-medium`, about 27 $), not per repo. Not covered: high availability (one VM, restarted by Compute Engine) and a person cloning the record (no public door yet).
 
 **How a turn uses it.** A chat turn reads instructions and memory from the database's projection and writes memory through tools shaped like Anthropic's memory tool, which land in the projection and go back to the record as a commit. A runner turn has the record cloned and reads and writes the files directly. The sync is `por-decidir/`'s: the record wins; an edit made outside it is written back on top of the head it read.
 
@@ -114,6 +127,7 @@ Per organisation, never shared:
 | Claude subscription token | The owner's sign-in through the unmodified Claude Code (`claudeSession.ts`) | Vault | The token itself (see Known gaps) |
 | Anthropic or OpenAI key | Pasted by an owner, checked with the provider | Vault | Used by the engine, never sent to a run |
 | Record access | The organisation's installation of our GitHub App | GitHub | A one-hour token for that repo only |
+| Record access, **Target** | A Forgejo user per agent, created by the engine with the agent | Our record store | A token for that agent's user, write on its organisation's repo only, deleted when the run reports |
 | Outside accounts (Google, Microsoft, makers' MCP servers) | The owner's OAuth sign-in | Vault | Their tools, through the engine; a write waits for approval |
 | Customer's Google Cloud | **Target**, below | Their IAM | A one-hour token for the organisation's own service account |
 
