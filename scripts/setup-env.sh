@@ -58,7 +58,7 @@ echo "== Customers' Google Cloud: $TENANTS_P"
 # The engine administers service accounts in this project and nothing else: the same role in $P would
 # let it take engine@'s, runner@'s or deployer@'s powers. IAM is free, so no billing is linked.
 gcloud projects describe "$TENANTS_P" >/dev/null 2>&1 ||
-  gcloud projects create "$TENANTS_P" --name "Ghostaff tenants ($GHOSTAFF_ENV)"
+  gcloud projects create "$TENANTS_P" --name "Ghostaff tenants $GHOSTAFF_ENV"
 gcloud services enable --project "$TENANTS_P" iam.googleapis.com iamcredentials.googleapis.com
 retry gcloud projects add-iam-policy-binding "$TENANTS_P" --member "serviceAccount:$(sa engine)" \
   --role roles/iam.serviceAccountAdmin --condition None
