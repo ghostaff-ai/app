@@ -2,7 +2,7 @@
 
 **Priority:** high — every organisation needs a record before agents can remember anything or have instructions of their own ([agent-memory.md](../ready/agent-memory.md), decision 2)
 **Gate:** none
-**Next:** land the PR; CI deploys the engine and the runner onto beta's VPC; then check on beta: a new organisation gets its record within a tick, and a run of an agent in it clones, pushes its memory and is refused on `memoria/empresa/`
+**Next:** check a run on beta: an agent on our runner in an organisation with a Forgejo record clones it, pushes its memory and is refused on `memoria/empresa/` (beta has no such agent yet: its only one on our runner is Órdago's Legal, whose record is on GitHub)
 
 **Goal:** Every organisation, personal spaces included, gets a record (a git repo) on storage we own in the EU when it is created; the engine and our runner read and write it as they do Órdago's GitHub record today; an agent can push only what it may write.
 
@@ -101,9 +101,9 @@ Stage 2, switched on in beta when this lands:
 | Step | Beta | Production |
 |---|---|---|
 | VM, disk, snapshots, admin token | ✅ 2026-11-24 | ⬜ |
-| Engine and runner on the VPC (deploy) | ⬜ on merge | ⬜ |
-| Records made for every organisation | ⬜ | ⬜ |
-| A run on a Forgejo record checked | ⬜ | ⬜ |
+| Engine and runner on the VPC (deploy) | ✅ 2026-11-24 | ⬜ |
+| Records made for every organisation | ✅ 2026-11-24, five by the first tick; Órdago stays on GitHub | ⬜ |
+| A run on a Forgejo record checked | ⬜ no agent on our runner in one yet | ⬜ |
 
 ## Out of scope
 
