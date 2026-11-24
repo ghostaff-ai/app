@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/auth/AuthContext';
 import { canWriteIn, readOnlyNote, showAuthors } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
+import { useGuideCards } from '@/lib/hooks/useGuideCards';
 import { useEngine } from '@/lib/hooks/useConnections';
 import { useMembers, useMyLevels, useReaders, useThread } from '@/lib/hooks/useChat';
 import { KeyboardColumn } from '@/lib/keyboard';
@@ -52,6 +53,12 @@ export default function Conversacion() {
   const isOwner = active?.role === 'owner';
   const owners = useMemo(() => members.filter((m) => m.role === 'owner').map((m) => m.displayName), [members]);
   const asks = useAccountAsks({ orgId, messages, agents, reloadAgents, owners, isOwner, returnPath: `conversacion/${id}` });
+  const mine = !!head && (head.personal || head.createdBy === me);
+  const level = head ? levels[head.agentId] : undefined;
+  const canTalk = !!head && canWriteIn({ visibility: head.visibility, mine }, level);
+  const guides = useGuideCards({ orgId, messages, isOwner, owners, canTalk, returnPath: `conversacion/${id}` });
+  // The cards' state (asked for, going on) lives outside the messages: redraw them when it changes.
+  const cardState = useMemo(() => ({ asks, guides }), [asks, guides]);
   // The card updates itself when the engine rewrites the message.
   const decide = useMemo(
     () => async (actionId: string, decision: 'approve' | 'reject') => {
@@ -63,9 +70,6 @@ export default function Conversacion() {
 
   if (head === undefined) return <Loading />;
   if (!head) return <Notice title="No encontramos esta conversación" body="Puede que ya no tengas acceso: quien la abrió la ha hecho privada, o ya no puedes ver a este agente." />;
-  const mine = head.personal || head.createdBy === me;
-  const level = levels[head.agentId];
-  const canTalk = canWriteIn({ visibility: head.visibility, mine }, level);
   const opener = members.find((m) => m.userId === head.createdBy)?.displayName ?? null;
   const showAudience = !head.personal && agent;
 
@@ -110,11 +114,11 @@ export default function Conversacion() {
               canDecide={isOwner}
               onDecide={decide}
               asks={asks}
+              guides={guides}
             />
           )}
           estimatedItemSize={64}
-          // The cards' state (asked for, going on) lives outside the messages: redraw them when it changes.
-          extraData={asks}
+          extraData={cardState}
           alignItemsAtEnd
           initialScrollAtEnd
           maintainScrollAtEnd

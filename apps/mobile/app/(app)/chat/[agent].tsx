@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/auth/AuthContext';
 import { showAuthors } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
+import { useGuideCards } from '@/lib/hooks/useGuideCards';
 import { useEngine } from '@/lib/hooks/useConnections';
 import { useAgentChat, useMembers, useMyLevels } from '@/lib/hooks/useChat';
 import { useRoutines } from '@/lib/hooks/useRoutines';
@@ -53,6 +54,10 @@ export default function Chat() {
   const isOwner = active?.role === 'owner';
   const owners = useMemo(() => members.filter((m) => m.role === 'owner').map((m) => m.displayName), [members]);
   const asks = useAccountAsks({ orgId, messages, agents, reloadAgents, owners, isOwner, returnPath: `chat/${agentId}` });
+  const canTalk = !!agent && levels[agent.id] === 'talk';
+  const guides = useGuideCards({ orgId, messages, isOwner, owners, canTalk, returnPath: `chat/${agentId}` });
+  // The cards' state (asked for, going on) lives outside the messages: redraw them when it changes.
+  const cardState = useMemo(() => ({ asks, guides }), [asks, guides]);
   // The card updates itself when the engine rewrites the message.
   const decide = useMemo(
     () => async (actionId: string, decision: 'approve' | 'reject') => {
@@ -69,7 +74,6 @@ export default function Chat() {
   if (!agent && (agentsLoading || levelsLoading)) return <Loading />;
   if (!agent) return <Notice title="No encontramos este agente" body="Puede que ya no esté en el equipo, o que no tengas acceso." />;
   const g = GHOSTS[agent.ghost];
-  const canTalk = levels[agent.id] === 'talk';
   const showClock = agent.runner !== 'ordago_job' && (canTalk || routines.length > 0);
   const nextLabel = next ? shortNext(next, new Date(), next.timezone) : null;
 
@@ -142,14 +146,14 @@ export default function Chat() {
                 canDecide={isOwner}
                 onDecide={decide}
                 asks={asks}
+                guides={guides}
                 onRetryTranscript={retryTranscript}
                 routineTitle={item.routineId ? routineTitles[item.routineId] : null}
                 me={me}
               />
             )}
             estimatedItemSize={64}
-            // The cards' state (asked for, going on) lives outside the messages: redraw them when it changes.
-            extraData={asks}
+            extraData={cardState}
             alignItemsAtEnd
             initialScrollAtEnd
             maintainScrollAtEnd
