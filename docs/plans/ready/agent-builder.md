@@ -2,7 +2,7 @@
 
 **Priority:** high — Jaime (2026-11-24): «un agente de finanzas no me dice nada»; today an agent is a costume (ghost, name, department) and every organisation's real work is its own
 **Gate:** none
-**Next:** slice 1 in a worktree off `develop`: the main agent as a role (`agents.is_main`), read by `isMainAgent`, and the new spaces hire it under that role
+**Next:** Task 1 of [slice 1](#build-slice-1-the-main-agent-as-a-role), in a worktree off `develop`: the migration `20261126200000_main_agent.sql` and its pgTAP test
 
 ## Goal
 
@@ -142,3 +142,98 @@ Slice 2 depends on routines' functions ([agent-routines.md](../ongoing/agent-rou
 - [agent-routines.md](../ongoing/agent-routines.md): «Not at hiring» changes; the creation conversation sets an agent's first routines.
 - [agent-templates.md](../ideas/agent-templates.md): the examples of «Nuevo agente» are where templates will live.
 - [swipe-to-hire.md](swipe-to-hire.md): built on the vacancies this plan removes; it would deal examples instead.
+
+## Build slice 1: the main agent as a role
+
+> **For agentic workers:** use superpowers:subagent-driven-development or superpowers:executing-plans to work through these tasks. Steps are `- [ ]` checkboxes. Work in a worktree off `develop` (AGENTS.md, Branches) and land with `pnpm pr:land`.
+
+**Goal:** «main agent» is a row's role (`agents.is_main`), not the `secretaria` ghost: one per organisation, never removed, hired with every new space, and hired by the migration where an organisation has no chat agent to take it.
+
+**Architecture:** a migration adds the column, a backfill function that is also what pgTAP tests, and moves the hiring into `hire_main_agent`. Every reader of «the ghost is `secretaria`» (shared, engine, app) reads `isMain` instead.
+
+**Tech stack:** Postgres migrations and pgTAP (`pnpm db:test`), `@ghostaff/shared` and `@ghostaff/engine` on vitest, `ghostaff-mobile` on jest.
+
+### Global constraints
+
+- `MAIN_AGENT_NAME = 'Secretaría'` until Jaime picks the name. The SQL repeats it in one place, `hire_main_agent`, with a comment pointing at the constant.
+- The main agent's job (`AGENT_JOBS.secretaria.job`): «Lleva tu equipo: crea contigo los agentes que necesitas y conoce cómo trabaja la empresa.»
+- Error for removing the main agent: `'the main agent stays'`, errcode `42501`.
+- Code and comments in English; anything a person sees in Spanish (AGENTS.md rule 5).
+
+### Review focus
+
+1. **Órdago:** an organisation whose only `secretaria` agent runs as a job (`runner` `ordago_job` or `ghostaff`) gets a **new** chat main agent; the job agent stays non-main (Task 1 test).
+2. **An organisation that removed Secretaría** gets a new main agent (Task 1 test).
+3. **A custom agent drawn as the `secretaria` ghost** is not main: no settings tools, no hello, `member_default` `read` (Tasks 1, 3, 4 tests).
+4. **Correo stops writing `memoria/empresa/`:** `hookAgents` gives the right only to `isMain`; runner.ts rewrites the hook on every run, so it applies at Correo's next run (Task 3 test).
+5. **Removing the main agent** is refused by the database, and its card has no «Quitar del equipo» (Tasks 1, 4).
+
+---
+
+### Task 1: the role in the database
+
+**Files:**
+- Create: `supabase/migrations/20261126200000_main_agent.sql`
+- Create: `supabase/tests/database/main_agent.test.sql`
+- Modify: `supabase/tests/database/spaces.test.sql` (the «Secretaría hired» assertions check `is_main`)
+
+**Produces:** `agents.is_main boolean not null default false`; unique index `agents_one_main on public.agents (org_id) where is_main`; internal `public.ensure_main_agent(target_org uuid) returns uuid` (the main agent's id); internal `public.hire_main_agent(target_org uuid) returns uuid`; `create_organization` and `create_personal_space` calling `hire_main_agent` instead of `hire_secretaria` (dropped); `delete_agent` refusing the main agent; `create_agent` always inserting `member_default = 'read'`.
+
+- [ ] **Step 1: write `main_agent.test.sql`** (same setup as `spaces.test.sql`: users in `auth.users`, `set local role authenticated`, jwt claims). Assertions:
+  - `create_organization('Taller')` → exactly one agent with `is_main`, named `Secretaría`, ghost `secretaria`, `member_default` `talk`; same for `create_personal_space()`.
+  - inserting a second `is_main` agent in that org (as `postgres`) → `throws_ok(..., '23505')`.
+  - `delete_agent(<main id>)` as the owner → `throws_ok(..., '42501', 'the main agent stays')`; `delete_agent` on another agent of the org → `lives_ok`.
+  - `create_agent(org, 'Otra', 'secretaria', 'direccion')` → `is_main = false`, `member_default = 'read'`.
+  - `ensure_main_agent` (as `postgres`), on three orgs inserted by hand: one with a chat `secretaria` agent → that agent becomes main, no new row; one with only a `ghostaff`-runner `secretaria` agent with a slug (Órdago's Correo) → a new chat agent named `Secretaría` is main, Correo is not; one with no agents → a new main agent. Called twice on the same org → same id, no extra row.
+  - `ensure_main_agent` and `hire_main_agent` not executable by `authenticated` (`throws_ok(..., '42501')`).
+- [ ] **Step 2:** `pnpm db:test` → the new file fails (no column, no functions).
+- [ ] **Step 3: write the migration.** In order: the column and the index; `hire_main_agent` (insert as `hire_secretaria` did, plus `is_main = true`, `created_by` = the organisation's `created_by` so it also works with no `auth.uid()`); `ensure_main_agent` (if a main exists return it; else mark the oldest `secretaria` agent with `runner = 'chat'`; else `hire_main_agent`); `create or replace` of `create_organization` and `create_personal_space` with their bodies from `20261122300000_spaces.sql` and `hire_main_agent` in place of `hire_secretaria`; `drop function public.hire_secretaria(uuid)`; `delete_agent` and `create_agent` with the changes above; then the backfill: `select public.ensure_main_agent(id) from public.organizations`. Revoke execute on both internal functions from `public, anon, authenticated`.
+- [ ] **Step 4:** update `spaces.test.sql`'s two «Secretaría hired» `results_eq` to also select `is_main` (`true`).
+- [ ] **Step 5:** `pnpm db:reset && pnpm db:test` → all pass. Then, on the local database, `select count(*) from public.organizations o where not exists (select 1 from public.agents a where a.org_id = o.id and a.is_main)` → `0`.
+- [ ] **Step 6:** commit `feat(db): the main agent is a role, one per organisation, never removed`.
+
+### Task 2: the role in `@ghostaff/shared`
+
+**Files:**
+- Modify: `packages/shared/src/models/index.ts` (`Agent.isMain`, `MAIN_AGENT_NAME`, `AGENT_JOBS.secretaria.job`)
+- Modify: `packages/shared/src/services/index.ts` (`AgentRow.is_main`, `agentFromRow`, `AGENT_COLUMNS`)
+- Modify: `packages/shared/src/services/settings.ts:480-483`
+- Create: `packages/shared/test/mainAgent.test.ts`
+
+**Consumes:** `agents.is_main` (Task 1). **Produces:** `Agent.isMain: boolean`; `export const MAIN_AGENT_NAME = 'Secretaría'` (models); `isMainAgent(a: { isMain?: boolean | null }): boolean`, true only for `isMain === true`.
+
+- [ ] **Step 1: test** `isMainAgent({ isMain: true })` is `true`; `isMainAgent({ isMain: false })` and `isMainAgent({})` are `false`; `agentFromRow({ ...row, ghost: 'secretaria', is_main: false }).isMain` is `false`, and `true` for `is_main: true`.
+- [ ] **Step 2:** `pnpm --filter @ghostaff/shared test` → fails.
+- [ ] **Step 3:** implement; `settings_read` and the settings tools keep calling `isMainAgent`, now by role. `pnpm check` will fail in engine and mobile until Tasks 3 and 4; that is expected inside this branch.
+- [ ] **Step 4:** `pnpm --filter @ghostaff/shared test` → passes. Commit `feat(shared): isMainAgent reads the role`.
+
+### Task 3: the role in the engine
+
+**Files:**
+- Modify: `apps/engine/src/chat.ts` (`ChatAgent.isMain?: boolean`), `apps/engine/src/chatStore.ts:37-42` (select `is_main`, map to `isMain`)
+- Modify: `apps/engine/src/recordProvision.ts` (`RecordAgent.isMain` replaces `ghost`; `hookAgents`; `recordSeed` says the main agent keeps `memoria/empresa/`, using `MAIN_AGENT_NAME`), `apps/engine/src/recordStore.ts:85-95` (select `is_main`)
+- Test: `apps/engine/test/chat.test.ts`, `apps/engine/test/recordStore.test.ts`, `apps/engine/test/settings.test.ts` (fixtures gain `isMain` / `is_main`)
+
+**Consumes:** `isMainAgent`, `MAIN_AGENT_NAME` (Task 2).
+
+- [ ] **Step 1: tests.** `recordStore.test.ts`: `hookAgents` gives `writesCompany: true` to `{ isMain: true }` and `false` to a `{ isMain: false }` agent with slug `correo`. `chat.test.ts`: the existing Secretaría fixture becomes `isMain: true` and keeps its settings tools; a new case, a ChatAgent with ghost `secretaria` and `isMain: false`, gets no `settings_*` tools.
+- [ ] **Step 2:** `pnpm --filter @ghostaff/engine test` → the new cases fail.
+- [ ] **Step 3:** implement. `apps/engine/test/settings.test.ts` must still pass with every database function classified.
+- [ ] **Step 4:** `pnpm --filter @ghostaff/engine test` → passes. Commit `feat(engine): settings and the company's memory follow the main agent's role`.
+
+### Task 4: the role in the app, and landing
+
+**Files:**
+- Modify: `apps/mobile/lib/firstHello.ts:20-45` (agents typed `{ id: string; orgId: string; isMain: boolean }`; finds the main agent by `isMain`)
+- Modify: `apps/mobile/app/(app)/agente/[id].tsx` (no «Quitar del equipo» when `agent.isMain`)
+- Test: `apps/mobile/__tests__/firstHello.test.ts`, `apps/mobile/__tests__/useFirstHello.test.tsx`, `apps/mobile/__tests__/chat.test.ts` (fixtures gain `isMain`)
+- Modify: `docs/plans/ongoing/agent-settings.md` (decision 2: `is_main`, not the ghost), `docs/plans/ongoing/welcome-and-spaces.md` (decision 6: `hire_main_agent`)
+
+**Consumes:** `Agent.isMain` (Task 2).
+
+- [ ] **Step 1: tests.** `firstHello.test.ts`: the fixture is `{ id: 'a1', orgId: 's1', isMain: true }`; a new case where the only agent is ghost `secretaria` with `isMain: false` → `hello` is never called. `chat.test.ts`: team ordering puts the `isMain` agent first even when it is not drawn as `secretaria`.
+- [ ] **Step 2:** `pnpm --filter ghostaff-mobile test` → the new cases fail.
+- [ ] **Step 3:** implement; update the two plans.
+- [ ] **Step 4:** `pnpm check` and `pnpm db:test` → pass. `pnpm e2e` → `create-company.yaml` and `create-personal.yaml` pass unchanged.
+- [ ] **Step 5:** on the web against the local stack (`ghostaff-web-local`): a new company's Equipo shows Secretaría first; her card has no «Quitar del equipo»; another agent's card has it.
+- [ ] **Step 6:** commit `feat(app): the main agent by its role, and it can't be removed`; `pnpm pr:land` until it exits `0`.
