@@ -2,7 +2,7 @@
 
 **Priority:** high — every organisation needs a record before agents can remember anything or have instructions of their own ([agent-memory.md](../ready/agent-memory.md), decision 2)
 **Gate:** none
-**Next:** check a run on beta: an agent on our runner in an organisation with a Forgejo record clones it, pushes its memory and is refused on `memoria/empresa/` (beta has no such agent yet: its only one on our runner is Órdago's Legal, whose record is on GitHub)
+**Next:** production: `bash scripts/setup-record-store.sh prod` with the first release, then check a run there as on beta
 
 **Goal:** Every organisation, personal spaces included, gets a record (a git repo) on storage we own in the EU when it is created; the engine and our runner read and write it as they do Órdago's GitHub record today; an agent can push only what it may write.
 
@@ -93,7 +93,7 @@ Stage 2, switched on in beta when this lands:
 - [x] A repo for every organisation without one, made by the tick, with branch protection and the hook. Made on the next tick (five minutes at most), not at the instant the organisation is created: the app calls nothing new.
 - [x] Runs on a Forgejo record: the agent's user, its token in the spec, revoked on report and swept by the tick; the runner clones from the spec's URL, its credential helper scoped to that host and user.
 - [x] Deploy scripts onto the VPC when the record store exists; `architecture.md` and `secrets/inventory.yml` updated.
-- [ ] Checked on beta (Next).
+- [x] Checked on beta: a test agent in the «jaime» space pushed its memory (`bcd3806`) and was refused on `memoria/empresa/` by the hook, 2026-11-24. It first failed at the clone: the runner ran git with `spawnSync`, blocking the token server git's helper asks (fixed in #69).
 - [ ] Production: `bash scripts/setup-record-store.sh prod`, with the first release.
 
 ## Rollout
@@ -103,7 +103,7 @@ Stage 2, switched on in beta when this lands:
 | VM, disk, snapshots, admin token | ✅ 2026-11-24 | ⬜ |
 | Engine and runner on the VPC (deploy) | ✅ 2026-11-24 | ⬜ |
 | Records made for every organisation | ✅ 2026-11-24, five by the first tick; Órdago stays on GitHub | ⬜ |
-| A run on a Forgejo record checked | ⬜ no agent on our runner in one yet | ⬜ |
+| A run on a Forgejo record checked | ✅ 2026-11-24 | ⬜ |
 
 ## Out of scope
 
