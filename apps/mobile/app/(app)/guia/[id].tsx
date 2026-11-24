@@ -76,11 +76,12 @@ export default function Guia() {
 
   if (g.view === undefined) return <Loading />;
   if (!g.view) {
+    const problem = g.loadProblem ?? { title: 'No hemos podido abrir esta guía.', retry: true };
     return (
       <Notice
-        title="No hemos podido abrir esta guía"
-        body={g.loadError ?? 'Puede que ya no tengas acceso a esta conversación.'}
-        action={<Button label="Reintentar" onPress={() => void g.reload()} />}
+        title={problem.title}
+        body={problem.body}
+        action={problem.retry ? <Button label="Reintentar" onPress={g.reload} /> : <Button label="Volver" variant="secondary" onPress={close} />}
       />
     );
   }

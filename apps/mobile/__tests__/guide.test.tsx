@@ -4,6 +4,7 @@ import { StyleSheet } from 'react-native';
 import GuideScreen from '@/app/(app)/guia/[id]';
 import { GuideCard } from '@/components/chat/GuideCard';
 import { AnnotatedShot } from '@/components/guide/AnnotatedShot';
+import { GuideBlocks } from '@/components/guide/GuideBlocks';
 import { type GuideControls, guidesToResume } from '@/lib/hooks/useGuideCards';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
@@ -31,10 +32,22 @@ jest.mock('@/lib/keyboard', () => {
 });
 jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(),
-  launchImageLibraryAsync: jest.fn(),
+  launchImageLibraryAsync: jest.fn(async () => ({ canceled: false, assets: [{ uri: 'file:///picked.png' }] })),
   requestCameraPermissionsAsync: jest.fn(async () => ({ granted: true })),
 }));
-jest.mock('expo-image-manipulator', () => ({ ImageManipulator: { manipulate: jest.fn() }, SaveFormat: { JPEG: 'jpeg' } }));
+// Each photo shrunk comes back as file:///shot-<n>.jpg, so a test can tell which one is drawn.
+let mockShots = 0;
+jest.mock('expo-image-manipulator', () => {
+  const image = () => ({
+    width: 800,
+    height: 600,
+    saveAsync: async () => ({ uri: `file:///shot-${++mockShots}.jpg`, width: 800, height: 600, base64: 'AAAA' }),
+  });
+  const context = { resize: () => context, renderAsync: async () => image() };
+  return { ImageManipulator: { manipulate: () => context }, SaveFormat: { JPEG: 'jpeg' } };
+});
+const mockCopy = jest.fn(async (_text: string) => true);
+jest.mock('expo-clipboard', () => ({ setStringAsync: (text: string) => mockCopy(text) }));
 
 const guide: GuidePart = { type: 'guide', guideId: 'g1', app: 'WordPress', why: 'Para publicar tus entradas', status: 'open' };
 
@@ -229,5 +242,124 @@ describe('the mark on the person\'s photo', () => {
     await render(<AnnotatedShot shot={null} mark={{ x: 0.3, y: 0.6 }} caption="Pulsa aquí" />);
     expect(screen.queryByTestId('guide-mark')).toBeNull();
     expect(screen.getByText('Vuelve a enviar tu foto para verla marcada.')).toBeTruthy();
+  });
+});
+
+// Fix round 1 (task review).
+
+const reply = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body }) as Response;
+const baseView = (step: GuideStep | null): GuideView => ({
+  id: 'g1',
+  threadId: 't1',
+  status: 'open',
+  app: 'WordPress',
+  goal: 'Acceso a tu web',
+  why: 'Para publicar tus entradas',
+  auth: 'basic',
+  agentEmail: 'redes@panaderia.ghostaff.ai',
+  step,
+  steps: 1,
+  mayApprove: false,
+  blockedReason: null,
+  undo: null,
+});
+
+describe('a photo that fails to send', () => {
+  it('keeps the previous step\'s mark on the previous photo', async () => {
+    const marked: GuideStep = { blocks: [{ type: 'title', text: 'Pulsa aquí' }, { type: 'annotated_shot', mark: { x: 0.5, y: 0.5 } }, { type: 'confirm' }] };
+    const stepReplies = [reply(200, { step: marked, status: 'open' }), reply(413, { error: 'too_big', message: 'Esa foto es demasiado grande. Prueba con una captura más pequeña.' })];
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/guides/g1')) return reply(200, baseView({ blocks: [{ type: 'title', text: '¿Dónde estás?' }, { type: 'confirm' }] }));
+      if (url.endsWith('/step')) return stepReplies.shift()!;
+      throw new Error(`unexpected ${url}`);
+    }) as typeof fetch;
+    const sendPhoto = async () => {
+      await fireEvent.press(screen.getByText('Enséñame tu pantalla'));
+      await fireEvent.press(screen.getByText('Elegir una captura'));
+    };
+
+    await render(<GuideScreen />);
+    await screen.findByText('¿Dónde estás?');
+    await sendPhoto();
+    await screen.findByText('Pulsa aquí');
+    const first = screen.getByTestId('guide-shot').props.source;
+    expect(first).toEqual({ uri: expect.stringMatching(/shot-\d+\.jpg$/) });
+
+    await sendPhoto();
+    expect(await screen.findByText('Esa foto es demasiado grande. Prueba con una captura más pequeña.')).toBeTruthy();
+    expect(screen.getByText('Pulsa aquí')).toBeTruthy();
+    expect(screen.getByTestId('guide-shot').props.source).toEqual(first);
+  });
+});
+
+describe('a guide that cannot be opened', () => {
+  const opening = (answer: () => Promise<Response>) => {
+    globalThis.fetch = jest.fn(answer) as typeof fetch;
+  };
+
+  it('one that no longer exists says so, with no retry', async () => {
+    opening(async () => reply(404, { error: 'not_found', message: 'guide not found' }));
+    await render(<GuideScreen />);
+    expect(await screen.findByText('Esta guía ya no existe.')).toBeTruthy();
+    expect(screen.queryByText('Reintentar')).toBeNull();
+  });
+
+  it('one the person may not read says so, with no retry', async () => {
+    opening(async () => reply(403, { error: 'not_allowed', message: 'you may not read this conversation' }));
+    await render(<GuideScreen />);
+    expect(await screen.findByText('No puedes ver esta guía.')).toBeTruthy();
+    expect(screen.queryByText('Reintentar')).toBeNull();
+    expect(screen.queryByText('Solo puede hacerlo quien escribe en esta conversación.')).toBeNull();
+  });
+
+  it('without a connection offers to try again, and opens it when it can', async () => {
+    let online = false;
+    opening(async () => {
+      if (!online) throw new TypeError('Network request failed');
+      return reply(200, baseView({ blocks: [{ type: 'title', text: 'Entra en tu WordPress' }, { type: 'confirm' }] }));
+    });
+    await render(<GuideScreen />);
+    expect(await screen.findByText('No hay conexión.')).toBeTruthy();
+    online = true;
+    await fireEvent.press(screen.getByText('Reintentar'));
+    expect(await screen.findByText('Entra en tu WordPress')).toBeTruthy();
+  });
+});
+
+describe('deciding a member\'s grant from the card', () => {
+  it('Aprobar and then Rechazar while the first runs sends one decision', async () => {
+    let finish: (v: string | null) => void = () => {};
+    const decide = jest.fn(() => new Promise<string | null>((resolve) => (finish = resolve)));
+    await render(<GuideCard guide={{ ...guide, status: 'checked', doneBy: 'Luis' }} controls={controls({ decide })} />);
+    await fireEvent.press(screen.getByText('Aprobar'));
+    await fireEvent.press(screen.getByText('Rechazar'));
+    expect(decide).toHaveBeenCalledTimes(1);
+    expect(decide).toHaveBeenCalledWith('g1', 'approve');
+    finish(null);
+    await waitFor(() => expect(screen.getByText('Rechazar')).toBeTruthy());
+  });
+});
+
+describe('a value to copy', () => {
+  it('«Copiar» copies exactly the value and says it did', async () => {
+    const noop = () => {};
+    await render(
+      <GuideBlocks
+        step={{ blocks: [{ type: 'copy_value', label: 'El correo del agente', value: 'redes@panaderia.ghostaff.ai' }, { type: 'confirm' }] }}
+        values={{}}
+        onValue={noop}
+        fieldError={null}
+        shot={null}
+        busy={null}
+        onAnswer={noop}
+        onCheck={noop}
+        missing={[]}
+        connector={{ canConnect: false, run: async () => null }}
+      />,
+    );
+    await fireEvent.press(screen.getByLabelText('Copiar El correo del agente'));
+    await waitFor(() => expect(mockCopy).toHaveBeenCalledWith('redes@panaderia.ghostaff.ai'));
+    expect(await screen.findByText('Copiado')).toBeTruthy();
   });
 });

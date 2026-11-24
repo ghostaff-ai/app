@@ -62,7 +62,7 @@ export function AnnotatedShot({ shot, mark, caption }: { shot: Shot | null; mark
         // A tall phone screenshot stays readable without taking the whole screen.
         style={{ width: '100%', maxWidth: shot.height > shot.width ? 260 : undefined, alignSelf: 'center', aspectRatio: shot.width / shot.height }}
       >
-        <Image source={{ uri: shot.uri }} alt="" style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+        <Image testID="guide-shot" source={{ uri: shot.uri }} alt="" style={{ width: '100%', height: '100%' }} resizeMode="contain" />
         <View testID="guide-mark" style={at}>
           {mark.shape === 'arrow' ? <Arrow fromBelow={mark.y < 0.25} color={c.waiting} /> : <Ring color={c.waiting} />}
         </View>

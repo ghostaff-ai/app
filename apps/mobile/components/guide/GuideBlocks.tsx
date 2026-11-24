@@ -1,6 +1,7 @@
 import { type CatalogueConnector, CONNECTORS, type GuideAnswer, type GuideBlock, type GuideCheckValues, type GuideField, type GuideImage, type GuideStep } from '@ghostaff/shared';
-import { useState } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
 import { AnnotatedShot } from '@/components/guide/AnnotatedShot';
 import { Icon, LockSimple } from '@/components/icons';
@@ -8,6 +9,7 @@ import { Button, ErrorText, Field } from '@/components/ui';
 import { FIELD_LABELS, stepAction } from '@/lib/guide';
 import type { Shot } from '@/lib/guidePhoto';
 import type { FieldError, GuideBusy } from '@/lib/hooks/useGuide';
+import { selection } from '@/lib/haptics';
 import { usePalette } from '@/lib/theme';
 
 // The middle of a guide's screen (guided-access.md): one step, drawn from the
@@ -101,15 +103,40 @@ function ChoiceBlock({ block, onAnswer, off }: { block: Extract<GuideBlock, { ty
 }
 
 function CopyValueBlock({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  const copy = async () => {
+    try {
+      await Clipboard.setStringAsync(value);
+    } catch {
+      return; // the value stays selectable to copy by hand
+    }
+    selection();
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 2000);
+  };
   return (
     <View className="mt-4">
       <Text className="text-footnote font-medium text-ink">{label}</Text>
-      <View className="mt-2 rounded-xl bg-sunk px-4 py-3">
-        <Text selectable className="text-base text-ink">
+      <View className="mt-2 flex-row items-center gap-2 rounded-xl bg-sunk py-1 pl-4 pr-1">
+        <Text selectable className="flex-1 py-2 text-base text-ink">
           {value}
         </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Copiar ${label}`}
+          onPress={() => void copy()}
+          className="min-h-[44px] min-w-[44px] items-center justify-center rounded-lg px-3 active:opacity-60"
+        >
+          <Text accessibilityLiveRegion="polite" className="text-footnote font-semibold text-ink">
+            {copied ? 'Copiado' : 'Copiar'}
+          </Text>
+        </Pressable>
       </View>
-      <Text className="mt-1 text-caption text-muted">{Platform.OS === 'web' ? 'Selecciónalo para copiarlo.' : 'Mantén el dedo encima para copiarlo.'}</Text>
     </View>
   );
 }

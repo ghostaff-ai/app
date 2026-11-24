@@ -1,5 +1,5 @@
 import { type CatalogueConnector, CONNECTORS, type GuidePart } from '@ghostaff/shared';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
 import { eitherOf } from '@/lib/guide';
@@ -31,15 +31,16 @@ function statusLine(guide: GuidePart, resuming: boolean): { text: string; tone: 
   }
 }
 
-function CardButton({ label, onPress, busy, quiet }: { label: string; onPress: () => void; busy?: boolean; quiet?: boolean }) {
+function CardButton({ label, onPress, busy, disabled, quiet }: { label: string; onPress: () => void; busy?: boolean; disabled?: boolean; quiet?: boolean }) {
+  const off = !!busy || !!disabled;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ busy: !!busy }}
-      disabled={busy}
+      accessibilityState={{ busy: !!busy, disabled: off }}
+      disabled={off}
       onPress={onPress}
-      className={`min-h-[44px] flex-1 items-center justify-center rounded-full px-3 py-2 ${quiet ? 'border border-line bg-surface' : 'bg-accent'} active:opacity-70`}
+      className={`min-h-[44px] flex-1 items-center justify-center rounded-full px-3 py-2 ${quiet ? 'border border-line bg-surface' : 'bg-accent'} ${off && !busy ? 'opacity-40' : 'active:opacity-70'}`}
     >
       {busy ? <ActivityIndicator size="small" /> : <Text className={`text-footnote font-semibold ${quiet ? 'text-ink' : 'text-on-accent'}`}>{label}</Text>}
     </Pressable>
@@ -48,6 +49,8 @@ function CardButton({ label, onPress, busy, quiet }: { label: string; onPress: (
 
 export function GuideCard({ guide, controls, writing = false }: { guide: GuidePart; controls?: GuideControls; writing?: boolean }) {
   const [busy, setBusy] = useState<'approve' | 'reject' | 'connect' | null>(null);
+  // One decision at a time: a second tap (on either button) before the first re-renders is dropped.
+  const running = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const handedTo = guide.status === 'handed_over' ? catalogue(guide.connector) : null;
   const status = statusLine(guide, !!controls?.resuming(guide.guideId));
@@ -56,7 +59,8 @@ export function GuideCard({ guide, controls, writing = false }: { guide: GuidePa
   const live = !!controls && !writing;
 
   const run = async (kind: 'approve' | 'reject' | 'connect') => {
-    if (!controls) return;
+    if (!controls || running.current) return;
+    running.current = true;
     setBusy(kind);
     setError(null);
     try {
@@ -64,6 +68,7 @@ export function GuideCard({ guide, controls, writing = false }: { guide: GuidePa
     } catch {
       setError('No se ha podido. Inténtalo otra vez.');
     } finally {
+      running.current = false;
       setBusy(null);
     }
   };
@@ -78,8 +83,8 @@ export function GuideCard({ guide, controls, writing = false }: { guide: GuidePa
       if (controls.isOwner)
         actions = (
           <>
-            <CardButton label="Aprobar" busy={busy === 'approve'} onPress={() => void run('approve')} />
-            <CardButton label="Rechazar" quiet busy={busy === 'reject'} onPress={() => void run('reject')} />
+            <CardButton label="Aprobar" busy={busy === 'approve'} disabled={busy !== null} onPress={() => void run('approve')} />
+            <CardButton label="Rechazar" quiet busy={busy === 'reject'} disabled={busy !== null} onPress={() => void run('reject')} />
           </>
         );
       else note = controls.owners.length ? `Falta que lo apruebe ${eitherOf(controls.owners)}` : 'Falta que lo apruebe quien es propietario';

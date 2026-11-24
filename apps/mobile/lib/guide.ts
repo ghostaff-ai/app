@@ -55,6 +55,25 @@ export function guideErrorText(e: unknown): string {
   }
 }
 
+/** Why the guide couldn't be opened, and whether trying again can help. */
+export type LoadProblem = { title: string; body?: string; retry: boolean };
+
+export function guideLoadProblem(e: unknown): LoadProblem {
+  switch (codeOf(e)) {
+    case 'not_found':
+    case 'bad_request':
+      return { title: 'Esta guía ya no existe.', body: 'Vuelve a la conversación: el agente puede pedirte el acceso otra vez.', retry: false };
+    case 'not_allowed':
+      return { title: 'No puedes ver esta guía.', body: 'Es de una conversación a la que no tienes acceso.', retry: false };
+    case 'unavailable':
+      return { title: 'Las guías no están disponibles ahora mismo.', body: 'Prueba otra vez en un rato.', retry: true };
+    case 'unreachable':
+      return { title: 'No hay conexión.', body: 'Comprueba tu internet y prueba otra vez.', retry: true };
+    default:
+      return { title: 'No hemos podido abrir esta guía.', body: 'Prueba otra vez en un momento.', retry: true };
+  }
+}
+
 /** The guide moved elsewhere (another step, someone finished it): read it again rather than show an error. */
 export const movedOn = (e: unknown) => ['conflict', 'finished', 'already_done'].includes(codeOf(e));
 
