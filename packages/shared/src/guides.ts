@@ -44,11 +44,16 @@ export type GuidePhoto = { mediaType: 'image/jpeg'; data: string };
 /** A circle or an arrow drawn on the person's screenshot; x and y are fractions (0-1) of the photo. */
 export type GuideMark = { x: number; y: number; shape?: 'circle' | 'arrow' };
 
+/** The reference drawings a `choice` option may show: the app ships them, the model only picks one. Never a URL. */
+export const GUIDE_IMAGES = ['sidebar-left', 'menu-top', 'none'] as const;
+
+export type GuideImage = (typeof GUIDE_IMAGES)[number];
+
 /** The closed catalogue of blocks a step is made of. */
 export type GuideBlock =
   | { type: 'title'; text: string }
   | { type: 'bullets'; items: string[] }
-  | { type: 'choice'; question: string; options: { id: string; label: string; image?: string }[] }
+  | { type: 'choice'; question: string; options: { id: string; label: string; image?: GuideImage }[] }
   | { type: 'annotated_shot'; mark: GuideMark; caption?: string }
   | { type: 'copy_value'; label: string; value: string }
   | { type: 'secret'; field: GuideSecretField; label: string }
@@ -161,13 +166,18 @@ function parseBlock(raw: unknown, landing: GuideLanding): GuideBlock | Failure {
       if (typeof q !== 'string') return q;
       const opts = raw.options;
       if (!Array.isArray(opts) || opts.length < 2 || opts.length > 4) return { error: 'choice takes two to four options' };
-      const options: { id: string; label: string; image?: string }[] = [];
+      const options: { id: string; label: string; image?: GuideImage }[] = [];
       for (const o of opts) {
         if (!isRecord(o) || typeof o.id !== 'string' || !o.id) return { error: 'each choice option needs an id' };
         const l = text(o.label, MAX_BULLET, 'a choice option label');
         if (typeof l !== 'string') return l;
-        const option: { id: string; label: string; image?: string } = { id: o.id, label: l };
-        if (typeof o.image === 'string') option.image = o.image;
+        const option: { id: string; label: string; image?: GuideImage } = { id: o.id, label: l };
+        if (o.image !== undefined) {
+          if (typeof o.image !== 'string' || !(GUIDE_IMAGES as readonly string[]).includes(o.image)) {
+            return { error: `choice option image must be one of: ${GUIDE_IMAGES.join(', ')}` };
+          }
+          option.image = o.image as GuideImage;
+        }
         options.push(option);
       }
       return { type: 'choice', question: q, options };
@@ -297,5 +307,6 @@ export function guidedProvider(app: string): string {
 
 /** The agent's own address, the identity it has in the customer's tool. */
 export function agentEmail(orgSlug: string, agent: { slug: string | null; name: string }): string {
-  return `${agent.slug ?? slugify(agent.name)}@${orgSlug}.ghostaff.ai`;
+  const local = agent.slug || slugify(agent.name) || 'agente';
+  return `${local}@${orgSlug}.ghostaff.ai`;
 }

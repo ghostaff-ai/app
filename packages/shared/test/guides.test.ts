@@ -137,6 +137,17 @@ describe('parseGuideStep', () => {
     expect(parseGuideStep('nope', landing)).toHaveProperty('error');
   });
 
+  it('a choice image is one of the shipped drawings, never a URL', () => {
+    const choice = (image: string) => ({
+      blocks: [{ type: 'choice', question: '¿Qué ves?', options: [{ id: 'a', label: 'Menú', image }, { id: 'b', label: 'Otro' }] }],
+    });
+    expect(parseGuideStep(choice('sidebar-left'), landing)).toHaveProperty('step');
+    for (const bad of ['https://evil.com/p.png', 'sidebar-right']) {
+      const r = parseGuideStep(choice(bad), landing);
+      expect((r as { error: string }).error).toMatch(/sidebar-left, menu-top, none/);
+    }
+  });
+
   it('accepts a connector from the catalogue', () => {
     expect(parseGuideStep({ blocks: [{ type: 'use_connector', connector: 'google' }] }, landing)).toHaveProperty('step');
   });
@@ -162,6 +173,11 @@ describe('agentEmail', () => {
     );
     expect(agentEmail('ana', { slug: null, name: 'Secretaría' })).toBe('secretaria@ana.ghostaff.ai');
     expect(agentEmail('ana', { slug: null, name: '  ¡Ventas & Co.! ' })).toBe('ventas-co@ana.ghostaff.ai');
+  });
+
+  it('treats an empty slug as none, and falls back when the name has no letters', () => {
+    expect(agentEmail('ana', { slug: '', name: 'Redes' })).toBe('redes@ana.ghostaff.ai');
+    expect(agentEmail('ana', { slug: null, name: '🙂' })).toBe('agente@ana.ghostaff.ai');
   });
 
   it('uses the slug when there is one', () => {
