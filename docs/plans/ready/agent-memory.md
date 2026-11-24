@@ -4,7 +4,7 @@
 **Gate:** blocked:record-store — every organisation needs a record first (decision 2) (recheck 2026-12-01)
 **Next:** once [record-store.md](../ideas/record-store.md) gives every organisation a record, write the File Structure and Tasks against that day's code, Empresa and agent stores first (decision 7)
 
-**Goal:** Every agent, whether people talk to it or it runs on a timetable, reads and writes memory stores that outlive a conversation; the organisation's and each agent's stores are folders of its record (git), a person's own store is private to them; people see each store in the app and correct or delete what is in it, and feedback given in a chat reaches the agent's next scheduled run.
+**Goal:** Every agent, whether people talk to it or it runs on a timetable, reads and writes memory stores that outlive a conversation; the organisation's and each agent's stores are folders of its record (git), a person's own store is private to them; people see each store in the app and correct or delete what is in it, and feedback given in a chat reaches the agent's next scheduled run. Each agent's instructions are a file of the same record, beside its memory.
 
 ## Context
 
@@ -47,7 +47,17 @@ So Álvaro's files and Managed Agents' stores are the same thing to the agent: f
 
 - **The record is the master** of Empresa and of each agent's store, as it is of `por-decidir/`. The database keeps a **projection** (`memories`: `org_id`, `store`, `path`, `content`, `sha`, `updated_at`) so the app lists and opens them and a chat turn reads them without cloning. The rules are `por-decidir/`'s, in `packages/shared/src/record/`: the record wins; an edit made in the app is written back in one commit on top of the head it read.
 - **History is git's.** «Historial» under a recuerdo is the file's commits (who: an agent's run, a person through the app); «Volver a esta versión» is a new commit with that content. No versions table for these stores.
-- **The agents' existing `agentes/<slug>/`** folders in Órdago's record move under `memoria/agentes/<slug>/` when each agent moves to Ghostaff (ordago-agents-in-ghostaff.md); prompts and skills stay where they are. Memory is what the agent learnt, not how it is configured.
+- **What Órdago's agents learnt** moves when each agent moves to Ghostaff (ordago-agents-in-ghostaff.md): the «Indicaciones» and «Aprendizajes» of `agentes/<a>/README.md` become recuerdos in `memoria/agentes/<slug>/`. What the README says about how the agent works goes into its instructions (below).
+
+### The agent's instructions live beside its memory (Jaime, 2026-11-24)
+
+**An agent's prompt is a file of its organisation's record, `agentes/<slug>/AGENTS.md`**, next to its memory, the organisation's `AGENTS.md` and its skills: everything that makes an agent is in the one repo per organisation, with git's history of who changed its instructions and when, and leaves with the export. It replaces the agent row as the prompt's home (decision 2 of ordago-agents-in-ghostaff.md said the row, 2026-11-24; Jaime moved it to the record the same day).
+
+- **`agents.task` becomes its projection**, read from the record by the same sync as `por-decidir/` and the memory, so a chat turn reads it without cloning. Editing it in the app, or by Secretaría after an owner's OK (rule 6, a setting in `settings.ts`), is a write-back commit, the record winning on conflict.
+- **A runner turn reads the file from its clone**; `composePrompt` (`apps/engine/src/runner.ts`) points at it instead of carrying `agents.task`.
+- **The rest of an agent's settings stay on the row**: its timetable, tools, model and who may see or talk to it. Access is what row-level security enforces, and it must not be a file anyone with a clone could change.
+- **Where there is no record yet**, nothing changes: chat agents keep the prompt the engine builds in code (`systemPrompt` in `chat.ts`, `AGENT_JOBS`), and get an `AGENTS.md` of their own when their organisation gets a record (decision 2). An organisation with a GitHub record, Órdago today, can have it now.
+- **Writing it is owners' only, as Empresa is**: an agent may propose a change to its own instructions, never make it alone, since a prompt-injected agent rewriting its own prompt is the worst case of Managed Agents' warning.
 - **Sobre ti is the one store outside the record**, on purpose: the record is shared by the whole organisation and cloned by every run of every agent, so nothing in it can be private to one person. It is data about a person, like `profiles`, and it is the store Jaime was worried about. A personal space (`organizations.kind = 'personal'`, [welcome-and-spaces.md](../ongoing/welcome-and-spaces.md)) has its own record, so what you keep for yourself there is in its Empresa store.
 
 ### Ghostaff's own record store first (decision 2)
