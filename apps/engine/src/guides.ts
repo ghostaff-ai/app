@@ -400,7 +400,12 @@ async function grant(deps: GuideDeps, g: GuideRecord, base: string, secret: Guid
     connectedBy: by.id,
     connectedByName: by.name,
   });
-  if (replacedGuideId) await deps.vault.remove(guidedSecretName(g.orgId, replacedGuideId)).catch(() => {});
+  if (replacedGuideId) {
+    // The new access already works; a stale credential left behind is logged, not a failure of this one.
+    await deps.vault.remove(guidedSecretName(g.orgId, replacedGuideId)).catch((e: unknown) => {
+      console.error('replaced guided secret not removed', e instanceof Error ? e.name : typeof e);
+    });
+  }
 }
 
 export type CheckOutcome = { ok: true; status: 'checked' | 'done' } | { ok: false; field?: GuideField; message: string };
@@ -486,8 +491,14 @@ export async function rejectGuide(deps: GuideDeps, userId: string, id: unknown):
   if (!(await deps.store.update(g.id, { status: 'checked' }, { status: 'rejected', decidedBy: userId }))) {
     throw new Refusal(409, 'already_decided', 'this guide was already decided');
   }
+  try {
+    await deps.vault.remove(guidedSecretName(g.orgId, g.id));
+  } catch (e) {
+    // Back to checked, so the owner can reject again and the credential does go.
+    await deps.store.update(g.id, { status: 'rejected' }, { status: 'checked', decidedBy: null }).catch(() => false);
+    throw e;
+  }
   await deps.store.updateCard(g.messageId, g.id, { status: 'rejected', decidedBy: owner.displayName });
-  await deps.vault.remove(guidedSecretName(g.orgId, g.id));
   return { status: 'rejected' };
 }
 

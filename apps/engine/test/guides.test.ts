@@ -98,14 +98,18 @@ function memoryGuides() {
 
 function memoryAccesses() {
   const created: Array<Parameters<GuidedStore['createAccess']>[0]> = [];
+  /** The guide whose access the next createAccess replaces, as the store reports it. */
+  const replacing: { guideId: string | null } = { guideId: null };
   const store: GuidedStore = {
     accesses: async () => [],
     createAccess: async (a) => {
       created.push(a);
-      return { id: `70000000-0000-0000-0000-00000000000${created.length}`, replacedGuideId: null };
+      const replacedGuideId = replacing.guideId;
+      replacing.guideId = null;
+      return { id: `70000000-0000-0000-0000-00000000000${created.length}`, replacedGuideId };
     },
   };
-  return { store, created };
+  return { store, created, replacing };
 }
 
 function setup(opts: { write?: Writer; messages?: ChatMessage[]; levels?: Record<string, Level>; noAccount?: boolean; fetchStatus?: number; asks?: AskStore } = {}) {
@@ -448,6 +452,43 @@ describe('checking a guide', () => {
   });
 });
 
+describe('a guide for an app the agent already reaches', () => {
+  const OLD = '60000000-0000-0000-0000-000000000042';
+
+  it("replaces the access: the old guide's secret goes, the new one stays", async () => {
+    const s = setup();
+    const id = await s.guides.seed();
+    await s.vault.put(guidedSecretName(ORG, OLD), JSON.stringify({ username: 'redes', password: 'vieja vieja' }), {});
+    s.accesses.replacing.guideId = OLD;
+    expect(await (await s.call('ana', `/guides/${id}/check`, { values: VALUES })).json()).toEqual({ ok: true, status: 'done' });
+    expect(await s.vault.get(guidedSecretName(ORG, OLD))).toBeNull();
+    expect(JSON.parse((await s.vault.get(guidedSecretName(ORG, id)))!).password).toBe(PASSWORD);
+  });
+
+  it('a stale secret that cannot be removed does not cost the new access, and is logged by name only', async () => {
+    const s = setup();
+    const id = await s.guides.seed();
+    s.accesses.replacing.guideId = OLD;
+    const remove = s.vault.remove.bind(s.vault);
+    s.vault.remove = async (name) => {
+      if (name === guidedSecretName(ORG, OLD)) throw new Error(`boom ${PASSWORD}`);
+      return remove(name);
+    };
+    const logged: unknown[][] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      logged.push(args);
+    };
+    try {
+      expect(await (await s.call('ana', `/guides/${id}/check`, { values: VALUES })).json()).toEqual({ ok: true, status: 'done' });
+    } finally {
+      console.error = original;
+    }
+    expect(s.guides.rows.get(id)?.status).toBe('done');
+    expect(logged).toEqual([['replaced guided secret not removed', 'Error']]);
+  });
+});
+
 describe('approving and rejecting a member’s guide', () => {
   async function checked() {
     const s = setup();
@@ -466,6 +507,24 @@ describe('approving and rejecting a member’s guide', () => {
     expect(s.accesses.created).toMatchObject([{ agentId: REDES, provider: 'xwordpress', hint: VALUES.username, connectedBy: 'luis', connectedByName: 'Luis' }]);
     expect(s.guides.rows.get(s.id)).toMatchObject({ status: 'done', decidedBy: 'ana' });
     expect(s.guides.cards.at(-1)?.patch).toEqual({ status: 'done', decidedBy: 'Ana' });
+  });
+
+  it('a rejection whose secret cannot be removed stays checked, for the owner to reject again', async () => {
+    const s = await checked();
+    const cardsBefore = s.guides.cards.length;
+    const remove = s.vault.remove.bind(s.vault);
+    let fails = 1;
+    s.vault.remove = async (name) => {
+      if (fails-- > 0) throw new Error('secret manager down');
+      return remove(name);
+    };
+    expect((await s.call('ana', `/guides/${s.id}/reject`)).status).toBe(500);
+    expect(s.guides.rows.get(s.id)).toMatchObject({ status: 'checked', decidedBy: null });
+    expect(await s.vault.get(guidedSecretName(ORG, s.id))).not.toBeNull();
+    expect(s.guides.cards).toHaveLength(cardsBefore);
+    expect(await (await s.call('ana', `/guides/${s.id}/reject`)).json()).toEqual({ status: 'rejected' });
+    expect(await s.vault.get(guidedSecretName(ORG, s.id))).toBeNull();
+    expect(s.guides.cards.at(-1)?.patch).toEqual({ status: 'rejected', decidedBy: 'Ana' });
   });
 
   it('only owners reject; rejecting removes the secret and says so on the card', async () => {
