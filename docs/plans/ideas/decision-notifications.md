@@ -1,7 +1,17 @@
 # Notifications: a decision reaches its person without opening the app
 
 **Priority:** high — the product's promise is to bring people the decisions that are theirs, and once Telegram goes off (ordago-agents-in-ghostaff.md, decision 3) nothing leaves the app to tell anyone a decision waits
-**Gate:** decision:either founder — notifications go from our engine straight to Apple and Google and say only how many decisions wait and in which organisation, never the question itself; yes?
+**Gate:** blocked:ordago-agents-in-ghostaff — built before Telegram goes off, once the last Órdago agents are about to move (Jaime, 2026-11-24)
+**Next:** rewrite this plan for the three-tabs app and the chat (below), then build it before Telegram goes off
+
+## When, and what it covers (Jaime, 2026-11-24)
+
+- **Before Telegram goes off, not now.** Telegram is today the only thing that reaches a person outside the app (an agent's reply, a report, a decision, a failed run). While it is on it covers that; the day it goes off ([ordago-agents-in-ghostaff.md](../ongoing/ordago-agents-in-ghostaff.md), decision 3), notifications must already be there, or nobody learns anything without opening Ghostaff. The worst case is a runner agent, which takes minutes to answer: you write, close the app, and never know it replied.
+- **My proposal for the rewrite, not yet decided:** the plumbing (device tokens, the engine sending straight to APNs and FCM, the permission ask) plus two notifications: **an agent replied to you** («Legal te ha contestado»), the one Telegram covers today, and **the daily one for waiting decisions**.
+- **What the design below misses, as of 2026-11-24:** Hoy no longer exists ([three-tabs.md](../ongoing/three-tabs.md)), so the daily one lands on Decisiones; an agent's OK card in a chat (`agent_actions`) is a decision too and should count; a reply in a chat is left out of scope below, and it is now the first thing to cover.
+- **Who gets a chat notification depends on [group-chat-per-agent.md](group-chat-per-agent.md)**: the members of the agent's group who haven't read it, or only the owner of a private chat. The plumbing doesn't.
+
+The design below (2026-11-22) still holds for the plumbing and the privacy rule: notifications go from our engine straight to Apple and Google, and never carry the record's words.
 
 **Goal:** A person gets one notification a day at their hour when something waits for them, and one more when a decision is due today, and a tap lands on that decision; so a decision stops depending on someone remembering to open Ghostaff.
 

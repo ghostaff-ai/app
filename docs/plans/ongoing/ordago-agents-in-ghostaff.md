@@ -59,7 +59,7 @@ From the YAMLs in `ghostaff-ai/agents/proyectos/ordago/agentes/` (2026-11-24). O
 
 ### Order
 
-Fewest needs first, each one moved with `org add-agents --runner ghostaff --only <agent>` and its Cloud Scheduler job paused in `ordago-agents` in the same sitting: Legal → Comercial → SEO, Producto, Dirección → Correo, Finanzas → La Mesa, Productor → Orgánico → Desarrollo. Then Telegram off: the webhook deleted, `telegram` removed from `proyecto.yaml`, the jobs in `ordago-agents` deleted, and `ghostaff-ai/agents` archived.
+Fewest needs first, each one moved with `org add-agents --runner ghostaff --only <agent>` and its Cloud Scheduler job paused in `ordago-agents` in the same sitting: Legal → Comercial → SEO, Producto, Dirección → Correo, Finanzas → La Mesa, Productor → Orgánico → Desarrollo. Before Telegram goes off, the app's notifications must be live, since Telegram is the only thing that reaches a person outside the app (Jaime, 2026-11-24: [decision-notifications.md](../ideas/decision-notifications.md)). Then Telegram off: the webhook deleted, `telegram` removed from `proyecto.yaml`, the jobs in `ordago-agents` deleted, and `ghostaff-ai/agents` archived.
 
 ### Decisions (2026-11-24)
 
