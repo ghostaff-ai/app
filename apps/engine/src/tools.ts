@@ -69,8 +69,11 @@ export interface AgentTools {
   accounts: string[];
   /** The step line to show while `name` runs. */
   stepFor(name: string): string;
-  /** Whether `name` creates or changes something outside Ghostaff (unknown tools count as writing). */
-  writes(name: string): boolean;
+  /**
+   * Whether `name` creates or changes something outside Ghostaff (unknown tools count as writing).
+   * `input`, when given, is the call's: a tool whose input decides it (a guided access's request: GET reads) looks at it.
+   */
+  writes(name: string, input?: unknown): boolean;
   /** What the approval card says a writing tool will do. */
   actionFor(name: string): string;
   /** For a writing tool that can say exactly what it will change (a setting): the card's label and preview. Throws on bad input. */
@@ -120,7 +123,7 @@ export function mergeTools(a: AgentTools, b: AgentTools): AgentTools {
     accounts: [...a.accounts, ...b.accounts],
     accountProviders: [...(a.accountProviders ?? a.accounts.map(() => '')), ...(b.accountProviders ?? b.accounts.map(() => ''))],
     stepFor: (name) => pick(name).stepFor(name),
-    writes: (name) => pick(name).writes(name),
+    writes: (name, input) => pick(name).writes(name, input),
     actionFor: (name) => pick(name).actionFor(name),
     describe: async (name, input) => (await pick(name).describe?.(name, input)) ?? null,
     providerOf: (name) => pick(name).providerOf?.(name),

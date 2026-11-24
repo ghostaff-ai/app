@@ -4,9 +4,10 @@ import { createApp } from '../src/app';
 import { type AiAccount, AiFailure, type AiUse, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, whoAnswers, type Writer } from '../src/chat';
 import type { AskRecord, AskStore } from '../src/accountAsks';
 import type { AsPerson } from '../src/settings';
+import { type GuidedStore, guidedToolsFor } from '../src/guidedAccounts';
 import { type AgentTools, NO_TOOLS } from '../src/tools';
 import { fakeSupabase } from './fixtures/fakeSupabase';
-import { MemoryVault } from '../src/vault';
+import { guidedSecretName, MemoryVault } from '../src/vault';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 const AGENT = '20000000-0000-0000-0000-000000000001';
@@ -49,6 +50,7 @@ function setup(
     agent?: ChatAgent;
     asPerson?: AsPerson;
     asks?: AskStore;
+    guidedToolsFor?: (orgId: string, agentId: string) => Promise<AgentTools>;
   } = {},
 ) {
   const threadAgent = opts.agent ?? finanzas;
@@ -126,6 +128,7 @@ function setup(
       toolsFor: async () => opts.tools ?? NO_TOOLS,
       asPerson: opts.asPerson,
       asks: opts.asks,
+      guidedToolsFor: opts.guidedToolsFor,
     },
     accounts: {} as never,
     actions: {} as never,
@@ -749,5 +752,76 @@ describe('an agent asking for an account it lacks (connector-in-chat.md)', () =>
     expect(t.records.get(ASK)?.status).toBe('open');
     release();
     await replying;
+  });
+});
+
+describe('a guided access in the chat', () => {
+  const GUIDE = '60000000-0000-0000-0000-000000000001';
+  const storeFor = (agentId: string): GuidedStore => ({
+    accesses: async (orgId, wanted) =>
+      [
+        {
+          id: '70000000-0000-0000-0000-000000000001',
+          agentId,
+          provider: 'xwordpress',
+          hint: 'finanzas@panaderia.ghostaff.ai',
+          status: 'ok' as const,
+          settings: { base: 'https://miweb.com/wp-json', auth: 'basic' as const, app: 'WordPress', guideId: GUIDE },
+        },
+      ].filter((a) => orgId === ORG && (!wanted || a.agentId === wanted)),
+  });
+  const fetched: string[] = [];
+  const f = (async (input: Parameters<typeof fetch>[0]) => {
+    fetched.push(String(input));
+    return new Response('[{"id":1}]', { status: 200 });
+  }) as typeof fetch;
+  const guided = async (owner: string) => {
+    const vault = new MemoryVault();
+    await vault.put(guidedSecretName(ORG, GUIDE), JSON.stringify({ username: 'finanzas@panaderia.ghostaff.ai', password: 'abcd efgh ijkl mnop' }), {});
+    return (orgId: string, agentId: string) => guidedToolsFor(storeFor(owner), vault, orgId, agentId, f);
+  };
+
+  it('the agent it belongs to gets its tool, whatever agents.accounts says; a GET runs, a POST becomes a card', async () => {
+    fetched.length = 0;
+    const told: unknown[] = [];
+    const { call, asked, proposed } = setup({
+      agent: { ...finanzas, accounts: [] },
+      guidedToolsFor: await guided(AGENT),
+      write: async ({ tools: t, onText }) => {
+        told.push(await t.run('xwordpress_request', { method: 'GET', path: '/wp/v2/posts' }));
+        told.push(await t.run('xwordpress_request', { method: 'POST', path: '/wp/v2/posts', body: { title: 'Pan' } }));
+        onText('Hecho.');
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    const names = (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
+    expect(names).toContain('xwordpress_request');
+    expect(asked[0]?.system).toContain('WordPress en https://miweb.com/wp-json');
+    expect(told[0]).toMatchObject({ isError: false });
+    expect(fetched).toEqual(['https://miweb.com/wp-json/wp/v2/posts']);
+    expect(proposed).toMatchObject([{ tool: 'xwordpress_request', label: 'WordPress: POST /wp/v2/posts' }]);
+  });
+
+  it('another agent of the same organisation does not get it', async () => {
+    const { call, asked } = setup({
+      guidedToolsFor: await guided(REDES),
+      write: async ({ onText }) => onText('Vale.'),
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    const names = (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
+    expect(names).not.toContain('xwordpress_request');
+    expect(asked[0]?.system).not.toContain('WordPress');
+  });
+});
+
+describe('guided tools that cannot be read', () => {
+  it('cost the agent only those tools, not the reply', async () => {
+    const { call, updates } = setup({
+      guidedToolsFor: async () => {
+        throw new Error('database down');
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(updates.at(-1)).toMatchObject({ state: 'done', text: 'Vamos bien.' });
   });
 });

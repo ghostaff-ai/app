@@ -177,3 +177,53 @@ describe('approving a settings change (agent-settings.md)', () => {
     expect(r.status).toBe('pending');
   });
 });
+
+describe('approving a write through a guided access', () => {
+  const FINANZAS = '20000000-0000-0000-0000-000000000001';
+  const record = (agentId: string | null): ActionRecord => ({
+    id: ACTION,
+    orgId: ORG,
+    threadId: 't',
+    messageId: 'm',
+    agentId,
+    tool: 'xwordpress_request',
+    input: { method: 'POST', path: '/wp/v2/posts', body: { title: 'Pan' } },
+    label: 'WordPress: POST /wp/v2/posts',
+    status: 'pending',
+    messageState: 'done',
+  });
+  const store = (r: ActionRecord): ActionStore => ({
+    membership: async () => ({ role: 'owner', displayName: 'Ana' }),
+    action: async () => r,
+    claim: async (_id, to) => {
+      r.status = to;
+      return true;
+    },
+    settle: async (_id, status) => {
+      r.status = status;
+    },
+    updateCard: async () => {},
+  });
+  const guidedOf = (asked: string[]) => async (orgId: string, agentId: string): Promise<AgentTools> => {
+    asked.push(`${orgId}/${agentId}`);
+    return {
+      ...NO_TOOLS,
+      specs: [{ name: 'xwordpress_request', description: '', input_schema: { type: 'object', properties: {} } }],
+      run: async (name) => (name === 'xwordpress_request' ? { content: 'HTTP 201', isError: false } : NO_TOOLS.run(name, {})),
+    };
+  };
+
+  it('runs with the tools of the agent that proposed it', async () => {
+    const asked: string[] = [];
+    const out = await approveAction({ actions: store(record(FINANZAS)), toolsFor: async () => NO_TOOLS, guidedToolsFor: guidedOf(asked) }, 'ana', ACTION);
+    expect(out).toEqual({ status: 'done', result: 'HTTP 201' });
+    expect(asked).toEqual([`${ORG}/${FINANZAS}`]);
+  });
+
+  it('an action with no agent gets no guided tools', async () => {
+    const asked: string[] = [];
+    const out = await approveAction({ actions: store(record(null)), toolsFor: async () => NO_TOOLS, guidedToolsFor: guidedOf(asked) }, 'ana', ACTION);
+    expect(out.status).toBe('failed');
+    expect(asked).toEqual([]);
+  });
+});

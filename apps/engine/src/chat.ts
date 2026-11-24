@@ -22,7 +22,7 @@ import { askRunner } from './runner';
 import { isMainAgent } from '@ghostaff/shared/services';
 import { NOTHING_NEW } from './runner';
 import { type AsPerson, settingsTools } from './settings';
-import { type AgentTools, mergeTools, restrictTo } from './tools';
+import { type AgentTools, mergeTools, NO_TOOLS, restrictTo } from './tools';
 
 export type Level = 'none' | 'read' | 'talk';
 
@@ -175,6 +175,8 @@ export interface ChatDeps {
   jobs?: JobDeps;
   /** An agent asking for an account it lacks (accountAsks.ts); without it agents cannot ask. */
   asks?: AskStore;
+  /** The tools of one agent's guided accesses (guidedAccounts.ts); without it no agent has any. */
+  guidedToolsFor?(orgId: string, agentId: string): Promise<AgentTools>;
   /** How often the growing text is written to the database. */
   flushMs?: number;
   now?: () => number;
@@ -361,7 +363,7 @@ async function writeReply(
         }
         return asked.outcome;
       }
-      if (!tools.writes(name)) return tools.run(name, input);
+      if (!tools.writes(name, input)) return tools.run(name, input);
       if (typeof input !== 'object' || input === null || Array.isArray(input)) {
         return { content: 'La entrada de la herramienta tiene que ser un objeto.', isError: true };
       }
@@ -490,8 +492,9 @@ async function recordUse(
 
 /**
  * What the organisation's agents can reach in a reply: each gets the accounts
- * an owner let it use; the main agent also the settings, read as whoever
- * asked; every agent the tool to ask for an account it lacks.
+ * an owner let it use, and its own guided accesses; the main agent also the
+ * settings, read as whoever asked; every agent the tool to ask for an account
+ * it lacks.
  */
 async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | undefined) {
   const [names, orgName, agents, tools] = await Promise.all([
@@ -501,8 +504,17 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
     deps.toolsFor(orgId),
   ]);
   const now = new Date(deps.now ? deps.now() : Date.now());
-  const reachOf = (who: ChatAgent, broughtInto?: string): { tools: AgentTools; system: string } => {
+  const reachOf = async (who: ChatAgent, broughtInto?: string): Promise<{ tools: AgentTools; system: string }> => {
     let mine = restrictTo(tools, who.accounts);
+    // A guided access is this agent's own identity in the app: only it gets the tool, whatever agents.accounts says.
+    // Reading them failing must not cost the reply, which has already started.
+    if (deps.guidedToolsFor) {
+      const guided = await deps.guidedToolsFor(orgId, who.id).catch((e: unknown) => {
+        console.error('guided tools failed', e instanceof Error ? e.name : typeof e);
+        return NO_TOOLS;
+      });
+      mine = mergeTools(mine, guided);
+    }
     // Settings read as whoever asked: none in a turn nobody asked for (a routine's, agent-routines.md decision 3).
     const asked = !!deps.asPerson && !!accessToken;
     const settings = isMainAgent(who) && asked;
@@ -542,7 +554,7 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
     if (messages.length === 0) {
       const replyId = await deps.chat.startReply(thread, agent, ['Presentándome']);
       if (!replyId) break;
-      const mine = reachOf(agent);
+      const mine = await reachOf(agent);
       await writeReply(deps, replyId, agent, mine.system, [introTurn(orgName)], mine.tools, { threadId: thread.id, userId }, 'Presentándome');
       replied = true;
       continue;
@@ -570,7 +582,7 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
       }
       // A second agent reads the first one's answer too.
       const history = i === 0 ? messages : await deps.chat.recentMessages(thread.id, 40);
-      const mine = reachOf(who, who.id === agent.id ? undefined : agent.name);
+      const mine = await reachOf(who, who.id === agent.id ? undefined : agent.name);
       await writeReply(deps, replyId, who, mine.system, toTurns(history, who.id), mine.tools, { threadId: thread.id, userId });
       replied = true;
     }
@@ -622,7 +634,7 @@ export async function resumeAfterAccount(
   await deps.asks.updateCard(ask.messageId, ask.id, { status: 'done', doneBy: who });
   const threadAgent = agent.id === thread.agentId ? null : await deps.chat.agent(thread.agentId);
   const { reachOf } = await orgReach(deps, thread.orgId, accessToken);
-  const mine = reachOf(agent, threadAgent?.name);
+  const mine = await reachOf(agent, threadAgent?.name);
   const turns = toTurns(await deps.chat.recentMessages(thread.id, 40), agent.id);
   const goOn = `${who}: Ya tienes acceso a ${ask.name}. Sigue con lo que se te pidió.`;
   const lastTurn = turns[turns.length - 1];

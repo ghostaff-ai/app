@@ -1,5 +1,6 @@
+import { createServer } from 'node:net';
 import { describe, expect, it } from 'vitest';
-import { isPublicAddress, publicLookup } from '../src/publicFetch';
+import { fetchPublic, isPublicAddress, publicLookup } from '../src/publicFetch';
 
 describe('isPublicAddress', () => {
   it('refuses private, loopback, link-local, shared and reserved addresses', () => {
@@ -72,5 +73,31 @@ describe('publicLookup', () => {
       lookup('videos.example.com', {}, (...args) => resolve(args));
     });
     expect(got).toEqual([null, '8.8.8.8', 4]);
+  });
+});
+
+describe('fetchPublic', () => {
+  // The system resolver is skipped for an address written as an IP, so the
+  // lookup alone never sees it: the connection itself must refuse it.
+  it('refuses an address written as a private IP without connecting, redirects included', async () => {
+    let connections = 0;
+    const server = createServer((socket) => {
+      connections += 1;
+      socket.destroy();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as { port: number };
+    try {
+      for (const url of [`https://127.0.0.1:${port}/`, `http://127.0.0.1:${port}/`, `https://[::1]:${port}/`, 'https://192.168.1.10/']) {
+        const err = await fetchPublic(url, { signal: AbortSignal.timeout(2000) }).then(
+          () => null,
+          (e: unknown) => e as { cause?: { code?: string } },
+        );
+        expect(err?.cause?.code, url).toBe('ENOTPUBLIC');
+      }
+      expect(connections).toBe(0);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

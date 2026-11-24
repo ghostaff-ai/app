@@ -15,6 +15,7 @@ import { supabaseStore } from './connections';
 import { spawnSetupToken } from './claudeCode';
 import { CONNECTORS } from '@ghostaff/shared';
 import { googleOAuth, googleTools } from './google';
+import { guidedToolsFor, supabaseGuidedStore } from './guidedAccounts';
 import { googleBusinessTools } from './googleBusiness';
 import { googleInsightsTools } from './googleInsights';
 import { instagramOAuth, instagramTools } from './instagram';
@@ -201,6 +202,9 @@ const jobs = {
     if (org && canReach(recordSync, org)) console.log((await syncOrg(recordSync, org)).summary);
   },
 };
+// An agent's own accesses to an app with an API, given through a guide (guidedAccounts.ts).
+const guided = supabaseGuidedStore(admin);
+const guidedTools = (orgId: string, agentId: string) => guidedToolsFor(guided, vault, orgId, agentId);
 const chatDeps: ChatDeps = {
   chat: supabaseChatStore(admin),
   writerFor: writerFactory(vault, cloudToken),
@@ -209,6 +213,7 @@ const chatDeps: ChatDeps = {
   asPerson,
   jobs,
   asks: supabaseAskStore(admin),
+  guidedToolsFor: guidedTools,
 };
 // Voice notes' transcripts: Gemini on Vertex AI in the EU, billed to Ghostaff's own project (transcribe.ts).
 const gcpProject = process.env.GCP_PROJECT;
@@ -238,7 +243,7 @@ const app = createApp({
   voice: supabaseVoiceNoteStore(admin),
   transcriber,
   accounts,
-  actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId), asPerson },
+  actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId), guidedToolsFor: guidedTools, asPerson },
   cron: {
     callerFromToken: caller,
     audience: publicUrl,
