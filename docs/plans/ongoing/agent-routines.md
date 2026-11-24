@@ -80,6 +80,18 @@ Routines are settings: defined once in `packages/shared/src/services/settings.ts
 - [ ] App: clock, list, form, agent page row, routine line in the chat
 - [ ] End-to-end flow in `.maestro/flows/ci/`
 - [ ] Landed on beta and checked with a real routine
+- [ ] Next stage: the engine picks each turn's kind (below)
+
+### Next stage: the engine picks the turn, not the agent's runner
+
+Jaime (2026-11-24). Today a routine runs however its agent runs: one of a `chat` agent is one model call in the engine, in seconds; one of an agent on our runner starts `agent-runner` every time (a container, a clone of the record, Claude Code for up to `maxTurns`, minutes, and only on a Claude subscription). A routine of Legal that only reads and answers («¿hay novedades en el BOE sobre el juego?») pays a container it does not need.
+
+That is half of [agent-memory.md](../ready/agent-memory.md) decision 3: «whether a turn runs as a quick model call or in a container is the engine's choice, by what the turn needs». To decide when this stage starts, against that day's code:
+
+- **What decides**: a rule (the turn needs the record's files, or writes them → container; otherwise a chat turn), the model itself choosing a tool that hands off to the runner, or a field on the routine set when it is made.
+- **What a chat turn of a runner agent gets**: its instructions (`agents.task`, projected from the record), its memory stores once [agent-memory.md](../ready/agent-memory.md) lands, and the connected accounts' tools; no clone.
+- **The same for messages, not only routines**: a person writing to Legal also starts a container today.
+- **Measure first**: per routine run, origin, runner, time and tokens (`agent_runs`, the AI account's card), so the saving is seen, not guessed.
 
 ## Decisions
 
