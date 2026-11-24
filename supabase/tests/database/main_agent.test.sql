@@ -2,7 +2,7 @@
 -- the database keeps it that way, and nobody removes it. Órdago and the
 -- organisations that predate the role are brought in by ensure_main_agent.
 begin;
-select plan(21);
+select plan(22);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000e1', 'olga@example.com');
@@ -73,6 +73,9 @@ select is(
 select is(
   (select count(*)::int from public.agents where org_id = '00000000-0000-0000-0000-0000000000f1'),
   1, '... without a new agent');
+select is(
+  (select is_main from public.agents where id = '00000000-0000-0000-0000-0000000000a1'),
+  true, '... and that row is now is_main');
 
 -- 2. Only a job agent drawn as secretaria (Órdago's Correo): a new chat main agent, Correo untouched.
 insert into public.agents (id, org_id, name, ghost, department, slug, runner, task, model, tools, max_turns)

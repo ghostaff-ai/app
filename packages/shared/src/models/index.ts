@@ -210,7 +210,7 @@ export type AgentGhost = (typeof AGENT_GHOSTS)[number];
  */
 export const AGENT_JOBS: Record<AgentGhost, { label: string; job: string }> = {
   base: { label: 'Agente', job: 'Un agente del equipo.' },
-  secretaria: { label: 'Secretaría', job: 'Lleva tu equipo: crea contigo los agentes que necesitas y conoce cómo trabaja la empresa.' },
+  secretaria: { label: 'Secretaría', job: 'Que no se escape nada: lee el correo y te trae solo lo que necesita de ti.' },
   incorporacion: { label: 'Incorporación', job: 'Monta el registro de la organización con lo que ya tenéis, y guarda lo nuevo que llegue.' },
   finanzas: { label: 'Finanzas', job: 'El libro al día, con un documento detrás de cada euro.' },
   redes: { label: 'Redes', job: 'Hace crecer vuestras redes, aprendiendo qué funciona.' },
@@ -222,6 +222,9 @@ export const AGENT_JOBS: Record<AgentGhost, { label: string; job: string }> = {
  * `hire_main_agent`, with a comment pointing here.
  */
 export const MAIN_AGENT_NAME = 'Secretaría';
+
+/** The main agent's one-line job, by role: any agent drawn as the secretaria ghost keeps the ghost's own line. */
+export const MAIN_AGENT_JOB = 'Lleva tu equipo: crea contigo los agentes que necesitas y conoce cómo trabaja la empresa.';
 
 export interface Agent {
   id: string;

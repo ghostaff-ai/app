@@ -1,5 +1,5 @@
 import type { Agent } from '@ghostaff/shared';
-import { deleteAgent, getAgent } from '@ghostaff/shared/services';
+import { agentJob, deleteAgent, getAgent } from '@ghostaff/shared/services';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
@@ -81,7 +81,7 @@ export default function Agente() {
         <Text className="text-center text-footnote font-medium text-muted">
           {DEPARTMENT_NAMES[agent.department]}, {g.label.toLowerCase()}
         </Text>
-        <Text className="mt-1.5 text-center text-[17px] leading-6 text-ink">{g.job}</Text>
+        <Text className="mt-1.5 text-center text-[17px] leading-6 text-ink">{agentJob(agent)}</Text>
 
         {level === 'talk' ? (
           <ListSection>

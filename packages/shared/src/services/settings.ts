@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ACCOUNT_PROVIDERS, type AccountProvider, connectorFor } from '../connectors';
-import { AGENT_GHOSTS, AGENT_LEVELS, type AgentGhost, type AgentLevel, CONVERSATION_VISIBILITIES, type ConversationVisibility, type Department, DEPARTMENTS } from '../models';
+import { AGENT_GHOSTS, AGENT_JOBS, AGENT_LEVELS, type AgentGhost, type AgentLevel, CONVERSATION_VISIBILITIES, type ConversationVisibility, type Department, DEPARTMENTS, MAIN_AGENT_JOB } from '../models';
 import { ALL_WEEKDAYS, describeWhen, invalidWhen, MAX_ROUTINES_PER_PERSON, type Routine, type RoutineAudience, type Weekday } from '../routines';
 import {
   createAgent,
@@ -690,4 +690,9 @@ export const ENGINE_SETTINGS: Record<string, FunctionReach> = {
 /** The organisation's main agent, the one that changes its settings: a role (`agents.is_main`), not a ghost. */
 export function isMainAgent(a: { isMain?: boolean | null }): boolean {
   return a.isMain === true;
+}
+
+/** An agent's one-line job: the main agent's by role, any other agent's by its ghost. */
+export function agentJob(a: { ghost: AgentGhost; isMain?: boolean | null }): string {
+  return isMainAgent(a) ? MAIN_AGENT_JOB : AGENT_JOBS[a.ghost]?.job ?? '';
 }

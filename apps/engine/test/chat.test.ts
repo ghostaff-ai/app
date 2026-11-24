@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@ghostaff/shared';
+import { AGENT_JOBS, type ChatMessage, MAIN_AGENT_JOB } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { type AiAccount, AiFailure, type AiUse, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, whoAnswers, type Writer } from '../src/chat';
@@ -470,6 +470,18 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     expect(names).toContain('settings_agent_accounts');
     expect(tokens).toEqual(['token-ana']);
     expect(asked[0]?.system).toContain('agente principal');
+  });
+
+  it('tells the main agent its job by role, and a Correo drawn as the secretaria ghost the mail line', async () => {
+    const main = setup({ agent: secretaria });
+    await main.call('ana', `/threads/${THREAD}/reply`);
+    expect(main.asked[0]?.system).toContain(MAIN_AGENT_JOB);
+
+    const correo: ChatAgent = { ...secretaria, name: 'Correo', isMain: false };
+    const other = setup({ agent: correo });
+    await other.call('ana', `/threads/${THREAD}/reply`);
+    expect(other.asked[0]?.system).toContain(AGENT_JOBS.secretaria.job);
+    expect(other.asked[0]?.system).not.toContain(MAIN_AGENT_JOB);
   });
 
   it('gives any other agent only the tools for its own routines (agent-routines.md)', async () => {

@@ -6,7 +6,8 @@
 // The rules (docs/plans/ready/agent-memory.md):
 // - the engine, Forgejo's admin, writes anything: it writes for people, after their OK;
 // - no agent changes an `AGENTS.md`: instructions change only through an owner;
-// - `memoria/empresa/` only the agents that keep the company's memory (Secretaría);
+// - `memoria/empresa/` only the main agent may push there, once it runs on our runner (today it is a
+//   chat agent, so no agent can: people change it from Ghostaff);
 // - in `memoria/agentes/`, each agent only its own folder;
 // - only `main`, never deleted.
 //
@@ -51,7 +52,7 @@ while read -r old new ref; do
     case "$f" in
       '') ;;
       AGENTS.md|*/AGENTS.md) deny "las instrucciones ($f) solo las cambia una persona desde Ghostaff. Propón el cambio en tu respuesta." ;;
-      memoria/empresa/*) [ "$company" = yes ] || deny "la memoria de la empresa ($f) la guarda Secretaría. Pídeselo mencionándola." ;;
+      memoria/empresa/*) [ "$company" = yes ] || deny "la memoria de la empresa ($f) la cambian las personas desde Ghostaff." ;;
       memoria/agentes/"$own"/*) ;;
       memoria/agentes/*) deny "esa memoria ($f) es de otro agente." ;;
       memoria/*) deny "en memoria/ solo escribes en memoria/agentes/$own/ ($f)." ;;

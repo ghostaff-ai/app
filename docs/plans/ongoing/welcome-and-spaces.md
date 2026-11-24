@@ -75,7 +75,7 @@ The native app is not held back by the web: the tabs are the system's own (`Nati
 
 ### Secretaría starts on her own
 
-- **Hired with the space.** `create_organization` and `create_personal_space` call `hire_main_agent`, which inserts her agent (ghost `secretaria`, `is_main`, department `direccion`, name «Secretaría») in the same transaction as the space, so no space exists without her. Spaces created before this keep their team as it is.
+- **Hired with the space.** `create_organization` and `create_personal_space` call `hire_main_agent`, which inserts her agent (ghost `secretaria`, `is_main`, department `direccion`, name «Secretaría») in the same transaction as the space, so no space exists without her. Spaces created before this got her too, from the `20261126200000_main_agent.sql` migration, which gives every organisation a main agent.
 - **She says hello once the AI is there.** Her first thread needs a working AI account, which a new space gets one step later (`conectar-ia`). So the first time an owner opens Hoy in a space whose AI can run agents and whose Secretaría has never spoken (no thread), the app calls `agentHello` for her once, as `contratar` does today. Hoy then shows her sentence and her thread. A failure leaves Hoy as it is and is tried again on the next visit.
 - **Members** never trigger the hello (only owners hire); they see Hoy as today.
 
