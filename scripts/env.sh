@@ -23,6 +23,9 @@ case "${1:-}" in
 esac
 
 export GHOSTAFF_ENV=$1
+# Customers' Google Cloud: one service account per organisation, in a project of its own where the
+# engine administers service accounts and nothing else (docs/architecture.md, «A customer's Google Cloud»).
+export TENANTS_P="ghostaff-tenants-$1"
 export R=europe-west1
 export SUPABASE_URL="https://$SUPABASE_REF.supabase.co"
 # Cloud Run's deterministic URL for a service named `engine`, known before the first deploy.

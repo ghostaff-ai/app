@@ -464,7 +464,6 @@ describe('the sign-in over a real WebSocket', () => {
       vault,
       checks: {} as never,
       userFromToken: async (t) => (t === 'token-ana' ? 'ana' : null),
-      serviceAccount: '',
       chat: { chat: {} as never, writerFor: async () => async () => {}, toolsFor: async () => NO_TOOLS },
       accounts: {} as never,
       actions: {} as never,

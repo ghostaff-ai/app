@@ -24,10 +24,12 @@ expect beta DEPLOY_BRANCH develop
 expect beta WIF_PROVIDER projects/1002624835789/locations/global/workloadIdentityPools/github/providers/ghostaff-app
 expect beta DEPLOYER_SA deployer@ghostaff-beta.iam.gserviceaccount.com
 expect beta R europe-west1
+expect beta TENANTS_P ghostaff-tenants-beta
 
 expect prod P ghostaff-prod
 expect prod PROJECT_NUMBER 664656500315
 expect prod ENGINE_URL https://engine-664656500315.europe-west1.run.app
+expect prod TENANTS_P ghostaff-tenants-prod
 expect prod SUPABASE_REF krhhndjjqmmkzjmwwazv
 expect prod SUPABASE_URL https://krhhndjjqmmkzjmwwazv.supabase.co
 expect prod DEPLOY_BRANCH main

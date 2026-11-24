@@ -98,7 +98,6 @@ function setup(opts: { grantScopes?: string[]; now?: () => Date; exchangeFails?:
     vault,
     checks: {} as never,
     userFromToken: async (t) => (t.startsWith('token-') ? t.slice(6) : null),
-    serviceAccount: 'x',
     chat: { chat: {} as never, writerFor: async () => async () => {}, toolsFor: async () => NO_TOOLS },
     accounts: deps,
     actions: {} as never,

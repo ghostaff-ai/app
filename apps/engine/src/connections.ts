@@ -52,7 +52,8 @@ export interface Store {
 export interface Checks {
   anthropic(key: string): Promise<CheckResult>;
   openai(key: string): Promise<CheckResult>;
-  vertex(project: string): Promise<CheckResult>;
+  /** Whether the organisation's own Google Cloud account may call Claude on Vertex AI in that project (cloudAccounts.ts). */
+  vertex(orgId: string, project: string): Promise<CheckResult>;
 }
 
 export interface Deps {
@@ -127,7 +128,7 @@ export async function connectAi(deps: Deps, userId: string, body: unknown): Prom
     const region = typeof input.region === 'string' ? input.region.trim() : '';
     if (!looksLikeProject(project)) throw new Refusal(400, 'bad_project', 'not a Google Cloud project ID');
     if (!isEuRegion(region)) throw new Refusal(400, 'bad_region', 'not an EU region we support');
-    refuseFailedCheck(await deps.checks.vertex(project));
+    refuseFailedCheck(await deps.checks.vertex(orgId, project));
     return deps.store.insert({ ...base, method: 'cloud_project', hint: project, settings: { project, region } });
   }
 

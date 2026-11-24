@@ -1,31 +1,33 @@
 # A customer's Google Cloud, reached as that organisation's own service account
 
-**Priority:** high — Órdago's agents read BigQuery and write buckets in `ordago-prod`, and none of that can move to Ghostaff without it; today's Vertex connection already shares one identity across customers
-**Gate:** decision:Jaime confirms an account per organisation, in a `ghostaff-tenants-<env>` project of its own (proposed 2026-11-24)
-**Next:** create `ghostaff-tenants-beta` with the engine as its only service-account admin (`scripts/setup-env.sh`)
+**Priority:** high — Órdago's agents read BigQuery and write buckets in `ordago-prod`, and none of that can move to Ghostaff without it, and every other Google Cloud use must not share one identity across customers as Vertex did
+**Gate:** none
+**Next:** once `feat/customer-cloud-access` lands, run `bash scripts/setup-env.sh beta` (it creates `ghostaff-tenants-beta`), then connect Claude on Vertex on the beta to try it; then the runner's token
 
-The design is in [architecture.md](../../architecture.md#target-a-customers-google-cloud); this plan is the work. Jaime (2026-11-24): Órdago runs on Ghostaff as any customer would, and a customer with data in its own BigQuery can give an agent that data without Ghostaff holding one identity that reaches every customer.
+The design is in [architecture.md](../../architecture.md#a-customers-google-cloud); this plan is the work. Jaime (2026-11-24): Órdago runs on Ghostaff as any customer would, and a customer with data in its own BigQuery can give an agent that data without Ghostaff holding one identity that reaches every customer.
 
 ## Decisions
 
-1. **One service account per organisation**, `org-<id>@ghostaff-tenants-<env>.iam.gserviceaccount.com`, created when an owner first connects Google Cloud. Not per agent yet: every agent of the organisation shares its grants. *(Proposed; confirm.)*
-2. **The accounts live in `ghostaff-tenants-beta` and `ghostaff-tenants-prod`**, where the engine is service-account admin and nothing else, so that role cannot reach `engine@`, `runner@` or `deployer@`. *(Proposed; confirm.)*
+1. **One service account per organisation**, `org-<first 24 hex digits of its id>@ghostaff-tenants-<env>.iam.gserviceaccount.com`, created when an owner first connects Google Cloud. Not per agent yet: every agent of the organisation shares its grants (Jaime, 2026-11-24).
+2. **The accounts live in `ghostaff-tenants-beta` and `ghostaff-tenants-prod`**, where the engine is service-account admin and nothing else, so that role cannot reach `engine@`, `runner@` or `deployer@` (Jaime, 2026-11-24).
 3. **The engine grants itself token creator on each account it creates**, on that account only. `runner@` gets nothing.
 4. **A run gets a one-hour access token** in its spec, beside the record's, with an endpoint to renew it for longer runs (as `POST /runs/:id/record-token`).
 5. **The grant is checked as the organisation's account**, with its own token, never as `engine@`.
-6. **Vertex AI for chat moves to the same account**: one Google Cloud connection per organisation serves both Claude on Vertex and the agents' data.
+6. **Vertex AI for chat moves to the same account**: one Google Cloud identity per organisation serves both Claude on Vertex and the agents' data. No Vertex connection existed on beta or production (checked 2026-11-24), so nothing had to be reconnected.
+7. **The account lasts as long as the organisation**, not the connection: a customer who removes Vertex and adds it again keeps their grants. It goes with the organisation, once deleting an organisation exists.
 
 ## Tasks
 
-- [ ] **Tenants project.** `setup-env.sh` creates the service-account side of `ghostaff-tenants-<env>` (a founder creates the project by hand, since that needs rights on the Google Cloud organisation; billing only if Google asks for it, as IAM itself is free): enable `iam` and `iamcredentials`, grant `engine@<env project>` `roles/iam.serviceAccountAdmin` there and nothing in the main project. Re-runs create nothing.
-- [ ] **Database.** The Google Cloud connection (today `provider = 'vertex'`) gains the account's email and the customer's project; its region stays for Vertex. Migration and pgTAP: members read it, only the engine writes it.
-- [ ] **Engine, connect.** `POST /connections/ai` for Google Cloud creates `org-<id>@` (idempotent: a retry finds it), grants the engine token creator on it, stores the connection, and returns the account's email and the commands to run. Removing it deletes the account.
-- [ ] **Engine, check.** «Comprobar» mints a token as the account and asks the customer's project which of the expected permissions it holds (`testIamPermissions` on the project, BigQuery `datasets.get` on a named dataset); the answer is shown, never cached as proof.
-- [ ] **Engine, runs.** The spec carries `google: { project, token, expiresAt }` when the organisation has the connection; `POST /runs/:id/google-token` renews it.
-- [ ] **Engine, chat.** Vertex replies use the organisation's account token instead of `engine@`'s. Before merging, list the Vertex connections in each Supabase: any made with `engine@` needs its owner to grant the new account (the app says so on the card).
+- [x] **Tenants project** (`feat/customer-cloud-access`): `scripts/setup-env.sh` creates `ghostaff-tenants-<env>` (`TENANTS_P` in `scripts/env.sh`) with only `iam` and `iamcredentials`, and makes `engine@<env project>` its service-account admin; `deploy-engine.sh` passes `TENANTS_PROJECT`. **Not run yet** on either environment.
+- [x] **Database**: `cloud_accounts` (organisation, email, Google's unique id), closed to every app role, pgTAP `cloud_accounts.test.sql`.
+- [x] **Engine** (`apps/engine/src/cloudAccounts.ts`): creates the account once (a half-done attempt is finished by the next; an account with its name made for another organisation is never adopted), lets only the engine act as it, mints one-hour tokens. `POST /cloud-account` gives an owner the email, creating it if need be; `GET /identity` (the shared `engine@`) is gone.
+- [x] **Engine, chat**: Vertex is checked and called as the organisation's account (`server.ts` `checkVertexAs`, `chatStore.ts` `writerFactory`).
+- [x] **App**: the Vertex form shows the organisation's own account to grant.
+- [ ] **Set up**: `bash scripts/setup-env.sh beta`, then `prod` (each creates its tenants project); try Claude on Vertex on the beta with a real project.
+- [ ] **Runs.** The spec carries `google: { project, token, expiresAt }` when the organisation has a Google Cloud connection for data; `POST /runs/:id/google-token` renews it. A fresh token per run (`mintCloudToken`), never the engine's cached one.
 - [ ] **Runner.** The image gains the Google Cloud CLI (`gcloud`, `bq`); the agent's environment points `gcloud` at the token (`CLOUDSDK_AUTH_ACCESS_TOKEN_FILE` in its throwaway HOME) and its default project at the customer's. Check that `bq` honours it before relying on it; the redaction of secrets in reports covers the token.
-- [ ] **App.** Conexiones → Google Cloud: the account's email, the commands to grant it (copyable), «Comprobar» and what it found, and a line for organisations whose policy restricts sharing to their own domain.
-- [ ] **Órdago as the first customer.** In `ordago-prod` and `ordago-media`, grant `org-<órdago>@` the union of what the agents' accounts hold today ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md#what-each-agent-needs)), and check it from the app.
+- [ ] **App, data.** Conexiones → Google Cloud for data (not only Vertex): the account's email, the commands to grant it (copyable), «Comprobar» (asked as the account: `testIamPermissions`, BigQuery `datasets.get`) and what it found, and a line for organisations whose policy restricts sharing to their own domain.
+- [ ] **Órdago as the first customer.** In `ordago-prod` and `ordago-media`, grant Órdago's account the union of what the agents' accounts hold today ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md#what-each-agent-needs)), and check it from the app.
 
 ## Later
 

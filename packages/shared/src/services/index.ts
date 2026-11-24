@@ -787,9 +787,12 @@ export async function voiceNoteUrl(client: SupabaseClient, path: string): Promis
   return data.signedUrl;
 }
 
-/** The service account a customer grants Vertex AI access to on their own project. */
-export async function getEngineIdentity(engine: EngineAccess): Promise<{ serviceAccount: string }> {
-  return callEngine(engine, 'GET', '/identity');
+/**
+ * The organisation's own Google Cloud account, which a customer grants roles
+ * to on their project; the engine creates it the first time. Owners only.
+ */
+export async function getCloudAccount(engine: EngineAccess, orgId: string): Promise<{ email: string }> {
+  return callEngine(engine, 'POST', '/cloud-account', { orgId });
 }
 
 // Agents. Members read the agents they may see (not those set to «none» for

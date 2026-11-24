@@ -22,7 +22,8 @@ import { tiktokOAuth, tiktokTools } from './tiktok';
 import { mcpOAuth } from './mcp';
 import { appClient } from './apps';
 import { microsoftOAuth, microsoftTools } from './microsoft';
-import { checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
+import { type CheckResult, checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
+import { CloudAccountNotReady, type CloudAccountDeps, cloudTokens, ensureCloudAccount, type GoogleCall, supabaseCloudAccountStore } from './cloudAccounts';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
 import { freshRepoToken, repoTokens } from './githubApp';
 import { googleCaller } from './googleCaller';
@@ -54,6 +55,37 @@ const googleRequest: GoogleRequest = async (url, data, opts) => {
   const res = await client.request({ url, method: 'POST', data, validateStatus: () => true, timeout: opts?.timeoutMs });
   return { status: res.status, data: res.data };
 };
+
+// Each organisation's own Google Cloud account, in the environment's tenants project (cloudAccounts.ts).
+const googleCall: GoogleCall = async (method, url, data) => {
+  const client = await auth.getClient();
+  const res = await client.request({ url, method, data, validateStatus: () => true });
+  return { status: res.status, data: res.data };
+};
+const tenantsProject = process.env.TENANTS_PROJECT;
+const engineAccount = process.env.ENGINE_SERVICE_ACCOUNT;
+if (!tenantsProject || !engineAccount) console.warn("Google Cloud accounts off (and Claude on Vertex with them): set TENANTS_PROJECT and ENGINE_SERVICE_ACCOUNT.");
+const cloud: CloudAccountDeps | null =
+  tenantsProject && engineAccount ? { store: supabaseCloudAccountStore(admin), call: googleCall, tenantsProject, engineAccount } : null;
+const cloudToken = cloud ? cloudTokens(cloud) : async () => null;
+/** Whether the organisation's account may call Claude on Vertex AI in the project: asked as that account, never as the engine. */
+async function checkVertexAs(orgId: string, project: string): Promise<CheckResult> {
+  if (!cloud) return { ok: false, reason: 'unavailable', detail: 'Google Cloud accounts are off' };
+  await ensureCloudAccount(cloud, orgId);
+  let token: string | null;
+  try {
+    token = await cloudToken(orgId);
+  } catch (e) {
+    // Just created: Google takes a moment to let the engine act as it. The app says to wait and retry.
+    if (e instanceof CloudAccountNotReady) return { ok: false, reason: 'no_access', detail: 'the organisation’s account is not ready yet' };
+    throw e;
+  }
+  if (!token) return { ok: false, reason: 'unavailable', detail: 'no account' };
+  return checkVertexProject(project, async (url, body) => {
+    const res = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return { status: res.status, data: await res.json().catch(() => null) };
+  });
+}
 
 let vault: Vault;
 if (process.env.VAULT === 'memory') {
@@ -158,7 +190,7 @@ const jobs = {
 };
 const chatDeps: ChatDeps = {
   chat: supabaseChatStore(admin),
-  writerFor: writerFactory(vault, auth),
+  writerFor: writerFactory(vault, cloudToken),
   costOf,
   toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
   asPerson,
@@ -179,13 +211,13 @@ const app = createApp({
   checks: {
     anthropic: (key) => checkAnthropicKey(key),
     openai: (key) => checkOpenAiKey(key),
-    vertex: (project) => checkVertexProject(project, googleRequest),
+    vertex: checkVertexAs,
   },
   async userFromToken(token) {
     const { data, error } = await admin.auth.getUser(token);
     return error ? null : (data.user?.id ?? null);
   },
-  serviceAccount: process.env.ENGINE_SERVICE_ACCOUNT ?? '',
+  ...(cloud ? { cloudAccount: (orgId: string) => ensureCloudAccount(cloud, orgId) } : {}),
   chat: chatDeps,
   reports: { callerFromToken: caller, audience: publicUrl },
   claudeSignIn: { spawn: spawnSetupToken },
