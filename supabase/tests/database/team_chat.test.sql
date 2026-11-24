@@ -26,13 +26,16 @@ insert into public.profiles (user_id, full_name) values ('00000000-0000-0000-000
 insert into public.agents (id, org_id, name, ghost, department) values
   ('20000000-0000-0000-0000-000000000009', '10000000-0000-0000-0000-000000000002', 'Finanzas', 'finanzas', 'finanzas');
 
+-- The bakery's main agent, who talks to everyone by default.
+select public.ensure_main_agent('10000000-0000-0000-0000-000000000001');
+
 set local role authenticated;
 
 -- Ana, owner of the bakery, builds her team.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';
 create temporary table ids (name text primary key, id uuid) on commit drop;
 grant all on ids to authenticated;
-insert into ids select 'secretaria', id from public.create_agent('10000000-0000-0000-0000-000000000001', 'Secretaría', 'secretaria', 'direccion');
+insert into ids select 'secretaria', a.id from public.agents a where a.org_id = '10000000-0000-0000-0000-000000000001' and a.is_main;
 insert into ids select 'finanzas', id from public.create_agent('10000000-0000-0000-0000-000000000001', 'Finanzas', 'finanzas', 'finanzas');
 select is(public.agent_level((select id from ids where name = 'finanzas')), 'talk', 'an owner talks to every agent');
 select throws_ok(

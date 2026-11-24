@@ -10,8 +10,12 @@ const MIGRATIONS = fileURLToPath(new URL('../../../supabase/migrations', import.
 function databaseFunctions(): Set<string> {
   const names = new Set<string>();
   for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql'))) {
-    for (const m of readFileSync(join(MIGRATIONS, f), 'utf8').matchAll(/create\s+(?:or\s+replace\s+)?function\s+public\.([a-z_0-9]+)/gi)) {
-      names.add(m[1]!);
+    // In order: a function a later statement drops no longer exists (hire_secretaria, replaced by
+    // hire_main_agent), and one dropped then created again (invite_member) still does.
+    const sql = readFileSync(join(MIGRATIONS, f), 'utf8');
+    for (const m of sql.matchAll(/(create\s+(?:or\s+replace\s+)?|drop\s+(?:if\s+exists\s+)?)function\s+public\.([a-z_0-9]+)/gi)) {
+      if (m[1]!.toLowerCase().startsWith('drop')) names.delete(m[2]!);
+      else names.add(m[2]!);
     }
   }
   return names;

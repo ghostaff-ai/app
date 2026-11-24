@@ -26,9 +26,9 @@ select is(
   (select count(*)::int from public.agents a join public.organizations o on o.id = a.org_id where o.name = 'Taller Dani'),
   1, '... and starts with one agent');
 select results_eq(
-  $$ select a.name, a.ghost, a.department, a.member_default::text from public.agents a
+  $$ select a.name, a.ghost, a.department, a.member_default::text, a.is_main from public.agents a
      join public.organizations o on o.id = a.org_id where o.name = 'Taller Dani' $$,
-  $$ values ('Secretaría'::text, 'secretaria'::text, 'direccion'::text, 'talk'::text) $$,
+  $$ values ('Secretaría'::text, 'secretaria'::text, 'direccion'::text, 'talk'::text, true) $$,
   '... Secretaría, in Dirección, whom members may talk to');
 
 -- His personal space.
@@ -43,8 +43,8 @@ select is(
   (select display_name from public.memberships where org_id = (select id from mine)),
   'Dani Ruiz', '... signing with his profile name');
 select results_eq(
-  $$ select a.ghost from public.agents a where a.org_id = (select id from mine) $$,
-  $$ values ('secretaria'::text) $$,
+  $$ select a.ghost, a.is_main from public.agents a where a.org_id = (select id from mine) $$,
+  $$ values ('secretaria'::text, true) $$,
   '... and Secretaría hired');
 select is(
   (select id from public.create_personal_space()),
