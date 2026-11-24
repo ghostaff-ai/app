@@ -1,8 +1,8 @@
 # Agent memory: folders in the record every agent reads and writes, and a screen to see and fix them
 
 **Priority:** medium — people trust an agent they can check and correct; today the chat agents forget everything outside the conversation, so there is nothing to show yet
-**Gate:** decision:Jaime — the seven decisions below (where memory lives, Ghostaff's own record store first, one kind of agent, the default stores, write access, who edits, the limits)
-**Next:** Jaime picks the decisions below; then write the File Structure and Tasks against that day's code, starting with Ghostaff's own record store if decision 2 holds
+**Gate:** blocked:record-store — every organisation needs a record first (decision 2) (recheck 2026-12-01)
+**Next:** once [record-store.md](../ideas/record-store.md) gives every organisation a record, write the File Structure and Tasks against that day's code, Empresa and agent stores first (decision 7)
 
 **Goal:** Every agent, whether people talk to it or it runs on a timetable, reads and writes memory stores that outlive a conversation; the organisation's and each agent's stores are folders of its record (git), a person's own store is private to them; people see each store in the app and correct or delete what is in it, and feedback given in a chat reaches the agent's next scheduled run.
 
@@ -35,7 +35,7 @@ From [Using agent memory](https://platform.claude.com/docs/en/managed-agents/mem
 
 So Álvaro's files and Managed Agents' stores are the same thing to the agent: folders of small Markdown files, searched by the agent. What we choose is where those folders are kept.
 
-## Design (with my picks; the decisions are below)
+## Design
 
 ### Where each store lives (decision 1)
 
@@ -96,7 +96,7 @@ Owners do not see someone else's Sobre ti. Today only agents' runs clone the rec
 
 **Forgetting is not erasing.** «Olvidar» removes a recuerdo from the head, so no agent reads it again, but git keeps it in the history. Purging it (a secret pasted by mistake, a person who asks to be erased) means rewriting the record's history: our operation through the record store, not a button in the app. That is the cost of git, and one more reason Sobre ti is not in it.
 
-## Open questions (decisions for Jaime)
+## Decisions (Jaime, «OK a todo», 2026-11-24: every pick, the first option of each)
 
 1. **Where memory lives.** (a) Empresa and each agent's store in the record as folders, the database as their projection; Sobre ti in Postgres (my pick). (b) Everything in Postgres, as the previous draft: no record needed, but a second master beside the record, outside the one repo per organisation. (c) Everything in the record, Sobre ti in a repo per person: one place, but a repo per member and per organisation, and the agent's run needs a second clone for each person.
 2. **Ghostaff's own record store first, for every organisation** (my pick: Forgejo on our project in the EU, a repo created with each organisation and personal space). Or, for now, a GitHub repo per organisation created by Ghostaff under our GitHub account, which reuses today's code but keeps the data on GitHub, outside the EU (invariant 2), and means moving every repo again later.
