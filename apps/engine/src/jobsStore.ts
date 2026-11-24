@@ -102,7 +102,7 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
   };
 }
 
-const RUNNER_AGENT = 'id, org_id, slug, name, description, task, model, tools, max_turns, schedule, last_scheduled_at';
+const RUNNER_AGENT = 'id, org_id, slug, name, description, task, task_in_record, model, tools, max_turns, schedule, last_scheduled_at';
 type RunnerAgentRow = {
   id: string;
   org_id: string;
@@ -110,6 +110,7 @@ type RunnerAgentRow = {
   name: string;
   description: string | null;
   task: string;
+  task_in_record: boolean;
   model: string;
   tools: string[];
   max_turns: number;
@@ -123,6 +124,7 @@ const toRunnerAgent = (r: RunnerAgentRow): RunnerAgent => ({
   name: r.name,
   description: r.description,
   task: r.task,
+  taskInRecord: r.task_in_record ?? false,
   model: r.model,
   tools: r.tools ?? [],
   maxTurns: r.max_turns,

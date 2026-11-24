@@ -143,10 +143,10 @@ async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff';
   for (const a of agents) {
     const { data: found, error: e1 } = await db
       .from('agents')
-      .select('id, runner')
+      .select('id, runner, task_in_record')
       .eq('org_id', orgId)
       .eq('slug', a.slug)
-      .maybeSingle<{ id: string; runner: string }>();
+      .maybeSingle<{ id: string; runner: string; task_in_record: boolean }>();
     if (e1) throw e1;
     // A refresh of every agent never moves one back off our runner: that takes saying so (and its job turned back on).
     if (found?.runner === 'ghostaff' && a.runner !== 'ghostaff') {
@@ -154,7 +154,9 @@ async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff';
       continue;
     }
     // Moving onto our runner, its timetable counts from now: the tick starts it at its next fire time, never a missed one.
-    const row = a.runner === 'ghostaff' ? { ...a, last_scheduled_at: new Date().toISOString() } : a;
+    const moved = a.runner === 'ghostaff' ? { ...a, last_scheduled_at: new Date().toISOString() } : a;
+    // Its instructions in the record (agentes/<slug>/AGENTS.md) are the master: the yaml's prompt never replaces them.
+    const row = found?.task_in_record && 'task' in moved ? (({ task: _yaml, ...rest }) => rest)(moved) : moved;
     const { error } = found
       ? await db.from('agents').update(row).eq('id', found.id)
       : await db.from('agents').insert({ ...row, org_id: orgId, member_default: 'read' });

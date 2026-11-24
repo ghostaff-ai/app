@@ -19,6 +19,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { type ChatMessage } from '@ghostaff/shared';
+import { agentInstructionsPath } from '@ghostaff/shared/record';
 import { Cron } from 'croner';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { madridNow } from './chat';
@@ -39,6 +40,8 @@ export interface RunnerAgent {
   name: string;
   description: string | null;
   task: string;
+  /** Whether `task` is the projection of agentes/<slug>/AGENTS.md in the record (recordSync.ts). */
+  taskInRecord: boolean;
   model: string;
   tools: string[];
   maxTurns: number;
@@ -310,6 +313,8 @@ export function composePrompt(p: {
   request: { text: string; from: string } | null;
 }): string {
   const { agent, orgName } = p;
+  const instructions = agentInstructionsPath(agent.slug);
+  const usual = agent.taskInRecord ? `tus instrucciones, en ${instructions}` : 'abajo';
   const parts = [
     `Eres el agente «${agent.name}» de ${orgName}${agent.description ? `: ${agent.description}` : '.'}`,
     'Corres solo, en un container y sin nadie delante: nadie va a contestar preguntas. Decide, y deja escrito por qué.',
@@ -324,7 +329,7 @@ export function composePrompt(p: {
   if (p.request) {
     parts.push(
       `Esta ejecución la ha lanzado ${p.request.from} para hablar contigo desde Ghostaff. Atiende lo que pide: contesta, corrige o haz ` +
-        'lo que pida. Tu tarea habitual (abajo) es tu contexto; no la hagas entera salvo que te lo pida.\n' +
+        `lo que pida. Tu tarea habitual (${usual}) es tu contexto; no la hagas entera salvo que te lo pida.\n` +
         'Antes de acabar, mira qué de lo hablado debe seguir siendo verdad mañana y escríbelo, con commit y push, donde te toca según el ' +
         'AGENTS.md del registro. Si no sale nada duradero, no escribas nada.\n' +
         'Tu último mensaje es lo que le llega en su hilo de Ghostaff: escríbelo para esa persona, corto y con las cifras que importen.\n' +
@@ -336,7 +341,11 @@ export function composePrompt(p: {
         `Si no hay nada que contarles, tu último mensaje es exactamente \`${NOTHING_NEW}\`, sin nada más, y no les llega nada.`,
     );
   }
-  parts.push(`Tu tarea:\n${agent.task}`);
+  parts.push(
+    agent.taskInRecord
+      ? `Tus instrucciones están en \`${instructions}\` del registro: léelas enteras antes de empezar y síguelas.`
+      : `Tu tarea:\n${agent.task}`,
+  );
   return parts.join('\n\n');
 }
 

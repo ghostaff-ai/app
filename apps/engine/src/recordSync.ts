@@ -9,11 +9,13 @@
 // refuses the fast-forward and the next tick tries again on the new head.
 
 import {
+  agentInstructionsPath,
   appendHistoryRow,
   DECISIONS_DIR,
   describeSync,
   HISTORY_PATH,
   historyRow,
+  MAX_INSTRUCTIONS,
   planSync,
   readDecision,
   type RecordFile,
@@ -41,6 +43,15 @@ export interface OrgWithoutRecord {
   name: string;
 }
 
+/** An agent as the sync projects its instructions (agentInstructionsPath). */
+export interface InstructedAgent {
+  id: string;
+  slug: string;
+  task: string | null;
+  /** Whether `task` is the projection of its file in the record. */
+  taskInRecord: boolean;
+}
+
 /** The database as the sync needs it (service role). */
 export interface RecordSyncStore {
   orgsWithRecord(): Promise<RecordOrg[]>;
@@ -51,6 +62,10 @@ export interface RecordSyncStore {
   decisions(orgId: string): Promise<DecisionRow[]>;
   apply(plan: SyncPlan): Promise<void>;
   markWrittenBack(rowIds: string[]): Promise<void>;
+  /** The organisation's agents that have a slug, so a file of their own. */
+  instructedAgents(orgId: string): Promise<InstructedAgent[]>;
+  /** The agent's instructions from its file (`task` set), or its file gone (`task` kept as it was). */
+  setInstructions(agentId: string, change: { task: string; inRecord: true } | { inRecord: false }): Promise<void>;
   /** When the record was last read, and why the last attempt failed (null when it did not). */
   syncState(orgId: string, error: string | null): Promise<void>;
 }
@@ -172,6 +187,30 @@ export interface OrgSyncResult {
   summary: string;
 }
 
+/**
+ * Each agent's `agentes/<slug>/AGENTS.md` read into `agents.task`, the record winning: what the
+ * chat and the app read without a clone. A file too long for the row is left out and named.
+ * Returns what changed, for the tick's summary.
+ */
+export async function projectInstructions(store: RecordSyncStore, repo: RecordRepo, orgId: string, ref: string): Promise<string[]> {
+  const notes: string[] = [];
+  for (const a of await store.instructedAgents(orgId)) {
+    const file = await repo.file(agentInstructionsPath(a.slug), ref);
+    if (file === null) {
+      if (a.taskInRecord) {
+        await store.setInstructions(a.id, { inRecord: false });
+        notes.push(`${a.slug}: instructions file gone, keeps its last`);
+      }
+    } else if (file.length > MAX_INSTRUCTIONS) {
+      notes.push(`${a.slug}: instructions over ${MAX_INSTRUCTIONS} characters, not read`);
+    } else if (file !== a.task || !a.taskInRecord) {
+      await store.setInstructions(a.id, { task: file, inRecord: true });
+      notes.push(`${a.slug}: instructions from the record`);
+    }
+  }
+  return notes;
+}
+
 /** Syncs one organisation's decisions with its record. Never throws: a failure is recorded on the organisation. */
 export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<OrgSyncResult> {
   const now = deps.now?.() ?? new Date();
@@ -185,6 +224,8 @@ export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<Org
     });
     const plan = planSync({ orgId: org.id, files, existing: await deps.store.decisions(org.id), commit: head.sha, now });
     await deps.store.apply(plan);
+    const instructions = await projectInstructions(deps.store, gh, org.id, head.sha);
+    const withInstructions = (summary: string) => [summary, ...instructions].join('\n');
 
     const written: string[] = [];
     if (plan.writeBacks.length) {
@@ -203,13 +244,13 @@ export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<Org
         const ok = await gh.commit(head, changed, `por-decidir: respuestas desde Ghostaff (${written.join(', ')})`);
         if (!ok) {
           await deps.store.syncState(org.id, null);
-          return { org: org.slug, ok: true, summary: `${describeSync(org.slug, plan, [])}\nwrite-back waits: the record moved` };
+          return { org: org.slug, ok: true, summary: withInstructions(`${describeSync(org.slug, plan, [])}\nwrite-back waits: the record moved`) };
         }
         await deps.store.markWrittenBack(plan.writeBacks.filter((w) => written.includes(w.recordId)).map((w) => w.rowId));
       }
     }
     await deps.store.syncState(org.id, null);
-    return { org: org.slug, ok: true, summary: describeSync(org.slug, plan, written) };
+    return { org: org.slug, ok: true, summary: withInstructions(describeSync(org.slug, plan, written)) };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await deps.store.syncState(org.id, msg.slice(0, 500)).catch(() => {});

@@ -24,6 +24,7 @@ const spec = (a: ChatAgent, over: Partial<RunnerAgent> = {}): RunnerAgent => ({
   name: a.name,
   description: 'Dice qué dice la ley.',
   task: 'Revisa la ley del juego.',
+  taskInRecord: false,
   model: 'claude-opus-5-5',
   tools: ['Read', 'Edit', 'WebSearch'],
   maxTurns: 200,
@@ -465,5 +466,14 @@ describe('composePrompt', () => {
     expect(p).toContain('`SIN NOVEDAD`');
     expect(p).toContain('hora de Madrid');
     expect(p).not.toContain('<indicacion>');
+    expect(p).toContain('Tu tarea:\nRevisa la ley del juego.');
+  });
+
+  it('points at agentes/<slug>/AGENTS.md instead of carrying the task when the record holds it', () => {
+    const request = { text: '¿Qué cambió en Navarra?', from: 'Jaime' };
+    const p = composePrompt({ agent: spec(legal, { taskInRecord: true }), orgName: 'Órdago', repo: 'ordago-app/business', now: new Date('2027-01-15T08:00:00Z'), request });
+    expect(p).toContain('Tus instrucciones están en `agentes/legal/AGENTS.md` del registro');
+    expect(p).toContain('Tu tarea habitual (tus instrucciones, en agentes/legal/AGENTS.md)');
+    expect(p).not.toContain('Revisa la ley del juego.');
   });
 });

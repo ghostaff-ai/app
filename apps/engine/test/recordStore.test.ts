@@ -107,6 +107,8 @@ describe('which records this engine reaches', () => {
         apply: async () => {},
         markWrittenBack: async () => {},
         syncState: async () => {},
+        instructedAgents: async () => [],
+        setInstructions: async () => {},
       },
     });
     expect(r).toEqual([]);
@@ -126,9 +128,12 @@ describe('the sync on a record in our record store', () => {
       if (path === '/branches/main') return json({ commit: { id: 'c1' } });
       if (path === '/contents/por-decidir') return json([{ type: 'file', name: 'seo-a.yaml', sha: 'b1' }]);
       if (path === '/git/blobs/b1') return json({ encoding: 'base64', content: Buffer.from(yaml).toString('base64') });
+      if (path === '/contents/agentes/seo/AGENTS.md') return json({ type: 'file', name: 'AGENTS.md', sha: 'b2' });
+      if (path === '/git/blobs/b2') return json({ encoding: 'base64', content: Buffer.from('# SEO\n').toString('base64') });
       return new Response('{}', { status: 404 });
     }) as typeof fetch;
     const applied: unknown[] = [];
+    const instructed: unknown[] = [];
     const r = await syncOrg(
       {
         tokens: null,
@@ -143,12 +148,15 @@ describe('the sync on a record in our record store', () => {
           apply: async (p) => void applied.push(p),
           markWrittenBack: async () => {},
           syncState: async () => {},
+          instructedAgents: async () => [{ id: 'a-seo', slug: 'seo', task: null, taskInRecord: false }],
+          setInstructions: async (id, change) => void instructed.push([id, change]),
         },
       },
       OWN,
     );
     expect(r.ok).toBe(true);
     expect((applied[0] as { upserts: { record_id: string }[] }).upserts.map((u) => u.record_id)).toEqual(['seo-a']);
+    expect(instructed).toEqual([['a-seo', { task: '# SEO\n', inRecord: true }]]);
     expect(seen.every((x) => x.startsWith('GET http://10.0.0.5:3000/api/v1/') && x.endsWith('token adm'))).toBe(true);
   });
 });
