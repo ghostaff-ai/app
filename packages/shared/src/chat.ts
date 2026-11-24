@@ -83,6 +83,8 @@ export type GuidePart = {
   decidedBy?: string;
   /** Why it cannot go on, when blocked. */
   blockedReason?: string;
+  /** The catalogue's connector that took over, when handed over: the card shows its connect button. */
+  connector?: string;
 };
 
 export function isGuidePart(p: MessagePart): p is GuidePart & MessagePart {

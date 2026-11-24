@@ -32,7 +32,9 @@ export type GuideHistoryEntry =
   | { type: 'step'; step: GuideStep }
   | { type: 'answer'; answer: GuideAnswer }
   /** The person sent a photo here; the photo itself is not kept. */
-  | { type: 'photo' };
+  | { type: 'photo' }
+  /** The check passed here. `base` is the address it passed on (never a secret), kept for an owner's approval. */
+  | { type: 'checked'; base: string };
 
 /** What the model reads about a guide (Task 5 builds it from the row). */
 export interface GuideState {
@@ -71,7 +73,7 @@ export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 export class GuideInputError extends Error {}
 
 const UNREADABLE_PHOTO = 'Esa foto no se puede leer. Prueba con otra.';
-const PHOTO_TOO_BIG = 'Esa foto es demasiado grande. Prueba con una captura más pequeña.';
+export const PHOTO_TOO_BIG = 'Esa foto es demasiado grande. Prueba con una captura más pequeña.';
 
 /**
  * Whether a photo is a JPEG the model can read: the media type, strict base64,
@@ -247,6 +249,8 @@ function historyLine(entry: GuideHistoryEntry): string | null {
     }
     case 'photo':
       return 'La persona mandó una foto de su pantalla (ya no la tienes).';
+    case 'checked':
+      return 'Ghostaff comprobó el acceso: funciona.';
     default:
       return null;
   }

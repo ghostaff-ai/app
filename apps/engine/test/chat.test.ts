@@ -757,7 +757,7 @@ describe('an agent asking for an account it lacks (connector-in-chat.md)', () =>
 
 describe('a guided access in the chat', () => {
   const GUIDE = '60000000-0000-0000-0000-000000000001';
-  const storeFor = (agentId: string): GuidedStore => ({
+  const storeFor = (agentId: string): Pick<GuidedStore, 'accesses'> => ({
     accesses: async (orgId, wanted) =>
       [
         {

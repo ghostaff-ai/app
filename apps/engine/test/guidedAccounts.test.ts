@@ -221,7 +221,7 @@ describe('guidedToolsFor', () => {
     status: 'ok',
     settings: { base: 'https://miweb.com/wp-json', auth: 'basic', app: 'WordPress', guideId: GUIDE },
   };
-  const store: GuidedStore = {
+  const store: Pick<GuidedStore, 'accesses'> = {
     accesses: async (orgId, agentId) => (orgId === ORG ? [access].filter((a) => !agentId || a.agentId === agentId) : []),
   };
   const vault = new MemoryVault();
@@ -248,7 +248,7 @@ describe('guidedToolsFor', () => {
   });
 
   it('a failing access gives no tool', async () => {
-    const failing: GuidedStore = { accesses: async () => [{ ...access, status: 'failing' }] };
+    const failing: Pick<GuidedStore, 'accesses'> = { accesses: async () => [{ ...access, status: 'failing' }] };
     expect((await guidedToolsFor(failing, vault, ORG, FINANZAS)).specs).toEqual([]);
   });
 

@@ -60,13 +60,28 @@ export interface GuidedAccess {
   settings: GuidedSettings;
 }
 
-/**
- * The database as guided accesses need it (service role). Reads only for now;
- * finishing a guide adds `createAccess`, removing an access `removeAccess`.
- */
+/** A guided access to write once its guide is done (guides.ts). */
+export interface NewGuidedAccess {
+  orgId: string;
+  agentId: string;
+  provider: string;
+  hint: string;
+  settings: GuidedSettings;
+  /** Who completed the guide, the person whose credential it is. */
+  connectedBy: string;
+  connectedByName: string;
+}
+
+/** The database as guided accesses need it (service role). Removing an access adds `removeAccess`. */
 export interface GuidedStore {
   /** The organisation's guided accesses; only one agent's when `agentId` is given. */
   accesses(orgId: string, agentId?: string): Promise<GuidedAccess[]>;
+  /**
+   * Writes the access, working. An agent has one access per app: a new guide
+   * for an app it already reaches replaces the old access, and
+   * `replacedGuideId` names the old guide, whose credential the caller removes.
+   */
+  createAccess(a: NewGuidedAccess): Promise<{ id: string; replacedGuideId: string | null }>;
 }
 
 /** What the vault keeps under `guidedSecretName`. */
@@ -333,7 +348,7 @@ function requestOf(access: GuidedAccess, input: unknown): { method: Method; url:
  * The credential the vault holds, when it has the fields `auth` needs; null
  * otherwise. Never throws: a parse error's message would carry part of the value.
  */
-function secretOf(auth: GuideAuth, raw: string | null): GuidedSecret | null {
+export function secretOf(auth: GuideAuth, raw: string | null): GuidedSecret | null {
   if (!raw) return null;
   let parsed: unknown;
   try {
@@ -381,7 +396,7 @@ function requestSpec(name: string, access: GuidedAccess): ToolSpec {
  * says. The credential is read from the vault when a request runs, never
  * before, and never reaches the model.
  */
-export async function guidedToolsFor(store: GuidedStore, vault: Vault, orgId: string, agentId: string, f: typeof fetch = fetchPublic): Promise<AgentTools> {
+export async function guidedToolsFor(store: Pick<GuidedStore, 'accesses'>, vault: Vault, orgId: string, agentId: string, f: typeof fetch = fetchPublic): Promise<AgentTools> {
   const accesses = (await store.accesses(orgId, agentId)).filter((a) => a.agentId === agentId && a.status === 'ok');
   if (accesses.length === 0) return NO_TOOLS;
   const byName = new Map(accesses.map((a) => [`${a.provider}_request`, a]));
@@ -480,6 +495,40 @@ export function supabaseGuidedStore(admin: SupabaseClient): GuidedStore {
       const { data, error } = await q.returns<GuidedRow[]>();
       if (error) throw error;
       return (data ?? []).map(accessFromRow).filter((a): a is GuidedAccess => a !== null);
+    },
+    async createAccess(a) {
+      const now = new Date().toISOString();
+      const row = {
+        hint: a.hint.slice(0, 80),
+        settings: a.settings,
+        status: 'ok' as const,
+        checked_at: now,
+        connected_by: a.connectedBy,
+        connected_by_name: a.connectedByName,
+        updated_at: now,
+      };
+      const { data: existing, error: readError } = await admin
+        .from('connections')
+        .select('id, settings')
+        .eq('org_id', a.orgId)
+        .eq('kind', 'guided')
+        .eq('agent_id', a.agentId)
+        .eq('provider', a.provider)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (existing) {
+        const { error } = await admin.from('connections').update(row).eq('id', existing.id);
+        if (error) throw error;
+        const old = (existing.settings as Record<string, unknown> | null)?.guideId;
+        return { id: existing.id as string, replacedGuideId: typeof old === 'string' && old !== a.settings.guideId ? old : null };
+      }
+      const { data, error } = await admin
+        .from('connections')
+        .insert({ ...row, org_id: a.orgId, kind: 'guided', method: 'guided', agent_id: a.agentId, provider: a.provider })
+        .select('id')
+        .single();
+      if (error) throw error;
+      return { id: (data as { id: string }).id, replacedGuideId: null };
     },
   };
 }

@@ -16,6 +16,7 @@ import { spawnSetupToken } from './claudeCode';
 import { CONNECTORS } from '@ghostaff/shared';
 import { googleOAuth, googleTools } from './google';
 import { guidedToolsFor, supabaseGuidedStore } from './guidedAccounts';
+import { supabaseGuideStore } from './guides';
 import { googleBusinessTools } from './googleBusiness';
 import { googleInsightsTools } from './googleInsights';
 import { instagramOAuth, instagramTools } from './instagram';
@@ -205,6 +206,8 @@ const jobs = {
 // An agent's own accesses to an app with an API, given through a guide (guidedAccounts.ts).
 const guided = supabaseGuidedStore(admin);
 const guidedTools = (orgId: string, agentId: string) => guidedToolsFor(guided, vault, orgId, agentId);
+// The guides that give them (guides.ts): started from a reply, driven by the app through the engine.
+const guideStore = supabaseGuideStore(admin);
 const chatDeps: ChatDeps = {
   chat: supabaseChatStore(admin),
   writerFor: writerFactory(vault, cloudToken),
@@ -214,6 +217,7 @@ const chatDeps: ChatDeps = {
   jobs,
   asks: supabaseAskStore(admin),
   guidedToolsFor: guidedTools,
+  guides: guideStore,
 };
 // Voice notes' transcripts: Gemini on Vertex AI in the EU, billed to Ghostaff's own project (transcribe.ts).
 const gcpProject = process.env.GCP_PROJECT;
@@ -244,6 +248,7 @@ const app = createApp({
   transcriber,
   accounts,
   actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId), guidedToolsFor: guidedTools, asPerson },
+  guides: { chat: chatDeps, store: guideStore, accesses: guided, vault },
   cron: {
     callerFromToken: caller,
     audience: publicUrl,
