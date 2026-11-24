@@ -171,6 +171,53 @@ describe('parseGuideStep', () => {
     }
   });
 
+  it('a field label naming an API key in any spelling is refused', () => {
+    for (const label of ['Tu apikey', 'El api_key', 'La api-key', 'APIKEY de la web']) {
+      const r = parseGuideStep({ blocks: [{ type: 'field', field: 'username', label }] }, landing);
+      expect((r as { error: string }).error, label).toMatch(/secret block/);
+    }
+  });
+
+  it('a choice option id is at most 80 characters and unique within the block', () => {
+    const choice = (ids: string[]) => ({ blocks: [{ type: 'choice', question: '¿Qué ves?', options: ids.map((id) => ({ id, label: `Opción ${id}` })) }] });
+    expect(parseGuideStep(choice(['a'.repeat(80), 'b']), landing)).toHaveProperty('step');
+    expect((parseGuideStep(choice(['a'.repeat(81), 'b']), landing) as { error: string }).error).toMatch(/80/);
+    expect((parseGuideStep(choice(['a', 'a']), landing) as { error: string }).error).toMatch(/unique/);
+  });
+
+  it('no links in v1: what the model writes never carries a web address, but the agent\'s email may be copied', () => {
+    const urls = ['https://miweb.com', 'Abre http://miweb.com', 'Entra en www.miweb.com', 'Abre miweb.com/wp-admin', 'Ve a MIWEB.ES/wp-login.php'];
+    const blocks = (text: string) => [
+      [{ type: 'title', text }],
+      [{ type: 'bullets', items: ['Pulsa Usuarios', text] }],
+      [{ type: 'copy_value', label: 'Copia esto', value: text }],
+      [{ type: 'copy_value', label: text, value: 'redes@panaderia.ghostaff.ai' }],
+      [{ type: 'field', field: 'base_url', label: text }],
+      [{ type: 'secret', field: 'password', label: text }],
+      [{ type: 'scope', text }],
+      [{ type: 'annotated_shot', mark: { x: 0.5, y: 0.5 }, caption: text }],
+      [{ type: 'choice', question: text, options: [{ id: 'a', label: 'Sí' }, { id: 'b', label: 'No' }] }],
+      [{ type: 'choice', question: '¿Qué ves?', options: [{ id: 'a', label: text }, { id: 'b', label: 'No' }] }],
+    ];
+    for (const text of urls) {
+      for (const b of blocks(text)) {
+        const r = parseGuideStep({ blocks: b }, landing);
+        expect((r as { error: string }).error, `${b[0]!.type}: ${text}`).toMatch(/link|web address/i);
+      }
+    }
+    const fine = parseGuideStep(
+      {
+        blocks: [
+          { type: 'title', text: 'Crea el usuario del agente' },
+          { type: 'bullets', items: ['Ve a Usuarios › Añadir nuevo', 'Usa la versión 2.0 o superior'] },
+          { type: 'copy_value', label: 'Su correo', value: 'redes@panaderia.ghostaff.ai' },
+        ],
+      },
+      landing,
+    );
+    expect(fine).toHaveProperty('step');
+  });
+
   it('accepts a connector from the catalogue', () => {
     expect(parseGuideStep({ blocks: [{ type: 'use_connector', connector: 'google' }] }, landing)).toHaveProperty('step');
   });

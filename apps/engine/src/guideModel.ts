@@ -141,7 +141,7 @@ export function showStepSpec(landing: GuideLanding): ToolSpec {
                     maxItems: 4,
                     items: {
                       type: 'object',
-                      properties: { id: { type: 'string', minLength: 1 }, label: str(90), image: { enum: [...GUIDE_IMAGES] } },
+                      properties: { id: str(80), label: str(90), image: { enum: [...GUIDE_IMAGES] } },
                       required: ['id', 'label'],
                     },
                   },

@@ -33,8 +33,8 @@ for (const [net, prefix] of [
   blocked.addSubnet(net, prefix, 'ipv4');
 }
 for (const [net, prefix] of [
-  ['::', 128],
-  ['::1', 128],
+  // IPv4-compatible (deprecated, [::7f00:1] is 127.0.0.1), with :: and ::1 inside it.
+  ['::', 96],
   ['64:ff9b::', 96],
   ['100::', 64],
   ['2001::', 23],
@@ -46,10 +46,20 @@ for (const [net, prefix] of [
   blocked.addSubnet(net, prefix, 'ipv6');
 }
 
-/** True only for an address on the public internet. An IPv4-mapped IPv6 address is judged as the IPv4 it carries. */
+/**
+ * True only for an address on the public internet. An IPv4-mapped IPv6 address
+ * (::ffff:0:0/96), dotted or in hex as a URL writes it ([::ffff:7f00:1]), is
+ * judged as the IPv4 it carries. Not in the block list: Node's BlockList
+ * matches IPv4 against it, which would refuse every IPv4.
+ */
 export function isPublicAddress(ip: string): boolean {
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  const mapped = /^(?:0{0,4}:){0,5}:?ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
   if (mapped) return isPublicAddress(mapped[1] as string);
+  const hex = /^(?:0{0,4}:){0,5}:?ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(ip);
+  if (hex) {
+    const [hi, lo] = [Number.parseInt(hex[1] as string, 16), Number.parseInt(hex[2] as string, 16)];
+    return isPublicAddress(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+  }
   const family = isIP(ip);
   if (family === 4) return !blocked.check(ip, 'ipv4');
   if (family === 6) return !blocked.check(ip, 'ipv6');

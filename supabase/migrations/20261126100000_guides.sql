@@ -1,6 +1,6 @@
 -- Guided access: a guide that walks a person through giving an agent access to
 -- an app the catalogue lacks, such as a self-hosted WordPress
--- (docs/plans/ongoing/guided-access.md). The guide is one row, moved by the
+-- (docs/plans/ready/guided-access.md). The guide is one row, moved by the
 -- engine alone: row-level security on and no policy at all, so the app goes
 -- through the engine. `history` holds the steps shown and the answers given,
 -- never a secret (that lives in the vault from the moment the check passes).
@@ -37,8 +37,9 @@ alter table public.guides enable row level security;
 revoke all on public.guides from anon, authenticated;
 
 -- The access a guide ends in is a connection, read by members like any other.
--- Its provider is `x` plus the app's slug (xwordpress): no catalogue id starts
--- with x, so the two never collide.
+-- Its provider is `x` plus the app's slug (xwordpress). It never mixes with a
+-- catalogue id: it lives under kind 'guided', belongs to one agent, and never
+-- enters agents.accounts.
 alter table public.connections drop constraint connections_kind_check;
 alter table public.connections add constraint connections_kind_check check (kind in ('ai', 'account', 'guided'));
 

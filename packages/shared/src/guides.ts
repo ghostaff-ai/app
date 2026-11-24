@@ -169,14 +169,28 @@ export function parseLanding(raw: unknown): GuideLanding | Failure {
  */
 function namesASecret(label: string): boolean {
   const plain = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  return /contrasen|password|passwd|clave|token|secret/.test(plain) || /\b(keys?|pins?)\b/.test(plain);
+  return /contrasen|password|passwd|clave|token|secret|api[\s_-]?key/.test(plain) || /\b(keys?|pins?)\b/.test(plain);
 }
+
+/**
+ * Whether text the model wrote carries a web address: a scheme, «www.», or a
+ * domain followed by a path («miweb.com/wp-admin»). There are no links in v1,
+ * and the prompt saying so is not enough. An email (the agent's own address,
+ * to copy) has no path, so it passes.
+ */
+function hasLink(text: string): boolean {
+  return /\bhttps?:\/\//i.test(text) || /\bwww\./i.test(text) || /\b[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}\//i.test(text);
+}
+
+/** The most a choice option's id may be: what an answer carries back (parseAnswer in the engine). */
+const MAX_OPTION_ID = 80;
 
 function parseBlock(raw: unknown, landing: GuideLanding): GuideBlock | Failure {
   if (!isRecord(raw) || typeof raw.type !== 'string') return { error: 'each block must be an object with a type' };
   const text = (v: unknown, max: number, what: string): string | Failure => {
     if (typeof v !== 'string' || !v.trim()) return { error: `${what} must be a non-empty string` };
     if (v.length > max) return { error: `${what} is ${v.length} characters; the limit is ${max}` };
+    if (hasLink(v)) return { error: `${what} has a web address; there are no links: name where to go (the menu, the button) instead` };
     return v;
   };
   switch (raw.type) {
@@ -205,6 +219,8 @@ function parseBlock(raw: unknown, landing: GuideLanding): GuideBlock | Failure {
       const options: { id: string; label: string; image?: GuideImage }[] = [];
       for (const o of opts) {
         if (!isRecord(o) || typeof o.id !== 'string' || !o.id) return { error: 'each choice option needs an id' };
+        if (o.id.length > MAX_OPTION_ID) return { error: `a choice option id is ${o.id.length} characters; the limit is ${MAX_OPTION_ID}` };
+        if (options.some((x) => x.id === o.id)) return { error: `choice option ids must be unique; ${o.id} is repeated` };
         const l = text(o.label, MAX_BULLET, 'a choice option label');
         if (typeof l !== 'string') return l;
         const option: { id: string; label: string; image?: GuideImage } = { id: o.id, label: l };
