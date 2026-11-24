@@ -16,12 +16,13 @@
 // in its environment but its credential, HOME, PATH and LANG. At the end, or
 // on any crash before it, it reports to the engine (best effort).
 
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { run as runCommand } from './exec';
 import { recordDir } from './guard';
 import {
   agentEnv,
@@ -112,11 +113,9 @@ async function serveRecordToken(first: { token: string; expiresAt: string }): Pr
   return { port: (server.address() as AddressInfo).port, close: () => server.close() };
 }
 
+/** git as the agent, never blocking: the record token server above answers git's helper from this process (exec.ts). */
 function asAgent(ids: { uid: number; gid: number }, env: Record<string, string>, cwd?: string) {
-  return (args: string[]) => {
-    const r = spawnSync('git', args, { uid: ids.uid, gid: ids.gid, env, cwd: cwd ?? env.HOME, stdio: ['ignore', 'inherit', 'inherit'] });
-    if (r.status !== 0) throw new Error(`git ${args[0]} failed (${r.status ?? r.signal})`);
-  };
+  return (args: string[]) => runCommand('git', args, { uid: ids.uid, gid: ids.gid, env, cwd: cwd ?? env.HOME });
 }
 
 const yamlNames = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.yaml')) : []);
@@ -168,15 +167,15 @@ async function main(): Promise<number> {
   try {
     const env = gitEnv(ids.home);
     const git = asAgent(ids, env);
-    git(['config', '--global', 'user.name', spec.author.name]);
-    git(['config', '--global', 'user.email', spec.author.email]);
+    await git(['config', '--global', 'user.name', spec.author.name]);
+    await git(['config', '--global', 'user.email', spec.author.email]);
     // The helper answers git only for the record's own host, with the run's user.
     const remote = new URL(spec.record.cloneUrl);
-    git(['config', '--global', 'credential.helper', `!node ${HELPER} ${tokens.port} ${remote.protocol.replace(':', '')} ${remote.host} ${spec.record.username}`]);
-    git(['config', '--global', 'push.default', 'current']);
+    await git(['config', '--global', 'credential.helper', `!node ${HELPER} ${tokens.port} ${remote.protocol.replace(':', '')} ${remote.host} ${spec.record.username}`]);
+    await git(['config', '--global', 'push.default', 'current']);
     const record = recordDir(ids.home);
-    git(['clone', '--quiet', spec.record.cloneUrl, record]);
-    if (existsSync(join(record, '.githooks'))) asAgent(ids, env, record)(['config', 'core.hooksPath', '.githooks']);
+    await git(['clone', '--quiet', spec.record.cloneUrl, record]);
+    if (existsSync(join(record, '.githooks'))) await asAgent(ids, env, record)(['config', 'core.hooksPath', '.githooks']);
 
     const decisions = join(record, spec.decisionsDir);
     const before = new Set(yamlNames(decisions));
