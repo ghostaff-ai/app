@@ -1,7 +1,7 @@
 // The sync on a schedule (docs/plans/ongoing/ordago-agents-in-ghostaff.md, step 1):
-// an organisation's `por-decidir/` read from its record on GitHub into the
+// an organisation's `por-decidir/` read from its record (GitHub, or our record store) into the
 // database, and the answers given in the app written back into the record in
-// one commit, the way apps/sync does it from a checkout. Through GitHub's API,
+// one commit, the way apps/sync does it from a checkout. Through the host's API,
 // with no clone, so it fits in the engine's tick.
 //
 // The record wins (packages/shared/src/record/sync.ts). A write-back is a
@@ -22,21 +22,32 @@ import {
   writeAnswer,
 } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
+import { type ForgejoConfig, forgejoRepo } from './forgejo';
 import { GITHUB_API, githubHeaders, type RepoTokens } from './githubApp';
 
 type Fetch = typeof fetch;
 
-export interface RecordOrg {
+/**
+ * An organisation with a record: in our record store (`ghostaff`, a repo made with the organisation,
+ * docs/plans/ongoing/record-store.md), or on GitHub as the master it brought (`github`, through our
+ * GitHub App's installation on that one repo).
+ */
+export type RecordOrg = { id: string; slug: string; repo: string } & ({ host: 'github'; installation: number } | { host: 'ghostaff' });
+
+/** An organisation still without a record: the tick gives it one in our record store. */
+export interface OrgWithoutRecord {
   id: string;
   slug: string;
-  repo: string;
-  installation: number;
+  name: string;
 }
 
 /** The database as the sync needs it (service role). */
 export interface RecordSyncStore {
   orgsWithRecord(): Promise<RecordOrg[]>;
   orgWithRecord(orgId: string): Promise<RecordOrg | null>;
+  orgsWithoutRecord(): Promise<OrgWithoutRecord[]>;
+  /** Marks the organisation's record as made in our record store; false when it got one meanwhile. */
+  setOwnRecord(orgId: string, repo: string): Promise<boolean>;
   decisions(orgId: string): Promise<DecisionRow[]>;
   apply(plan: SyncPlan): Promise<void>;
   markWrittenBack(rowIds: string[]): Promise<void>;
@@ -46,9 +57,26 @@ export interface RecordSyncStore {
 
 export interface RecordSyncDeps {
   store: RecordSyncStore;
-  tokens: RepoTokens;
+  /** GitHub records: installation tokens; null when the GitHub App is not configured. */
+  tokens: RepoTokens | null;
+  /** Our record store; null when this environment has none. */
+  forgejo: ForgejoConfig | null;
   fetch?: Fetch;
   now?: () => Date;
+}
+
+/** Whether this engine can reach the organisation's record at all. */
+export const canReach = (deps: Pick<RecordSyncDeps, 'tokens' | 'forgejo'>, org: RecordOrg) =>
+  org.host === 'github' ? deps.tokens !== null : deps.forgejo !== null;
+
+/** The sync's client for the organisation's record, on whichever host keeps it. */
+async function repoOf(deps: RecordSyncDeps, org: RecordOrg): Promise<RecordRepo> {
+  if (org.host === 'github') {
+    if (!deps.tokens) throw new Error('the GitHub record connector is not configured');
+    return githubRepo(org.repo, await deps.tokens(org.installation, org.repo), deps.fetch);
+  }
+  if (!deps.forgejo) throw new Error('this environment has no record store');
+  return forgejoRepo(deps.forgejo, org.repo, deps.fetch);
 }
 
 export class GithubError extends Error {
@@ -60,8 +88,23 @@ export class GithubError extends Error {
   }
 }
 
+/**
+ * The few calls the sync makes on one record, whichever host keeps it: GitHub (githubRepo, an
+ * organisation that brings its own repo) or our record store (forgejoRepo in forgejo.ts).
+ */
+export interface RecordRepo {
+  /** The default branch and the commit at its head. */
+  head(): Promise<{ branch: string; sha: string }>;
+  /** The files directly in `dir` at `ref`; empty when the folder does not exist. */
+  files(dir: string, ref: string): Promise<{ name: string; content: string }[]>;
+  /** One file at `ref`, or null. */
+  file(path: string, ref: string): Promise<string | null>;
+  /** One commit on top of `head` with these files; false when the record moved meanwhile. */
+  commit(head: { branch: string; sha: string }, files: { path: string; content: string }[], message: string): Promise<boolean>;
+}
+
 /** A small client for the few Git data calls the sync makes on one repo. */
-export function githubRepo(repo: string, token: string, f: Fetch = fetch) {
+export function githubRepo(repo: string, token: string, f: Fetch = fetch): RecordRepo {
   const call = async <T>(method: string, path: string, body?: unknown): Promise<T | null> => {
     const res = await f(`${GITHUB_API}/repos/${repo}${path}`, {
       method,
@@ -133,7 +176,7 @@ export interface OrgSyncResult {
 export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<OrgSyncResult> {
   const now = deps.now?.() ?? new Date();
   try {
-    const gh = githubRepo(org.repo, await deps.tokens(org.installation, org.repo), deps.fetch);
+    const gh = await repoOf(deps, org);
     const head = await gh.head();
     const raw = await gh.files(DECISIONS_DIR, head.sha);
     const files: RecordFile[] = raw.flatMap((x) => {
@@ -174,9 +217,9 @@ export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<Org
   }
 }
 
-/** Every organisation with a record, one after another. */
+/** Every organisation with a record this engine can reach, one after another. */
 export async function syncAll(deps: RecordSyncDeps): Promise<OrgSyncResult[]> {
   const out: OrgSyncResult[] = [];
-  for (const org of await deps.store.orgsWithRecord()) out.push(await syncOrg(deps, org));
+  for (const org of await deps.store.orgsWithRecord()) if (canReach(deps, org)) out.push(await syncOrg(deps, org));
   return out;
 }

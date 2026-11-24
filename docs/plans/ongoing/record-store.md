@@ -2,7 +2,7 @@
 
 **Priority:** high — every organisation needs a record before agents can remember anything or have instructions of their own ([agent-memory.md](../ready/agent-memory.md), decision 2)
 **Gate:** none
-**Next:** write the File Structure and Tasks against that day's code: the VM and its disk in `scripts/setup-env.sh`, then the engine's record interface with a Forgejo implementation
+**Next:** land the PR; CI deploys the engine and the runner onto beta's VPC; then check on beta: a new organisation gets its record within a tick, and a run of an agent in it clones, pushes its memory and is refused on `memoria/empresa/`
 
 **Goal:** Every organisation, personal spaces included, gets a record (a git repo) on storage we own in the EU when it is created; the engine and our runner read and write it as they do Órdago's GitHub record today; an agent can push only what it may write.
 
@@ -67,6 +67,43 @@ What this adds, to keep [architecture.md](../../architecture.md) and `secrets/in
 - Per project: the VM `record-store` and its disk, the snapshot schedule, a firewall rule letting only the VPC reach Forgejo, Direct VPC egress on the `engine` service and the `agent-runner` job.
 - Secret Manager: `FORGEJO_ADMIN_TOKEN` (the engine's admin token), listed in `secrets/inventory.yml` with how to renew it.
 - In Forgejo: a user per agent (`agent-<id>`), a repo per organisation, the pre-receive hook and branch protection on each repo.
+
+## Checked against Forgejo 15.0.12 (LTS), 2026-11-24
+
+On a local container: `POST /repos/{o}/{r}/contents` writes several files in one commit and answers 409 when a file's `sha` is not the head's (our «the record moved»); `GET …/commits?path=` gives a file's history; an admin creates users and adds them as `write` collaborators; a user's token can only be created with that user's basic auth (an admin's token with `Sudo` is refused), so the engine sets a random password it never keeps and mints with it; with `security.DISABLE_GIT_HOOKS=false` an admin sets a repo's `pre-receive` through the API, and it sees `GITEA_PUSHER_NAME` and the pushed range.
+
+## File structure
+
+- `scripts/setup-record-store.sh` (new): per environment, the VM `record-store` (Container-Optimized OS, Forgejo's container from cloud-init, data on its own disk), the snapshot schedule, the firewall rule, its service account `record-store@` allowed only to add versions to `FORGEJO_ADMIN_TOKEN`, which the VM fills on first boot.
+- `apps/engine/src/forgejo.ts` (new): the admin client (repos, users, collaborators, run tokens, hooks, branch protection) and `forgejoRepo`, the same four calls as `githubRepo` (`head`, `files`, `file`, `commit`).
+- `apps/engine/src/recordHook.ts` (new): the `pre-receive` script for one organisation's repo, generated from its agents.
+- `apps/engine/src/recordSync.ts`, `recordStore.ts`, `runner.ts`, `server.ts`: one record interface over GitHub and Forgejo; provisioning on creation and on the tick; a run's token for its agent's user, revoked on report.
+- `supabase/migrations/…_record_store.sql`: `organizations.record_host` (`github` | `ghostaff`).
+- `apps/runner/src/main.ts`, `credential-helper.mjs`: clone from the spec's URL; the helper answers for that host only.
+- `scripts/deploy-engine.sh`, `deploy-runner.sh`: Direct VPC egress to private ranges, `FORGEJO_URL` and the admin token when the record store exists.
+
+## Tasks
+
+Stage 1, nothing switched on:
+- [x] `forgejo.ts` and `recordHook.ts` with tests (a fake Forgejo for the client; the hook run by `sh` on a real git repo; `test/forgejo.live.test.ts` against a real Forgejo).
+- [x] `setup-record-store.sh`, run on beta (2026-11-24): VM `record-store` at `10.132.0.2:3000`, disk with its daily snapshot, `FORGEJO_ADMIN_TOKEN` made by the VM on its first boot. The first try pushed Forgejo's arm64 image from a Mac; the script now pushes `linux/amd64` explicitly and the VM pulls on every start.
+
+Stage 2, switched on in beta when this lands:
+- [x] Migration (`record_host`) and the record interface; the sync reads and writes a Forgejo record.
+- [x] A repo for every organisation without one, made by the tick, with branch protection and the hook. Made on the next tick (five minutes at most), not at the instant the organisation is created: the app calls nothing new.
+- [x] Runs on a Forgejo record: the agent's user, its token in the spec, revoked on report and swept by the tick; the runner clones from the spec's URL, its credential helper scoped to that host and user.
+- [x] Deploy scripts onto the VPC when the record store exists; `architecture.md` and `secrets/inventory.yml` updated.
+- [ ] Checked on beta (Next).
+- [ ] Production: `bash scripts/setup-record-store.sh prod`, with the first release.
+
+## Rollout
+
+| Step | Beta | Production |
+|---|---|---|
+| VM, disk, snapshots, admin token | ✅ 2026-11-24 | ⬜ |
+| Engine and runner on the VPC (deploy) | ⬜ on merge | ⬜ |
+| Records made for every organisation | ⬜ | ⬜ |
+| A run on a Forgejo record checked | ⬜ | ⬜ |
 
 ## Out of scope
 

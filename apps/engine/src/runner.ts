@@ -7,8 +7,10 @@
 // nonce, and stores just the nonce's hash. The run then proves who it is twice
 // over, as the runner's service account (a Google ID token for the engine's
 // URL) and with that nonce, and fetches its spec once: its prompt, model,
-// tools and turns, the record to clone with a fresh GitHub token, and the
-// organisation's Claude subscription from the vault. It reports at the end
+// tools and turns, the record to clone with a token for this run only (a fresh
+// GitHub installation token, or one for the agent's own user in our record
+// store, revoked when it reports), and the organisation's Claude subscription
+// from the vault. It reports at the end
 // through POST /runs/report, like any job (jobs.ts).
 //
 // One service account runs every organisation's agents, so the nonce is what
@@ -21,8 +23,12 @@ import { Cron } from 'croner';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { madridNow } from './chat';
 import { Refusal } from './connections';
+import { agentUsername, type ForgejoAdmin } from './forgejo';
 import type { FreshRepoToken } from './githubApp';
 import { type AgentJob, indication, type JobDeps, type RunRecord } from './jobs';
+import { hookAgents, type RecordAgent } from './recordProvision';
+import { preReceiveHook } from './recordHook';
+import type { RecordOrg } from './recordSync';
 import { readAiSecret, type Vault } from './vault';
 
 /** What an agent on our runner runs with (its row in `agents`). */
@@ -67,10 +73,12 @@ export interface RunnerDeps {
   /** The engine's public URL: where the run fetches its spec and reports. */
   engineUrl: string;
   vault: Pick<Vault, 'get'>;
-  /** The organisation's record repo, through the record connector; null without one. */
-  record(orgId: string): Promise<{ repo: string; installation: number } | null>;
-  /** A new, uncached record token per call: a run never shares one with the sync or another run. */
+  /** The organisation's record; null without one. */
+  record(orgId: string): Promise<RecordOrg | null>;
+  /** GitHub records: a new, uncached token per call, so a run never shares one with the sync or another run. */
   freshToken: FreshRepoToken;
+  /** Our record store; null in an environment without one. */
+  recordStore: { admin: ForgejoAdmin; adminUser: string; agentsOf(orgId: string): Promise<RecordAgent[]> } | null;
   /** Who the agent's commits are by: `<agent> (Ghostaff)` and this address. */
   commitEmail: string;
   now?: () => Date;
@@ -84,10 +92,55 @@ export interface RunSpec {
   model: string;
   tools: string[];
   maxTurns: number;
-  record: { repo: string; token: string; expiresAt: string };
+  record: RunRecordAccess;
   author: { name: string; email: string };
   claudeToken: string;
   decisionsDir: string;
+}
+
+/**
+ * How a run reaches its organisation's record: cloned from `cloneUrl`, with `token` as the password of
+ * `username`, given to git by the runner's credential helper and never written anywhere.
+ */
+export interface RunRecordAccess {
+  repo: string;
+  cloneUrl: string;
+  username: string;
+  token: string;
+  /** When to ask the engine for another (POST /runs/:id/record-token). */
+  expiresAt: string;
+}
+
+/** A token in our record store lives until the run reports; past a run's longest timeout the tick sweeps it. */
+export const RECORD_STORE_TOKEN_HOURS = 4;
+
+/** A token for this run, on whichever host keeps the record. */
+export async function recordAccess(runner: RunnerDeps, org: RecordOrg, agentId: string, runId: string): Promise<RunRecordAccess> {
+  if (org.host === 'github') {
+    const t = await runner.freshToken(org.installation, org.repo);
+    return { repo: org.repo, cloneUrl: `https://github.com/${org.repo}.git`, username: 'x-access-token', token: t.token, expiresAt: t.expiresAt };
+  }
+  const store = runner.recordStore;
+  if (!store) throw new Refusal(409, 'no_record', 'this environment has no record store');
+  const username = agentUsername(agentId);
+  await store.admin.ensureAgentUser(username, org.repo);
+  // Written whole each time, from the organisation's agents now, so a new agent can push from its first run.
+  await store.admin.setHook(org.repo, preReceiveHook(store.adminUser, hookAgents(await store.agentsOf(org.id))));
+  const t = await store.admin.mintRunToken(username, runId);
+  const now = runner.now ? runner.now() : new Date();
+  return {
+    repo: org.repo,
+    cloneUrl: store.admin.cloneUrl(org.repo),
+    username,
+    token: t.token,
+    expiresAt: new Date(now.getTime() + RECORD_STORE_TOKEN_HOURS * 3_600_000).toISOString(),
+  };
+}
+
+/** When a run reports: its tokens in our record store stop working (a GitHub token just expires). */
+export async function endRecordAccess(runner: RunnerDeps, orgId: string, agentId: string, runId: string): Promise<void> {
+  const org = await runner.record(orgId);
+  if (org?.host === 'ghostaff' && runner.recordStore) await runner.recordStore.admin.revokeRunTokens(agentUsername(agentId), runId);
 }
 
 /** The record's folder of open decisions (Órdago's `por-decidir/` format). */
@@ -99,7 +152,7 @@ export const NO_SUBSCRIPTION =
   'No puedo ponerme a trabajar: esta organización no tiene conectada una suscripción de Claude. ' +
   'Quien sea propietario puede conectarla en Conexiones, en «Claude · tu suscripción».';
 const NO_RECORD =
-  'No puedo ponerme a trabajar: esta organización no tiene conectado su registro. Quien sea propietario puede conectarlo en Conexiones.';
+  'No puedo ponerme a trabajar: esta organización aún no tiene su registro. Se prepara solo en unos minutos; vuelve a escribirme entonces.';
 const GONE = 'No he podido ponerme con ello: ya no trabajo desde aquí. Pregunta a quien sea propietario.';
 const NOT_STARTED = 'No he podido ponerme con ello. Vuelve a escribirme en un rato.';
 
@@ -336,7 +389,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
     const thread = await chat.chat.thread(run.threadId);
     if (thread) request = requestOf(await chat.chat.recentMessages(thread.id, 40), thread, run);
   }
-  const token = await runner.freshToken(record.installation, record.repo);
+  const access = await recordAccess(runner, record, agent.id, run.id);
   return {
     run: run.id,
     slug: agent.slug,
@@ -350,7 +403,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
     model: agent.model,
     tools: agent.tools,
     maxTurns: agent.maxTurns,
-    record: { repo: record.repo, token: token.token, expiresAt: token.expiresAt },
+    record: access,
     author: { name: `${agent.name} (Ghostaff)`, email: runner.commitEmail },
     claudeToken: subscription.token,
     decisionsDir: DECISIONS_DIR,
@@ -368,7 +421,8 @@ export async function runRecordToken(deps: JobDeps, caller: string | null, runId
   if (!run || !nonceMatches(nonce, run.nonceHash) || run.state !== 'running' || !run.specFetched) throw new Refusal(403, 'not_allowed', 'not this run');
   const record = await runner.record(run.orgId);
   if (!record) throw new Refusal(409, 'no_record', 'the organisation has no record');
-  return runner.freshToken(record.installation, record.repo);
+  const access = await recordAccess(runner, record, run.agentId, run.id);
+  return { token: access.token, expiresAt: access.expiresAt };
 }
 
 /** For reportRun: the agent of a run our runner reports for, checked by its nonce; a Refusal when it does not match. */

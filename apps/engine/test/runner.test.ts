@@ -155,7 +155,11 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
       job: runnerJob,
       engineUrl: 'https://engine',
       vault,
-      record: async (orgId) => (orgId === ORG ? { repo: 'ordago-app/business', installation: 7 } : { repo: 'taller/registro', installation: 8 }),
+      record: async (orgId) =>
+        orgId === ORG
+          ? { id: ORG, slug: 'ordago', repo: 'ordago-app/business', host: 'github', installation: 7 }
+          : { id: orgId, slug: 'taller', repo: 'taller/registro', host: 'github', installation: 8 },
+      recordStore: null,
       freshToken: async (inst, repo) => {
         minted += 1;
         return { token: `ghs_${inst}_${repo}_${now.getTime()}_${minted}`, expiresAt: new Date(now.getTime() + 3600_000).toISOString() };
@@ -254,7 +258,7 @@ describe('POST /runs/:id/spec', () => {
       model: 'claude-opus-5-5',
       tools: ['Read', 'Edit', 'WebSearch'],
       maxTurns: 200,
-      record: { repo: 'ordago-app/business' },
+      record: { repo: 'ordago-app/business', cloneUrl: 'https://github.com/ordago-app/business.git', username: 'x-access-token' },
       author: { name: 'Legal (Ghostaff)', email: 'bot@example.com' },
       claudeToken: 'sk-ant-oat-org1',
       decisionsDir: 'por-decidir',

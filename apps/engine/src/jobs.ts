@@ -15,7 +15,7 @@
 import { atLimit, type ChatMessage, type Limits, limitsFromEvent, messageText, type TokenUsage, tokensFromUsage } from '@ghostaff/shared';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { Refusal } from './connections';
-import { type RunnerDeps, runnerReporter } from './runner';
+import { endRecordAccess, type RunnerDeps, runnerReporter } from './runner';
 
 /** Where an agent's job runs and who it reports as. */
 export interface AgentJob {
@@ -247,6 +247,9 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
     decisionsOpened: report.decisions.length,
   });
   if (!took) return { run: run.id, threadId: null }; // another copy of this report got there first
+  if (reporter && deps.runner) {
+    await endRecordAccess(deps.runner, run.orgId, agent.id, run.id).catch((e) => console.error('run record access not ended', run.id, e instanceof Error ? e.message : e));
+  }
   if (reporter && run.connectionId) {
     const u = report.usage;
     await chat.chat

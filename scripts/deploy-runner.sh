@@ -26,13 +26,20 @@ gcloud auth print-access-token | docker login -u oauth2accesstoken --password-st
 docker push "$IMAGE"
 docker logout "https://$REGISTRY" >/dev/null # the token was only for this push
 
+# Our record store (scripts/setup-record-store.sh) is on the VPC: runs clone from it there. Only private ranges
+# go through the VPC; GitHub, Anthropic and the web are reached as before.
+NETWORK_FLAGS=()
+if gcloud compute addresses describe record-store --region "$R" --project "$P" >/dev/null 2>&1; then
+  NETWORK_FLAGS=(--network default --subnet default --vpc-egress private-ranges-only)
+fi
+
 echo "== The job"
 # One task, no retries: a run that fails reports it, and a person asks again. Three hours, like the longest
 # of Órdago's agents; memory for Claude Code and what it runs.
 if gcloud run jobs describe "$JOB" --region "$R" --project "$P" >/dev/null 2>&1; then VERB=update; else VERB=create; fi
 gcloud run jobs "$VERB" "$JOB" --project "$P" --region "$R" --image "$IMAGE" \
   --service-account "$RUNNER_SA" --tasks 1 --max-retries 0 --task-timeout 3h \
-  --cpu 2 --memory 4Gi >/dev/null
+  --cpu 2 --memory 4Gi ${NETWORK_FLAGS[@]+"${NETWORK_FLAGS[@]}"} >/dev/null
 
 echo "== The engine may start it, with overrides, and nothing else"
 gcloud run jobs add-iam-policy-binding "$JOB" --project "$P" --region "$R" \

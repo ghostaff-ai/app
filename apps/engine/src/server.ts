@@ -27,12 +27,14 @@ import { CloudAccountNotReady, type CloudAccountDeps, cloudTokens, ensureCloudAc
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
 import { freshRepoToken, repoTokens } from './githubApp';
 import { googleCaller } from './googleCaller';
-import { supabaseRecordStore } from './recordStore';
-import { syncAll, syncOrg } from './recordSync';
+import { type ForgejoConfig, forgejoAdmin } from './forgejo';
+import { provisionRecords } from './recordProvision';
+import { recordAgentsOf, supabaseRecordStore } from './recordStore';
+import { canReach, type RecordSyncDeps, syncAll, syncOrg } from './recordSync';
 import { expireRuns } from './jobs';
 import type { ChatDeps } from './chat';
 import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
-import { type RunnerDeps, startScheduled } from './runner';
+import { RECORD_STORE_TOKEN_HOURS, type RunnerDeps, startScheduled } from './runner';
 import { DEFAULT_TRANSCRIBE_MODEL, type GoogleRequest, vertexTranscriber } from './transcribe';
 import { supabaseVoiceNoteStore } from './voiceNotes';
 
@@ -150,9 +152,18 @@ const tokenFor = accessTokens(accounts);
 const githubAppId = process.env.GITHUB_APP_ID;
 const githubAppKey = process.env.GITHUB_APP_KEY?.replace(/\\n/g, '\n');
 if (!githubAppId || !githubAppKey) console.warn('record connector off: set GITHUB_APP_ID and GITHUB_APP_KEY.');
-const recordSync = {
+// Our own record store (docs/plans/ongoing/record-store.md): Forgejo on the environment's VPC, set up by
+// scripts/setup-record-store.sh. Without it, organisations keep only a record they bring on GitHub.
+const forgejoUrl = process.env.FORGEJO_URL?.trim();
+const forgejoToken = process.env.FORGEJO_ADMIN_TOKEN?.trim();
+const forgejo: ForgejoConfig | null =
+  forgejoUrl && forgejoToken ? { url: forgejoUrl, adminToken: forgejoToken, adminUser: process.env.FORGEJO_ADMIN_USER ?? 'ghostaff' } : null;
+if (!forgejo) console.warn('record store off: set FORGEJO_URL and FORGEJO_ADMIN_TOKEN.');
+const forgejoAdminClient = forgejo ? forgejoAdmin(forgejo) : null;
+const recordSync: RecordSyncDeps = {
   store: supabaseRecordStore(admin),
-  tokens: repoTokens(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
+  tokens: githubAppId && githubAppKey ? repoTokens(async () => ({ appId: githubAppId, privateKey: githubAppKey })) : null,
+  forgejo,
 };
 const caller = googleCaller();
 // Ghostaff's own runner (runner.ts, apps/runner): the Cloud Run job `agent-runner` beside the engine, running as
@@ -172,8 +183,10 @@ const runner: RunnerDeps | undefined = runnerIdentity
       vault,
       async record(orgId) {
         const org = await recordSync.store.orgWithRecord(orgId);
-        return org ? { repo: org.repo, installation: org.installation } : null;
+        return org && canReach(recordSync, org) ? org : null;
       },
+      recordStore:
+        forgejo && forgejoAdminClient ? { admin: forgejoAdminClient, adminUser: forgejo.adminUser, agentsOf: (orgId) => recordAgentsOf(admin, orgId) } : null,
       freshToken: freshRepoToken(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
       commitEmail: process.env.RECORD_COMMIT_EMAIL ?? 'ghostaff-registro[bot]@users.noreply.github.com',
     }
@@ -183,9 +196,8 @@ const jobs = {
   jobs: supabaseJobStore(admin),
   launch: cloudRunLauncher(auth),
   async syncOrg(orgId: string) {
-    if (!githubAppId || !githubAppKey) return;
     const org = await recordSync.store.orgWithRecord(orgId);
-    if (org) console.log((await syncOrg(recordSync, org)).summary);
+    if (org && canReach(recordSync, org)) console.log((await syncOrg(recordSync, org)).summary);
   },
 };
 const chatDeps: ChatDeps = {
@@ -230,11 +242,27 @@ const app = createApp({
     audience: publicUrl,
     callers: cronCallers,
     async tick() {
-      const synced = githubAppId && githubAppKey ? await syncAll(recordSync) : [];
+      // The record store being down never stops the rest of the tick.
+      const made =
+        forgejo && forgejoAdminClient
+          ? await provisionRecords({ store: recordSync.store, admin: forgejoAdminClient, adminUser: forgejo.adminUser, agentsOf: (orgId) => recordAgentsOf(admin, orgId) }).catch(
+              (e) => [`records not made: ${e instanceof Error ? e.message : e}`],
+            )
+          : [];
+      for (const m of made) console.log(m);
+      const synced = await syncAll(recordSync);
       for (const s of synced) console.log(s.summary);
+      if (forgejoAdminClient) {
+        const before = new Date(Date.now() - RECORD_STORE_TOKEN_HOURS * 3_600_000);
+        try {
+          for (const user of await forgejoAdminClient.agentUsers()) await forgejoAdminClient.sweepRunTokens(user, before);
+        } catch (e) {
+          console.error('run tokens not swept', e instanceof Error ? e.message : e);
+        }
+      }
       const expired = await expireRuns(chatDeps, jobs);
       const started = await startScheduled(chatDeps, jobs);
-      return { synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, started };
+      return { records: made.length, synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, started };
     },
   },
 });

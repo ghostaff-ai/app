@@ -33,6 +33,18 @@ connector Instagram INSTAGRAM_APP_ID "$INSTAGRAM_APP_ID" INSTAGRAM_APP_SECRET in
 connector TikTok TIKTOK_CLIENT_KEY "$TIKTOK_CLIENT_KEY" TIKTOK_CLIENT_SECRET tiktok-client-secret
 connector "Record (GitHub App)" GITHUB_APP_ID "$GITHUB_APP_ID" GITHUB_APP_KEY github-app-registro-key
 
+# Our record store (scripts/setup-record-store.sh): when its address and its admin's token exist, the engine
+# reaches Forgejo over the VPC. Only private ranges go through it; everything else leaves as before.
+NETWORK_FLAGS=()
+RECORD_STORE_IP=$(gcloud compute addresses describe record-store --region "$R" --project "$P" --format 'value(address)' 2>/dev/null || true)
+if [ -n "$RECORD_STORE_IP" ] && gcloud secrets versions list FORGEJO_ADMIN_TOKEN --project "$P" --filter 'state=ENABLED' --format 'value(name)' 2>/dev/null | grep -q .; then
+  ENV_VARS="$ENV_VARS,FORGEJO_URL=http://$RECORD_STORE_IP:3000"
+  SECRETS="$SECRETS,FORGEJO_ADMIN_TOKEN=FORGEJO_ADMIN_TOKEN:latest"
+  NETWORK_FLAGS=(--network default --subnet default --vpc-egress private-ranges-only)
+else
+  echo "== Record store off: no address record-store or no FORGEJO_ADMIN_TOKEN in $P"
+fi
+
 echo "== Build and push $IMAGE"
 # Cloud Run runs amd64: built for it even on an Apple Silicon Mac (emulated, slower).
 docker build --platform linux/amd64 -f apps/engine/Dockerfile -t "$IMAGE" .
@@ -49,6 +61,7 @@ echo "== Deploy to $P"
 gcloud run deploy engine --project "$P" --region "$R" --image "$IMAGE" \
   --service-account "$SA" --allow-unauthenticated --min-instances 0 --max-instances 3 \
   --timeout 900 --memory 2Gi --session-affinity \
+  ${NETWORK_FLAGS[@]+"${NETWORK_FLAGS[@]}"} \
   --set-env-vars "$ENV_VARS" \
   --set-secrets "$SECRETS"
 

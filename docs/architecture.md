@@ -67,7 +67,7 @@ A run on our runner, end to end:
 
 ### Target: the record
 
-Decided 2026-11-24 ([agent-memory.md](plans/ready/agent-memory.md), [record-store.md](plans/ready/record-store.md)); not built. The rule is invariant 4: what agents work on are files with history, and the app reads the database.
+Decided 2026-11-24 ([agent-memory.md](plans/ready/agent-memory.md), [record-store.md](plans/ongoing/record-store.md)). The record store is being built: beta's VM is up, and the engine and runner use it once that plan's stage 2 lands; agents' instructions and memory in it are not built. The rule is invariant 4: what agents work on are files with history, and the app reads the database.
 
 **What an agent is made of**, and where each part lives:
 
@@ -82,7 +82,7 @@ Decided 2026-11-24 ([agent-memory.md](plans/ready/agent-memory.md), [record-stor
 
 «Sobre ti» stays out of the record because every run of every agent clones it, so nothing in it can be private to one person. Access stays on the row because row-level security, not a file anyone with a clone could change, is what enforces it.
 
-**Where the record is.** One Forgejo per environment, on a Compute Engine VM in the environment's project, with no public address: the engine and `agent-runner` reach it through Direct VPC egress. A repo is made with every organisation. The engine is its admin (like the service-role key for the database); each agent is a Forgejo user with write on its organisation's repo only, and a run gets a token for that user, deleted when it reports. A server-side hook refuses, by pusher, what an agent may not write (Empresa unless Secretaría, another agent's memory, any `AGENTS.md`). An organisation that brings its own GitHub repo as master (Órdago, until its migration ends) is read and written through the same interface with the GitHub App; afterwards GitHub is only a push mirror, the live copy.
+**Where the record is.** One Forgejo per environment, on a Compute Engine VM in the environment's project, with no public address: the engine and `agent-runner` reach it through Direct VPC egress. A repo is made for every organisation by the tick, within five minutes of its creation (`recordProvision.ts`). The engine is its admin (like the service-role key for the database); each agent is a Forgejo user with write on its organisation's repo only, and a run gets a token for that user, deleted when it reports. A server-side hook refuses, by pusher, what an agent may not write (Empresa unless Secretaría, another agent's memory, any `AGENTS.md`). An organisation that brings its own GitHub repo as master (Órdago, until its migration ends) is read and written through the same interface with the GitHub App; afterwards GitHub is only a push mirror, the live copy.
 
 **What it adds to each environment's project**, and what it costs (estimated 2026-11-24 in `europe-west1`; check Google's pricing calculator before building):
 

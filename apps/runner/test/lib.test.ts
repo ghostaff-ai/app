@@ -12,7 +12,13 @@ const SPEC = {
   model: 'claude-opus-5-5',
   tools: ['Bash', 'Read', 'WebSearch'],
   maxTurns: 200,
-  record: { repo: 'ordago-app/business', token: 'ghs_secret_token', expiresAt: '2026-11-21T11:00:00Z' },
+  record: {
+    repo: 'ordago-app/business',
+    cloneUrl: 'https://github.com/ordago-app/business.git',
+    username: 'x-access-token',
+    token: 'ghs_secret_token',
+    expiresAt: '2026-11-21T11:00:00Z',
+  },
   author: { name: 'Legal (Ghostaff)', email: 'bot@example.com' },
   claudeToken: 'sk-ant-oat01-secret',
   decisionsDir: 'por-decidir',
@@ -25,6 +31,20 @@ describe('the spec', () => {
     expect(() => readSpec({ ...SPEC, model: '--dangerously-skip-permissions' })).toThrow();
     expect(() => readSpec({ ...SPEC, record: { repo: 'a/b --upload-pack=x', token: 't' } })).toThrow();
     expect(() => readSpec({ ...SPEC, claudeToken: '' })).toThrow();
+  });
+
+  it('clones only from GitHub or our record store, as a plain git user', () => {
+    const own = {
+      ...SPEC.record,
+      repo: 'records/6f1d2c3b-0000-4000-8000-000000000001',
+      cloneUrl: 'http://10.132.0.5:3000/records/6f1d2c3b-0000-4000-8000-000000000001.git',
+      username: 'agent-0b6a4c1e111142228333944455556666',
+    };
+    expect(readSpec({ ...SPEC, record: own }).record.cloneUrl).toBe(own.cloneUrl);
+    expect(() => readSpec({ ...SPEC, record: { ...own, cloneUrl: 'ext::sh -c touch% /tmp/x' } })).toThrow();
+    expect(() => readSpec({ ...SPEC, record: { ...own, cloneUrl: 'http://10.0.0.5:3000/otra/cosa.git' } })).toThrow();
+    expect(() => readSpec({ ...SPEC, record: { ...own, cloneUrl: 'https://evil.example/records/x.git --upload-pack=x' } })).toThrow();
+    expect(() => readSpec({ ...SPEC, record: { ...own, username: '-c core.sshCommand=x' } })).toThrow();
   });
 
   it('runs Claude Code with the agent’s model, tools and turns, never asking', () => {
