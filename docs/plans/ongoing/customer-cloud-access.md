@@ -2,7 +2,7 @@
 
 **Priority:** high — Órdago's agents read BigQuery and write buckets in `ordago-prod`, and none of that can move to Ghostaff without it, and every other Google Cloud use must not share one identity across customers as Vertex did
 **Gate:** none
-**Next:** once `feat/customer-cloud-access` lands, run `bash scripts/setup-env.sh beta` (it creates `ghostaff-tenants-beta`), then connect Claude on Vertex on the beta to try it; then the runner's token
+**Next:** the runner's token: the spec carries a fresh token as the organisation's account when it has a Google Cloud connection for data, and the image gains `gcloud` and `bq` (Tasks, «Runs» and «Runner»)
 
 The design is in [architecture.md](../../architecture.md#a-customers-google-cloud); this plan is the work. Jaime (2026-11-24): Órdago runs on Ghostaff as any customer would, and a customer with data in its own BigQuery can give an agent that data without Ghostaff holding one identity that reaches every customer.
 
@@ -23,7 +23,8 @@ The design is in [architecture.md](../../architecture.md#a-customers-google-clou
 - [x] **Engine** (`apps/engine/src/cloudAccounts.ts`): creates the account once (a half-done attempt is finished by the next; an account with its name made for another organisation is never adopted), lets only the engine act as it, mints one-hour tokens. `POST /cloud-account` gives an owner the email, creating it if need be; `GET /identity` (the shared `engine@`) is gone.
 - [x] **Engine, chat**: Vertex is checked and called as the organisation's account (`server.ts` `checkVertexAs`, `chatStore.ts` `writerFactory`).
 - [x] **App**: the Vertex form shows the organisation's own account to grant.
-- [ ] **Set up**: `bash scripts/setup-env.sh beta`, then `prod` (each creates its tenants project); try Claude on Vertex on the beta with a real project.
+- [x] **Set up beta** (2026-11-24, PR #66 merged): `ghostaff-tenants-beta` created by `setup-env.sh beta`, `engine@ghostaff-beta` its service-account admin and nothing else there (checked).
+- [ ] **Set up production**: `bash scripts/setup-env.sh prod`, before the first release deploys production's engine. Try Claude on Vertex on the beta with a real project.
 - [ ] **Runs.** The spec carries `google: { project, token, expiresAt }` when the organisation has a Google Cloud connection for data; `POST /runs/:id/google-token` renews it. A fresh token per run (`mintCloudToken`), never the engine's cached one.
 - [ ] **Runner.** The image gains the Google Cloud CLI (`gcloud`, `bq`); the agent's environment points `gcloud` at the token (`CLOUDSDK_AUTH_ACCESS_TOKEN_FILE` in its throwaway HOME) and its default project at the customer's. Check that `bq` honours it before relying on it; the redaction of secrets in reports covers the token.
 - [ ] **App, data.** Conexiones → Google Cloud for data (not only Vertex): the account's email, the commands to grant it (copyable), «Comprobar» (asked as the account: `testIamPermissions`, BigQuery `datasets.get`) and what it found, and a line for organisations whose policy restricts sharing to their own domain.
