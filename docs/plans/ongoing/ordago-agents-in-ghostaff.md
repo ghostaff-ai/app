@@ -2,7 +2,7 @@
 
 **Priority:** high — Ghostaff uses Ghostaff: until Órdago's agents run through it, the platform is a chat with no work behind it
 **Gate:** none
-**Next:** move Legal for good: `org add-agents … --runner ghostaff --only legal` with its timetable, then pause `ordago-legal` in `ordago-agents` in the same sitting
+**Next:** move Legal for good: write `agentes/legal/AGENTS.md` in Órdago's record from its YAML `prompt` and what its README says about how it works (decision 2), make the runner read its instructions from that file instead of `agents.task` (`runner.ts`), then `org add-agents … --runner ghostaff --only legal` with its timetable and pause `ordago-legal` in `ordago-agents` in the same sitting
 
 Álvaro asked (2026-11-21) how close Ghostaff is to running all of Órdago's agents, then to build what is missing. Where we stood that day: the app (sign-in, organisations, decision inbox, team chat, connectors, vault) is on the beta; the agents still run entirely in `ghostaff-ai/agents` (Claude Code in a container on Cloud Run Jobs in `ordago-agents`, on a timetable, working in `ordago-app/business`, reporting by Telegram), and the engine here only answers in chat. He took my picks with four changes («go», 2026-11-21).
 
