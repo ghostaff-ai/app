@@ -95,6 +95,10 @@ Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm pr:lan
 - **What Álvaro looks at is the beta app on his phone, not Metro.** Every push to `develop` reaches it on its own once CI passes, end-to-end tests included: GitHub publishes the change over the air, or starts a new beta build when the native side changed (`.github/workflows/beta.yml`).
 - **A main flow has an end-to-end test** in `.maestro/flows/ci/` (Maestro on an Android emulator, a release build against the local Supabase; [.maestro/README.md](.maestro/README.md)). A screen that changes one updates its flow in the same PR; run `pnpm e2e` before opening it. Metro and the dev build are for agents while they build.
 
+## Architecture
+
+[docs/architecture.md](docs/architecture.md) is the high-level design: the parts and where each runs, the three agent runners, how organisations are kept apart, and which identity reaches what. Read it before designing anything that touches the engine, the runner, a connector or a customer's systems, and update it in the same change when that changes.
+
 ## Plans
 
 Design work lives in [docs/plans/](docs/plans/) by stage (`ideas/` → `ready/` → `ongoing/`), with the agent-plans v2 header (`Priority`, `Gate`, `Next`). Durable rationale for shipped work goes to [docs/decisions/](docs/decisions/). See the `managing-plans-lifecycle` skill.

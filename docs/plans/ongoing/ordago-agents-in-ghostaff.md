@@ -1,8 +1,8 @@
 # Órdago's agents in Ghostaff: first the face, then the body, one agent at a time
 
 **Priority:** high — Ghostaff uses Ghostaff: until Órdago's agents run through it, the platform is a chat with no work behind it
-**Gate:** blocked:ordago-as-customer (Jaime, 2026-11-22: the agents move only once the rest of the architecture is ready). Meanwhile Legal runs in both (Álvaro, 2026-11-23): the old job keeps its timetable and Telegram, Ghostaff's runner answers it in the chat
-**Next:** nothing for Legal until the gate lifts: it runs in both (old job on its timetable; Ghostaff's Legal imported `--on-demand` on 2026-11-23, no timetable, answers when written to). Then the move: `org add-agents … --runner ghostaff --only legal` and pause `ordago-legal`
+**Gate:** decision:Jaime picks where Órdago's agents run until the first release — beta now, or wait for production
+**Next:** move Legal for good: `org add-agents … --runner ghostaff --only legal` with its timetable, then pause `ordago-legal` in `ordago-agents` in the same sitting
 
 Álvaro asked (2026-11-21) how close Ghostaff is to running all of Órdago's agents, then to build what is missing. Where we stood that day: the app (sign-in, organisations, decision inbox, team chat, connectors, vault) is on the beta; the agents still run entirely in `ghostaff-ai/agents` (Claude Code in a container on Cloud Run Jobs in `ordago-agents`, on a timetable, working in `ordago-app/business`, reporting by Telegram), and the engine here only answers in chat. He took my picks with four changes («go», 2026-11-21).
 
@@ -23,6 +23,48 @@
 - **Two runners while migrating.** An agent row says how it runs: `chat` (only answers in chat, today's agents), `ordago_job` (still a job in `ordago-agents`: the engine starts it with what the person wrote, as Telegram's webhook does), or `ghostaff` (our own runner job, `agent-runner` in `ghostaff-prod`).
 - **Our runner** is the unmodified Claude Code in a container, like `ghostaff-ai/agents`' image: it fetches its run (prompt, tools, model, a record token, the org's Claude credential) once from the engine, proving who it is with its ID token and a one-time nonce, clones the record, runs `claude -p`, pushes, and reports.
 - **Reports.** Every run of either runner ends with `POST /runs/report`: the answer to the person who asked lands in their thread; a scheduled run with something to say lands in the chat of each person who can see the agent (three-tabs.md, decision 12; it was a shared «Avisos» thread until then); every run is a row in `agent_runs`, which feeds «Hecho sin ti» on Hoy. A report also triggers that organisation's sync, so a decision an agent opens is in the inbox within a minute.
+
+## Moving all of them, and Telegram off (Jaime, 2026-11-24)
+
+Jaime lifted his gate of 2026-11-22: Órdago moves onto Ghostaff now, as its first customer, and what it lacks gets built into the platform for every customer. It started from La Mesa failing on a weekly limit after Jaime added a Claude account in Conexiones: the legacy jobs never read Conexiones, they read `ordago-claude-token` in `ordago-agents` ([architecture.md](../../architecture.md#the-legacy-engine)). When every agent runs on our runner, Telegram goes off and people talk to the agents only in Ghostaff and the panel.
+
+### What each agent needs
+
+From the YAMLs in `ghostaff-ai/agents/proyectos/ordago/agentes/` (2026-11-24). Our runner today gives a run the record, the web and the organisation's Claude subscription, and nothing else.
+
+| Agent | Repos beyond the record | Google Cloud | Secrets | Other |
+|---|---|---|---|---|
+| Legal | — | — | — | Ready |
+| Comercial | — | BigQuery: `ordago-prod.agentes.organizadores` | — | |
+| SEO | `ordago-apps` | BigQuery: `ordago_bi.mart_weekly_web_traffic`; act as `search-console-reader@ordago-prod` | — | |
+| Producto | `ordago-apps` | BigQuery: 19 `ordago_bi.mart_weekly_*` views | — | |
+| Dirección | `ordago-apps` | BigQuery: `ordago_bi`; reads the other agents' transcripts | — | Transcripts kept by Ghostaff |
+| Correo | — | — | Mailbox passwords for info@ and Gmail | No web tools |
+| Finanzas | — | — | Gmail password | No web tools |
+| La Mesa | `ordago-apps` | BigQuery: `ordago_bi.digest_snapshots`; Vertex in `ordago-media`; bucket `ordago-podcast`; act as `podcast-publisher@ordago-prod`; Pub/Sub `ordago-prod/notify` | — | Posts the episode as audio |
+| Productor | `ordago-apps` | Bucket `ordago-agents-podcast`; `ordago-media` | ElevenLabs | Posts audio |
+| Orgánico | `ordago-reels`, pushing to `main` | Firestore read in `ordago-prod`; buckets `ordago-agents-reels`, `ordago-prod-reels-publicacion`; BigQuery `agentes.altas_diarias`; runs the job `reels-publisher` in `ordago-prod` | Meta, ElevenLabs | |
+| Desarrollo | `ordago-apps`, opening PRs | — | — | `ritmo` (at most 3 runs a day, CI queue), 3-hour runs, no web tools |
+
+### What Ghostaff builds for it
+
+1. **The organisation's Google Cloud** ([customer-cloud-access.md](customer-cloud-access.md)): one service account per organisation, a one-hour token per run, `gcloud` and `bq` in the runner. Órdago grants its account the union of the column above.
+2. **More repos per run.** The GitHub App installed on `ordago-apps` and `ordago-reels` too; the spec lists the repos an agent may clone and push, each with its own token; `gh` in the image for pull requests.
+3. **Secrets per agent.** An organisation's secret in the vault, named on the agent row, handed only to that agent's runs. Mail and Meta become connectors when those exist.
+4. **What the legacy start-up does and our runner doesn't:** a per-agent timeout and size (Desarrollo needs 3 hours), forbidden tools, `ritmo` and its metrics, never two runs of one agent at once, «tell only if there is news» (`SIN NOVEDAD` covers it), transcripts kept per run for Dirección.
+5. **Audio from an agent** in a thread shared by the people who should hear it (La Mesa for both founders), with the player the voice notes already have.
+6. **A second Claude account** in Órdago's failover order: twelve agents on one subscription is exactly the weekly limit La Mesa hit.
+7. **The panel launches through the engine.** `ordago-panel/lib/ejecuciones.ts` calls the Cloud Run jobs `ordago-<agent>` directly; it calls the engine instead (start a run, read `agent_runs`) with a credential of its own. What it reads and writes in the record is unchanged.
+
+### Order
+
+Fewest needs first, each one moved with `org add-agents --runner ghostaff --only <agent>` and its Cloud Scheduler job paused in `ordago-agents` in the same sitting: Legal → Comercial → SEO, Producto, Dirección → Correo, Finanzas → La Mesa, Productor → Orgánico → Desarrollo. Then Telegram off: the webhook deleted, `telegram` removed from `proyecto.yaml`, the jobs in `ordago-agents` deleted, and `ghostaff-ai/agents` archived.
+
+### Open decisions (Jaime)
+
+1. **Beta or production.** Production comes up with the first release (`develop` into `main`); Órdago's organisation lives in the beta Supabase today.
+2. **Where the prompts live.** Edited in Ghostaff (the agent row), or the YAMLs stay the source and are imported.
+3. **The panel.** Kept and moved to the engine (item 7), or launching and run state live only in Ghostaff.
 
 ## Steps
 

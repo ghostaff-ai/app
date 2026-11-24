@@ -18,7 +18,7 @@ Jaime (2026-11-22): before moving Órdago's twelve agents ([ordago-agents-in-gho
 3. ~~**A test walk with Órdago on beta**~~ **Dropped (Álvaro, 2026-11-23: not needed).** Was:: a test organisation, one real Órdago agent rebuilt from zero through the customer flow (one that reports every few days what works and what doesn't: SEO or Orgánico), plus a point-by-point comparison with Órdago's panel (`ordago-apps/apps/ordago-panel`). Out comes the list of what is missing, which orders what follows.
 4. **The organisation's assistant** (above). Hidden dependency: a new organisation needs somewhere to keep its record, and today only the GitHub record connector exists ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md), step 6). The app also has no file upload yet.
 5. **Create your own agent**: ask in your own words, a few questions, its card, a trial run, then it runs on its timetable and reports. The sketch in the product plan («Agentes a medida», Jaime 2026-11-14) is the starting point.
-6. **Move Órdago's twelve real agents to production** with the existing plan. **Not yet** (Jaime, 2026-11-22): only once fronts 1–5 have the architecture ready.
+6. **Move Órdago's twelve real agents to production** with the existing plan. ~~**Not yet** (Jaime, 2026-11-22): only once fronts 1–5 have the architecture ready.~~ **Started now** (Jaime, 2026-11-24): Órdago moves as Ghostaff's first customer, and what it lacks is built into the platform on the way ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md#moving-all-of-them-and-telegram-off-jaime-2026-11-24)).
 
 Each front gets its own plan when it is designed; this file only keeps the order and the why.
 
