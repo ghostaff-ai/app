@@ -4,7 +4,7 @@ import type { DecisionRow } from '@ghostaff/shared/services';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { appJwt, freshRepoToken, repoTokens } from '../src/githubApp';
-import { type RecordOrg, type RecordSyncStore, syncOrg } from '../src/recordSync';
+import { type InstructedAgent, type RecordOrg, type RecordSyncStore, syncOrg } from '../src/recordSync';
 
 const ORG: RecordOrg = { id: 'org-1', slug: 'ordago', repo: 'ordago-app/business', host: 'github', installation: 7 };
 
@@ -69,8 +69,9 @@ function fakeGithub(files: Record<string, string>, opts: { moved?: boolean } = {
   return { f, commits, calls };
 }
 
-function store(rows: DecisionRow[] = []) {
+function store(rows: DecisionRow[] = [], agents: InstructedAgent[] = []) {
   const applied: SyncPlan[] = [];
+  const instructions: Array<[string, unknown]> = [];
   const written: string[] = [];
   const states: Array<string | null> = [];
   const s: RecordSyncStore = {
@@ -88,8 +89,12 @@ function store(rows: DecisionRow[] = []) {
     syncState: async (_o, e) => {
       states.push(e);
     },
+    instructedAgents: async () => agents,
+    setInstructions: async (id, change) => {
+      instructions.push([id, change]);
+    },
   };
-  return { s, applied, written, states };
+  return { s, applied, written, states, instructions };
 }
 
 const appAnswered = (recordId: string): DecisionRow =>
@@ -149,6 +154,33 @@ describe('syncOrg', () => {
     const r = await syncOrg({ store: db.s, tokens: async () => Promise.reject(new Error('no installation')), forgejo: null, fetch: fakeGithub({}).f }, ORG);
     expect(r.ok).toBe(false);
     expect(db.states).toEqual(['no installation']);
+  });
+
+  it("reads each agent's AGENTS.md into its task, the record winning, and lets go of one whose file went", async () => {
+    const gh = fakeGithub({ 'agentes/legal/AGENTS.md': '# Legal\nRevisa la ley.\n', 'agentes/seo/AGENTS.md': 'igual' });
+    const agents: InstructedAgent[] = [
+      { id: 'a-legal', slug: 'legal', task: 'del YAML', taskInRecord: false },
+      { id: 'a-seo', slug: 'seo', task: 'igual', taskInRecord: true },
+      { id: 'a-correo', slug: 'correo', task: 'antes del record', taskInRecord: true },
+      { id: 'a-finanzas', slug: 'finanzas', task: 'del YAML', taskInRecord: false },
+    ];
+    const db = store([], agents);
+    const r = await syncOrg({ store: db.s, tokens: async () => 'tok', forgejo: null, fetch: gh.f }, ORG);
+    expect(r.ok).toBe(true);
+    expect(db.instructions).toEqual([
+      ['a-legal', { task: '# Legal\nRevisa la ley.\n', inRecord: true }],
+      ['a-correo', { inRecord: false }],
+    ]);
+    expect(r.summary).toContain('legal: instructions from the record');
+    expect(gh.commits).toEqual([]);
+  });
+
+  it('leaves out instructions too long for the row, and says so', async () => {
+    const gh = fakeGithub({ 'agentes/legal/AGENTS.md': 'x'.repeat(40001) });
+    const db = store([], [{ id: 'a-legal', slug: 'legal', task: 'del YAML', taskInRecord: false }]);
+    const r = await syncOrg({ store: db.s, tokens: async () => 'tok', forgejo: null, fetch: gh.f }, ORG);
+    expect(db.instructions).toEqual([]);
+    expect(r.summary).toContain('legal: instructions over 40000 characters');
   });
 
   it('an empty or missing por-decidir closes nothing that is not there and syncs fine', async () => {

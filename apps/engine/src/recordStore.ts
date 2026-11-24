@@ -54,6 +54,23 @@ export function supabaseRecordStore(db: SupabaseClient): RecordSyncStore {
     },
     apply: (plan) => applySync(db, plan),
     markWrittenBack: (ids) => markWrittenBack(db, ids),
+    async instructedAgents(orgId) {
+      const { data, error } = await db
+        .from('agents')
+        .select('id, slug, task, task_in_record')
+        .eq('org_id', orgId)
+        .not('slug', 'is', null)
+        .returns<Array<{ id: string; slug: string; task: string | null; task_in_record: boolean }>>();
+      if (error) throw error;
+      return (data ?? []).map((r) => ({ id: r.id, slug: r.slug, task: r.task, taskInRecord: r.task_in_record }));
+    },
+    async setInstructions(agentId, change) {
+      const { error } = await db
+        .from('agents')
+        .update(change.inRecord ? { task: change.task, task_in_record: true } : { task_in_record: false })
+        .eq('id', agentId);
+      if (error) throw error;
+    },
     async syncState(orgId, err) {
       const { error } = await db
         .from('organizations')
