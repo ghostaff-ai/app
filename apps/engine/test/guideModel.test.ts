@@ -1,7 +1,7 @@
 import type { GuideAnswer, GuideLanding, GuidePhoto, GuideStep } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { type AiAccount, AiFailure, type AiUse, type ModelTurn, type Writer } from '../src/chat';
-import { FALLBACK_STEP, GuideInputError, type GuideModelDeps, type GuideState, guideSystemPrompt, nextStep, SHOW_STEP, showStepSpec, validateGuidePhoto } from '../src/guideModel';
+import { closingStep, FALLBACK_STEP, GuideInputError, type GuideModelDeps, type GuideState, guideSystemPrompt, nextStep, SHOW_STEP, showStepSpec, validateGuidePhoto } from '../src/guideModel';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 const REDES = '20000000-0000-0000-0000-000000000002';
@@ -238,6 +238,36 @@ describe('a step of a guide, from the model', () => {
       expect((await req.tools.run('other_tool', {})).isError).toBe(true);
     };
     expect(await nextStep(deps({ 'key-1': write }), guide())).toEqual(openUsers);
+  });
+});
+
+describe('done belongs to the closing step only (R21)', () => {
+  const finished: GuideStep = { blocks: [{ type: 'title', text: 'Ya está' }], done: { undo: 'Borra el usuario redes en Usuarios.' } };
+  const passed = guide([{ type: 'step', step: openUsers }, { type: 'checked', base: 'https://miweb.com/wp-json' }]);
+
+  it('while the check has not passed, a step with done is sent back, and twice gives the fallback, which has none', async () => {
+    const s = scripted([{ step: finished }, { step: openUsers }]);
+    expect(await nextStep(deps({ 'key-1': s.write }), guide())).toEqual(openUsers);
+    expect(s.requests[1]?.messages.at(-1)?.content).toMatch(/done/);
+    const twice = scripted([{ step: finished }, { step: finished }]);
+    const step = await nextStep(deps({ 'key-1': twice.write }), guide());
+    expect(step).toEqual(FALLBACK_STEP);
+    expect(step.done).toBeUndefined();
+  });
+
+  it('once the check passed, the step must carry done; one without is sent back', async () => {
+    const s = scripted([{ step: openUsers }, { step: finished }]);
+    expect(await nextStep(deps({ 'key-1': s.write }), passed)).toEqual(finished);
+    expect(s.requests[1]?.messages.at(-1)?.content).toMatch(/done\.undo/);
+  });
+
+  it('when the model fails twice at the closing step, a fixed one says how to remove the agent\'s user', async () => {
+    const s = scripted([{ step: openUsers }, { text: 'Hecho.' }]);
+    const step = await nextStep(deps({ 'key-1': s.write }), passed);
+    expect(step).toEqual(closingStep('redes@panaderia.ghostaff.ai', 'WordPress'));
+    expect(step.done).toEqual({ undo: 'Quita el usuario redes@panaderia.ghostaff.ai en WordPress.' });
+    const { parseGuideStep } = await import('@ghostaff/shared');
+    expect(parseGuideStep(step, wordpress)).toEqual({ step });
   });
 });
 

@@ -33,8 +33,8 @@ export type GuideHistoryEntry =
   | { type: 'answer'; answer: GuideAnswer }
   /** The person sent a photo here; the photo itself is not kept. */
   | { type: 'photo' }
-  /** The check passed here. `base` is the address it passed on (never a secret), kept for an owner's approval. */
-  | { type: 'checked'; base: string };
+  /** The check passed here. `base` is the address it passed on (never a secret), kept for an owner's approval; `at`, when. */
+  | { type: 'checked'; base: string; at?: string };
 
 /** What the model reads about a guide (Task 5 builds it from the row). */
 export interface GuideState {
@@ -65,6 +65,23 @@ export const FALLBACK_STEP: GuideStep = {
     { type: 'bullets', items: ['Haz una foto o una captura de lo que ves ahora.', 'Pulsa «Enséñame tu pantalla», abajo.'] },
   ],
 };
+
+/**
+ * The closing step when the model got it wrong twice: the check passed, so the
+ * guide ends here, with how to take the access back in the app's own tool.
+ */
+export function closingStep(agentEmail: string, app: string): GuideStep {
+  return {
+    blocks: [
+      { type: 'title', text: 'Acceso comprobado' },
+      { type: 'bullets', items: ['Ghostaff ha probado el acceso y funciona.'] },
+    ],
+    done: { undo: `Quita el usuario ${agentEmail} en ${app}.` },
+  };
+}
+
+/** Whether the guide's check has passed: its next step is the closing one, the only one with `done`. */
+export const isClosing = (history: readonly GuideHistoryEntry[]) => history.some((e) => e.type === 'checked');
 
 /** A photo above this, decoded, is refused. */
 export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
@@ -266,7 +283,9 @@ function guideTurn(guide: GuideState, answer: GuideAnswer | undefined, photo: bo
   const tail = [
     now ? `Ahora la persona: ${now}` : null,
     photo ? 'La persona te manda una foto de su pantalla con este mensaje.' : null,
-    `Llama a ${SHOW_STEP} con el paso siguiente.`,
+    isClosing(guide.history)
+      ? `La comprobación ha pasado: este es el último paso. Llama a ${SHOW_STEP} con él, y con done.undo.`
+      : `Llama a ${SHOW_STEP} con el paso siguiente.`,
   ].filter((l): l is string => l !== null);
   return [
     `App: ${guide.app}`,
@@ -341,14 +360,20 @@ async function ask(deps: GuideModelDeps, landing: GuideLanding, system: string, 
   throw new AiFailure('failed', 'no AI account answered');
 }
 
-/** The step if it is valid for this guide; else the error, for the model. */
-function check(attempt: Attempt, landing: GuideLanding, photo: boolean): { step: GuideStep } | { error: string } {
+/**
+ * The step if it is valid for this guide; else the error, for the model. `done`
+ * ends the guide on the person's screen, so it belongs to the closing step only:
+ * refused before the check passed, required after.
+ */
+function check(attempt: Attempt, landing: GuideLanding, photo: boolean, closing: boolean): { step: GuideStep } | { error: string } {
   if (!attempt.got) return { error: `you wrote text instead of calling ${SHOW_STEP}; a step only counts as a ${SHOW_STEP} call` };
   const parsed = parseGuideStep(attempt.input, landing);
   if ('error' in parsed) return parsed;
   if (!photo && parsed.step.blocks.some((b) => b.type === 'annotated_shot')) {
     return { error: 'annotated_shot needs a photo sent with this turn, and there is none; ask for one instead' };
   }
+  if (!closing && parsed.step.done) return { error: 'done is only for the last step, once the check has passed, and it has not passed yet; drop done' };
+  if (closing && !parsed.step.done) return { error: 'the check has passed, so this is the last step: it needs done.undo, how to take the access back' };
   return parsed;
 }
 
@@ -367,7 +392,8 @@ function withPhoto(turns: ModelTurn[], photo: GuidePhoto | undefined): ModelTurn
  * The next step of a guide, after the person's `answer` and with their `photo`
  * (the latest one only). Throws GuideInputError for a photo the model cannot
  * read, before any account is tried; throws when no AI account answers
- * (AiFailure or the provider's error); a step the model gets wrong twice gives FALLBACK_STEP.
+ * (AiFailure or the provider's error); a step the model gets wrong twice gives
+ * FALLBACK_STEP, or the fixed closing step once the check has passed.
  */
 export async function nextStep(deps: GuideModelDeps, guide: GuideState, answer?: GuideAnswer, photo?: GuidePhoto): Promise<GuideStep> {
   if (photo !== undefined) {
@@ -375,15 +401,16 @@ export async function nextStep(deps: GuideModelDeps, guide: GuideState, answer?:
     if (!valid.ok) throw new GuideInputError(valid.message);
   }
   const system = guideSystemPrompt(guide);
+  const closing = isClosing(guide.history);
   const turns: ModelTurn[] = [{ role: 'user', content: guideTurn(guide, answer, !!photo) }];
   for (let round = 0; round < 2; round++) {
     const attempt = await ask(deps, guide.landing, system, withPhoto(turns, photo));
-    const checked = check(attempt, guide.landing, !!photo);
+    const checked = check(attempt, guide.landing, !!photo, closing);
     if ('step' in checked) return checked.step;
     turns.push(
       { role: 'assistant', content: echo(attempt) },
       { role: 'user', content: `Ese paso no vale: ${checked.error}. Vuelve a llamar a ${SHOW_STEP} con el paso corregido.` },
     );
   }
-  return FALLBACK_STEP;
+  return closing ? closingStep(guide.agentEmail, guide.app) : FALLBACK_STEP;
 }

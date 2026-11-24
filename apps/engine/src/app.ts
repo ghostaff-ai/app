@@ -13,7 +13,7 @@ import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromPr
 import { type ActionDeps, approveAction, rejectAction } from './actions';
 import { CONNECTORS } from '@ghostaff/shared';
 import { agentHello, type ChatDeps, replyInThread, resumeInThread } from './chat';
-import { approveGuide, checkGuide, type GuideDeps, getGuide, guidedAccessUndo, guideStep, MAX_STEP_BODY, rejectGuide, removeGuidedAccess } from './guides';
+import { approveGuide, checkGuide, type GuideDeps, getGuide, guidedAccessUndo, guideStep, MAX_STEP_BODY, pendingGuides, rejectGuide, removeGuidedAccess } from './guides';
 import { PHOTO_TOO_BIG } from './guideModel';
 import { reportRun } from './jobs';
 import { runRecordToken, runSpec } from './runner';
@@ -239,6 +239,9 @@ export function createApp(deps: AppDeps) {
   };
   app.get('/guides/:id', async (c) => c.json(await getGuide(guides(), c.get('userId'), c.req.param('id'))));
 
+  // Owners only: the organisation's member guides waiting for their approval, for Conexiones.
+  app.get('/orgs/:orgId/guides/pending', async (c) => c.json(await pendingGuides(guides(), c.get('userId'), c.req.param('orgId'))));
+
   // Answers when the model has written the step. A photo above 2 MB is refused before anything else is read.
   app.post('/guides/:id/step', async (c) => {
     const g = guides();
@@ -264,6 +267,7 @@ export function createApp(deps: AppDeps) {
     return c.json(await checkGuide(g, c.get('userId'), c.req.param('id'), body));
   });
 
+  // Answers once the agent has gone on in the guide's conversation (Cloud Run keeps the CPU only while a request is open).
   app.post('/guides/:id/approve', async (c) => c.json(await approveGuide(guides(), c.get('userId'), c.req.param('id'))));
 
   app.post('/guides/:id/reject', async (c) => c.json(await rejectGuide(guides(), c.get('userId'), c.req.param('id'))));

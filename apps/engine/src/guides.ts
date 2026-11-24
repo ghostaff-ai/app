@@ -6,8 +6,10 @@
 // which is what the engine trusts afterwards, never the card. The app then
 // drives the guide through the routes here: each step from the guide's model
 // (guideModel.ts), the check of what the person typed (guidedAccounts.ts), an
-// owner's approval of a member's grant (decision 2), and the agent going on
-// once (`resumeInThread` in chat.ts).
+// owner's approval of a member's grant (decision 2), which an owner gives from
+// Conexiones or the guide's screen even when the guide's conversation is a
+// member's own, and the agent going on once (`resumeInThread`, or `resumeAs`
+// on an approval, in chat.ts).
 //
 // Every move of a guide is a conditional update of its row (on its status,
 // and on when it last changed where a step could race it), so two people, or
@@ -16,9 +18,10 @@
 // What the person typed in the check goes to `secretFrom` and the vault only:
 // never into the row, its history, a message, a log or an error.
 
-import { agentEmail, type GuideAnswer, type GuideAuth, type GuideCheckOutcome, type GuideField, type GuideLanding, type GuidePart, type GuidePhoto, type GuideStatus, type GuideStep, type GuideView, guidedProvider, isGuidePart, type MessagePart, normaliseBase, parseLanding } from '@ghostaff/shared';
+import { type AccountAskPart, agentEmail, type GuideAnswer, type GuideAuth, type GuideCheckOutcome, type GuideField, type GuideLanding, type GuidePart, type GuidePhoto, type GuideStatus, type GuideStep, type GuideView, guidedProvider, isGuidePart, type MessagePart, normaliseBase, type PendingGuide, parseLanding } from '@ghostaff/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ChatAgent, ChatDeps, Resumable } from './chat';
+import { catalogueEntry, needFor } from './accountAsks';
+import { type ChatAgent, type ChatDeps, type Resumable, resumeAs } from './chat';
 import { type Membership, Refusal, requireOwner } from './connections';
 import { type CheckValues, checkLanding, type GuidedSecret, type GuidedSettings, type GuidedStore, secretFrom, secretOf } from './guidedAccounts';
 import { GuideInputError, type GuideHistoryEntry, type GuideModelDeps, MAX_PHOTO_BYTES, nextStep, validateGuidePhoto } from './guideModel';
@@ -67,7 +70,8 @@ export interface GuideCondition {
   notResumed?: boolean;
 }
 
-export type GuidePatch = Partial<Pick<GuideRecord, 'status' | 'history' | 'undo' | 'blockedReason' | 'completedBy' | 'decidedBy' | 'resumedAt'>>;
+/** A move of the guide; it marks when the row last changed. Going on (`resumedAt`) is not one: `claimResume`. */
+export type GuidePatch = Partial<Pick<GuideRecord, 'status' | 'history' | 'undo' | 'blockedReason' | 'completedBy' | 'decidedBy'>>;
 
 /** The database as guides need it (service role). */
 export interface GuideStore {
@@ -85,8 +89,21 @@ export interface GuideStore {
   guide(id: string): Promise<GuideRecord | null>;
   /** Applies `patch` only while the row matches `cond`; false when it no longer does. */
   update(id: string, cond: GuideCondition, patch: GuidePatch): Promise<boolean>;
-  /** Rewrites the card in its message, so everyone in the thread sees it change. */
-  updateCard(messageId: string, guideId: string, patch: Partial<GuidePart>): Promise<void>;
+  /**
+   * Marks the agent gone on, while the guide is done and it has not yet; false
+   * when it already had. Leaves `updatedAt` as it was: the closing step, still
+   * being written, is saved on condition of it.
+   */
+  claimResume(id: string): Promise<boolean>;
+  /** Undoes the claim, when the agent could not go on after all. */
+  releaseResume(id: string): Promise<void>;
+  /** The organisation's member guides waiting for an owner (`checked`), oldest first. */
+  pending(orgId: string): Promise<PendingGuide[]>;
+  /**
+   * Rewrites the card in its message, so everyone in the thread sees it change;
+   * `add` goes after it, in the same write (the account a handed-over guide asks for).
+   */
+  updateCard(messageId: string, guideId: string, patch: Partial<GuidePart>, add?: MessagePart): Promise<void>;
   membership(orgId: string, userId: string): Promise<Membership | null>;
   /** What the agent's address is made of; null when the agent is gone. */
   identity(orgId: string, agentId: string): Promise<{ orgSlug: string; agent: { slug: string | null; name: string } } | null>;
@@ -236,11 +253,17 @@ async function addressOf(deps: GuideDeps, g: GuideRecord): Promise<string> {
 const stepsOf = (history: readonly GuideHistoryEntry[]) =>
   history.filter((e): e is Extract<GuideHistoryEntry, { type: 'step' }> => e.type === 'step').map((e) => e.step);
 
-/** What the guide's screen needs. Anyone who may read the conversation may read it. */
+/**
+ * What the guide's screen needs. Anyone who may read the conversation may read
+ * it; so may an owner who cannot, while the guide waits for an owner, and once
+ * they decided it (a member's guide in their personal chat, approved from Conexiones).
+ */
 export async function getGuide(deps: GuideDeps, userId: string, id: unknown): Promise<GuideView> {
   const g = await load(deps, id);
-  if ((await deps.chat.chat.threadLevelFor(g.threadId, userId)) === 'none') throw new Refusal(403, 'not_allowed', 'you may not read this conversation');
-  const [address, member] = await Promise.all([addressOf(deps, g), deps.store.membership(g.orgId, userId)]);
+  const [level, member] = await Promise.all([deps.chat.chat.threadLevelFor(g.threadId, userId), deps.store.membership(g.orgId, userId)]);
+  const ownerReads = member?.role === 'owner' && (g.status === 'checked' || g.decidedBy === userId);
+  if (level === 'none' && !ownerReads) throw new Refusal(403, 'not_allowed', 'you may not read this conversation');
+  const address = await addressOf(deps, g);
   const steps = stepsOf(g.history);
   return {
     id: g.id,
@@ -331,7 +354,8 @@ export async function guideStep(deps: GuideDeps, userId: string, id: unknown, bo
     { type: 'step', step },
   ];
   const patch: GuidePatch = { history: [...g.history, ...entries] };
-  if (step.done) patch.undo = step.done.undo.slice(0, 1000);
+  // nextStep gives `done` on the closing step only, and always there.
+  if (closing && step.done) patch.undo = step.done.undo.slice(0, 1000);
   const handOver = step.blocks.find((b): b is Extract<GuideStep['blocks'][number], { type: 'use_connector' }> => b.type === 'use_connector');
   if (g.status === 'open' && handOver) patch.status = 'handed_over';
   else if (g.status === 'open' && step.blocked) {
@@ -343,11 +367,39 @@ export async function guideStep(deps: GuideDeps, userId: string, id: unknown, bo
   }
   if (patch.status === 'handed_over' && handOver) {
     const by = (await deps.store.membership(g.orgId, userId))?.displayName ?? 'Alguien';
-    await deps.store.updateCard(g.messageId, g.id, { status: 'handed_over', connector: handOver.connector, decidedBy: by });
+    const ask = await handOverAsk(deps, g, handOver.connector, userId);
+    await deps.store.updateCard(g.messageId, g.id, { status: 'handed_over', connector: handOver.connector, decidedBy: by }, ask ?? undefined);
   } else if (patch.status === 'blocked') {
     await deps.store.updateCard(g.messageId, g.id, { status: 'blocked', blockedReason: patch.blockedReason ?? undefined });
   }
   return { step, status: patch.status ?? g.status };
+}
+
+/**
+ * A guide handed over to the catalogue's button asks for that account in the
+ * same message, as the agent would with `ask_for_account` (accountAsks.ts), so
+ * connector-in-chat's connect → grant → resume takes over from there. Null when
+ * asking is off here. An account the agent already has is asked as a grant: the
+ * chat finds it ready at once and the agent goes on.
+ */
+async function handOverAsk(deps: GuideDeps, g: GuideRecord, connectorId: string, userId: string): Promise<AccountAskPart | null> {
+  const asks = deps.chat.asks;
+  const connector = catalogueEntry(connectorId);
+  if (!asks || !connector) return null;
+  const agent = await deps.chat.chat.agent(g.agentId);
+  const found = needFor(connector, await asks.accountStates(g.orgId), agent?.accounts);
+  const need = found === 'have' ? 'grant' : found;
+  const askId = await asks.propose({
+    orgId: g.orgId,
+    threadId: g.threadId,
+    messageId: g.messageId,
+    agentId: g.agentId,
+    connector: connector.id,
+    name: connector.name,
+    need,
+    requestedBy: userId,
+  });
+  return { type: 'account_ask', askId, name: connector.name, why: g.why, need, status: 'open', connector: connector.id };
 }
 
 /** The check's values: only the fields a guide asks for, as text. Never logged. */
@@ -363,10 +415,14 @@ function checkValues(body: unknown): CheckValues {
   return out;
 }
 
-/** What the app shows to recognise an access: the user's name, or the key's last four characters. */
+/** The shortest token or key whose last four characters may be shown: on a shorter one they give too much of it away. */
+const MIN_HINTED = 12;
+
+/** What the app shows to recognise an access: the user's name, or a long token or key's last four characters; else nothing. */
 function hintOf(auth: GuideAuth, secret: GuidedSecret): string {
   if (auth === 'basic') return secret.username ?? '';
-  return `…${(secret.token ?? secret.key ?? '').slice(-4)}`;
+  const value = secret.token ?? secret.key ?? '';
+  return value.length >= MIN_HINTED ? `…${value.slice(-4)}` : '';
 }
 
 /** Writes the access for the guide's agent; the credential of an access it replaces goes. */
@@ -415,7 +471,7 @@ export async function checkGuide(deps: GuideDeps, userId: string, id: unknown, b
   const claimed = await deps.store.update(
     g.id,
     { status: 'open', updatedAt: g.updatedAt },
-    { status: to, completedBy: userId, history: [...g.history, { type: 'checked', base: base.base }] },
+    { status: to, completedBy: userId, history: [...g.history, { type: 'checked', base: base.base, at: new Date().toISOString() }] },
   );
   if (!claimed) {
     const now = await deps.store.guide(g.id);
@@ -445,8 +501,15 @@ async function decidable(deps: GuideDeps, userId: string, id: unknown) {
   return { g, owner };
 }
 
-/** An owner approves a member's grant: the access is written, for the guide's agent only. */
-export async function approveGuide(deps: GuideDeps, userId: string, id: unknown): Promise<{ status: 'done' }> {
+/**
+ * An owner approves a member's grant: the access is written, for the guide's
+ * agent only, and the agent goes on in the guide's conversation as the member
+ * who did the guide (the owner may not see it: a member's personal chat). Answers
+ * once that reply is written. `resumed` is false when the agent could not go on
+ * now (it was answering, or someone's chat let it go on first): the chat does it
+ * when it next sees the guide done, once.
+ */
+export async function approveGuide(deps: GuideDeps, userId: string, id: unknown): Promise<{ status: 'done'; resumed: boolean }> {
   const { g, owner } = await decidable(deps, userId, id);
   const base = [...g.history].reverse().find((e): e is Extract<GuideHistoryEntry, { type: 'checked' }> => e.type === 'checked')?.base;
   const secret = secretOf(g.landing.auth, await deps.vault.get(guidedSecretName(g.orgId, g.id)));
@@ -463,7 +526,24 @@ export async function approveGuide(deps: GuideDeps, userId: string, id: unknown)
     throw e;
   }
   await deps.store.updateCard(g.messageId, g.id, { status: 'done', decidedBy: owner.displayName });
-  return { status: 'done' };
+  return { status: 'done', resumed: await resumeAfterApproval(deps, g, completedBy) };
+}
+
+async function resumeAfterApproval(deps: GuideDeps, g: GuideRecord, completedBy: string): Promise<boolean> {
+  try {
+    await resumeAs(deps.chat, g.threadId, await guideResumable(deps.store, g.threadId, g.id), completedBy);
+    return true;
+  } catch (e) {
+    // The approval stands either way.
+    if (!(e instanceof Refusal)) console.error('guide approved, agent did not go on', e instanceof Error ? e.name : typeof e);
+    return false;
+  }
+}
+
+/** The organisation's member guides waiting for an owner, for Conexiones. Owners only. */
+export async function pendingGuides(deps: GuideDeps, userId: string, orgId: unknown): Promise<{ guides: PendingGuide[] }> {
+  await requireOwner(deps.store, orgId, userId);
+  return { guides: await deps.store.pending(orgId as string) };
 }
 
 /** An owner turns a member's grant down: the credential goes, and the card tells the agent. */
@@ -525,10 +605,8 @@ export async function guideResumable(store: GuideStore, threadId: string, guideI
     agentId: g.agentId,
     name: g.app,
     ready: async (_agent: ChatAgent) => {},
-    claim: (_userId) => store.update(g.id, { status: 'done', notResumed: true }, { resumedAt: new Date().toISOString() }),
-    release: async () => {
-      await store.update(g.id, { status: 'done' }, { resumedAt: null });
-    },
+    claim: (_userId) => store.claimResume(g.id),
+    release: () => store.releaseResume(g.id),
     // The card already says who finished it.
     settle: async () => {},
     memberName: async (userId) => (await store.membership(g.orgId, userId))?.displayName ?? null,
@@ -553,7 +631,6 @@ export function supabaseGuideStore(admin: SupabaseClient): GuideStore {
     blockedReason: 'blocked_reason',
     completedBy: 'completed_by',
     decidedBy: 'decided_by',
-    resumedAt: 'resumed_at',
   };
   return {
     async create(g) {
@@ -612,11 +689,42 @@ export function supabaseGuideStore(admin: SupabaseClient): GuideStore {
       const rows = check(await q.select('id')) ?? [];
       return rows.length === 1;
     },
-    async updateCard(messageId, guideId, patch) {
+    async claimResume(id) {
+      const rows =
+        check(await admin.from('guides').update({ resumed_at: new Date().toISOString() }).eq('id', id).eq('status', 'done').is('resumed_at', null).select('id')) ?? [];
+      return rows.length === 1;
+    },
+    async releaseResume(id) {
+      check(await admin.from('guides').update({ resumed_at: null }).eq('id', id).eq('status', 'done'));
+    },
+    async pending(orgId) {
+      const rows = (check(
+        await admin.from('guides').select('id, app, agent_id, completed_by, history, updated_at, agents(name)').eq('org_id', orgId).eq('status', 'checked').order('updated_at'),
+      ) ?? []) as Record<string, any>[];
+      const who = [...new Set(rows.map((r) => r.completed_by as string | null).filter((u): u is string => !!u))];
+      const names = new Map<string, string>();
+      if (who.length > 0) {
+        const members = check(await admin.from('memberships').select('user_id, display_name').eq('org_id', orgId).in('user_id', who)) ?? [];
+        for (const m of members as { user_id: string; display_name: string }[]) names.set(m.user_id, m.display_name);
+      }
+      return rows.map((r) => {
+        const agent = Array.isArray(r.agents) ? r.agents[0] : r.agents;
+        const checked = (Array.isArray(r.history) ? (r.history as GuideHistoryEntry[]) : []).find((e) => e.type === 'checked');
+        return {
+          id: r.id,
+          app: r.app,
+          agentId: r.agent_id,
+          agentName: agent?.name ?? 'Un agente',
+          completedByName: (r.completed_by && names.get(r.completed_by)) || 'Alguien',
+          checkedAt: (checked?.type === 'checked' && checked.at) || r.updated_at,
+        };
+      });
+    },
+    async updateCard(messageId, guideId, patch, add) {
       const r = check(await admin.from('messages').select('parts').eq('id', messageId).maybeSingle());
       if (!r) return;
       const parts = (r.parts as MessagePart[]).map((p) => (isGuidePart(p) && p.guideId === guideId ? { ...p, ...patch } : p));
-      check(await admin.from('messages').update({ parts }).eq('id', messageId));
+      check(await admin.from('messages').update({ parts: add ? [...parts, add] : parts }).eq('id', messageId));
     },
     async membership(orgId, userId) {
       const r = check(await admin.from('memberships').select('role, display_name').eq('org_id', orgId).eq('user_id', userId).maybeSingle());

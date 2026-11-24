@@ -1,11 +1,11 @@
-import type { ChatMessage, GuideLanding, GuidePart, GuideStep } from '@ghostaff/shared';
+import type { AccountAskPart, ChatMessage, GuideLanding, GuidePart, GuideStep, MessagePart } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { type ChatAgent, type ChatDeps, type ChatStore, type ChatThreadHead, type Level, toTurns, type Writer } from '../src/chat';
-import type { AskStore } from '../src/accountAsks';
+import type { AskRecord, AskStore } from '../src/accountAsks';
 import type { Membership } from '../src/connections';
 import type { GuidedStore } from '../src/guidedAccounts';
-import { SHOW_STEP } from '../src/guideModel';
+import { FALLBACK_STEP, SHOW_STEP } from '../src/guideModel';
 import { GUIDE_TOOL, type GuideRecord, type GuideStore } from '../src/guides';
 import { NO_TOOLS } from '../src/tools';
 import { guidedSecretName, MemoryVault } from '../src/vault';
@@ -48,7 +48,7 @@ function msg(p: Partial<ChatMessage> & { text: string }): ChatMessage {
 /** The guides in memory: every move is the conditional update the database makes. */
 function memoryGuides() {
   const rows = new Map<string, GuideRecord>();
-  const cards: Array<{ messageId: string; guideId: string; patch: Partial<GuidePart> }> = [];
+  const cards: Array<{ messageId: string; guideId: string; patch: Partial<GuidePart>; add?: MessagePart }> = [];
   let clock = 0;
   const members: Record<string, Membership> = {
     ana: { role: 'owner', displayName: 'Ana' },
@@ -85,14 +85,36 @@ function memoryGuides() {
       Object.assign(r, structuredClone(patch), { updatedAt: `t${clock++}` });
       return true;
     },
-    updateCard: async (messageId, guideId, patch) => {
-      cards.push({ messageId, guideId, patch });
+    // As the database does it: resumed_at alone, with updated_at left as it was.
+    claimResume: async (id) => {
+      const r = rows.get(id);
+      if (!r || r.status !== 'done' || r.resumedAt) return false;
+      r.resumedAt = new Date().toISOString();
+      return true;
+    },
+    releaseResume: async (id) => {
+      const r = rows.get(id);
+      if (r && r.status === 'done') r.resumedAt = null;
+    },
+    pending: async (orgId) =>
+      [...rows.values()]
+        .filter((r) => r.orgId === orgId && r.status === 'checked')
+        .map((r) => ({
+          id: r.id,
+          app: r.app,
+          agentId: r.agentId,
+          agentName: 'Redes',
+          completedByName: (r.completedBy && members[r.completedBy]?.displayName) || 'Alguien',
+          checkedAt: r.history.flatMap((e) => (e.type === 'checked' && e.at ? [e.at] : []))[0] ?? r.updatedAt,
+        })),
+    updateCard: async (messageId, guideId, patch, add) => {
+      cards.push({ messageId, guideId, patch, ...(add ? { add } : {}) });
     },
     membership: async (_org, userId) => members[userId] ?? null,
     identity: async () => ({ orgSlug: 'panaderia', agent: { slug: 'redes', name: 'Redes' } }),
   };
-  const seed = async () =>
-    store.create({ orgId: ORG, threadId: THREAD, messageId: MESSAGE, agentId: REDES, app: 'WordPress', goal: 'Redes publica borradores en tu web', why: 'Para publicar', landing: wordpress, startedBy: 'luis' });
+  const seed = async (landing: GuideLanding = wordpress) =>
+    store.create({ orgId: ORG, threadId: THREAD, messageId: MESSAGE, agentId: REDES, app: 'WordPress', goal: 'Redes publica borradores en tu web', why: 'Para publicar', landing, startedBy: 'luis' });
   return { store, rows, cards, seed };
 }
 
@@ -120,8 +142,49 @@ function memoryAccesses() {
   return { store, created, replacing, rows, flags };
 }
 
-function setup(opts: { write?: Writer; messages?: ChatMessage[]; levels?: Record<string, Level>; noAccount?: boolean; fetchStatus?: number; asks?: AskStore } = {}) {
+/** Asking for an account, in memory, as accountAsks.ts records it. */
+function memoryAsks() {
+  const states = new Map<string, 'ok' | 'failing'>();
+  const rows = new Map<string, AskRecord>();
+  const proposed: Array<Parameters<AskStore['propose']>[0]> = [];
+  const store: AskStore = {
+    accountStates: async () => new Map(states),
+    propose: async (a) => {
+      proposed.push(a);
+      const id = `80000000-0000-0000-0000-00000000000${rows.size + 1}`;
+      rows.set(id, { id, orgId: a.orgId, threadId: a.threadId, messageId: a.messageId, agentId: a.agentId, connector: a.connector, name: a.name, need: a.need, status: 'open', messageState: 'done' });
+      return id;
+    },
+    ask: async (id) => (rows.has(id) ? { ...rows.get(id)! } : null),
+    claim: async (id) => {
+      const r = rows.get(id);
+      if (!r || r.status !== 'open') return false;
+      r.status = 'done';
+      return true;
+    },
+    reopen: async (id) => {
+      rows.get(id)!.status = 'open';
+    },
+    updateCard: async () => {},
+    memberName: async (_o, u) => ({ ana: 'Ana', luis: 'Luis' })[u] ?? null,
+  };
+  return { store, states, rows, proposed };
+}
+
+function setup(
+  opts: {
+    write?: Writer;
+    messages?: ChatMessage[];
+    levels?: Record<string, Level>;
+    /** Each person's level on the guide's conversation, when it differs from their level on the agent (a personal chat). */
+    threadLevels?: Record<string, Level>;
+    noAccount?: boolean;
+    fetchStatus?: number;
+    asks?: AskStore;
+  } = {},
+) {
   const levels = opts.levels ?? { ana: 'talk', luis: 'talk', bea: 'read' };
+  const threadLevels = opts.threadLevels ?? levels;
   const guides = memoryGuides();
   const accesses = memoryAccesses();
   const vault = new MemoryVault();
@@ -133,7 +196,7 @@ function setup(opts: { write?: Writer; messages?: ChatMessage[]; levels?: Record
   const threads: ChatThreadHead[] = [{ id: THREAD, orgId: ORG, agentId: REDES, title: 'Web' }];
   const chat: ChatStore = {
     levelFor: async (_a, u) => levels[u] ?? 'none',
-    threadLevelFor: async (_t, u) => levels[u] ?? 'none',
+    threadLevelFor: async (_t, u) => threadLevels[u] ?? 'none',
     thread: async (id) => threads.find((t) => t.id === id) ?? null,
     agent: async (id) => (id === REDES ? redes : null),
     orgAgents: async () => [redes],
@@ -375,14 +438,47 @@ describe('the guide screen: reading and stepping', () => {
     expect(await res.json()).toMatchObject({ message: 'No he podido preparar el siguiente paso. Prueba otra vez en un momento.' });
   });
 
-  it('use_connector gives handed_over, with the connector on the card', async () => {
-    const s = setup({ write: stepping({ blocks: [{ type: 'title', text: 'Usa el botón de WordPress.com' }, { type: 'use_connector', connector: 'wordpress' }] }) });
+  it('use_connector gives handed_over, and asks for that account in the same message, for the connect → grant → resume flow (R22)', async () => {
+    const asks = memoryAsks();
+    const s = setup({ asks: asks.store, write: stepping({ blocks: [{ type: 'title', text: 'Usa el botón de WordPress.com' }, { type: 'use_connector', connector: 'wordpress' }] }) });
     const id = await s.guides.seed();
     const res = await s.call('luis', `/guides/${id}/step`, { answer: { type: 'choice', option: 'wpcom' } });
     expect(await res.json()).toMatchObject({ status: 'handed_over' });
     expect(s.guides.rows.get(id)?.status).toBe('handed_over');
-    expect(s.guides.cards).toEqual([{ messageId: MESSAGE, guideId: id, patch: { status: 'handed_over', connector: 'wordpress', decidedBy: 'Luis' } }]);
+    expect(asks.proposed).toEqual([
+      { orgId: ORG, threadId: THREAD, messageId: MESSAGE, agentId: REDES, connector: 'wordpress', name: 'WordPress.com', need: 'connect', requestedBy: 'luis' },
+    ]);
+    const [askId] = [...asks.rows.keys()];
+    const ask: AccountAskPart = { type: 'account_ask', askId: askId!, name: 'WordPress.com', why: 'Para publicar', need: 'connect', status: 'open', connector: 'wordpress' };
+    expect(s.guides.cards).toEqual([{ messageId: MESSAGE, guideId: id, patch: { status: 'handed_over', connector: 'wordpress', decidedBy: 'Luis' }, add: ask }]);
     expect((await s.call('luis', `/guides/${id}/step`, {})).status).toBe(409);
+
+    // Not connected yet: not yet. Connected (and Redes may use every account): the agent goes on, as for any ask.
+    expect(await (await s.call('ana', `/threads/${THREAD}/resume`, { askId })).json()).toMatchObject({ error: 'not_yet' });
+    asks.states.set('wordpress', 'ok');
+    const said: string[] = [];
+    s.answerWith(async ({ messages, onText }) => {
+      said.push(messages.at(-1)?.content ?? '');
+      onText('Publico el borrador en WordPress.com.');
+    });
+    const resumed = await s.call('ana', `/threads/${THREAD}/resume`, { askId });
+    expect(await resumed.json()).toEqual({ resumed: true });
+    expect(said[0]).toContain('Ana: Ya tienes acceso a WordPress.com.');
+  });
+
+  it('a handover for an account that is connected but not given to the agent asks to give it', async () => {
+    const asks = memoryAsks();
+    asks.states.set('wordpress', 'ok');
+    const s = setup({ asks: asks.store, write: stepping({ blocks: [{ type: 'use_connector', connector: 'wordpress' }] }) });
+    redes.accounts = [];
+    try {
+      const id = await s.guides.seed();
+      await s.call('luis', `/guides/${id}/step`, {});
+      expect(asks.proposed[0]).toMatchObject({ connector: 'wordpress', need: 'grant' });
+      expect(s.guides.cards[0]?.add).toMatchObject({ type: 'account_ask', need: 'grant' });
+    } finally {
+      delete redes.accounts;
+    }
   });
 
   it('a wall gives blocked with its reason; the last step keeps its undo', async () => {
@@ -392,10 +488,26 @@ describe('the guide screen: reading and stepping', () => {
     expect(s.guides.rows.get(id)).toMatchObject({ status: 'blocked', blockedReason: 'Tu web no tiene https' });
     expect(s.guides.cards.at(-1)?.patch).toEqual({ status: 'blocked', blockedReason: 'Tu web no tiene https' });
 
-    const t = setup({ write: stepping({ blocks: [{ type: 'title', text: 'Listo' }], done: { undo: 'Borra el usuario redes en Usuarios.' } }) });
-    const other = await t.guides.seed();
-    await t.call('luis', `/guides/${other}/step`, {});
-    expect(t.guides.rows.get(other)?.undo).toBe('Borra el usuario redes en Usuarios.');
+  });
+
+  it('a step with done while the guide is open is never saved as done: the guide stays open, with no undo (R21)', async () => {
+    const s = setup({ write: stepping({ blocks: [{ type: 'title', text: 'Listo' }], done: { undo: 'Borra el usuario redes en Usuarios.' } }) });
+    const id = await s.guides.seed();
+    const res = await s.call('luis', `/guides/${id}/step`, {});
+    expect(await res.json()).toEqual({ step: FALLBACK_STEP, status: 'open' });
+    expect(s.asked).toHaveLength(2);
+    expect(s.guides.rows.get(id)).toMatchObject({ status: 'open', undo: null });
+  });
+
+  it('after the check, the closing step keeps its undo, and then the guide takes no more steps', async () => {
+    const finished: GuideStep = { blocks: [{ type: 'title', text: 'Listo' }], done: { undo: 'Borra el usuario redes en Usuarios.' } };
+    const s = setup();
+    const id = await s.guides.seed();
+    await s.call('ana', `/guides/${id}/check`, { values: VALUES });
+    s.answerWith(stepping(finished));
+    expect(await (await s.call('ana', `/guides/${id}/step`, {})).json()).toEqual({ step: finished, status: 'done' });
+    expect(s.guides.rows.get(id)?.undo).toBe('Borra el usuario redes en Usuarios.');
+    expect((await s.call('ana', `/guides/${id}/step`, {})).status).toBe(409);
   });
 });
 
@@ -458,6 +570,45 @@ describe('checking a guide', () => {
     expect(await s.vault.get(guidedSecretName(ORG, id))).toBeNull();
     expect((await s.call('bea', `/guides/${id}/check`, { values: VALUES })).status).toBe(403);
   });
+
+  it('a token or key shows its last four only when it is long enough to keep them secret; otherwise no hint', async () => {
+    const bearer: GuideLanding = { auth: 'bearer', check: { path: '/me' } };
+    for (const [token, hint] of [
+      ['abcdefgh1234', '…1234'],
+      ['short1234', ''],
+    ] as const) {
+      const s = setup();
+      const id = await s.guides.seed(bearer);
+      expect(await (await s.call('ana', `/guides/${id}/check`, { values: { base_url: 'miweb.com', token } })).json()).toEqual({ ok: true, status: 'done' });
+      expect(s.accesses.created[0]?.hint, token).toBe(hint);
+    }
+  });
+});
+
+describe('the agent going on while the closing step is written (R23)', () => {
+  it('a resume between the check and the closing step does not make the closing step fail', async () => {
+    const finished: GuideStep = { blocks: [{ type: 'title', text: 'Listo' }], done: { undo: 'Borra el usuario redes en Usuarios.' } };
+    const s = setup();
+    const id = await s.guides.seed();
+    await s.call('ana', `/guides/${id}/check`, { values: VALUES });
+    let release: () => void = () => {};
+    const modelWaits = new Promise<void>((r) => {
+      release = r;
+    });
+    s.answerWith(async (req) => {
+      if (req.tools.specs.some((t) => t.name === SHOW_STEP)) {
+        await modelWaits;
+        await stepping(finished)(req);
+      } else req.onText('Publico el borrador.');
+    });
+    const closing = s.call('ana', `/guides/${id}/step`, {});
+    await new Promise((r) => setTimeout(r, 10));
+    expect((await s.call('ana', `/threads/${THREAD}/resume`, { guideId: id })).status).toBe(200);
+    release();
+    const res = await closing;
+    expect(res.status).toBe(200);
+    expect(s.guides.rows.get(id)).toMatchObject({ undo: 'Borra el usuario redes en Usuarios.', resumedAt: expect.any(String) });
+  });
 });
 
 describe('a guide for an app the agent already reaches', () => {
@@ -511,7 +662,7 @@ describe('approving and rejecting a member’s guide', () => {
     expect(s.accesses.created).toEqual([]);
     const res = await s.call('ana', `/guides/${s.id}/approve`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: 'done' });
+    expect(await res.json()).toEqual({ status: 'done', resumed: true });
     expect(s.accesses.created).toMatchObject([{ agentId: REDES, provider: 'xwordpress', hint: VALUES.username, connectedBy: 'luis', connectedByName: 'Luis' }]);
     expect(s.guides.rows.get(s.id)).toMatchObject({ status: 'done', decidedBy: 'ana' });
     expect(s.guides.cards.at(-1)?.patch).toEqual({ status: 'done', decidedBy: 'Ana' });
@@ -544,6 +695,86 @@ describe('approving and rejecting a member’s guide', () => {
     expect(s.guides.rows.get(s.id)).toMatchObject({ status: 'rejected', decidedBy: 'ana' });
     expect(s.guides.cards.at(-1)?.patch).toEqual({ status: 'rejected', decidedBy: 'Ana' });
     expect((await s.call('ana', `/guides/${s.id}/approve`)).status).toBe(409);
+  });
+});
+
+describe('an owner approves a member\'s guide from a conversation they cannot see (R19, R20)', () => {
+  /** Luis does the guide in his personal chat with Redes: nobody else may read it. */
+  async function inLuisChat() {
+    const s = setup({ threadLevels: { luis: 'talk' } });
+    const id = await s.guides.seed();
+    expect(await (await s.call('luis', `/guides/${id}/check`, { values: VALUES })).json()).toEqual({ ok: true, status: 'checked' });
+    return { ...s, id };
+  }
+
+  it('the owner lists it as pending and reads it; nobody else does', async () => {
+    const s = await inLuisChat();
+    const res = await s.get('ana', `/orgs/${ORG}/guides/pending`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      guides: [{ id: s.id, app: 'WordPress', agentId: REDES, agentName: 'Redes', completedByName: 'Luis', checkedAt: expect.any(String) }],
+    });
+    for (const user of ['luis', 'bea', 'zoe']) expect((await s.get(user, `/orgs/${ORG}/guides/pending`)).status).toBe(403);
+    expect((await s.get('ana', '/orgs/nope/guides/pending')).status).toBe(400);
+
+    expect(await (await s.get('ana', `/guides/${s.id}`)).json()).toMatchObject({ status: 'checked', mayApprove: true });
+    expect((await s.get('bea', `/guides/${s.id}`)).status).toBe(403);
+  });
+
+  it('approving resumes the agent once, in that conversation, as the member who did the guide; then it is no longer pending', async () => {
+    const s = await inLuisChat();
+    const said: string[] = [];
+    s.answerWith(async ({ messages, onText }) => {
+      said.push(messages.at(-1)?.content ?? '');
+      onText('Publico el borrador.');
+    });
+    const res = await s.call('ana', `/guides/${s.id}/approve`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'done', resumed: true });
+    // The request answered after the reply was written.
+    expect(s.updates.at(-1)).toMatchObject({ id: MESSAGE, state: 'done', text: 'Publico el borrador.' });
+    expect(said).toEqual([expect.stringContaining('Luis: Ya tienes acceso a WordPress. Sigue con lo que se te pidió.')]);
+    expect(s.guides.rows.get(s.id)).toMatchObject({ status: 'done', decidedBy: 'ana', resumedAt: expect.any(String) });
+    expect(s.accesses.created).toMatchObject([{ connectedBy: 'luis' }]);
+
+    expect(await (await s.get('ana', `/orgs/${ORG}/guides/pending`)).json()).toEqual({ guides: [] });
+    // Who decided it may still read it; the guide's screen says how it ended.
+    expect(await (await s.get('ana', `/guides/${s.id}`)).json()).toMatchObject({ status: 'done', mayApprove: false });
+
+    // A second approve, and the chat's own resume, are refused: the agent went on once.
+    expect((await s.call('ana', `/guides/${s.id}/approve`)).status).toBe(409);
+    const again = await s.call('luis', `/threads/${THREAD}/resume`, { guideId: s.id });
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({ error: 'already_done' });
+    expect(said).toHaveLength(1);
+  });
+
+  it('the owner rejects it without seeing the conversation too', async () => {
+    const s = await inLuisChat();
+    expect(await (await s.call('ana', `/guides/${s.id}/reject`)).json()).toEqual({ status: 'rejected' });
+    expect(await s.vault.get(guidedSecretName(ORG, s.id))).toBeNull();
+    expect(s.asked).toHaveLength(0);
+  });
+
+  it('when the agent is answering, the approval still stands and the chat resumes it later', async () => {
+    const s = await inLuisChat();
+    let release: () => void = () => {};
+    s.answerWith(async ({ onText }) => {
+      await new Promise<void>((r) => {
+        release = r;
+      });
+      onText('Hecho.');
+    });
+    s.messages.push(msg({ text: '¿Y bien?', authorUserId: 'luis', authorName: 'Luis' }));
+    const replying = s.call('luis', `/threads/${THREAD}/reply`);
+    await new Promise((r) => setTimeout(r, 10));
+    const res = await s.call('ana', `/guides/${s.id}/approve`);
+    expect(await res.json()).toEqual({ status: 'done', resumed: false });
+    expect(s.guides.rows.get(s.id)).toMatchObject({ status: 'done', resumedAt: null });
+    release();
+    await replying;
+    s.answerWith(async ({ onText }) => onText('Publico el borrador.'));
+    expect(await (await s.call('luis', `/threads/${THREAD}/resume`, { guideId: s.id })).json()).toEqual({ resumed: true });
   });
 });
 
@@ -590,25 +821,31 @@ describe('two people on one guide, or a double press (Review focus 5)', () => {
 });
 
 describe('the agent going on after a guide', () => {
-  it('is refused while the guide is checked, and goes on once an owner approved it', async () => {
+  it('is refused while the guide is checked; an owner\'s approval lets it go on, and the chat\'s resume is refused after', async () => {
     const s = setup();
     const id = await s.guides.seed();
     await s.call('luis', `/guides/${id}/check`, { values: VALUES });
     const early = await s.call('luis', `/threads/${THREAD}/resume`, { guideId: id });
     expect(early.status).toBe(409);
     expect(await early.json()).toMatchObject({ error: 'not_yet' });
-    await s.call('ana', `/guides/${id}/approve`);
     const said: string[] = [];
     s.answerWith(async ({ messages, onText }) => {
       said.push(messages.at(-1)?.content ?? '');
       onText('Publico el borrador.');
     });
-    const res = await s.call('luis', `/threads/${THREAD}/resume`, { guideId: id });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ resumed: true });
+    expect(await (await s.call('ana', `/guides/${id}/approve`)).json()).toEqual({ status: 'done', resumed: true });
     expect(said[0]).toContain('Luis: Ya tienes acceso a WordPress. Sigue con lo que se te pidió.');
     expect(s.guides.rows.get(id)?.resumedAt).toEqual(expect.any(String));
     expect((await s.call('luis', `/threads/${THREAD}/resume`, { guideId: id })).status).toBe(409);
+  });
+
+  it('an owner who finished the guide lets the agent go on from the chat, as before', async () => {
+    const s = setup();
+    const id = await s.guides.seed();
+    await s.call('ana', `/guides/${id}/check`, { values: VALUES });
+    const res = await s.call('ana', `/threads/${THREAD}/resume`, { guideId: id });
+    expect(await res.json()).toEqual({ resumed: true });
+    expect((await s.call('ana', `/threads/${THREAD}/resume`, { guideId: id })).status).toBe(409);
   });
 
   it('refuses a guide of another thread, someone who may not write, and a bad id', async () => {

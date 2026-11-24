@@ -674,27 +674,49 @@ export async function resumeInThread(
   if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
   // An agent brought in by an @mention: the person must be able to talk to it too.
   if (agent.id !== thread.agentId) await requireTalk(deps, agent.id, userId);
+  await goOn(deps, thread, agent, waited, userId, accessToken);
+  return { resumed: true };
+}
+
+/**
+ * Lets an agent go on in `threadId` as `actorId`, without checking the caller
+ * against the thread: for an owner's approval of a member's guide, which the
+ * owner may approve from a conversation they cannot see (the member's personal
+ * chat). The agent answers as if the member who did the guide had asked (no
+ * settings tools: there is no session of theirs to read them as). Resolves when
+ * the reply is written; refuses as `resumeInThread` does (`already_done`, `busy`).
+ */
+export async function resumeAs(deps: ChatDeps, threadId: string, waited: Resumable, actorId: string): Promise<{ resumed: true }> {
+  const thread = await deps.chat.thread(threadId);
+  if (!thread) throw new Refusal(404, 'not_found', 'thread not found');
+  const agent = await deps.chat.agent(waited.agentId);
+  if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
+  await goOn(deps, thread, agent, waited, actorId);
+  return { resumed: true };
+}
+
+/** The agent goes on, once: claimed before its reply starts, written as `actorId` asked. Whoever calls has checked who may. */
+async function goOn(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, waited: Resumable, actorId: string, accessToken?: string): Promise<void> {
   await waited.ready(agent);
-  if (!(await waited.claim(userId))) throw new Refusal(409, 'already_done', 'the agent already went on');
+  if (!(await waited.claim(actorId))) throw new Refusal(409, 'already_done', 'the agent already went on');
   const replyId = await deps.chat.startReply(thread, agent, ['Retomando']);
   if (!replyId) {
     // Another reply is being written; the person can go on once it ends.
     await waited.release();
     throw new Refusal(409, 'busy', 'the agent is answering; try again when it ends');
   }
-  const who = (await waited.memberName(userId)) ?? 'Alguien';
+  const who = (await waited.memberName(actorId)) ?? 'Alguien';
   await waited.settle(who);
   const threadAgent = agent.id === thread.agentId ? null : await deps.chat.agent(thread.agentId);
   const { reachOf } = await orgReach(deps, thread.orgId, accessToken);
   const mine = await reachOf(agent, threadAgent?.name);
   const turns = toTurns(await deps.chat.recentMessages(thread.id, 40), agent.id);
-  const goOn = `${who}: Ya tienes acceso a ${waited.name}. Sigue con lo que se te pidió.`;
+  const line = `${who}: Ya tienes acceso a ${waited.name}. Sigue con lo que se te pidió.`;
   const lastTurn = turns[turns.length - 1];
-  if (lastTurn?.role === 'user') lastTurn.content += `\n\n${goOn}`;
-  else turns.push({ role: 'user', content: goOn });
-  await writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId }, 'Retomando');
+  if (lastTurn?.role === 'user') lastTurn.content += `\n\n${line}`;
+  else turns.push({ role: 'user', content: line });
+  await writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId: actorId }, 'Retomando');
   await deps.chat.touchThread(thread.id).catch(() => {});
-  return { resumed: true };
 }
 
 /** A routine of a chat agent, as the turn needs it (routines.ts). */

@@ -92,6 +92,18 @@ export interface GuideView {
   undo: string | null;
 }
 
+/** A member's guide waiting for an owner, as Conexiones lists it (GET /orgs/:orgId/guides/pending). */
+export interface PendingGuide {
+  id: string;
+  app: string;
+  agentId: string;
+  agentName: string;
+  /** Who did the guide and passed its check. */
+  completedByName: string;
+  /** When the check passed (ISO). */
+  checkedAt: string;
+}
+
 /** What the person typed, sent only in the check: the one place a secret travels. */
 export type GuideCheckValues = Partial<Record<GuideField, string>>;
 
