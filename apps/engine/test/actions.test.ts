@@ -60,7 +60,6 @@ function setup(opts: { state?: 'working' | 'done'; fails?: boolean } = {}) {
     vault: {} as never,
     checks: {} as never,
     userFromToken: async (t) => (t.startsWith('token-') ? t.slice(6) : null),
-    serviceAccount: '',
     chat: {} as never,
     accounts: {} as never,
     actions: { actions, toolsFor: async () => tools },

@@ -129,9 +129,11 @@ Per organisation, never shared:
 | Record access | The organisation's installation of our GitHub App | GitHub | A one-hour token for that repo only |
 | Record access, **Target** | A Forgejo user per agent, created by the engine with the agent | Our record store | A token for that agent's user, write on its organisation's repo only, deleted when the run reports |
 | Outside accounts (Google, Microsoft, makers' MCP servers) | The owner's OAuth sign-in | Vault | Their tools, through the engine; a write waits for approval |
-| Customer's Google Cloud | **Target**, below | Their IAM | A one-hour token for the organisation's own service account |
+| Customer's Google Cloud | The organisation's own service account, below | Their IAM | A one-hour token for that account (**Target**: today only the engine's Vertex calls use it) |
 
-### Target: a customer's Google Cloud
+### A customer's Google Cloud
+
+Built for Claude on Vertex AI in the chat; the agents' own access from a run is **Target**.
 
 A customer wants an agent to read their BigQuery, write to their bucket, call their Vertex AI. Granting one shared Ghostaff service account across every customer would make our code the only thing keeping customers apart: if organisation A typed `ordago-prod` as its project and Órdago had granted the shared account, A's agent would read Órdago's data. Google would see the same identity both times and could not tell them apart (a «confused deputy»). Instead:
 
@@ -145,10 +147,10 @@ engine@  ── mints a one-hour token as org-<id>@ ──►  the run
 runner@  ── no role anywhere
 ```
 
-1. **An account per organisation, created when its owner first connects Google Cloud** in Conexiones, not when the organisation is created. The engine creates `org-<id>@` through the IAM API, stores its email on the connection, and grants itself token creator on that account alone.
+1. **An account per organisation, created when its owner first connects Google Cloud** in Conexiones, not when the organisation is created. The engine creates `org-<first 24 hex digits of the id>@` through the IAM API, grants itself token creator on that account alone, and keeps its email in `cloud_accounts`, a table only the engine reads (`apps/engine/src/cloudAccounts.ts`).
 2. **The customer grants roles to that account** in their own project, with the exact command the app shows. Ghostaff checks the grant **as that account**, not as the engine, so the check proves the access belongs to this organisation.
 3. **Each run gets a one-hour token** for the organisation's account, in its spec, the way it gets the record's token. Claude Code's `gcloud` and `bq` use it. Queries are billed to the customer's project (`jobUser` there).
-4. **Removing the connection or the organisation deletes the account.** The customer's grants are left pointing at a deleted principal; an account later created with the same name gets a new unique id and inherits nothing.
+4. **The account lasts as long as the organisation**, so removing a connection and adding it again does not make the customer grant everything again. Deleting it with the organisation is still to build (there is no way to delete an organisation yet). A deleted account leaves the customer's grants pointing at a deleted principal, and one later created with the same name gets a new unique id and inherits nothing.
 5. **The accounts live in a project of their own**, `ghostaff-tenants-beta` and `ghostaff-tenants-prod`, where the engine is admin of service accounts and of nothing else. In the main project that role would let the engine grant itself `engine@`'s, `runner@`'s or `deployer@`'s powers. A separate project also keeps the per-project quota of service accounts (100 by default, raised on request) away from the platform's own.
 
 What this accepts: every agent of an organisation shares that organisation's grants (no per-agent least privilege yet); the token is readable by the agent during its hour, like the record's; a customer whose organisation policy restricts sharing to its own domain has to allow Ghostaff's tenants project first. Rejected: a shared account (the confused deputy above); customers' JSON keys (long-lived, and many organisations forbid creating them); an account per agent now (quota, and no customer has asked). Workload Identity Federation is the path for AWS or Azure customers, later. The work is [customer-cloud-access.md](plans/ongoing/customer-cloud-access.md).
@@ -164,7 +166,6 @@ Ghostaff will never have a connector for every system a customer uses, and it do
 ## Known gaps
 
 - **The Claude token is readable inside a run.** It sits in Claude Code's environment, so the agent can print it with Bash, and so can anyone who can talk to the agent. Accepted while only Órdago's own agents use the runner; the fix is a local proxy that holds it out of the agent's reach (`apps/runner/src/lib.ts`, `agentEnv`).
-- **Vertex AI for chat uses the shared `engine@` today.** A customer grants Vertex AI User to `engine@` and types their project; nothing ties that project to the organisation that typed it (`providers.ts`, `chatStore.ts`). The worst case is spending another customer's Vertex; it moves to the organisation's own account with [customer-cloud-access.md](plans/ongoing/customer-cloud-access.md).
 - **The engine is Secret Manager admin on the whole project**, so a bug in it can read any organisation's secret. Its own code is the boundary there.
 - **Target: the engine is the record store's admin**, as it holds the service-role key: a bug in it can read or write any organisation's record. Its own code is the boundary there; an agent's run never gets more than its own user.
 - **The record's default branch has no protection** on GitHub's free plan; the runner's push guard is only a net. Our own record store closes it with branch protection and a server-side hook ([Target: the record](#target-the-record)).

@@ -128,7 +128,6 @@ function setup(
     vault: new MemoryVault(),
     checks: {} as never,
     userFromToken: async (t) => (t.startsWith('token-') ? t.slice(6) : null),
-    serviceAccount: 'x',
     chat: { chat, flushMs: 0, writerFor: async () => write, toolsFor: async () => NO_TOOLS },
     accounts: {} as never,
     actions: {} as never,

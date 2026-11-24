@@ -4,7 +4,7 @@ import {
   connectAi,
   connectClaudeSubscription,
   disconnectAi,
-  getEngineIdentity,
+  getCloudAccount,
   renameAiConnection,
   setAiOrder,
 } from '@ghostaff/shared/services';
@@ -39,8 +39,8 @@ import { usePalette } from '@/lib/theme';
 // One of the organisation's AI accounts (`?id=`), or a new one of a kind (no
 // id). A key is sent once to the engine, which checks it and keeps it in the
 // vault; this screen never sees it again, only its last 4 characters. Vertex
-// needs no key: the organisation lets our engine's service account into its own
-// Google Cloud project. A Claude subscription is connected by signing in
+// needs no key: the organisation lets its own Google Cloud account (one per
+// organisation, made by the engine) into its own project. A Claude subscription is connected by signing in
 // through Claude Code, which the engine runs: this screen only relays
 // Anthropic's link and the code pasted back. An organisation may have several
 // accounts, even two sign-ins to one subscription; each has its name, its usage
@@ -307,12 +307,13 @@ function VertexForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The organisation's own account, made the first time: only this organisation's agents act as it.
   useEffect(() => {
     if (!engine) return;
-    getEngineIdentity(engine)
-      .then((i) => setAccount(i.serviceAccount || null))
+    getCloudAccount(engine, orgId)
+      .then((a) => setAccount(a.email))
       .catch((e) => setError(connectErrorMessage(e, 'vertex')));
-  }, [engine]);
+  }, [engine, orgId]);
 
   const save = async () => {
     if (!engine) return;

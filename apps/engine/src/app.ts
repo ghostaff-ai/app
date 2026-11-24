@@ -16,7 +16,7 @@ import { agentHello, type ChatDeps, replyInThread, resumeAfterAccount } from './
 import { reportRun } from './jobs';
 import { runRecordToken, runSpec } from './runner';
 import { clientMetadataDocument } from './mcp';
-import { connectAi, type Deps, disconnectAi, Refusal } from './connections';
+import { connectAi, type Deps, disconnectAi, Refusal, requireOwner } from './connections';
 import { bearer, type CallerFromToken } from './googleCaller';
 import { NoteLimiter, type Transcriber } from './transcribe';
 import { sendVoiceNote, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
@@ -35,8 +35,11 @@ export interface CronDeps {
 export interface AppDeps extends Deps {
   /** The signed-in person behind a Supabase access token, or null. */
   userFromToken(token: string): Promise<string | null>;
-  /** The service account customers grant Vertex AI access to. */
-  serviceAccount: string;
+  /**
+   * The organisation's own Google Cloud account, created the first time
+   * (cloudAccounts.ts): what a customer grants roles to. Off without a tenants project.
+   */
+  cloudAccount?(orgId: string): Promise<string>;
   /** The team chat: agents answering in threads. */
   chat: ChatDeps;
   /** Outside accounts connected by signing in there. */
@@ -176,7 +179,13 @@ export function createApp(deps: AppDeps) {
     await next();
   });
 
-  app.get('/identity', (c) => c.json({ serviceAccount: deps.serviceAccount }));
+  app.post('/cloud-account', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const orgId = (body as { orgId?: unknown }).orgId;
+    await requireOwner(deps.store, orgId, c.get('userId'));
+    if (!deps.cloudAccount) throw new Refusal(503, 'not_configured', 'no tenants project for Google Cloud accounts');
+    return c.json({ email: await deps.cloudAccount(orgId as string) });
+  });
 
   app.post('/connections/ai', async (c) => {
     const body = await c.req.json().catch(() => null);

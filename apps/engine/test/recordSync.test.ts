@@ -206,7 +206,6 @@ describe('POST /cron', () => {
       vault: {} as never,
       checks: {} as never,
       userFromToken: async () => null,
-      serviceAccount: '',
       chat: {} as never,
       accounts: { publicUrl: 'https://engine' } as never,
       actions: {} as never,

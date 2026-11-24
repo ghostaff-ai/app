@@ -12,7 +12,7 @@ const BEA = 'bea'; // member of ORG
 const CARLA = 'carla'; // owner of OTHER
 const ANTHROPIC_KEY = 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1234';
 
-function setup(checks: Partial<Checks> = {}) {
+function setup(checks: Partial<Checks> = {}, cloud: { cloudAccount?: (orgId: string) => Promise<string> } = { cloudAccount: async (o) => `org-${o.slice(0, 8)}@ghostaff-tenants-beta.iam.gserviceaccount.com` }) {
   const members: Record<string, Membership> = {
     [`${ORG}/${ANA}`]: { role: 'owner', displayName: 'Ana' },
     [`${ORG}/${BEA}`]: { role: 'member', displayName: 'Bea' },
@@ -37,7 +37,7 @@ function setup(checks: Partial<Checks> = {}) {
     vault,
     checks: { anthropic: ok, openai: ok, vertex: ok, ...checks },
     userFromToken: async (t) => (t.startsWith('token-') ? t.slice(6) : null),
-    serviceAccount: 'engine@ghostaff-prod.iam.gserviceaccount.com',
+    ...cloud,
     now: () => new Date('2026-11-14T10:00:00Z'),
     chat: { chat: {} as never, writerFor: async () => async () => {}, toolsFor: async () => NO_TOOLS },
     accounts: {} as never,
@@ -82,7 +82,7 @@ describe('connecting an AI key', () => {
   it('without a sign-in, nothing', async () => {
     const { call } = setup();
     expect((await call(null, 'POST', '/connections/ai', { orgId: ORG, provider: 'anthropic', apiKey: ANTHROPIC_KEY })).status).toBe(401);
-    expect((await call(null, 'GET', '/identity')).status).toBe(401);
+    expect((await call(null, 'POST', '/cloud-account', { orgId: ORG })).status).toBe(401);
   });
 
   it('a key the provider rejects is not stored', async () => {
@@ -192,9 +192,31 @@ describe('connecting a Google Cloud project', () => {
     expect(((await res.json()) as { error: string }).error).toBe('bad_region');
   });
 
-  it('shows the service account to grant access to', async () => {
+  it('checks the project as the organisation, never as the engine', async () => {
+    const asked: string[][] = [];
+    const { call } = setup({ vertex: async (orgId, project) => (asked.push([orgId, project]), { ok: true }) });
+    await call(ANA, 'POST', '/connections/ai', { orgId: ORG, provider: 'vertex', project: 'panaderia-ai', region: 'europe-west1' });
+    expect(asked).toEqual([[ORG, 'panaderia-ai']]);
+  });
+
+  it('an owner gets her organisation’s own account to grant access to', async () => {
     const { call } = setup();
-    expect(await (await call(ANA, 'GET', '/identity')).json()).toEqual({ serviceAccount: 'engine@ghostaff-prod.iam.gserviceaccount.com' });
+    const res = await call(ANA, 'POST', '/cloud-account', { orgId: ORG });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ email: 'org-10000000@ghostaff-tenants-beta.iam.gserviceaccount.com' });
+  });
+
+  it('nobody else does, an organisation’s member or not', async () => {
+    const { call } = setup();
+    expect((await call(BEA, 'POST', '/cloud-account', { orgId: ORG })).status).toBe(403);
+    expect((await call(CARLA, 'POST', '/cloud-account', { orgId: ORG })).status).toBe(403);
+  });
+
+  it('without a tenants project the engine says it cannot', async () => {
+    const { call } = setup({}, {});
+    const res = await call(ANA, 'POST', '/cloud-account', { orgId: ORG });
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { error: string }).error).toBe('not_configured');
   });
 });
 

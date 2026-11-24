@@ -8,7 +8,7 @@ import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
 import { addTokens, atLimit, type ChatMessage, estimateCostUsd, limitsFromRow, limitsToRow, mergeLimits, NO_TOKENS, type TokenUsage, tokensFromUsage } from '@ghostaff/shared';
 import { messageFromRow } from '@ghostaff/shared/services';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { GoogleAuth } from 'google-auth-library';
+import { CloudAccountNotReady } from './cloudAccounts';
 import { type AiAccount, AiFailure, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, type Writer } from './chat';
 import { type PrintRunner, runClaudePrint } from './claudeCode';
 import { subscriptionWriter } from './claudeWriter';
@@ -253,12 +253,22 @@ export function streamWith(client: Anthropic | AnthropicVertex): Writer {
   };
 }
 
-export function writerFactory(vault: Vault, auth: GoogleAuth, runClaude: PrintRunner = runClaudePrint) {
+/**
+ * `cloudToken` is a token as the organisation's own Google Cloud account
+ * (cloudAccounts.ts): Claude on Vertex AI is called as the organisation, so it
+ * only reaches a project that organisation was let into.
+ */
+export function writerFactory(vault: Vault, cloudToken: (orgId: string) => Promise<string | null>, runClaude: PrintRunner = runClaudePrint) {
   return async (orgId: string, account: AiAccount, opts: { busyFails: boolean }): Promise<Writer> => {
     if (account.provider === 'vertex') {
-      // A fresh token per reply (the SDK pins its own google-auth-library version).
-      const accessToken = await auth.getAccessToken();
-      if (!accessToken) throw new Error('no Google access token');
+      let accessToken: string | null;
+      try {
+        accessToken = await cloudToken(orgId);
+      } catch (e) {
+        if (e instanceof CloudAccountNotReady) throw new AiFailure('refused', 'the organisation’s Google Cloud account cannot be used');
+        throw e;
+      }
+      if (!accessToken) throw new AiFailure('refused', 'the organisation has no Google Cloud account');
       return streamWith(new AnthropicVertex({ projectId: account.project, region: account.region, accessToken }));
     }
     const secret = await readAiSecret(vault, orgId, account);

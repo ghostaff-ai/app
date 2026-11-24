@@ -177,7 +177,6 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
     vault: {} as never,
     checks: {} as never,
     userFromToken: async (t) => (t.startsWith('token-') ? t.slice(6) : null),
-    serviceAccount: 'x',
     chat: chatDeps,
     reports: {
       callerFromToken: async (t, aud) => (aud === 'https://engine' && t.startsWith('id-') ? t.slice(3) : null),
