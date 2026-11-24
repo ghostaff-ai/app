@@ -6,7 +6,7 @@ import type { ReadyShot, Shot } from '../guidePhoto';
 import { success } from '../haptics';
 import { useEngine } from './useConnections';
 
-// A guide's screen (docs/plans/ready/guided-access.md): the guide as the engine
+// A guide's screen (docs/plans/ongoing/guided-access.md): the guide as the engine
 // keeps it, the step it stopped at, and what the person does on each step.
 //
 // What the person types lives here, in the screen's state, and nowhere else.

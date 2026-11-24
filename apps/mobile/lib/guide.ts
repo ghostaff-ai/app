@@ -1,7 +1,7 @@
 import type { GuideField, GuideStep } from '@ghostaff/shared';
 import { EngineError } from '@ghostaff/shared/services';
 
-// The pure side of a guide's screen and card (docs/plans/ready/guided-access.md):
+// The pure side of a guide's screen and card (docs/plans/ongoing/guided-access.md):
 // what a step asks the person to do, and the engine's refusals in plain Spanish.
 
 /**

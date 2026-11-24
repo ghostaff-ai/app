@@ -6,7 +6,7 @@ import { Group } from '@/components/connections/Group';
 import { Button, ListRow } from '@/components/ui';
 import { checkedWhen } from '@/lib/guide';
 
-// «Pendientes de aprobar» in Conexiones (docs/plans/ready/guided-access.md, decision 2):
+// «Pendientes de aprobar» in Conexiones (docs/plans/ongoing/guided-access.md, decision 2):
 // the guides a member did, checked and waiting for an owner. Owners only. It is
 // where an owner approves one done in a conversation they cannot see (a member's
 // personal chat); the row opens the guide to read it first. Approving answers once

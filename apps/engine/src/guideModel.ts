@@ -1,4 +1,4 @@
-// The guide's model (docs/plans/ready/guided-access.md, «The guide's model").
+// The guide's model (docs/plans/ongoing/guided-access.md, «The guide's model").
 //
 // Each step of a guide is one model call, through the organisation's AI
 // accounts in the same order as a reply. The model reads the goal, the app,

@@ -1,6 +1,6 @@
 -- Guided access: a guide that walks a person through giving an agent access to
 -- an app the catalogue lacks, such as a self-hosted WordPress
--- (docs/plans/ready/guided-access.md). The guide is one row, moved by the
+-- (docs/plans/ongoing/guided-access.md). The guide is one row, moved by the
 -- engine alone: row-level security on and no policy at all, so the app goes
 -- through the engine. `history` holds the steps shown and the answers given,
 -- never a secret (that lives in the vault from the moment the check passes).

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { decideErrorText } from '../guide';
 import { useEngine } from './useConnections';
 
-// What a guide's card can do in a chat (docs/plans/ready/guided-access.md):
+// What a guide's card can do in a chat (docs/plans/ongoing/guided-access.md):
 // open the guide, an owner's approval of what a member granted, and the agent
 // going on once the guide is done, as an account's card does (useAccountAsks).
 // The engine checks it all again and goes on once, whoever asks: an owner's

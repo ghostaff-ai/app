@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { decideErrorText } from '../guide';
 import { useEngine } from './useConnections';
 
-// The organisation's member guides waiting for an owner (docs/plans/ready/guided-access.md):
+// The organisation's member guides waiting for an owner (docs/plans/ongoing/guided-access.md):
 // read from the engine, which keeps guides apart from the app, and decided there.
 // Only an owner reads them; for anyone else the list stays empty and is never asked for.
 

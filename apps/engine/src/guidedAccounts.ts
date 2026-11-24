@@ -1,4 +1,4 @@
-// Guided accesses (docs/plans/ready/guided-access.md): an agent's own user or
+// Guided accesses (docs/plans/ongoing/guided-access.md): an agent's own user or
 // key in an app with an HTTP API, given by a person through a guide.
 //
 // Two halves live here. `checkLanding` tries the credential the person typed

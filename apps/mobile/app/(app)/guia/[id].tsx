@@ -13,7 +13,7 @@ import { KeyboardForm } from '@/lib/keyboard';
 import { DESKTOP_PAGE, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 
-// A guide (docs/plans/ready/guided-access.md), opened from its card in the chat.
+// A guide (docs/plans/ongoing/guided-access.md), opened from its card in the chat.
 // A fixed shell around dynamic content: on top the goal and the progress, in
 // the middle the step the guide's model wrote (GuideBlocks), at the bottom,
 // always while it goes on, «Enséñame tu pantalla». Leaving keeps the guide

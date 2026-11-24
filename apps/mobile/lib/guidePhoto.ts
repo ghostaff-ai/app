@@ -2,7 +2,7 @@ import type { GuidePhoto } from '@ghostaff/shared';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
-// A photo of the person's screen for a guide (docs/plans/ready/guided-access.md):
+// A photo of the person's screen for a guide (docs/plans/ongoing/guided-access.md):
 // from the camera or the library on the phone, a file or a paste on the web. It
 // is shrunk to 1,568 px on its long side (what the model reads best) and sent
 // as JPEG at 0.7, well under the engine's 2 MB. The device keeps it to draw the

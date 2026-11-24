@@ -2,7 +2,7 @@
 
 **Priority:** high — Jaime (2026-11-24): «una parte super importante del producto que hay que trabajar muy mucho»: the agent will need access we never built a connector for, and a non-technical person has to be able to give it
 **Gate:** none
-**Next:** Task 1 of [the first slice](#build-the-first-slice-a-self-hosted-wordpress), in a worktree off `develop`: the guide's shapes and their validation in `packages/shared/src/guides.ts`
+**Next:** on `feat/guided-access`, make «Pendientes de aprobar» refresh on focus and after a decision elsewhere (a 409 must clear the row); then `pnpm pr:land`; then Task 8 on beta
 
 ## Goal
 
@@ -181,7 +181,7 @@ Once the access is there, the agent gets **one tool for it**, `<provider>_reques
   - `status` moves `open → checked → done | rejected` when a member completes it, `open → done` when an owner does, and `open → blocked | handed_over` (a wall, or the catalogue's button took over).
   - Row-level security on and no policy: the engine reads and writes it, and the app goes through the engine. A pgTAP test proves no member reads or writes it.
 - **`connections`** grows a kind: `kind = 'guided'`, `method = 'guided'`.
-  - `provider` is `x` plus the app's slug (`xwordpress`). No catalogue id starts with `x`, and a test in `connectors.test.ts` keeps it that way.
+  - `provider` is `x` plus the app's slug (`xwordpress`). The `x` only guarantees a leading letter: guided providers live under `kind = 'guided'` and never enter `agents.accounts`, so they cannot collide with a catalogue id (one, `xero`, already starts with `x`).
   - A new nullable `agent_id`, required for `guided` and null otherwise; unique on (`org_id`, `agent_id`, `provider`) where `kind = 'guided'`.
   - `hint` is the user's name or the key's last four characters. `settings` is `{ base, auth, headerName?, app, guideId }`.
   - Members read it through the existing policy, as they read every connection.
@@ -216,7 +216,7 @@ Once the access is there, the agent gets **one tool for it**, `<provider>_reques
   - At the bottom, always: «Enséñame tu pantalla».
   - An owner who may approve reads what approving does, with «Aprobar» and «Rechazar».
 - **Photos:** camera or library on the phone (`expo-image-picker`); on the web, a file picker and paste. Each is resized to 1,568 px on the long side and JPEG 0.7 (`expo-image-manipulator`). Adding both is a native change: the next beta is a new build, which `beta.yml` already does.
-- **`AnnotatedShot`** draws the mark the model returns (a box in 0–1 coordinates and a short label) over the last photo the device sent.
+- **`AnnotatedShot`** draws the mark the model returns (a point in 0–1 coordinates and a short label, drawn as a circle) over the last photo the device sent.
 - **Secrets** stay in the screen's state, in a masked field, until the check. They are never logged and never sent with a step.
 - **Services** in `@ghostaff/shared/services`: `getGuide`, `guideStep`, `checkGuide`, `approveGuide`, `rejectGuide`, `pendingGuides`, `resumeAfterGuide`, `removeGuidedAccess`.
 - **The chat resumes** a done guide that has not resumed yet, as it does for asks (`guidesToResume`, beside `asksToResume`).
@@ -239,7 +239,7 @@ The inputs no task's happy path covers, most likely first. Each has its test in 
 ### File structure
 
 - **Create** `packages/shared/src/guides.ts`, `packages/shared/test/guides.test.ts`.
-- **Modify** `packages/shared/src/chat.ts` (`GuidePart`, `isGuidePart`), `packages/shared/src/index.ts`, `packages/shared/src/services/index.ts`, `packages/shared/test/connectors.test.ts` (no id starts with `x`).
+- **Modify** `packages/shared/src/chat.ts` (`GuidePart`, `isGuidePart`), `packages/shared/src/index.ts`, `packages/shared/src/services/index.ts`.
 - **Create** `supabase/migrations/20261126100000_guides.sql`, `supabase/tests/database/guides.test.sql`.
 - **Create** `apps/engine/src/guidedAccounts.ts` (the request tool, the check, the store over Supabase), `apps/engine/src/guideModel.ts` (one step from the model), `apps/engine/src/guides.ts` (`start_guide`, the routes' logic, finishing and approving), and their tests in `apps/engine/test/`.
 - **Modify** `apps/engine/src/chat.ts` (interception, the prompt line, the tool for every agent, guided tools for their agent in `orgReach`, resume with `guideId`, `ModelTurn.images`), `apps/engine/src/chatStore.ts` (`streamWith` maps images), `apps/engine/src/claudeWriter.ts` (the photo as a file, `Read` on it only), `apps/engine/src/vault.ts` (`guidedSecretName`), `apps/engine/src/app.ts` (routes), `apps/engine/src/server.ts` (wiring).
@@ -251,7 +251,7 @@ The inputs no task's happy path covers, most likely first. Each has its test in 
 
 Each task lands green on its own (`pnpm check`; `pnpm db:test` for Task 2) and in order. A task's tests are named here with what they prove; the implementer writes them first.
 
-- [ ] **1. Shared shapes** (`guides.ts`).
+- [x] **1. Shared shapes** (`guides.ts`).
   - Types: `GuideBlock` (the nine blocks of [the catalogue](#a-fixed-shell-dynamic-content), plus `use_connector { connector }`), `GuideStep { blocks: GuideBlock[]; done?: { undo: string }; blocked?: string }`, `GuideAnswer` (`choice`, `confirm`, `text` values; never a secret), `GuideField` (`base_url`, `username`, `password`, `token`, `key`), `GuidePhoto { mediaType: 'image/jpeg'; data: string }`, `GuideLanding`, `GuideStatus`, and `GuidePart` in `chat.ts`.
   - Functions:
     - `parseLanding(raw: unknown): GuideLanding | { error: string }`
@@ -265,12 +265,11 @@ Each task lands green on its own (`pnpm check`; `pnpm db:test` for Task 2) and i
     - **parseGuideStep:** each limit of [the guide's model](#the-guides-model) rejected with its error; a valid WordPress step accepted.
     - **fieldsFor:** `secret` allowed only for `password` with `basic`.
     - **agentEmail:** `agentEmail('panaderia-ana', { slug: null, name: 'Redes Sociales' })` is `redes-sociales@panaderia-ana.ghostaff.ai`.
-    - **connectors.test.ts:** no catalogue id starts with `x`.
-- [ ] **2. Database.**
+- [x] **2. Database.**
   - The `guides` table, row-level security with no policy.
   - `connections`: `kind` and `method` allow `guided`; `agent_id` (references `agents`, cascade); a check that `agent_id` is set exactly when the kind is `guided`; the unique index.
   - pgTAP: no member reads or writes `guides`; a member reads a guided connection of their organisation and not another's; a guided row without an agent is refused.
-- [ ] **3. Guided accesses** (`guidedAccounts.ts`).
+- [x] **3. Guided accesses** (`guidedAccounts.ts`).
   - `checkLanding(landing, values, f: typeof fetch): Promise<{ ok: true } | { ok: false; field?: GuideField; message: string }>`
   - `guidedToolsFor(store: GuidedStore, vault: Vault, orgId: string, agentId: string, f?: typeof fetch): Promise<AgentTools>`
   - `guidedSecretName` in `vault.ts`; `supabaseGuidedStore(admin)`.
@@ -282,7 +281,7 @@ Each task lands green on its own (`pnpm check`; `pnpm db:test` for Task 2) and i
     - GET reads and POST is reported as a write (`writes()`);
     - the tool is absent for another agent of the same organisation;
     - the credential never appears in the tool's output or step line.
-- [ ] **4. The guide's model** (`guideModel.ts`).
+- [x] **4. The guide's model** (`guideModel.ts`).
   - `nextStep(deps: GuideModelDeps, guide: GuideState, answer?: GuideAnswer, photo?: GuidePhoto): Promise<GuideStep>`, where `GuideState` is `{ app, goal, landing, agentEmail, history }` (defined here; Task 5 builds it from the row) and `GuideModelDeps` is `aiAccounts` and `writerFor` from `ChatDeps`.
   - `ModelTurn.images?: { mediaType: 'image/jpeg'; data: string }[]`, mapped by `streamWith`; the subscription path in `claudeWriter.ts`.
   - Tests with a fake writer:
@@ -292,7 +291,7 @@ Each task lands green on its own (`pnpm check`; `pnpm db:test` for Task 2) and i
     - no secret value is in any turn;
     - `claudeArgs` with a photo allows `Read` and nothing else.
   - **Real check, by hand:** one WordPress screenshot through a real API account places the mark on «Usuarios».
-- [ ] **5. Starting, checking and finishing** (`guides.ts`, `chat.ts`, `app.ts`).
+- [x] **5. Starting, checking and finishing** (`guides.ts`, `chat.ts`, `app.ts`).
   - `start_guide` intercepted in `writeReply`, and the routes of [Engine](#engine).
   - Tests:
     - one guide per message;
@@ -302,7 +301,7 @@ Each task lands green on its own (`pnpm check`; `pnpm db:test` for Task 2) and i
     - Review focus 5: a double check, a double approve and a double resume each happen once;
     - resume refused while `checked`;
     - `use_connector` gives `handed_over`.
-- [ ] **6. The app: card, screen and photos.**
+- [x] **6. The app: card, screen and photos.**
   - `GuideCard`, the guide screen, `AnnotatedShot`, `ShotButton`, `useGuide`, the services, and resuming guides from the chat.
   - Add `expo-image-picker` and `expo-image-manipulator` with `npx expo install`.
   - `guide.test.tsx`:
@@ -310,7 +309,7 @@ Each task lands green on its own (`pnpm check`; `pnpm db:test` for Task 2) and i
     - the secret field's value is not in the step request;
     - the mark is drawn at the box's position.
   - Then on the web against local Supabase with a stand-in model: light and dark, phone and desktop width. Review against the Web Interface Guidelines (AGENTS.md).
-- [ ] **7. Removing an access, and the docs.**
+- [x] **7. Removing an access, and the docs.**
   - `DELETE /connections/guided/:id` and «Accesos de tus agentes» in Conexiones, with the `undo` text before removing.
   - Tests: only owners remove; the secret goes with the row.
   - `docs/architecture.md` updated.
@@ -319,3 +318,22 @@ Each task lands green on its own (`pnpm check`; `pnpm db:test` for Task 2) and i
   - Run the whole guide with photos from a phone, as a member, then approve as an owner.
   - Redes resumes and proposes a draft; approving it publishes the draft on the site.
   - Write what was seen in Progress, then move this plan to `ongoing/`.
+
+## Progress
+
+Built on `feat/guided-access` (2026-11-24), tasks 1–7, each reviewed and fixed, then a whole-branch review and one fix wave. `pnpm check` and `pnpm db:test` green; a local-Postgres test of the guide and guided-access stores' conditional updates passes (skipped without a local Supabase env).
+
+What changed from the plan while building:
+- **Owners approve a member's guide from anywhere** (Conexiones «Pendientes de aprobar» and the guide screen), not only from the chat card: a member's personal or private chat is invisible to owners. An owner may read a `checked` guide without seeing its thread: what an agent does is not private.
+- **Approving makes the agent go on in the engine**, acting as the member who completed the guide; the approve request returns after the reply is written.
+- **`done` closes only**: refused while the guide is open; the closing step after the check must carry it (a fixed closing step with a generic `undo` if the model fails twice).
+- **A handover to a catalogue connector** (WordPress.com, Wix) adds an `account_ask` to the same message, so connector-in-chat's connect → grant → resume takes over.
+- **Hardening found in review:** `fetchPublic` now blocks private addresses typed as literal IPs (it did not, which also affected TikTok downloads), including IPv4-compatible and -mapped IPv6; a guided request refuses WordPress's `_method` override in the query (a GET with `_method=DELETE` would have written without approval); a `field` label can't ask for a secret and no model text may carry a link; a malformed photo is refused before any AI account is tried (it would have marked every account failing); on a subscription, Claude Code reads the photo from a folder holding only the photo.
+
+Seen working: unit and route tests for every step; the app on the web with a stand-in engine (cards in every state, light and dark, phone and desktop width, a photo resized and the mark drawn on it, the secret only ever in the check).
+
+Not checked yet (Task 8): a real WordPress, a real model reading a real screenshot, native camera and permissions, Claude Code accepting the `Read(//abs/path)` rule, a hosting that drops the `Authorization` header (WordPress answers 401 `rest_not_logged_in`; the guide should say so instead of blaming the password).
+
+Open before landing: «Pendientes de aprobar» loads only on mount, so a new pending guide doesn't show until the app restarts, and a row decided elsewhere stays (its 409 doesn't clear it).
+
+Follow-ups noted in review, not blocking: a race between approve's card update and its resume claim (claim earlier); a handover's ask skipping `ask_for_account`'s duplicate and "already have it" checks; `callEngine` without a timeout; a `version` column instead of `updated_at` for optimistic updates; orphaned vault secrets when an agent is deleted or a `checked` guide is never decided.

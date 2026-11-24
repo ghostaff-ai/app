@@ -6,7 +6,7 @@ import { eitherOf } from '@/lib/guide';
 import type { GuideControls } from '@/lib/hooks/useGuideCards';
 
 // An agent asking, with a guide, for access to an app the catalogue lacks
-// (docs/plans/ready/guided-access.md), drawn like AccountAskCard. Anyone who
+// (docs/plans/ongoing/guided-access.md), drawn like AccountAskCard. Anyone who
 // writes in the conversation may do the guide (decision 2); what a member
 // grants waits for an owner's «Aprobar» (here, on the guide's screen or in
 // Conexiones). Once done, the card says who did it, and who approved it. A guide

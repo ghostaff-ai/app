@@ -776,7 +776,7 @@ export async function resumeAfterAccount(engine: EngineAccess, threadId: string,
   return callEngine(engine, 'POST', `/threads/${encodeURIComponent(threadId)}/resume`, { askId });
 }
 
-// Guides (docs/plans/ready/guided-access.md): the guide's screen reads one, asks
+// Guides (docs/plans/ongoing/guided-access.md): the guide's screen reads one, asks
 // for each step and checks what the person typed; an owner decides a member's grant.
 
 /** The guide as its screen reads it, with the step it stopped at. */

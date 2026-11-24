@@ -1,4 +1,4 @@
-// Guides (docs/plans/ready/guided-access.md): an agent hands a person a guide
+// Guides (docs/plans/ongoing/guided-access.md): an agent hands a person a guide
 // to give it access to an app the catalogue lacks (a self-hosted WordPress).
 //
 // The agent starts one with `start_guide` in its reply; the reply's writer

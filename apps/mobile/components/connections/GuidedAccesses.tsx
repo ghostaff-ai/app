@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button, ListRow } from '@/components/ui';
 
-// «Accesos de tus agentes» in Conexiones (docs/plans/ready/guided-access.md): the
+// «Accesos de tus agentes» in Conexiones (docs/plans/ongoing/guided-access.md): the
 // agent's own user or key in an app, given through a guide. Every member sees
 // them (the connections' read policy); only an owner gets «Quitar». Removing
 // shows first how to remove the user in the app's own tool (the guide's `undo`),

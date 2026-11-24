@@ -162,7 +162,7 @@ Other secrets an agent needs (a mailbox password, a social network's token, a vo
 
 ### Guided accesses
 
-For an app with an HTTP API and no connector (first case: a self-hosted WordPress), an agent gets **its own identity in the customer's tool**: a user or key made for it, never a person's. Its address is `<agent>@<org>.ghostaff.ai`, one per agent (decision 1 of [guided-access.md](plans/ready/guided-access.md)), so the customer's own audit log says which agent did what. An agent starts a guide, a person follows it and types the credential; the engine checks it before keeping it.
+For an app with an HTTP API and no connector (first case: a self-hosted WordPress), an agent gets **its own identity in the customer's tool**: a user or key made for it, never a person's. Its address is `<agent>@<org>.ghostaff.ai`, one per agent (decision 1 of [guided-access.md](plans/ongoing/guided-access.md)), so the customer's own audit log says which agent did what. An agent starts a guide, a person follows it and types the credential; the engine checks it before keeping it.
 
 - **One generic landing**, so a new app needs a guide and no engine code: `auth` (`basic`, `bearer` or `header`), a `base` (the address the person typed, https only, plus the agent's suffix) and a `check` (a GET under `base` that must answer 2xx, optionally with one expected JSON field).
 - **The credential lives in the vault** under one secret per guide (`guidedSecretName`) and is added by the engine to each request. The model never sees it, and it is cut out of what the app answers.
