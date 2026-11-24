@@ -286,14 +286,13 @@ function slugify(text: string): string {
 
 /**
  * The provider id of a guided access: «x» plus the app's name reduced to
- * [a-z0-9], at most 31 characters (the database check). The «x» keeps it apart
- * from the catalogue; the one catalogue id that starts with it («xero») is
- * skipped by adding a digit.
+ * [a-z0-9], at most 31 characters (the database check). The «x» only
+ * guarantees a leading letter: guided accesses belong to one agent and have
+ * their own uniqueness, so they never collide with catalogue ids.
  */
 export function guidedProvider(app: string): string {
   const slug = slugify(app).replace(/-/g, '');
-  const id = `x${slug || 'app'}`.slice(0, 31);
-  return PROVIDER_IDS.includes(id) ? `${id.slice(0, 30)}2` : id;
+  return `x${slug || 'app'}`.slice(0, 31);
 }
 
 /** The agent's own address, the identity it has in the customer's tool. */

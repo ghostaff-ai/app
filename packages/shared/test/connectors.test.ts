@@ -8,10 +8,6 @@ describe('the connector catalogue', () => {
     expect(new Set(ACCOUNT_PROVIDERS).size).toBe(ACCOUNT_PROVIDERS.length);
   });
 
-  it('no catalogue id starts with x, except xero: guided accesses take that prefix (guidedProvider)', () => {
-    expect(ACCOUNT_PROVIDERS.filter((id) => id.startsWith('x'))).toEqual(['xero']);
-  });
-
   it('every maker\'s server is https, and every card says plainly what agents can do', () => {
     for (const c of CONNECTORS) {
       if (c.kind === 'mcp') expect(new URL(c.url).protocol).toBe('https:');

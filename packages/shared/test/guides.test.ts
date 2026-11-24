@@ -148,11 +148,6 @@ describe('guidedProvider', () => {
     expect(guidedProvider('Mi Tienda Ñoña!')).toBe('xmitiendanona');
   });
 
-  it('never returns a catalogue id, xero included', () => {
-    expect(guidedProvider('ero')).not.toBe('xero');
-    expect(guidedProvider('ero')).toMatch(/^[a-z][a-z0-9]{1,30}$/);
-  });
-
   it('fits the database check at any length, even for a name with no letters', () => {
     const re = /^[a-z][a-z0-9]{1,30}$/;
     expect(guidedProvider('a'.repeat(80))).toHaveLength(31);
