@@ -1,0 +1,93 @@
+#cloud-config
+# The record store's VM (docs/plans/ongoing/record-store.md): Container-Optimized OS running Forgejo
+# from our own registry, its repos and SQLite on the data disk, which survives the VM and is what the
+# snapshots keep. scripts/setup-record-store.sh fills the __PLACEHOLDERS__. On the first boot with an
+# empty disk it makes Forgejo's admin and puts the admin's token straight into Secret Manager: no
+# person ever sees it.
+
+bootcmd:
+  # Format the data disk only when it has no filesystem at all: never on a disk with data.
+  - blkid /dev/disk/by-id/google-forgejo-data || mkfs.ext4 -m 0 -F -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/disk/by-id/google-forgejo-data
+  - mkdir -p /mnt/disks/forgejo
+  - mountpoint -q /mnt/disks/forgejo || mount -o discard,defaults /dev/disk/by-id/google-forgejo-data /mnt/disks/forgejo
+
+write_files:
+  - path: /etc/systemd/system/forgejo.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Forgejo, the record store
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      Environment=HOME=/home/forgejo-runner
+      ExecStartPre=/bin/mkdir -p /home/forgejo-runner
+      ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries __REGISTRY__
+      ExecStartPre=-/usr/bin/docker rm -f forgejo
+      ExecStart=/usr/bin/docker run --rm --name forgejo -p 3000:3000 -v /mnt/disks/forgejo:/data \
+        -e USER_UID=1000 -e USER_GID=1000 \
+        -e FORGEJO__database__DB_TYPE=sqlite3 \
+        -e FORGEJO__server__ROOT_URL=http://__IP__:3000/ \
+        -e FORGEJO__server__DISABLE_SSH=true \
+        -e FORGEJO__server__OFFLINE_MODE=true \
+        -e FORGEJO__security__INSTALL_LOCK=true \
+        -e FORGEJO__security__DISABLE_GIT_HOOKS=false \
+        -e FORGEJO__service__DISABLE_REGISTRATION=true \
+        -e FORGEJO__service__REQUIRE_SIGNIN_VIEW=true \
+        -e FORGEJO__repository__DEFAULT_PRIVATE=private \
+        -e FORGEJO__repository__DISABLE_STARS=true \
+        -e FORGEJO__mailer__ENABLED=false \
+        -e FORGEJO__cron__ENABLED=true \
+        __IMAGE__
+      ExecStop=/usr/bin/docker stop forgejo
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/forgejo-admin.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Forgejo's admin for the Ghostaff engine, once
+      Requires=forgejo.service
+      After=forgejo.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/bash /etc/forgejo-admin.sh
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/forgejo-admin.sh
+    permissions: '0700'
+    content: |
+      #!/bin/bash
+      # Makes the admin `__ADMIN__` once and adds its token as a new version of the secret
+      # FORGEJO_ADMIN_TOKEN. The token goes from Forgejo to Secret Manager through variables only.
+      set -euo pipefail
+      for i in $(seq 1 60); do curl -fs http://127.0.0.1:3000/api/healthz >/dev/null && break; sleep 5; done
+      if docker exec -u git forgejo forgejo admin user list --admin | awk '{print $2}' | grep -qx '__ADMIN__'; then
+        echo "admin __ADMIN__ already there"; exit 0
+      fi
+      pw=$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)A1
+      docker exec -u git forgejo forgejo admin user create --admin --username '__ADMIN__' --password "$pw" \
+        --email '__ADMIN__@record-store.ghostaff.invalid' --must-change-password=false >/dev/null
+      token=$(docker exec -u git forgejo forgejo admin user generate-access-token --username '__ADMIN__' \
+        --token-name engine --scopes all --raw)
+      md=http://metadata.google.internal/computeMetadata/v1
+      access=$(curl -fs -H 'Metadata-Flavor: Google' "$md/instance/service-accounts/default/token" | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
+      project=$(curl -fs -H 'Metadata-Flavor: Google' "$md/project/project-id")
+      data=$(printf '%s' "$token" | base64 -w0)
+      curl -fs -o /dev/null -X POST -H "Authorization: Bearer $access" -H 'Content-Type: application/json' \
+        -d "{\"payload\":{\"data\":\"$data\"}}" \
+        "https://secretmanager.googleapis.com/v1/projects/$project/secrets/FORGEJO_ADMIN_TOKEN:addVersion"
+      echo "admin __ADMIN__ made; its token is in Secret Manager"
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now forgejo.service
+  - systemctl start forgejo-admin.service

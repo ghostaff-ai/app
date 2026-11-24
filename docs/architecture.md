@@ -67,7 +67,7 @@ A run on our runner, end to end:
 
 ### Target: the record
 
-Decided 2026-11-24 ([agent-memory.md](plans/ready/agent-memory.md), [record-store.md](plans/ready/record-store.md)); not built. The rule is invariant 4: what agents work on are files with history, and the app reads the database.
+Decided 2026-11-24 ([agent-memory.md](plans/ready/agent-memory.md), [record-store.md](plans/ongoing/record-store.md)); not built. The rule is invariant 4: what agents work on are files with history, and the app reads the database.
 
 **What an agent is made of**, and where each part lives:
 

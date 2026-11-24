@@ -60,8 +60,23 @@ export class GithubError extends Error {
   }
 }
 
+/**
+ * The few calls the sync makes on one record, whichever host keeps it: GitHub (githubRepo, an
+ * organisation that brings its own repo) or our record store (forgejoRepo in forgejo.ts).
+ */
+export interface RecordRepo {
+  /** The default branch and the commit at its head. */
+  head(): Promise<{ branch: string; sha: string }>;
+  /** The files directly in `dir` at `ref`; empty when the folder does not exist. */
+  files(dir: string, ref: string): Promise<{ name: string; content: string }[]>;
+  /** One file at `ref`, or null. */
+  file(path: string, ref: string): Promise<string | null>;
+  /** One commit on top of `head` with these files; false when the record moved meanwhile. */
+  commit(head: { branch: string; sha: string }, files: { path: string; content: string }[], message: string): Promise<boolean>;
+}
+
 /** A small client for the few Git data calls the sync makes on one repo. */
-export function githubRepo(repo: string, token: string, f: Fetch = fetch) {
+export function githubRepo(repo: string, token: string, f: Fetch = fetch): RecordRepo {
   const call = async <T>(method: string, path: string, body?: unknown): Promise<T | null> => {
     const res = await f(`${GITHUB_API}/repos/${repo}${path}`, {
       method,
