@@ -1,8 +1,8 @@
 # A guide that walks a person through giving an agent access
 
 **Priority:** high — Jaime (2026-11-24): «una parte super importante del producto que hay que trabajar muy mucho»: the agent will need access we never built a connector for, and a non-technical person has to be able to give it
-**Gate:** decision:who may complete a guide, owners only or also the member (open question 2)
-**Next:** Jaime answers open question 2; then move to `ready/` with WordPress as the first case and write the block catalogue as types in `packages/shared`
+**Gate:** none
+**Next:** move to `ready/` and write the build plan for the WordPress case, starting with the block catalogue as types in `packages/shared`
 
 ## Goal
 
@@ -103,6 +103,7 @@ The card in the chat is the same as connector-in-chat's, with a new `need: 'guid
 
 - **Ghostaff never asks for the person's own password**, and never opens or suggests a link outside the maker's own domains (an allow-list per app).
 - **Least access:** the smallest role that does the job, read before write. The `scope` block says it before the person grants anything.
+- **A member's grant waits for an owner** (decision 2): checked and stored, but unused until an owner approves it.
 - **A guide only asks**: the access is granted by the person in their own tool. Writes the agent later makes still wait for approval, as today.
 - **Screenshots belong to the organisation**: stored with its data in the EU, used for that guide only. They never go into a proven guide.
 
@@ -121,9 +122,10 @@ If the photo in step 1 shows another platform, the guide follows that one. That 
 
 1. **One email address per agent** (Jaime, 2026-11-24), `<agent>@<org>.ghostaff.ai`, not one per organisation. It reads like an employee, each agent's access stays apart (removing Redes's user in WordPress doesn't touch Finanzas), and the person sees in their own tool which agent can do what. Cost: an organisation that wants two agents in the same app invites two users, and the inbound mail (kind C) routes by agent, not just by organisation.
 
+2. **Owners and members may complete a guide** (Jaime, 2026-11-24). The member the agent was talking to is often the one with the account (the person who runs the web), so the card's «Empezar» shows to them too, unlike connector-in-chat's decision 1 where only owners connect. What a member grants **waits for an owner's approval before the agent uses it**: the check still runs when the guide ends, the secret still goes to the vault, but the access stays `pending` and owners get a card, «Luis ha dado a Redes acceso a la web (Editor) · Aprobar». An owner completing a guide needs no second step. This keeps «which accounts an agent reaches is an owner's call» (`agents.accounts`, `settings_agent_accounts`) while letting the person with the account do the work. *(The approval step was part of the recommendation Jaime picked; confirm it if in doubt.)*
+
 ## Open questions
 
-2. **Who may complete a guide:** only owners, as with connecting today, or also the member the agent was talking to, for apps where the member is the one with the account?
 3. **Vision model and cost:** Claude's vision for reading screenshots and placing the mark, or a cheaper first pass. To be measured on real screenshots.
 4. **Where the agent's own credentials for an invited user live** (the password it sets when accepting an invitation): the vault, per organisation and app, like any token.
 5. **Live screen sharing on the web:** the same loop on a frame every few seconds or on demand. Privacy: what is on screen besides the app.
