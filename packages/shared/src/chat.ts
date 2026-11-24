@@ -4,6 +4,7 @@
 // parts in the AI SDK's shape, so the agents can later add tool calls, files or
 // decisions beside the text.
 
+import type { GuideStatus } from './guides';
 import type { ConversationVisibility } from './models';
 
 export type MessagePart = { type: 'text'; text: string } | { type: string; [key: string]: unknown };
@@ -61,6 +62,31 @@ export type AccountAskPart = {
 
 export function isAccountAskPart(p: MessagePart): p is AccountAskPart & MessagePart {
   return p.type === 'account_ask' && typeof (p as { askId?: unknown }).askId === 'string';
+}
+
+/**
+ * A guide in the thread (guides.ts): the card that
+ * opens the guide on the app's access. The engine trusts its own row, never the
+ * part. A type, not an interface, so a part of a message can be one as it is.
+ */
+export type GuidePart = {
+  type: 'guide';
+  guideId: string;
+  /** The app's name as the person reads it. */
+  app: string;
+  /** Why the agent needs access, in one line. */
+  why: string;
+  status: GuideStatus;
+  /** Who finished it, once done. */
+  doneBy?: string;
+  /** Who turned it down or handed it over. */
+  decidedBy?: string;
+  /** Why it cannot go on, when blocked. */
+  blockedReason?: string;
+};
+
+export function isGuidePart(p: MessagePart): p is GuidePart & MessagePart {
+  return p.type === 'guide' && typeof (p as { guideId?: unknown }).guideId === 'string';
 }
 
 /**
