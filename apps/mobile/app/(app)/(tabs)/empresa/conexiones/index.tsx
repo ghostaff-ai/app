@@ -48,7 +48,7 @@ export default function Connections() {
     [items],
   );
   const guided = useMemo(() => items.filter((i) => i.kind === 'guided'), [items]);
-  const { items: agents } = useAgents(active?.id ?? null);
+  const { items: agents, loading: agentsLoading } = useAgents(active?.id ?? null);
   const engine = useEngine();
   const [moveError, setMoveError] = useState<string | null>(null);
   const desktop = useIsDesktop();
@@ -152,7 +152,7 @@ export default function Connections() {
             header="Accesos de tus agentes"
             footer="Cada uno es el usuario propio de un agente en una app tuya. Solo ese agente lo usa."
           >
-            {guidedRows({ items: guided, agents, owner, engine, onRemoved: () => void reload() })}
+            {guidedRows({ items: guided, agents, agentsLoading, owner, engine, onRemoved: () => void reload() })}
           </Group>
         ) : null}
       </View>

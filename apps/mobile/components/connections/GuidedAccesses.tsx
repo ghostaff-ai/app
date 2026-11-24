@@ -26,19 +26,24 @@ type Confirm = { state: 'loading' } | { state: 'ready'; undo: string | null } | 
 function GuidedRow({
   conn,
   agent,
+  agentsLoading,
   owner,
   engine,
   onRemoved,
 }: {
   conn: Connection;
   agent: Agent | undefined;
+  /** The agents are still being read: not finding this one yet says nothing about it. */
+  agentsLoading: boolean;
   owner: boolean;
   engine: EngineAccess | null;
   onRemoved: () => void;
 }) {
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const app = conn.settings.app ?? 'una aplicación';
-  const who = agent ? agent.name : 'Un agente que ya no está';
+  // Until the agents are read, no name: a live agent must not read as gone.
+  const who = agent ? agent.name : agentsLoading ? null : 'Un agente que ya no está';
+  const whoText = who ?? 'El agente';
 
   const open = async () => {
     if (!engine) return;
@@ -65,7 +70,7 @@ function GuidedRow({
     <View testID={`guided-${conn.id}`}>
       <ListRow
         title={app}
-        subtitle={conn.hint ? `${who} · ${conn.hint}` : who}
+        subtitle={[who, conn.hint].filter(Boolean).join(' · ') || null}
         trailing={
           owner && !confirm ? <Button testID={`guided-remove-${conn.id}`} label="Quitar" variant="plain" size="small" onPress={() => void open()} /> : undefined
         }
@@ -79,7 +84,7 @@ function GuidedRow({
           ) : (
             <>
               <Text className="text-footnote text-muted">
-                {`${who} dejará de poder entrar en ${app}. Su usuario sigue en ${app}: quítalo también allí.`}
+                {`${whoText} dejará de poder entrar en ${app}. Su usuario sigue en ${app}: quítalo también allí.`}
               </Text>
               {undo ? <Text className="mt-2 text-base text-ink">{undo}</Text> : null}
               {confirm.state === 'error' ? <Text className="mt-2 text-footnote text-no">{confirm.message}</Text> : null}
@@ -107,12 +112,13 @@ function GuidedRow({
 }
 
 /** The rows of the section, one per access. */
-export function guidedRows(props: { items: Connection[]; agents: Agent[]; owner: boolean; engine: EngineAccess | null; onRemoved: () => void }) {
+export function guidedRows(props: { items: Connection[]; agents: Agent[]; agentsLoading: boolean; owner: boolean; engine: EngineAccess | null; onRemoved: () => void }) {
   return props.items.map((conn) => (
     <GuidedRow
       key={conn.id}
       conn={conn}
       agent={props.agents.find((a) => a.id === conn.agentId)}
+      agentsLoading={props.agentsLoading}
       owner={props.owner}
       engine={props.engine}
       onRemoved={props.onRemoved}
