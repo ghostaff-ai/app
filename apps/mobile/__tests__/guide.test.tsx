@@ -1,12 +1,12 @@
 import type { ChatMessage, GuidePart, GuideStep, GuideView } from '@ghostaff/shared';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 import { Platform, StyleSheet } from 'react-native';
 import GuideScreen from '@/app/(app)/guia/[id]';
 import { GuideCard } from '@/components/chat/GuideCard';
 import { AnnotatedShot } from '@/components/guide/AnnotatedShot';
 import { GuideBlocks } from '@/components/guide/GuideBlocks';
 import { checkedWhen } from '@/lib/guide';
-import { type GuideControls, guidesToResume } from '@/lib/hooks/useGuideCards';
+import { type GuideControls, guidesToResume, useGuideCards } from '@/lib/hooks/useGuideCards';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 // Stable, as the real useEngine is (memoised on the token).
@@ -459,5 +459,54 @@ describe('when a guide was checked', () => {
     expect(checkedWhen('2026-11-24T09:00:00+01:00', now)).toBe('hoy');
     expect(checkedWhen('2026-11-23T23:30:00+01:00', now)).toBe('ayer');
     expect(checkedWhen('2026-11-20T10:00:00+01:00', now)).toBe('el 20 nov');
+  });
+});
+
+describe('an owner approving from the card', () => {
+  const agentMessage = (status: GuidePart['status']): ChatMessage => ({
+    id: 'm1',
+    threadId: 't1',
+    authorKind: 'agent',
+    authorUserId: null,
+    authorAgentId: 'a1',
+    authorName: 'Redes',
+    parts: [{ ...guide, status }],
+    state: 'done',
+    steps: [],
+    createdAt: '2026-11-24T10:00:00Z',
+  });
+
+  it('leaves the agent going on to the engine, which does it as whoever did the guide: this chat does not resume it too', async () => {
+    const urls: string[] = [];
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return reply(200, String(input).endsWith('/approve') ? { status: 'done', resumed: true } : { resumed: true });
+    }) as typeof fetch;
+    const { result, rerender } = await renderHook(({ messages }: { messages: ChatMessage[] }) => useGuideCards({ messages, isOwner: true, owners: ['Ana'], canTalk: true }), {
+      initialProps: { messages: [agentMessage('checked')] },
+    });
+    await act(async () => {
+      expect(await result.current.decide('g1', 'approve')).toBeNull();
+    });
+    await rerender({ messages: [agentMessage('done')] });
+    await act(async () => {});
+    expect(urls.filter((u) => u.endsWith('/approve'))).toHaveLength(1);
+    expect(urls.filter((u) => u.endsWith('/resume'))).toHaveLength(0);
+  });
+
+  it('when the engine could not let the agent go on yet, this chat does it once the conversation moves', async () => {
+    const urls: string[] = [];
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return reply(200, String(input).endsWith('/approve') ? { status: 'done', resumed: false } : { resumed: true });
+    }) as typeof fetch;
+    const { result, rerender } = await renderHook(({ messages }: { messages: ChatMessage[] }) => useGuideCards({ messages, isOwner: true, owners: ['Ana'], canTalk: true }), {
+      initialProps: { messages: [agentMessage('checked')] },
+    });
+    await act(async () => {
+      await result.current.decide('g1', 'approve');
+    });
+    await rerender({ messages: [agentMessage('done')] });
+    await waitFor(() => expect(urls.filter((u) => u.endsWith('/resume'))).toHaveLength(1));
   });
 });

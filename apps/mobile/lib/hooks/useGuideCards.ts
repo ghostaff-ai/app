@@ -81,11 +81,18 @@ export function useGuideCards(opts: {
   const decide = useCallback(
     async (guideId: string, decision: 'approve' | 'reject'): Promise<string | null> => {
       if (!engine) return 'No hay conexión. Prueba otra vez.';
+      // Approving lets the agent go on, in the engine, as whoever did the guide: this chat
+      // mustn't race it (the card turns done before the approval answers) and go on as the owner.
+      if (decision === 'approve') tried.current.add(guideId);
       try {
-        await (decision === 'approve' ? approveGuide(engine, guideId) : rejectGuide(engine, guideId));
-        // The card updates itself when the engine rewrites the message; the agent goes on from the effect above.
+        if (decision === 'approve') {
+          // The agent was answering: this chat lets it go on when that reply ends (the effect above).
+          if (!(await approveGuide(engine, guideId)).resumed) tried.current.delete(guideId);
+        } else await rejectGuide(engine, guideId);
+        // The card updates itself when the engine rewrites the message.
         return null;
       } catch (e) {
+        tried.current.delete(guideId);
         return decideErrorText(e);
       }
     },

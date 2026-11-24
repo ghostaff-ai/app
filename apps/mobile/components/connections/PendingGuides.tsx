@@ -22,13 +22,11 @@ function PendingRow({ guide, decide }: { guide: PendingGuide; decide: (id: strin
     running.current = true;
     setBusy(d);
     setError(null);
+    // On success the list has been read again and the row is gone.
     const problem = await decide(guide.id, d);
     running.current = false;
-    // On success the row goes with the list read again.
-    if (problem) {
-      setError(problem);
-      setBusy(null);
-    }
+    setBusy(null);
+    setError(problem);
   };
   return (
     <View testID={`pending-${guide.id}`}>
