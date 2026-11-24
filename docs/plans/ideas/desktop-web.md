@@ -8,6 +8,8 @@ Jaime's request (2026-11-21), after seeing the app on `localhost:8083`: on a com
 
 It builds on [web.md](web.md) (the marketing site, Álvaro 2026-11-21: Astro in `ghostaff-ai/web`, Firebase Hosting), [entry-flows.md](entry-flows.md) (the way in) and the calm-desk decisions in [app-design.md](../ongoing/app-design.md), and reopens none of them.
 
+**Órdago's panel converges here** (Jaime, 2026-11-24). As Órdago's agents move onto Ghostaff, the panel (`ordago-apps/apps/ordago-panel`) stops launching them, and a web page where a customer follows what their agents are doing is part of the product, not a page each customer builds. Jaime also floated pages per subscription plan, one or several, as some builders offer; not designed yet.
+
 ## The idea
 
 **For the person it is one web.**

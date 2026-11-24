@@ -1,7 +1,7 @@
 # Órdago's agents in Ghostaff: first the face, then the body, one agent at a time
 
 **Priority:** high — Ghostaff uses Ghostaff: until Órdago's agents run through it, the platform is a chat with no work behind it
-**Gate:** decision:Jaime picks where Órdago's agents run until the first release — beta now, or wait for production
+**Gate:** none
 **Next:** move Legal for good: `org add-agents … --runner ghostaff --only legal` with its timetable, then pause `ordago-legal` in `ordago-agents` in the same sitting
 
 Álvaro asked (2026-11-21) how close Ghostaff is to running all of Órdago's agents, then to build what is missing. Where we stood that day: the app (sign-in, organisations, decision inbox, team chat, connectors, vault) is on the beta; the agents still run entirely in `ghostaff-ai/agents` (Claude Code in a container on Cloud Run Jobs in `ordago-agents`, on a timetable, working in `ordago-app/business`, reporting by Telegram), and the engine here only answers in chat. He took my picks with four changes («go», 2026-11-21).
@@ -54,17 +54,18 @@ From the YAMLs in `ghostaff-ai/agents/proyectos/ordago/agentes/` (2026-11-24). O
 4. **What the legacy start-up does and our runner doesn't:** a per-agent timeout and size (Desarrollo needs 3 hours), forbidden tools, `ritmo` and its metrics, never two runs of one agent at once, «tell only if there is news» (`SIN NOVEDAD` covers it), transcripts kept per run for Dirección.
 5. **Audio from an agent** in a thread shared by the people who should hear it (La Mesa for both founders), with the player the voice notes already have.
 6. **A second Claude account** in Órdago's failover order: twelve agents on one subscription is exactly the weekly limit La Mesa hit.
-7. **The panel launches through the engine.** `ordago-panel/lib/ejecuciones.ts` calls the Cloud Run jobs `ordago-<agent>` directly; it calls the engine instead (start a run, read `agent_runs`) with a credential of its own. What it reads and writes in the record is unchanged.
+7. **The prompt is edited in Ghostaff.** Editing an agent's task (`agents.task`, today written only by `org add-agents`) is a setting in `packages/shared/src/services/settings.ts`, so an owner and Secretaría can change it (rule 6). Each agent's «Indicaciones» and «Aprendizajes» in `agentes/<a>/README.md` move to its memory in the record, `memoria/agentes/<slug>/` ([agent-memory.md](../ready/agent-memory.md)); the rest of that README that the agent needs goes into its task.
+8. **Órdago into production** with the first release: the organisation, its people, agents and connections made again in the production Supabase (the vault is per project, so the Claude sign-in, the GitHub App's installation and the Google Cloud grant are redone, not copied).
 
 ### Order
 
 Fewest needs first, each one moved with `org add-agents --runner ghostaff --only <agent>` and its Cloud Scheduler job paused in `ordago-agents` in the same sitting: Legal → Comercial → SEO, Producto, Dirección → Correo, Finanzas → La Mesa, Productor → Orgánico → Desarrollo. Then Telegram off: the webhook deleted, `telegram` removed from `proyecto.yaml`, the jobs in `ordago-agents` deleted, and `ghostaff-ai/agents` archived.
 
-### Open decisions (Jaime)
+### Decisions (2026-11-24)
 
-1. **Beta or production.** Production comes up with the first release (`develop` into `main`); Órdago's organisation lives in the beta Supabase today.
-2. **Where the prompts live.** Edited in Ghostaff (the agent row), or the YAMLs stay the source and are imported.
-3. **The panel.** Kept and moved to the engine (item 7), or launching and run state live only in Ghostaff.
+1. **Beta now, production with the first release** (Jaime left it to me). Órdago's organisation, its Claude sign-in and its record connection already live on the beta, and the production app is not on anyone's phone yet; waiting for production would hold the move on the first release. The cost: a broken beta stops Órdago's agents, and the organisation is made again in production later (item 8).
+2. **The prompt lives in Ghostaff, on the agent row** (settled with the agent-memory session, which Jaime asked to decide it). The YAMLs are imported once and stop being a source: no customer will have a YAML in `ghostaff-ai/agents`, rule 6 cannot reach a file in another repo, and each thing keeps one master. Configuration is on the row; what the agent learns is in the record's memory (item 7).
+3. **The panel stops launching agents** (Jaime): starting a run and seeing its state live only in Ghostaff, and `ordago-panel/lib/ejecuciones.ts` goes when the jobs do. A web page where a customer follows their agents is wanted as part of the product, later, converging with [desktop-web.md](../../ideas/desktop-web.md).
 
 ## Steps
 

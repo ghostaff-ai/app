@@ -17,7 +17,7 @@ The design is in [architecture.md](../../architecture.md#target-a-customers-goog
 
 ## Tasks
 
-- [ ] **Tenants project.** `setup-env.sh` creates the service-account side of `ghostaff-tenants-<env>` (a founder creates the project and links billing by hand: project creation needs the organisation's rights): enable `iam` and `iamcredentials`, grant `engine@<env project>` `roles/iam.serviceAccountAdmin` there and nothing in the main project. Re-runs create nothing.
+- [ ] **Tenants project.** `setup-env.sh` creates the service-account side of `ghostaff-tenants-<env>` (a founder creates the project by hand, since that needs rights on the Google Cloud organisation; billing only if Google asks for it, as IAM itself is free): enable `iam` and `iamcredentials`, grant `engine@<env project>` `roles/iam.serviceAccountAdmin` there and nothing in the main project. Re-runs create nothing.
 - [ ] **Database.** The Google Cloud connection (today `provider = 'vertex'`) gains the account's email and the customer's project; its region stays for Vertex. Migration and pgTAP: members read it, only the engine writes it.
 - [ ] **Engine, connect.** `POST /connections/ai` for Google Cloud creates `org-<id>@` (idempotent: a retry finds it), grants the engine token creator on it, stores the connection, and returns the account's email and the commands to run. Removing it deletes the account.
 - [ ] **Engine, check.** «Comprobar» mints a token as the account and asks the customer's project which of the expected permissions it holds (`testIamPermissions` on the project, BigQuery `datasets.get` on a named dataset); the answer is shown, never cached as proof.
