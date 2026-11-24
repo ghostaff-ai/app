@@ -1,8 +1,8 @@
 # A guide that walks a person through giving an agent access
 
 **Priority:** high — Jaime (2026-11-24): «una parte super importante del producto que hay que trabajar muy mucho»: the agent will need access we never built a connector for, and a non-technical person has to be able to give it
-**Gate:** decision:the agent's own email address, per agent or per organisation (open question 1)
-**Next:** Jaime answers open questions 1–2; then move to `ready/` with WordPress as the first case and write the block catalogue as types in `packages/shared`
+**Gate:** decision:who may complete a guide, owners only or also the member (open question 2)
+**Next:** Jaime answers open question 2; then move to `ready/` with WordPress as the first case and write the block catalogue as types in `packages/shared`
 
 ## Goal
 
@@ -25,7 +25,7 @@ The value: the agent can ask for connections nobody planned for, and a person wh
 
 When you hire someone, you give them an email and invite them to your tools. Every shop owner knows how to do that. So:
 
-- **The agent has its own email address** (`redes@acme.ghostaff.ai`, open question 1).
+- **Each agent has its own email address** (`redes@acme.ghostaff.ai`; decision 1).
 - Many accesses then stop being «create an API key» and become **«invite this email as a user, with this role»** in Shopify, WordPress, Analytics, Holded or Meta Business. That is one instruction anyone can follow, and the person keeps control in their own tool (they can see the user and remove it).
 - The same address receives invitations, verification mails and forwarded documents (kind C's forwarding address).
 
@@ -117,9 +117,12 @@ Chosen because it forces the hard parts: hostings and themes show it differently
 
 If the photo in step 1 shows another platform, the guide follows that one. That branch is the test that it is really dynamic.
 
+## Decisions
+
+1. **One email address per agent** (Jaime, 2026-11-24), `<agent>@<org>.ghostaff.ai`, not one per organisation. It reads like an employee, each agent's access stays apart (removing Redes's user in WordPress doesn't touch Finanzas), and the person sees in their own tool which agent can do what. Cost: an organisation that wants two agents in the same app invites two users, and the inbound mail (kind C) routes by agent, not just by organisation.
+
 ## Open questions
 
-1. **The agent's email: per agent or per organisation?** Per agent (`redes@…`) reads like an employee and keeps each agent's access apart; per organisation (`agentes@…`) is one invitation that serves every agent. This changes the identity model and the mailbox plumbing (kind C's inbound mail).
 2. **Who may complete a guide:** only owners, as with connecting today, or also the member the agent was talking to, for apps where the member is the one with the account?
 3. **Vision model and cost:** Claude's vision for reading screenshots and placing the mark, or a cheaper first pass. To be measured on real screenshots.
 4. **Where the agent's own credentials for an invited user live** (the password it sets when accepting an invitation): the vault, per organisation and app, like any token.
