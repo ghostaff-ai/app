@@ -20,6 +20,7 @@ It describes the platform as built, plus the target where one is decided and not
   │ agent-runner  Cloud Run job: one execution per agent run, the unmodified Claude Code  │
   │ vault         Secret Manager, EU only: every organisation's keys and tokens           │
   │ tick          Cloud Scheduler → POST /cron                                            │
+  │ record store  Target: Forgejo on a VM, a repo per organisation, internal address only │
   └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -31,6 +32,7 @@ It describes the platform as built, plus the target where one is decided and not
 | Runner | `apps/runner` | Cloud Run job `agent-runner` | One agent run: fetches its spec from the engine once, clones the record, runs `claude -p`, pushes, reports |
 | Sync | `apps/sync` | By hand | The record's `por-decidir/` into the database from a checkout. The engine's `recordSync.ts` does the same on the tick through GitHub's API |
 | Shared | `packages/shared` | Everywhere | Models, the record's file formats, the data services |
+| Record store | **Target** | A Compute Engine VM per project | Forgejo: every organisation's record, the agents' instructions and memory. See [Target: the record](#target-the-record) |
 
 ### Environments
 
@@ -63,13 +65,34 @@ A run on our runner, end to end:
 4. Claude Code works on the clone as the unprivileged user `agente`, under a read-only constitution and a push guard.
 5. The runner reports to `POST /runs/report`: the answer lands in the thread, or in each person's chat for a scheduled run with news; the decisions it opened reach the inbox through the sync; usage and limits go to the AI account's card.
 
+### Target: the record
+
+Decided 2026-11-24 ([agent-memory.md](plans/ready/agent-memory.md), [record-store.md](plans/ideas/record-store.md)); not built. The rule is invariant 4: what agents work on are files with history, and the app reads the database.
+
+**What an agent is made of**, and where each part lives:
+
+| Part | Lives in | The database keeps | Changed by |
+|---|---|---|---|
+| Its instructions | The record: `agentes/<slug>/AGENTS.md` | A projection (`agents.task`) for chat turns | Owners, in the app or through Secretaría after their OK; each change a commit |
+| The organisation's memory («Empresa») | The record: `memoria/empresa/` | A projection (`memories`) | Secretaría; owners in the app |
+| Its own memory | The record: `memoria/agentes/<slug>/` | A projection (`memories`) | That agent; owners in the app |
+| What it knows about one person («Sobre ti») | **The database only**, row-level security to that person | It is the master | That agent in that person's private conversations; that person |
+| Its timetable, tools, model, who may see it | The database: the agent row | It is the master | Owners (settings, rule 6) |
+| Conversations | The database: `threads`, `messages` | It is the master | People and agents |
+
+«Sobre ti» stays out of the record because every run of every agent clones it, so nothing in it can be private to one person. Access stays on the row because row-level security, not a file anyone with a clone could change, is what enforces it.
+
+**Where the record is.** One Forgejo per environment, on a Compute Engine VM in the environment's project, with no public address: the engine and `agent-runner` reach it through Direct VPC egress. A repo is made with every organisation. The engine is its admin (like the service-role key for the database); each agent is a Forgejo user with write on its organisation's repo only, and a run gets a token for that user, deleted when it reports. A server-side hook refuses, by pusher, what an agent may not write (Empresa unless Secretaría, another agent's memory, any `AGENTS.md`). An organisation that brings its own GitHub repo as master (Órdago, until its migration ends) is read and written through the same interface with the GitHub App; afterwards GitHub is only a push mirror, the live copy.
+
+**How a turn uses it.** A chat turn reads instructions and memory from the database's projection and writes memory through tools shaped like Anthropic's memory tool, which land in the projection and go back to the record as a commit. A runner turn has the record cloned and reads and writes the files directly. The sync is `por-decidir/`'s: the record wins; an edit made outside it is written back on top of the head it read.
+
 ## Keeping organisations apart
 
 Invariant 1 of the product: an organisation's record, data, documents and keys never mix with another's. Each layer enforces it on its own:
 
 - **Database:** every table with an organisation's data has `org_id`, row-level security and a pgTAP test proving another organisation's member can neither see nor change it.
 - **Vault:** one secret per organisation and connection (`org-<org>-ai-<connection>`, `org-<org>-account-<provider>`), replicated only in the EU. The key itself never reaches the database or the app.
-- **Record:** the GitHub App «Ghostaff Registro» is installed by each organisation on its own repo; a token is minted per installation and limited to that repo.
+- **Record:** the GitHub App «Ghostaff Registro» is installed by each organisation on its own repo; a token is minted per installation and limited to that repo. **Target:** a repo per organisation in our own Forgejo, each agent a user with write on its organisation's repo only ([Target: the record](#target-the-record)).
 - **Runs:** one runner identity serves every organisation, so the per-run nonce is what ties a call to its run. Without it, one organisation's run could fetch another's spec.
 
 ## Identities
@@ -123,4 +146,4 @@ Other secrets an agent needs (a mailbox password, a social network's token, a vo
 - **The Claude token is readable inside a run.** It sits in Claude Code's environment, so the agent can print it with Bash, and so can anyone who can talk to the agent. Accepted while only Órdago's own agents use the runner; the fix is a local proxy that holds it out of the agent's reach (`apps/runner/src/lib.ts`, `agentEnv`).
 - **Vertex AI for chat uses the shared `engine@` today.** A customer grants Vertex AI User to `engine@` and types their project; nothing ties that project to the organisation that typed it (`providers.ts`, `chatStore.ts`). The worst case is spending another customer's Vertex; it moves to the organisation's own account with [customer-cloud-access.md](plans/ongoing/customer-cloud-access.md).
 - **The engine is Secret Manager admin on the whole project**, so a bug in it can read any organisation's secret. Its own code is the boundary there.
-- **The record's default branch has no protection** on GitHub's free plan; the runner's push guard is only a net.
+- **The record's default branch has no protection** on GitHub's free plan; the runner's push guard is only a net. Our own record store closes it with branch protection and a server-side hook ([Target: the record](#target-the-record)).
