@@ -3,9 +3,11 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useMemo } from 'react';
 import { Image, Platform, Pressable, Text, View } from 'react-native';
+import { shortNext, soonest } from '@ghostaff/shared';
 import { decideAction } from '@ghostaff/shared/services';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
+import { Clock, Icon } from '@/components/icons';
 import { Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { showAuthors } from '@/lib/chat';
@@ -13,15 +15,20 @@ import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useEngine } from '@/lib/hooks/useConnections';
 import { useAgentChat, useMembers, useMyLevels } from '@/lib/hooks/useChat';
+import { useRoutines } from '@/lib/hooks/useRoutines';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { GHOSTS } from '@/lib/team';
+import { usePalette } from '@/lib/theme';
 
 // The person's one chat with an agent (three-tabs.md, decision 3), opened
 // straight from its row in Equipo: one long conversation, as in WhatsApp, with
 // what the agent did on its own in it too (decision 12). Only the person and
 // the agent see it. The agent's name on top opens its page and settings
 // (decision 6). The mic sends voice notes (voice.md), here only: no engine, no mic.
+// The clock on the right is the agent's routines (agent-routines.md): an
+// outline when the person has none with it, the next one's day and hour
+// when they do; it opens them.
 
 export default function Chat() {
   const { agent: agentId } = useLocalSearchParams<{ agent: string }>();
@@ -32,6 +39,8 @@ export default function Chat() {
   const { members } = useMembers(orgId);
   const { levels, loading: levelsLoading } = useMyLevels(orgId);
   const { messages, loading, error, send, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
+  const { items: routines, reload: reloadRoutines } = useRoutines(orgId, agentId ?? null);
+  const palette = usePalette();
   const headerHeight = useHeaderHeight();
   const engine = useEngine();
 
@@ -49,14 +58,20 @@ export default function Chat() {
     () => async (actionId: string, decision: 'approve' | 'reject') => {
       if (!engine) throw new Error('not signed in');
       await decideAction(engine, actionId, decision);
+      // An approved routine shows on the clock at once.
+      void reloadRoutines();
     },
-    [engine],
+    [engine, reloadRoutines],
   );
+  const routineTitles = useMemo(() => Object.fromEntries(routines.map((r) => [r.id, r.title])), [routines]);
+  const next = soonest(routines, new Date());
 
   if (!agent && (agentsLoading || levelsLoading)) return <Loading />;
   if (!agent) return <Notice title="No encontramos este agente" body="Puede que ya no esté en el equipo, o que no tengas acceso." />;
   const g = GHOSTS[agent.ghost];
   const canTalk = levels[agent.id] === 'talk';
+  const showClock = agent.runner !== 'ordago_job' && (canTalk || routines.length > 0);
+  const nextLabel = next ? shortNext(next, new Date(), next.timezone) : null;
 
   return (
     <View className="flex-1 bg-surface">
@@ -85,6 +100,22 @@ export default function Chat() {
               </View>
             </Pressable>
           ),
+          headerRight: showClock
+            ? () => (
+                <Pressable
+                  testID="chat-routines"
+                  accessibilityRole="button"
+                  accessibilityLabel={nextLabel ? `Rutinas. La próxima: ${nextLabel}` : 'Rutinas'}
+                  accessibilityHint={`Lo que ${agent.name} hace solo, a su hora`}
+                  onPress={() => router.push(`/rutinas/${agent.id}`)}
+                  hitSlop={10}
+                  className="min-h-11 flex-row items-center justify-center px-1 active:opacity-60"
+                >
+                  <Icon icon={Clock} size={22} color={nextLabel ? palette.ink : palette.muted} weight={nextLabel ? 'regular' : 'light'} />
+                  {nextLabel ? <Text className="ml-1 text-footnote font-medium text-ink">{nextLabel}</Text> : null}
+                </Pressable>
+              )
+            : undefined,
         }}
       />
       <KeyboardColumn offset={headerHeight}>
@@ -112,6 +143,8 @@ export default function Chat() {
                 onDecide={decide}
                 asks={asks}
                 onRetryTranscript={retryTranscript}
+                routineTitle={item.routineId ? routineTitles[item.routineId] : null}
+                me={me}
               />
             )}
             estimatedItemSize={64}

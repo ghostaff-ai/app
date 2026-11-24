@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import type { AiUse, ChatAgent, ChatStore, ChatThreadHead } from '../src/chat';
 import type { AgentJob, JobDeps, JobStore, RunRecord } from '../src/jobs';
-import { composePrompt, firedBetween, hashNonce, NO_SUBSCRIPTION, type RunnerAgent, type RunnerStore, startScheduled } from '../src/runner';
+import { askRunner, composePrompt, firedBetween, hashNonce, NO_SUBSCRIPTION, type RunnerAgent, type RunnerStore, startScheduled } from '../src/runner';
 import { NO_TOOLS } from '../src/tools';
 import { aiSecretName, legacyAiSecretName, MemoryVault } from '../src/vault';
 
@@ -13,6 +13,7 @@ const LEGAL = '20000000-0000-0000-0000-000000000001';
 const TALLER = '20000000-0000-0000-0000-000000000002';
 const THREAD = '30000000-0000-0000-0000-000000000001';
 const RUNNER = 'runner@ghostaff-prod.iam.gserviceaccount.com';
+const ROUTINE = '50000000-0000-0000-0000-000000000001';
 const legal: ChatAgent = { id: LEGAL, orgId: ORG, name: 'Legal', ghost: 'base', department: 'legal', runner: 'ghostaff' };
 const taller: ChatAgent = { id: TALLER, orgId: OTHER_ORG, name: 'Taller', ghost: 'base', department: 'direccion', runner: 'ghostaff' };
 const runnerJob: AgentJob = { project: 'ghostaff-prod', region: 'europe-west1', name: 'agent-runner', identity: RUNNER };
@@ -58,6 +59,8 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
   const launched: Array<{ job: AgentJob; env: Record<string, string> }> = [];
   const runs = new Map<string, RunRecord & { summary?: string | null; specFetchedAt?: string }>();
   const notices: string[] = [];
+  const deleted: string[] = [];
+  const copies: Array<[string, string, string | null]> = [];
   const agents = new Map<string, RunnerAgent>([
     [LEGAL, spec(legal)],
     [TALLER, spec(taller)],
@@ -93,6 +96,9 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
       updates.push({ id, ...patch });
       if (patch.state && patch.state !== 'working') working = null;
     },
+    deleteMessage: async (id) => {
+      deleted.push(id);
+    },
     touchThread: async () => {},
     personalChat: async () => 'x',
     aiAccounts: async (orgId) => [
@@ -120,6 +126,10 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
       return true;
     },
     staleRuns: async () => [],
+    postRoutineCopies: async (id, text, except) => {
+      copies.push([id, text, except]);
+      return 1;
+    },
     postToPersonalChats: async (a, text) => {
       notices.push(`${a.name}: ${text}`);
       return 2;
@@ -143,6 +153,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
     useConnection: async (id, connectionId) => {
       runs.get(id)!.connectionId = connectionId;
     },
+    routineAsk: async (id) => (id === ROUTINE ? { title: 'Ley', instruction: 'Mira si cambió la ley', audience: 'me', from: 'Ana' } : null),
   };
   const jobDeps: JobDeps = {
     jobs,
@@ -196,7 +207,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
   const fetchSpec = (run: string, nonce: string, as = RUNNER) => post(`/runs/${run}/spec`, as, { nonce });
   const report = (body: unknown, as = RUNNER) => post('/runs/report', as, body);
   return {
-    ask, fetchSpec, report, post, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf,
+    ask, fetchSpec, report, post, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf, deleted, copies, thread,
     setNow: (d: Date) => {
       now = d;
     },
@@ -407,6 +418,28 @@ describe('our runner’s report', () => {
     expect((await t.report({ ok: true, text: 'hola', nonce: other.nonce })).status).toBe(400);
     expect(t.runs.get(run!)!.state).toBe('running');
     expect(t.notices).toEqual([]);
+  });
+
+  it("a routine's run is told its routine, answers in its creator's chat and copies it to whoever else gets it (agent-routines.md)", async () => {
+    const t = setup();
+    await askRunner(t.chatDeps, t.jobDeps, t.thread, legal, 'reply-r', 'ana', ROUTINE);
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    expect(t.runs.get(run!)).toMatchObject({ origin: 'routine', routineId: ROUTINE, messageId: 'reply-r' });
+    const spec = (await (await t.fetchSpec(run!, nonce!)).json()) as { prompt: string };
+    expect(spec.prompt).toContain('la rutina «Ley» de Ana');
+    await t.report({ run, nonce, ok: true, text: 'La ley no ha cambiado, pero hay consulta pública.', noteworthy: true, decisions: [] });
+    expect(t.updates).toContainEqual(expect.objectContaining({ id: 'reply-r', state: 'done', text: 'La ley no ha cambiado, pero hay consulta pública.' }));
+    expect(t.copies).toEqual([[ROUTINE, 'La ley no ha cambiado, pero hay consulta pública.', 'ana']]);
+  });
+
+  it("a routine's run with nothing to say leaves nothing in the chat", async () => {
+    const t = setup();
+    await askRunner(t.chatDeps, t.jobDeps, t.thread, legal, 'reply-r', 'ana', ROUTINE);
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    await t.report({ run, nonce, ok: true, text: 'SIN NOVEDAD', noteworthy: false });
+    expect(t.deleted).toEqual(['reply-r']);
+    expect(t.copies).toEqual([]);
+    expect(t.runs.get(run!)!.state).toBe('done');
   });
 
   it('a scheduled run with nothing to say reaches nobody', async () => {

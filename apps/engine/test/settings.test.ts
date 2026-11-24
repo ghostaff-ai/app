@@ -38,8 +38,8 @@ describe('what the main agent may change (agent-settings.md)', () => {
     }
   });
 
-  it('only reads without an owner', () => {
-    expect(SETTING_TOOLS.filter((t) => !t.writes).map((t) => t.name)).toEqual(['settings_read']);
+  it('only reads without an approval', () => {
+    expect(SETTING_TOOLS.filter((t) => !t.writes).map((t) => t.name)).toEqual(['settings_read', 'settings_read_routines']);
   });
 
   it('never lets an agent change its own accounts', async () => {
@@ -68,6 +68,78 @@ describe('what the main agent may change (agent-settings.md)', () => {
     await tool.run(ctx, { agent_id: finanzas, visibility: 'read' });
     expect(calls).toEqual([['set_agent_chat_default', { target_agent: finanzas, new_default: 'read' }]]);
     expect(DATABASE_FUNCTIONS.set_conversation_visibility?.reach).toBe('never');
+  });
+});
+
+describe('routines as settings (agent-routines.md)', () => {
+  const secretaria = '20000000-0000-0000-0000-000000000001';
+  const finanzas = '20000000-0000-0000-0000-000000000002';
+  const routine = '30000000-0000-0000-0000-000000000001';
+  const agentRow = (id: string, name: string, ghost: string) => ({
+    id, org_id: 'o', name, ghost, department: 'finanzas', member_default: 'read', chat_default: 'private', runner: 'chat', accounts: null, created_at: '',
+  });
+  const routineRow = {
+    id: routine, org_id: 'o', agent_id: finanzas, created_by: 'u', audience: 'me', title: 'Ventas', instruction: 'Resumen de ventas',
+    kind: 'days', weekdays: [5], month_day: null, hour: 9, minute: 0, timezone: 'Europe/Madrid', paused: false, paused_reason: null,
+    last_fired_at: '', created_at: '',
+  };
+  function client(calls: Array<[string, unknown]> = []) {
+    const tables: Record<string, unknown[]> = {
+      agents: [agentRow(secretaria, 'Secretaría', 'secretaria'), agentRow(finanzas, 'Finanzas', 'finanzas')],
+      agent_routines: [routineRow],
+    };
+    const query = (rows: unknown[]) => {
+      const q = { select: () => q, eq: () => q, order: () => q, returns: async () => ({ data: rows, error: null }) };
+      return q;
+    };
+    return {
+      from: (t: string) => query(tables[t] ?? []),
+      rpc: (fn: string, args: unknown) => {
+        calls.push([fn, args]);
+        return { single: async () => ({ data: { ...routineRow, ...(args as object) }, error: null }) };
+      },
+    } as unknown as SupabaseClient;
+  }
+  const tool = (name: string) => SETTING_TOOLS.find((t) => t.name === name)!;
+
+  it('turns «los viernes a las 9» into a card its asker approves, for «Solo para mí»', async () => {
+    const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: secretaria };
+    const input = { agent_id: finanzas, audience: 'me', title: 'Ventas', instruction: 'Mándame el resumen de ventas', days: [5], hour: 9 };
+    expect(await tool('settings_create_routine').describe!(ctx, input)).toEqual({
+      label: 'Rutina de Finanzas: «Ventas»',
+      preview: 'Cuándo: Cada viernes, 9:00\nQué: Mándame el resumen de ventas\nPara: solo para quien la pide',
+      decider: 'requester',
+    });
+    expect((await tool('settings_create_routine').describe!(ctx, { ...input, audience: 'team' })).decider).toBe('owner');
+  });
+
+  it('refuses a timetable that is not one, in words', async () => {
+    const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: secretaria };
+    const input = { agent_id: finanzas, audience: 'me', title: 'Ventas', instruction: 'x', days: [], hour: 9 };
+    await expect(tool('settings_create_routine').describe!(ctx, input)).rejects.toThrow('Elige al menos un día.');
+    await expect(tool('settings_create_routine').describe!(ctx, { ...input, days: [1], hour: 25 })).rejects.toBeInstanceOf(SettingError);
+  });
+
+  it('lets an agent that is not the main one propose only its own', async () => {
+    const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: secretaria, onlySelf: true };
+    const input = { agent_id: finanzas, audience: 'me', title: 'Ventas', instruction: 'x', hour: 9 };
+    await expect(tool('settings_create_routine').describe!(ctx, input)).rejects.toThrow(/Solo puedes proponer rutinas tuyas/);
+    await expect(tool('settings_pause_routine').describe!(ctx, { routine_id: routine, paused: true })).rejects.toBeInstanceOf(SettingError);
+    const own: SettingsContext = { ...ctx, agentId: finanzas };
+    expect(JSON.parse(await tool('settings_read_routines').run(own, {}))).toMatchObject([{ id: routine, when: 'Cada viernes, 9:00' }]);
+  });
+
+  it('pauses through the function the screen calls, never deletes', async () => {
+    const calls: Array<[string, unknown]> = [];
+    const ctx: SettingsContext = { client: client(calls), orgId: 'o', agentId: secretaria };
+    expect(await tool('settings_pause_routine').describe!(ctx, { routine_id: routine, paused: true })).toEqual({
+      label: 'Pausar la rutina «Ventas»',
+      preview: 'Ahora: Cada viernes, 9:00\nDespués: en pausa',
+      decider: 'requester',
+    });
+    await tool('settings_pause_routine').run(ctx, { routine_id: routine, paused: true });
+    expect(calls).toEqual([['set_routine_paused', { target_routine: routine, paused: true }]]);
+    expect(DATABASE_FUNCTIONS.delete_routine?.reach).toBe('never');
   });
 });
 

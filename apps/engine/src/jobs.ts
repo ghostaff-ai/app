@@ -29,10 +29,13 @@ export interface RunRecord {
   id: string;
   orgId: string;
   agentId: string;
-  origin: 'person' | 'schedule';
+  /** `routine`: one of the agent's routines started it (agent-routines.md). */
+  origin: 'person' | 'schedule' | 'routine';
   state: 'running' | 'done' | 'failed';
   threadId: string | null;
   messageId: string | null;
+  /** The routine that started it. */
+  routineId?: string | null;
   /** Who asked, for a run a person started. */
   requestedBy?: string | null;
   /** SHA-256 of the run's one-time nonce: runs on our runner only (runner.ts). */
@@ -58,6 +61,12 @@ export interface JobStore {
    * Returns how many chats it reached.
    */
   postToPersonalChats(agent: ChatAgent, text: string): Promise<number>;
+  /**
+   * A routine's answer in the chat of everyone else who gets it: for the
+   * team's, each person who can see the agent but `except` (who got it in
+   * full); for «Solo para mí», nobody else. Returns how many chats it reached.
+   */
+  postRoutineCopies(routineId: string, text: string, except: string | null): Promise<number>;
   /** Runs still «running» that started before `before`: their job died without reporting. */
   staleRuns(before: Date): Promise<RunRecord[]>;
 }
@@ -270,8 +279,18 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
   await deps.syncOrg(agent.orgId).catch((e) => console.error('sync after report failed', e instanceof Error ? e.message : typeof e));
 
   if (run.messageId && run.threadId) {
+    // A routine with nothing to tell leaves nothing in the chat (agent-routines.md).
+    if (run.routineId && report.ok && !noteworthy) {
+      await chat.chat.deleteMessage(run.messageId).catch((e) => console.error('quiet routine answer not removed', e instanceof Error ? e.message : typeof e));
+      return { run: run.id, threadId: null };
+    }
     await chat.chat.updateReply(run.messageId, { text, state: report.ok ? 'done' : 'failed', steps: ['Trabajando en ello', 'Hecho'] });
     await chat.chat.touchThread(run.threadId).catch(() => {});
+    if (run.routineId && report.ok) {
+      await deps.jobs
+        .postRoutineCopies(run.routineId, text, run.requestedBy ?? null)
+        .catch((e) => console.error('routine copies not posted', e instanceof Error ? e.message : typeof e));
+    }
     return { run: run.id, threadId: run.threadId };
   }
   if (noteworthy) await deps.jobs.postToPersonalChats(agent, text);

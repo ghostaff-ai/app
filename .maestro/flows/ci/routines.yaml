@@ -1,0 +1,81 @@
+appId: ${APP_ID}
+name: An owner gives Secretaría a routine from the clock on her chat
+---
+# Routines (docs/plans/ongoing/agent-routines.md). A new owner opens
+# Secretaría's chat, taps the clock on top, finds no routines, makes one
+# («De lunes a viernes, 9:00», the form's default), sees it in the list, and the
+# clock on the chat now shows when it fires. No engine runs in e2e, so nothing fires.
+- evalScript: ${output.email = 'e2e-rut-' + Date.now() + '@ghostaff.test'}
+- evalScript: ${output.company = 'Horno E2E ' + Date.now().toString().slice(-6)}
+- runFlow:
+    file: ../subflows/sign-in-email.yaml
+    env:
+      EMAIL: ${output.email}
+- extendedWaitUntil:
+    visible: "¿Cómo te llamas?"
+    timeout: 30000
+- tapOn: "Nombre y apellido"
+- inputText: "Rita E2E"
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "¿Para qué vas a usar Ghostaff?"
+    timeout: 30000
+- tapOn: "Para mi empresa.*"
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "Por ejemplo, Panadería Ana"
+    timeout: 15000
+- tapOn: "Por ejemplo, Panadería Ana"
+- inputText: ${output.company}
+- tapOn: "Crear"
+- extendedWaitUntil:
+    visible: "Conecta tu IA"
+    timeout: 30000
+- runScript:
+    file: ../../scripts/connect-ai.js
+    env:
+      COMPANY: ${output.company}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "agent-secretaria"
+    timeout: 60000
+- tapOn:
+    id: "agent-secretaria"
+- extendedWaitUntil:
+    visible:
+      id: "chat-routines"
+    timeout: 20000
+- tapOn:
+    id: "chat-routines"
+- extendedWaitUntil:
+    visible: "Ninguna rutina todavía"
+    timeout: 20000
+- tapOn:
+    id: "routine-new"
+- extendedWaitUntil:
+    visible:
+      id: "routine-instruction"
+    timeout: 15000
+- tapOn:
+    id: "routine-instruction"
+- inputText: "Dime qué decisiones me esperan hoy"
+- hideKeyboard
+- assertVisible: "De lunes a viernes, 9:00"
+- scrollUntilVisible:
+    element:
+      id: "routine-save"
+- tapOn:
+    id: "routine-save"
+- extendedWaitUntil:
+    visible: "Dime qué decisiones me esperan hoy"
+    timeout: 20000
+- assertVisible: "De lunes a viernes, 9:00"
+# Back on the chat, the clock says when it fires next.
+- back
+- extendedWaitUntil:
+    visible: ".*9:00"
+    timeout: 15000

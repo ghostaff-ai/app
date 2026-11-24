@@ -34,6 +34,7 @@ import { canReach, type RecordSyncDeps, syncAll, syncOrg } from './recordSync';
 import { expireRuns } from './jobs';
 import type { ChatDeps } from './chat';
 import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
+import { startRoutines, supabaseRoutineStore } from './routines';
 import { RECORD_STORE_TOKEN_HOURS, type RunnerDeps, startScheduled } from './runner';
 import { DEFAULT_TRANSCRIBE_MODEL, type GoogleRequest, vertexTranscriber } from './transcribe';
 import { supabaseVoiceNoteStore } from './voiceNotes';
@@ -215,6 +216,7 @@ if (!gcpProject) console.warn('voice notes off: set GCP_PROJECT.');
 const transcriber = gcpProject
   ? vertexTranscriber({ project: gcpProject, model: process.env.TRANSCRIBE_MODEL || DEFAULT_TRANSCRIBE_MODEL, request: googleRequest })
   : undefined;
+const routineStore = supabaseRoutineStore(admin);
 const cronCallers = (process.env.CRON_CALLERS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
 
 const app = createApp({
@@ -262,7 +264,12 @@ const app = createApp({
       }
       const expired = await expireRuns(chatDeps, jobs);
       const started = await startScheduled(chatDeps, jobs);
-      return { records: made.length, synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, started };
+      // Routines (agent-routines.md): a failure here never hides what the rest of the tick did.
+      const routines = await startRoutines(chatDeps, jobs, routineStore).catch((e) => {
+        console.error('routines not started', e instanceof Error ? e.message : e);
+        return 0;
+      });
+      return { records: made.length, synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, started, routines };
     },
   },
 });

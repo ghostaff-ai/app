@@ -15,6 +15,7 @@ export { CaretRightIcon as CaretRight } from 'phosphor-react-native/src/icons/Ca
 export { ChatsCircleIcon as ChatsCircle } from 'phosphor-react-native/src/icons/ChatsCircle';
 export { CheckIcon as Check } from 'phosphor-react-native/src/icons/Check';
 export { CheckCircleIcon as CheckCircle } from 'phosphor-react-native/src/icons/CheckCircle';
+export { ClockIcon as Clock } from 'phosphor-react-native/src/icons/Clock';
 export { EnvelopeSimpleIcon as EnvelopeSimple } from 'phosphor-react-native/src/icons/EnvelopeSimple';
 export { EyeIcon as Eye } from 'phosphor-react-native/src/icons/Eye';
 export { LinkSimpleIcon as LinkSimple } from 'phosphor-react-native/src/icons/LinkSimple';

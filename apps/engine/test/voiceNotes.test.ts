@@ -102,6 +102,7 @@ function setup(
         });
       }
     },
+    deleteMessage: async () => {},
     touchThread: async () => {},
     personalChat: async (orgId, agentId, title, userId) => {
       opened.push(userId);

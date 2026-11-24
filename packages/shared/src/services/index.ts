@@ -29,6 +29,7 @@ import type {
   Profile,
 } from '../models';
 import type { ChatMessage, ChatThread, MessagePart, OrgMember } from '../chat';
+import type { Routine, RoutineAudience, RoutineWhen, Weekday } from '../routines';
 
 // The only place the app talks to the database. Screens, hooks and components
 // call these functions, never `supabase.from(...)` (the same rule as
@@ -1017,6 +1018,7 @@ interface MessageRow {
   parts: MessagePart[];
   state?: 'working' | 'done' | 'failed';
   steps?: string[];
+  routine_id?: string | null;
   created_at: string;
 }
 
@@ -1031,11 +1033,12 @@ export function messageFromRow(r: MessageRow): ChatMessage {
     parts: Array.isArray(r.parts) ? r.parts : [],
     state: r.state ?? 'done',
     steps: Array.isArray(r.steps) ? r.steps : [],
+    routineId: r.routine_id ?? null,
     createdAt: r.created_at,
   };
 }
 
-const MESSAGE_COLUMNS = 'id, thread_id, author_kind, author_user, author_agent, author_name, parts, state, steps, created_at';
+const MESSAGE_COLUMNS = 'id, thread_id, author_kind, author_user, author_agent, author_name, parts, state, steps, routine_id, created_at';
 
 /** A thread's latest messages, oldest first. */
 export async function listMessages(client: SupabaseClient, threadId: string, limit = 300): Promise<ChatMessage[]> {
@@ -1176,7 +1179,7 @@ interface AgentRunRow {
   id: string;
   org_id: string;
   agent_id: string;
-  origin: 'person' | 'schedule';
+  origin: 'person' | 'schedule' | 'routine';
   state: 'running' | 'done' | 'failed';
   summary: string | null;
   noteworthy: boolean;
@@ -1206,7 +1209,7 @@ export async function listDoneWithoutYou(client: SupabaseClient, orgId: string, 
     .from('agent_runs')
     .select('id, org_id, agent_id, origin, state, summary, noteworthy, decisions_opened, started_at, finished_at')
     .eq('org_id', orgId)
-    .eq('origin', 'schedule')
+    .in('origin', ['schedule', 'routine'])
     .eq('state', 'done')
     .gte('started_at', since.toISOString())
     .order('started_at', { ascending: false })
@@ -1215,4 +1218,108 @@ export async function listDoneWithoutYou(client: SupabaseClient, orgId: string, 
   if (error) throw error;
   return (data ?? []).map(agentRunFromRow);
 }
+// Routines: what a person asks an agent to do on its own at an hour
+// (docs/plans/ongoing/agent-routines.md, supabase/migrations/20261126000000_agent_routines.sql).
+// A person sees their own and the team's of the agents they can see; the
+// database checks every change (rule 2), and these are the functions both the
+// screens and the agents' tool call (rule 6).
+
+export interface RoutineRow {
+  id: string;
+  org_id: string;
+  agent_id: string;
+  created_by: string | null;
+  audience: RoutineAudience;
+  title: string;
+  instruction: string;
+  kind: Routine['kind'];
+  weekdays: number[];
+  month_day: number | null;
+  hour: number;
+  minute: number;
+  timezone: string;
+  paused: boolean;
+  paused_reason: Routine['pausedReason'];
+  last_fired_at: string;
+  created_at: string;
+}
+
+export function routineFromRow(r: RoutineRow): Routine {
+  return {
+    id: r.id,
+    orgId: r.org_id,
+    agentId: r.agent_id,
+    createdBy: r.created_by,
+    audience: r.audience,
+    title: r.title,
+    instruction: r.instruction,
+    kind: r.kind,
+    weekdays: (r.weekdays ?? []) as Weekday[],
+    monthDay: r.month_day,
+    hour: r.hour,
+    minute: r.minute,
+    timezone: r.timezone,
+    paused: r.paused,
+    pausedReason: r.paused_reason ?? null,
+    lastFiredAt: r.last_fired_at,
+    createdAt: r.created_at,
+  };
+}
+
+const ROUTINE_COLUMNS =
+  'id, org_id, agent_id, created_by, audience, title, instruction, kind, weekdays, month_day, hour, minute, timezone, paused, paused_reason, last_fired_at, created_at';
+
+/** The routines the person sees in an organisation (or with one agent), oldest first. */
+export async function listRoutines(client: SupabaseClient, orgId: string, agentId?: string): Promise<Routine[]> {
+  let q = client.from('agent_routines').select(ROUTINE_COLUMNS).eq('org_id', orgId);
+  if (agentId) q = q.eq('agent_id', agentId);
+  const { data, error } = await q.order('created_at').returns<RoutineRow[]>();
+  if (error) throw error;
+  return (data ?? []).map(routineFromRow);
+}
+
+export interface RoutineInput extends RoutineWhen {
+  title: string;
+  instruction: string;
+}
+
+const whenArgs = (w: RoutineInput) => ({
+  title: w.title.trim(),
+  instruction: w.instruction.trim(),
+  kind: w.kind,
+  weekdays: w.kind === 'days' ? [...new Set(w.weekdays)].sort() : [1, 2, 3, 4, 5, 6, 7],
+  month_day: w.kind === 'monthly' ? w.monthDay : null,
+  hour: w.hour,
+  minute: w.minute,
+});
+
+/** A new routine with an agent the person may talk to; «Para todo el equipo» is an owner's. */
+export async function createRoutine(client: SupabaseClient, agentId: string, audience: RoutineAudience, r: RoutineInput): Promise<Routine> {
+  const { data, error } = await client
+    .rpc('create_routine', { target_agent: agentId, audience, ...whenArgs(r) })
+    .single<RoutineRow>();
+  if (error) throw error;
+  return routineFromRow(data);
+}
+
+/** What it does and when; it starts again from now. Its creator for «Solo para mí», an owner for the team's. */
+export async function updateRoutine(client: SupabaseClient, routineId: string, r: RoutineInput): Promise<Routine> {
+  const { data, error } = await client
+    .rpc('update_routine', { target_routine: routineId, ...whenArgs(r) })
+    .single<RoutineRow>();
+  if (error) throw error;
+  return routineFromRow(data);
+}
+
+export async function setRoutinePaused(client: SupabaseClient, routineId: string, paused: boolean): Promise<Routine> {
+  const { data, error } = await client.rpc('set_routine_paused', { target_routine: routineId, paused }).single<RoutineRow>();
+  if (error) throw error;
+  return routineFromRow(data);
+}
+
+export async function deleteRoutine(client: SupabaseClient, routineId: string): Promise<void> {
+  const { error } = await client.rpc('delete_routine', { target_routine: routineId });
+  if (error) throw error;
+}
+
 export * from './settings';

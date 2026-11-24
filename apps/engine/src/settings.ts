@@ -7,7 +7,7 @@
 // app; a change only once an owner approves it (actions.ts), as that owner, so
 // the database checks it exactly as if they had made it on the screen.
 
-import { SETTING_TOOLS, SettingError, type SettingsContext } from '@ghostaff/shared/services';
+import { ROUTINE_TOOL_NAMES, SETTING_TOOLS, SettingError, type SettingsContext } from '@ghostaff/shared/services';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { AgentTools } from './tools';
 
@@ -39,7 +39,7 @@ const REFUSALS: Record<string, string> = {
   '22023': 'Ese cambio no es válido. Revisa los datos y vuelve a proponerlo.',
   '23505': 'Eso ya existe: por ejemplo, esa persona ya está en la empresa.',
   '23514': 'Ese valor no está permitido.',
-  '54000': 'La empresa ha llegado al límite para esto.',
+  '54000': 'Se ha llegado al límite para esto (por ejemplo, diez rutinas por persona).',
 };
 
 /** What a refusal says to the model and on the card, always in Spanish: ours as written, the database's by its code. */
@@ -66,11 +66,16 @@ export async function runSetting(ctx: SettingsContext, name: string, input: unkn
   }
 }
 
-/** The settings tools for the main agent in one reply, reading as the person who asked. */
+/**
+ * The settings tools in one reply, reading as the person who asked: every one
+ * for the main agent; for any other, only those for its own routines
+ * (`ctx.onlySelf`, agent-routines.md).
+ */
 export function settingsTools(ctx: SettingsContext): AgentTools {
-  const byName = new Map(SETTING_TOOLS.map((t) => [t.name, t]));
+  const tools = ctx.onlySelf ? SETTING_TOOLS.filter((t) => (ROUTINE_TOOL_NAMES as readonly string[]).includes(t.name)) : SETTING_TOOLS;
+  const byName = new Map(tools.map((t) => [t.name, t]));
   return {
-    specs: SETTING_TOOLS.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
+    specs: tools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
     accounts: [],
     stepFor: (name) => byName.get(name)?.step ?? 'Trabajando',
     writes: (name) => byName.get(name)?.writes ?? true,
@@ -80,7 +85,7 @@ export function settingsTools(ctx: SettingsContext): AgentTools {
       if (!tool?.describe) return null;
       return tool.describe(ctx, input);
     },
-    run: (name, input) => runSetting(ctx, name, input),
+    run: (name, input) => (byName.has(name) ? runSetting(ctx, name, input) : Promise.resolve({ content: `No existe la herramienta ${name}.`, isError: true })),
   };
 }
 

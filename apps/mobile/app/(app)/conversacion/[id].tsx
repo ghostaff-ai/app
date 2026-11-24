@@ -101,6 +101,7 @@ export default function Conversacion() {
           keyExtractor={(m) => m.id}
           renderItem={({ item, index }) => (
             <MessageView
+              me={me}
               message={item}
               mine={item.authorKind === 'person' && item.authorUserId === me}
               ghost={item.authorAgentId ? ghostOf[item.authorAgentId] : undefined}

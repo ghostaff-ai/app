@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { ThreadRow } from '@/components/chat/ThreadRow';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
-import { ChatsCircle, Eye, LinkSimple, Plus, Prohibit } from '@/components/icons';
+import { ChatsCircle, Clock, Eye, LinkSimple, Plus, Prohibit } from '@/components/icons';
 import { Button, ErrorText, LEVEL_NAMES, ListRow, ListSection, Loading, Notice, RowIcon } from '@/components/ui';
 import { VISIBILITY_NAMES, visibilityTag } from '@/lib/chat';
 import { useMyLevels, useThreads } from '@/lib/hooks/useChat';
@@ -15,7 +15,7 @@ import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
 // One agent's page, opened from its name on top of the chat (three-tabs.md,
 // decision 6): live in 3D on top (drag to spin it, tap to make it hop), its
-// job, «Nueva conversación» for whoever may talk to it, and every titled
+// job, «Nueva conversación» and «Rutinas» for whoever may talk to it, and every titled
 // conversation with it the person may see (chat-permissions.md). An owner
 // sets who may use it, who reads its new conversations by default and which
 // connected accounts it uses, and can remove it (two taps, so not by accident).
@@ -93,6 +93,16 @@ export default function Agente() {
               chevron
               onPress={() => router.push(`/nueva-conversacion/${agent.id}`)}
             />
+            {agent.runner !== 'ordago_job' ? (
+              <ListRow
+                testID="agent-routines"
+                leading={<RowIcon icon={Clock} />}
+                title="Rutinas"
+                subtitle={`Lo que ${agent.name} hace solo, a su hora`}
+                chevron
+                onPress={() => router.push(`/rutinas/${agent.id}`)}
+              />
+            ) : null}
           </ListSection>
         ) : null}
         {conversations.length > 0 ? (

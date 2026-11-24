@@ -74,7 +74,7 @@ export interface AgentTools {
   /** What the approval card says a writing tool will do. */
   actionFor(name: string): string;
   /** For a writing tool that can say exactly what it will change (a setting): the card's label and preview. Throws on bad input. */
-  describe?(name: string, input: Record<string, unknown>): Promise<{ label: string; preview: string } | null>;
+  describe?(name: string, input: Record<string, unknown>): Promise<{ label: string; preview: string; decider?: 'owner' | 'requester' } | null>;
   /** The connected account a tool belongs to; undefined for one that belongs to none. */
   providerOf?(name: string): string | undefined;
   /** The provider of each line of `accounts`, in the same order. */
