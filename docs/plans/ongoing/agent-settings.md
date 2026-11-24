@@ -43,5 +43,5 @@ Anything an owner can change in the app, the organisation's main agent (Secretar
 
 - [ ] An «Deshacer» on a done settings card. The before state is already on the card.
 - [ ] A settings change proposed on the agent's own initiative (a job), as a decision in Hoy
-- [ ] The agent's own rules and schedule as settings, once they exist in the app
+- [ ] The agent's own rules as settings, once they exist in the app; its timetable is [agent-routines.md](../ready/agent-routines.md)
 - [ ] Agents on a runner (`ordago_job`, `ghostaff`) honour `agents.accounts` when they get connected accounts

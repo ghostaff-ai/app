@@ -68,7 +68,7 @@ It also answers Jaime's worry about private data «en un servidor random»: the 
 
 ### One agent, talkable and optionally on a timetable (decision 3)
 
-As in Managed Agents, an agent is one thing: you can always write to it, and a timetable is an option, shown as a clock on the agent («Cada viernes a las 9»), which `agents.schedule` already holds. Nobody picks «chat or job» when creating an agent; whether a turn runs as a quick model call or in a container is the engine's choice, by what the turn needs. This needs its own plan; memory does not wait for it, but both kinds of turn read and write the same stores.
+As in Managed Agents, an agent is one thing: you can always write to it, and a timetable is an option, shown as a clock on the agent («Cada viernes a las 9»), which `agents.schedule` already holds. Nobody picks «chat or job» when creating an agent; whether a turn runs as a quick model call or in a container is the engine's choice, by what the turn needs. That plan is [agent-routines.md](agent-routines.md); memory does not wait for it, but both kinds of turn read and write the same stores.
 
 ### How agents use it
 

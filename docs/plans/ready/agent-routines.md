@@ -1,8 +1,8 @@
 # Routines: a clock on the agent, and as many timetables as you need
 
 **Priority:** high — «runs its routine work» is half of what Ghostaff promises, and today no customer can make an agent work on a timetable: only we can, by CLI
-**Gate:** decision:the open questions below, Jaime's to answer (recheck 2026-12-01)
-**Next:** answer the open questions, then move to `ready/`
+**Gate:** none
+**Next:** verify the Context against that day's code, write the File Structure and Tasks (data and tick first, then the clock, then the settings tool), and move to `ongoing/`
 
 **Goal:** Anyone who talks to an agent can give it routines («cada viernes a las 9, mándame el resumen de ventas»), from a clock on top of its chat or by asking, and each routine's answer lands in their chat with that agent as if they had written to it at that hour.
 
@@ -48,7 +48,7 @@ In the chat, a routine's turn shows as a small line above the answer, «🕘 Rut
 Routines are settings: defined once in `packages/shared/src/services/settings.ts`, the screen and the agents' tool call the same service functions, and the tool's card says what changes («Ahora: solo cuando le escribes / Después: cada viernes a las 9, resumen de ventas»).
 
 - The tool takes **structured fields** (days, hour, instruction), never raw cron: the model turns «los viernes a las 9» into fields, and the card's preview is written from them, so what a person approves is what will run.
-- **Secretaría** can propose a routine for any agent; **each agent** can propose its own (that is the «¿cada lunes?» above). Who approves is open question 1.
+- **Secretaría** can propose a routine for any agent; **each agent** can propose its own (that is the «¿cada lunes?» above). Who approves is decision 1.
 
 ### Data
 
@@ -58,13 +58,15 @@ Routines are settings: defined once in `packages/shared/src/services/settings.ts
 - **The tick** fires routines instead of agents: `startScheduled` reads due routines (any runner), claims each by moving `last_fired_at` atomically as it does `last_scheduled_at` today, and starts a chat turn or a runner run with the routine's instruction as the request. A `me` routine answers in its creator's chat; a `team` routine, in everyone's who can see the agent.
 - **`agents.schedule` becomes a routine**: each agent with one (Órdago's, moved by `org add-agents`) gets a `team` routine whose instruction is «tu tarea habitual», and the column goes once the tick no longer reads it.
 
-## Open questions
+## Decisions
 
-1. **Who approves a routine.** My pick: a «Solo para mí» routine needs only the person who will receive it (it is what they could already write by hand, at an hour), and a «Para todo el equipo» one needs an owner, like any setting. Or: every routine needs an owner, since each one spends the organisation's AI.
-2. **Limits.** A floor on frequency (no more than once an hour?) and a cap per person or per organisation, so a routine cannot burn a subscription's limit. My pick: once an hour at most, 10 routines per person, and the AI account card shows what routines spend.
-3. **Settings tools in a routine's turn.** A chat turn reads and proposes settings as the person who wrote (`asPerson`, their token); at the tick there is no token. My pick: a routine's turn has no settings tools; it says in its answer what it would change, and the person asks from there.
-4. **Timezone.** Everything is Madrid time today. My pick: the organisation's timezone, Madrid by default, until a person needs their own.
-5. **A routine whose creator leaves**, or loses access to the agent: paused, and its owners told; or deleted.
+Jaime accepted these (2026-11-24).
+
+1. **Who approves a routine.** A «Solo para mí» routine needs only the person who will receive it: it is what they could already write by hand, at an hour, and they need `talk` on the agent. A «Para todo el equipo» routine needs an owner, like any setting. *Rejected:* an owner for every routine, since it would make owners approve what members can already do by writing.
+2. **Limits.** A routine fires at most once an hour, and a person has at most 10 routines in an organisation, so routines cannot burn a subscription's limit. The AI account's card shows what routines spend.
+3. **No settings tools in a routine's turn.** A chat turn reads and proposes settings as the person who wrote (`asPerson`, their token), and at the tick there is no token. The routine's answer says what it would change, and the person asks from there.
+4. **Timezone.** The organisation's, Madrid by default, until a person needs their own.
+5. **A routine whose creator leaves** the organisation, or loses `talk` on the agent, is paused, and the owners are told in their chat with Secretaría. Nothing is deleted.
 
 ## Builds on, and changes
 
