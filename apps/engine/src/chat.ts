@@ -34,6 +34,8 @@ export interface ChatAgent {
   orgId: string;
   name: string;
   ghost: AgentGhost;
+  /** The organisation's main agent (agents.is_main): the one with the settings tools. Not the same as its ghost. */
+  isMain?: boolean;
   department: string;
   /** How it runs (supabase/migrations/20261121100000_agent_runners.sql); a job agent answers through its job. */
   runner?: 'chat' | 'ordago_job' | 'ghostaff';

@@ -3,6 +3,7 @@
 // its own. An organisation that brought its own GitHub repo as master (record_host `github`) is left
 // alone.
 
+import { MAIN_AGENT_NAME } from '@ghostaff/shared';
 import { agentUsername, type ForgejoAdmin, recordRepoName } from './forgejo';
 import { type HookAgent, preReceiveHook } from './recordHook';
 import type { RecordSyncStore } from './recordSync';
@@ -11,8 +12,8 @@ import type { RecordSyncStore } from './recordSync';
 export interface RecordAgent {
   id: string;
   slug: string;
-  /** Its ghost (AGENT_GHOSTS): Secretaría keeps the company's memory. */
-  ghost: string;
+  /** The organisation's main agent keeps the company's memory (agents.is_main). */
+  isMain: boolean;
 }
 
 export interface ProvisionDeps {
@@ -23,9 +24,9 @@ export interface ProvisionDeps {
   agentsOf(orgId: string): Promise<RecordAgent[]>;
 }
 
-/** Who may push what to the record (recordHook.ts): each agent on our runner, Secretaría also the company's memory. */
+/** Who may push what to the record (recordHook.ts): each agent on our runner, the main agent also the company's memory. */
 export const hookAgents = (agents: RecordAgent[]): HookAgent[] =>
-  agents.map((a) => ({ username: agentUsername(a.id), slug: a.slug, writesCompany: a.ghost === 'secretaria' }));
+  agents.map((a) => ({ username: agentUsername(a.id), slug: a.slug, writesCompany: a.isMain }));
 
 /** The record's first commit: how it is laid out, for the people and agents who read it. */
 export function recordSeed(orgName: string): { path: string; content: string }[] {
@@ -37,7 +38,7 @@ export function recordSeed(orgName: string): { path: string; content: string }[]
 El registro de ${orgName} en Ghostaff: lo que sus agentes saben y hacen, con su historia. Cada cambio es un
 commit, con quién lo hizo y cuándo.
 
-- \`memoria/empresa/\`: qué es ${orgName} y cómo trabaja. La guarda Secretaría; las personas la corrigen desde Ghostaff.
+- \`memoria/empresa/\`: qué es ${orgName} y cómo trabaja. La guarda ${MAIN_AGENT_NAME}; las personas la corrigen desde Ghostaff.
 - \`memoria/agentes/<agente>/\`: lo que cada agente ha aprendido haciendo su trabajo. Cada agente escribe solo en la suya.
 - \`agentes/<agente>/AGENTS.md\`: las instrucciones de cada agente. Solo las cambian personas, desde Ghostaff.
 - \`por-decidir/\`: lo que espera la decisión de una persona.

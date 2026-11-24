@@ -48,7 +48,7 @@ describe('what the main agent may change (agent-settings.md)', () => {
 
   it('never lets an agent change its own accounts', async () => {
     const self = '20000000-0000-0000-0000-000000000001';
-    const rows = [{ id: self, org_id: 'o', name: 'Secretaría', ghost: 'secretaria', department: 'direccion', member_default: 'talk', runner: 'chat', accounts: null, created_at: '' }];
+    const rows = [{ id: self, org_id: 'o', name: 'Secretaría', ghost: 'secretaria', is_main: true, department: 'direccion', member_default: 'talk', runner: 'chat', accounts: null, created_at: '' }];
     const query = { select: () => query, eq: () => query, order: () => query, returns: async () => ({ data: rows, error: null }) };
     const client = { from: () => query } as unknown as SupabaseClient;
     const ctx: SettingsContext = { client, orgId: 'o', agentId: self };

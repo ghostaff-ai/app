@@ -90,11 +90,11 @@ export function supabaseRecordStore(db: SupabaseClient): RecordSyncStore {
 export async function recordAgentsOf(db: SupabaseClient, orgId: string): Promise<RecordAgent[]> {
   const { data, error } = await db
     .from('agents')
-    .select('id, slug, ghost')
+    .select('id, slug, is_main')
     .eq('org_id', orgId)
     .eq('runner', 'ghostaff')
     .not('slug', 'is', null)
-    .returns<RecordAgent[]>();
+    .returns<{ id: string; slug: string; is_main: boolean }[]>();
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map((a) => ({ id: a.id, slug: a.slug, isMain: a.is_main }));
 }

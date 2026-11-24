@@ -440,7 +440,7 @@ describe("an agent using its organisation's tools", () => {
 });
 
 describe("the main agent changing the organisation's settings (agent-settings.md)", () => {
-  const secretaria: ChatAgent = { id: AGENT, orgId: ORG, name: 'Secretaría', ghost: 'secretaria', department: 'direccion' };
+  const secretaria: ChatAgent = { id: AGENT, orgId: ORG, name: 'Secretaría', ghost: 'secretaria', department: 'direccion', isMain: true };
   const INVITATION = '60000000-0000-0000-0000-000000000001';
   const google: AgentTools = {
     specs: [{ name: 'google_calendar_list_events', description: 'Lista eventos', input_schema: { type: 'object', properties: {} } }],
@@ -486,6 +486,15 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     expect(asked[0]?.system).toContain('rutinas tuyas');
   });
 
+  it('gives no settings to an agent drawn as the secretaria ghost that is not the main agent', async () => {
+    const correo: ChatAgent = { ...secretaria, name: 'Correo', isMain: false };
+    const { call, asked } = setup({ agent: correo, tools: google, asPerson: () => fakeSupabase({}).client });
+    await call('ana', `/threads/${THREAD}/reply`);
+    const names = (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
+    expect(names.some((n) => n.startsWith('settings_'))).toBe(false);
+    expect(asked[0]?.system).not.toContain('agente principal');
+  });
+
   it('gives an agent only the accounts an owner let it use', async () => {
     const { call, asked } = setup({ agent: { ...finanzas, accounts: [] }, tools: google });
     await call('ana', `/threads/${THREAD}/reply`);
@@ -517,7 +526,7 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     let told: unknown;
     const { call, proposed } = setup({
       agent: secretaria,
-      asPerson: () => fakeSupabase({ agents: [{ id: AGENT, org_id: ORG, name: 'Secretaría', ghost: 'secretaria', accounts: null }] }).client,
+      asPerson: () => fakeSupabase({ agents: [{ id: AGENT, org_id: ORG, name: 'Secretaría', ghost: 'secretaria', is_main: true, accounts: null }] }).client,
       write: async ({ tools: t, onText }) => {
         told = await t.run('settings_agent_accounts', { agent_id: AGENT, providers: null });
         onText('Vale.');

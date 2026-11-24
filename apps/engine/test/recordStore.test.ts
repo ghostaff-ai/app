@@ -6,6 +6,7 @@ import { endRecordAccess, RECORD_STORE_TOKEN_HOURS, recordAccess, type RunnerDep
 
 const ORG_ID = '6f1d2c3b-0000-4000-8000-000000000001';
 const SECRETARIA = '11111111-1111-4111-8111-111111111111';
+const CORREO = '33333333-3333-4333-8333-333333333333';
 const LEGAL = '22222222-2222-4222-8222-222222222222';
 const RUN = '33333333-3333-4333-8333-333333333333';
 const OWN: RecordOrg = { id: ORG_ID, slug: 'panaderia', repo: `records/${ORG_ID}`, host: 'ghostaff' };
@@ -42,8 +43,8 @@ function fakeAdmin(opts: { fail?: string } = {}) {
 }
 
 const agents = [
-  { id: SECRETARIA, slug: 'secretaria', ghost: 'secretaria' },
-  { id: LEGAL, slug: 'legal', ghost: 'base' },
+  { id: SECRETARIA, slug: 'secretaria', isMain: true },
+  { id: LEGAL, slug: 'legal', isMain: false },
 ];
 
 describe('records for every organisation', () => {
@@ -73,11 +74,15 @@ describe('records for every organisation', () => {
     expect(did).toEqual([]);
   });
 
-  it('lets only Secretaría keep the company’s memory', () => {
+  it('lets only the main agent keep the company’s memory', () => {
     expect(hookAgents(agents)).toEqual([
       { username: agentUsername(SECRETARIA), slug: 'secretaria', writesCompany: true },
       { username: agentUsername(LEGAL), slug: 'legal', writesCompany: false },
     ]);
+  });
+
+  it('does not let a job agent drawn as the secretaria ghost keep it, only the role does', () => {
+    expect(hookAgents([{ id: CORREO, slug: 'correo', isMain: false }])).toEqual([{ username: agentUsername(CORREO), slug: 'correo', writesCompany: false }]);
   });
 
   it('starts the record with how it is laid out, in the organisation’s name', () => {
