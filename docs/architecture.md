@@ -57,9 +57,11 @@ An agent row says how it runs (`agents.runner`):
 | `ghostaff` | One execution of `agent-runner` | The first Claude subscription in the owner's order | Claude Code's own tools on a clone of the record | Órdago's Legal (on demand) |
 | `ordago_job` | A job in `ordago-agents` (legacy) | Órdago's token in its own Secret Manager | Whatever its YAML gives it | Órdago's other agents |
 
+**Routines** ([agent-routines.md](plans/ongoing/agent-routines.md)): whatever the runner, a person may give an agent routines, «cada viernes a las 9, mándame el resumen de ventas». On the tick, a due routine is a message the clock writes for its creator: the engine answers it in their chat with the agent as it would answer them, with a chat turn (`chat`) or a run (`ghostaff`); no settings tools, since nobody is there to read as. A team routine's answer is copied to everyone else who sees the agent; one with nothing to tell (`SIN NOVEDAD`) leaves nothing. `ordago_job` agents take none. An agent's own `schedule` (from its definition) still starts its usual task as below.
+
 A run on our runner, end to end:
 
-1. A person writes to the agent, or the tick finds its timetable due.
+1. A person writes to the agent, or the tick finds its timetable or one of its routines due.
 2. The engine records the run with the hash of a one-time nonce and starts an `agent-runner` execution with only the run id and the nonce.
 3. The runner calls `POST /runs/:id/spec` with its Google ID token and the nonce. The engine checks both and hands over, once: the prompt, model, tools, turns, a one-hour GitHub token for the record only, and the organisation's Claude token from the vault.
 4. Claude Code works on the clone as the unprivileged user `agente`, under a read-only constitution and a push guard.
