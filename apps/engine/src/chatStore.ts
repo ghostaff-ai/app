@@ -52,14 +52,14 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
       const rows = check(
         await admin
           .from('messages')
-          .select('id, thread_id, author_kind, author_user, author_agent, author_name, parts, state, steps, created_at')
+          .select('id, thread_id, author_kind, author_user, author_agent, author_name, parts, state, steps, routine_id, created_at')
           .eq('thread_id', threadId)
           .order('created_at', { ascending: false })
           .limit(limit),
       );
       return (rows ?? []).map(messageFromRow).reverse();
     },
-    async startReply(thread: ChatThreadHead, agent: ChatAgent, steps) {
+    async startReply(thread: ChatThreadHead, agent: ChatAgent, steps, routineId) {
       const { data, error } = await admin
         .from('messages')
         .insert({
@@ -71,6 +71,7 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
           parts: [],
           state: 'working',
           steps,
+          routine_id: routineId ?? null,
         })
         .select('id')
         .single();
@@ -102,12 +103,16 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
             input: a.input,
             label: a.label.slice(0, 200),
             requested_by: a.requestedBy,
+            decider: a.decider,
           })
           .select('id')
           .single(),
       );
       if (!r) throw new Error('action not recorded');
       return r.id as string;
+    },
+    async deleteMessage(id) {
+      check(await admin.from('messages').delete().eq('id', id));
     },
     async touchThread(threadId) {
       check(await admin.from('threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId));

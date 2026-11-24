@@ -25,6 +25,10 @@ export interface ActionPart {
   result?: string;
   /** Who approved or rejected it. */
   decidedBy?: string;
+  /** Who decides it: an owner (absent), or the person who asked, for their own «Solo para mí» routine (agent-routines.md). */
+  decider?: 'owner' | 'requester';
+  /** Who asked for it, when that person decides. */
+  requestedBy?: string;
 }
 
 export function isActionPart(p: MessagePart): p is ActionPart & MessagePart {
@@ -94,6 +98,8 @@ export interface ChatMessage {
   state: 'working' | 'done' | 'failed';
   /** What the agent did, one plain line per step. */
   steps: string[];
+  /** The routine that started this answer (agent-routines.md): the chat says so above it. */
+  routineId?: string | null;
   createdAt: string;
 }
 

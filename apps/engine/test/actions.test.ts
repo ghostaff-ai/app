@@ -25,6 +25,8 @@ function setup(opts: { state?: 'working' | 'done'; fails?: boolean } = {}) {
     label: 'Publicar en Instagram',
     status: 'pending',
     messageState: opts.state ?? 'done',
+    decider: 'owner',
+    requestedBy: null,
   };
   const cards: Array<Partial<ActionPart>> = [];
   const ran: Array<{ name: string; input: unknown }> = [];
@@ -142,6 +144,8 @@ describe('approving a settings change (agent-settings.md)', () => {
     label: 'Retirar la invitación de luis@panaderia.es',
     status: 'pending',
     messageState: 'done',
+    decider: 'owner',
+    requestedBy: null,
   });
 
   it("runs as the owner who approved, through the app's own function", async () => {

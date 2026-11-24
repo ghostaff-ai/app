@@ -87,6 +87,7 @@ function setup(
         messages.splice(startedAt, 0, msg({ id, authorKind: 'agent', authorAgentId: a.id, authorUserId: null, authorName: a.name, text: patch.text ?? '' }));
       }
     },
+    deleteMessage: async () => {},
     touchThread: async () => {},
     personalChat: async (_o, agentId, title) => {
       const id = '30000000-0000-0000-0000-000000000009';
@@ -468,12 +469,18 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     expect(asked[0]?.system).toContain('agente principal');
   });
 
-  it('gives no other agent the settings', async () => {
+  it('gives any other agent only the tools for its own routines (agent-routines.md)', async () => {
     const { call, asked } = setup({ tools: google, asPerson: () => fakeSupabase({}).client });
     await call('ana', `/threads/${THREAD}/reply`);
     const names = (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
-    expect(names.some((n) => n.startsWith('settings_'))).toBe(false);
+    expect(names.filter((n) => n.startsWith('settings_')).sort()).toEqual([
+      'settings_create_routine',
+      'settings_pause_routine',
+      'settings_read_routines',
+      'settings_update_routine',
+    ]);
     expect(asked[0]?.system).not.toContain('agente principal');
+    expect(asked[0]?.system).toContain('rutinas tuyas');
   });
 
   it('gives an agent only the accounts an owner let it use', async () => {

@@ -28,6 +28,9 @@ export interface ActionRecord {
   status: ActionPart['status'];
   /** The state of the message that carries the card: an action is decided once its message is written. */
   messageState: 'working' | 'done' | 'failed';
+  /** Who decides: an owner, or the person who asked (their own «Solo para mí» routine, agent-routines.md). */
+  decider: 'owner' | 'requester';
+  requestedBy: string | null;
 }
 
 export interface ActionStore {
@@ -54,10 +57,17 @@ async function decidable(deps: ActionDeps, userId: string, id: unknown) {
   const a = await deps.actions.action(id);
   if (!a) throw new Refusal(404, 'not_found', 'action not found');
   // Owners decide: an action acts with the organisation's own accounts. Anyone else hears the same refusal.
-  const owner = await requireOwner(deps.actions, a.orgId, userId);
+  // A person's own «Solo para mí» routine is theirs to decide, and only theirs (agent-routines.md, decision 1).
+  const owner = a.decider === 'requester' ? await requireRequester(deps.actions, a, userId) : await requireOwner(deps.actions, a.orgId, userId);
   if (a.messageState === 'working') throw new Refusal(409, 'still_writing', 'the agent is still writing that message');
   if (a.status !== 'pending') throw new Refusal(409, 'already_decided', 'this action was already decided');
   return { a, owner };
+}
+
+async function requireRequester(store: ActionStore, a: ActionRecord, userId: string): Promise<Membership> {
+  const m = await store.membership(a.orgId, userId);
+  if (!m || !a.requestedBy || a.requestedBy !== userId) throw new Refusal(403, 'not_allowed', 'only the person who asked decides this');
+  return m;
 }
 
 /** Runs the action as stored, with the organisation's connected account, and shows how it went. */
@@ -127,7 +137,7 @@ export function supabaseActionStore(admin: SupabaseClient): ActionStore {
       const r = check(
         await admin
           .from('agent_actions')
-          .select('id, org_id, thread_id, message_id, agent_id, tool, input, label, status, messages(state)')
+          .select('id, org_id, thread_id, message_id, agent_id, tool, input, label, status, decider, requested_by, messages(state)')
           .eq('id', id)
           .maybeSingle(),
       ) as Record<string, any> | null;
@@ -144,6 +154,8 @@ export function supabaseActionStore(admin: SupabaseClient): ActionStore {
         label: r.label,
         status: r.status,
         messageState: message?.state ?? 'done',
+        decider: r.decider === 'requester' ? 'requester' : 'owner',
+        requestedBy: r.requested_by ?? null,
       };
     },
     async claim(id, to, userId, name) {

@@ -93,6 +93,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date }
       updates.push({ id, ...patch });
       if (patch.state && patch.state !== 'working') working = null;
     },
+    deleteMessage: async () => {},
     touchThread: async () => {},
     personalChat: async () => 'x',
     aiAccounts: async (orgId) => [

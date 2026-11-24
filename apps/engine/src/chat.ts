@@ -20,6 +20,7 @@ import { Refusal } from './connections';
 import { askJob, type JobDeps } from './jobs';
 import { askRunner } from './runner';
 import { isMainAgent } from '@ghostaff/shared/services';
+import { NOTHING_NEW } from './runner';
 import { type AsPerson, settingsTools } from './settings';
 import { type AgentTools, mergeTools, restrictTo } from './tools';
 
@@ -103,8 +104,13 @@ export interface ChatStore {
   memberNames(orgId: string): Promise<string[]>;
   /** The thread's latest messages, oldest first. */
   recentMessages(threadId: string, limit: number): Promise<ChatMessage[]>;
-  /** Inserts the agent's «working» message; null when a reply is already being written. */
-  startReply(thread: ChatThreadHead, agent: ChatAgent, steps: string[]): Promise<string | null>;
+  /**
+   * Inserts the agent's «working» message; null when a reply is already being
+   * written. `routineId` marks it as a routine's answer (agent-routines.md).
+   */
+  startReply(thread: ChatThreadHead, agent: ChatAgent, steps: string[], routineId?: string): Promise<string | null>;
+  /** Removes a message: a routine's answer that had nothing to tell. */
+  deleteMessage(id: string): Promise<void>;
   /** With `text`, the message's parts become that text followed by `cards` (approvals, asks for an account). */
   updateReply(id: string, patch: { text?: string; cards?: Card[]; steps?: string[]; state?: 'working' | 'done' | 'failed' }): Promise<void>;
   /** Records an action the agent proposes, for an owner to approve (actions.ts); returns its id. */
@@ -117,6 +123,8 @@ export interface ChatStore {
     input: Record<string, unknown>;
     label: string;
     requestedBy: string;
+    /** Who approves it: an owner, or the person who asked (their own «Solo para mí» routine). */
+    decider: 'owner' | 'requester';
   }): Promise<string>;
   touchThread(threadId: string): Promise<void>;
   /** The person's own chat with the agent, opened if it isn't yet (supabase/migrations/20261123200000_personal_chats.sql). */
@@ -217,16 +225,21 @@ function reachLines(accounts: string[], today: string, canAsk: boolean): string[
 
 /** What the main agent is told about changing the organisation's settings (agent-settings.md). */
 const SETTINGS_LINES = [
-  'Eres el agente principal: puedes cambiar la configuración de la organización en Ghostaff, lo mismo que una persona propietaria cambia en la app (qué agentes hay, qué cuentas conectadas usa cada uno, quién puede ver o hablar con cada agente, el orden de las cuentas de IA, las invitaciones). Mira antes la configuración con settings_read.',
-  'Cada cambio queda como propuesta hasta que alguien propietario la aprueba. Propón un cambio solo cuando te lo pidan o cuando lo expliques y lo justifiques en la conversación.',
+  'Eres el agente principal: puedes cambiar la configuración de la organización en Ghostaff, lo mismo que una persona propietaria cambia en la app (qué agentes hay, qué cuentas conectadas usa cada uno, quién puede ver o hablar con cada agente, el orden de las cuentas de IA, las invitaciones, las rutinas de cada agente). Mira antes la configuración con settings_read.',
+  'Cada cambio queda como propuesta hasta que alguien propietario la aprueba (una rutina «solo para mí» la aprueba quien la pide). Propón un cambio solo cuando te lo pidan o cuando lo expliques y lo justifiques en la conversación.',
   'Nunca puedes: conectar o desconectar cuentas ni tocar claves, cambiar propietarios o quitar personas, borrar agentes o datos, ni darte más herramientas a ti. Si te lo piden, explica que eso se hace en la app.',
+];
+
+/** What every agent is told about routines it may propose for itself (agent-routines.md). */
+const ROUTINE_LINES = [
+  'Puedes proponer rutinas tuyas con settings_create_routine: algo que harás solo, a una hora, como si te lo escribieran entonces (un resumen cada viernes, revisar algo cada mañana). Propónla cuando te pidan algo que se repite, o ofrécela tú en una frase cuando lo veas claro; queda como propuesta hasta que la aprueban.',
 ];
 
 /** The agent's standing instructions. Spanish, first person, «tú» (app-design.md #17). */
 export function systemPrompt(
   agent: ChatAgent,
   orgName: string,
-  opts: { broughtInto?: string; accounts?: string[]; now?: Date; settings?: boolean; canAsk?: boolean } = {},
+  opts: { broughtInto?: string; accounts?: string[]; now?: Date; settings?: boolean; routines?: boolean; canAsk?: boolean } = {},
 ): string {
   const job = AGENT_JOBS[agent.ghost]?.job ?? '';
   const broughtInto = opts.broughtInto;
@@ -240,6 +253,7 @@ export function systemPrompt(
     'Contesta en español, en primera persona y de tú, breve y concreto, sin fórmulas de cortesía. Usa listas solo si ayudan.',
     ...reachLines(opts.accounts ?? [], madridNow(opts.now ?? new Date()), opts.canAsk ?? false),
     ...(opts.settings ? SETTINGS_LINES : []),
+    ...(opts.routines ? ROUTINE_LINES : []),
     'No inventes datos de la organización. Si no sabes algo, pregúntalo.',
     'Cuando algo necesite la decisión de una persona, dilo de forma explícita.',
   ]
@@ -315,7 +329,7 @@ async function writeReply(
   tools: AgentTools,
   who: { threadId: string; userId: string },
   first = 'Leyendo la conversación',
-): Promise<void> {
+): Promise<{ text: string; ok: boolean }> {
   const now = deps.now ?? Date.now;
   const flushMs = deps.flushMs ?? 400;
   const started = now();
@@ -352,13 +366,14 @@ async function writeReply(
         return { content: 'La entrada de la herramienta tiene que ser un objeto.', isError: true };
       }
       if (cards.filter((c) => c.type === 'action').length >= 5) return { content: 'Ya hay cinco propuestas en este mensaje: espera a que se decidan.', isError: true };
-      let described: { label: string; preview: string } | null = null;
+      let described: { label: string; preview: string; decider?: 'owner' | 'requester' } | null = null;
       try {
         described = (await tools.describe?.(name, input as Record<string, unknown>)) ?? null;
       } catch (e) {
         return { content: e instanceof Error && e.message ? e.message : 'La propuesta no es válida.', isError: true };
       }
       const label = (described?.label ?? tools.actionFor(name)).slice(0, 200);
+      const decider = described?.decider ?? 'owner';
       const actionId = await deps.chat.proposeAction({
         orgId: agent.orgId,
         threadId: who.threadId,
@@ -368,11 +383,20 @@ async function writeReply(
         input: input as Record<string, unknown>,
         label,
         requestedBy: who.userId,
+        decider,
       });
-      cards.push({ type: 'action', actionId, label, preview: described ? described.preview : previewOf(input), status: 'pending' });
+      cards.push({
+        type: 'action',
+        actionId,
+        label,
+        preview: described ? described.preview : previewOf(input),
+        status: 'pending',
+        ...(decider === 'requester' ? { decider, requestedBy: who.userId } : {}),
+      });
       showCards();
+      const approver = decider === 'requester' ? 'la persona que la ha pedido' : 'quien es propietario';
       return {
-        content: `Propuesta guardada, pendiente de aprobación: «${label}». No está hecha: quien es propietario la aprueba o la rechaza en esta conversación. Dilo así; no digas que ya está hecho.`,
+        content: `Propuesta guardada, pendiente de aprobación: «${label}». No está hecha: ${approver} la aprueba o la rechaza en esta conversación. Dilo así; no digas que ya está hecho.`,
         isError: false,
       };
     },
@@ -381,7 +405,7 @@ async function writeReply(
     const accounts = await deps.chat.aiAccounts(agent.orgId);
     if (accounts.length === 0) {
       await deps.chat.updateReply(replyId, { text: NO_ACCOUNT, steps: ['Buscando una cuenta de IA'], state: 'done' });
-      return;
+      return { text: NO_ACCOUNT, ok: false };
     }
     await deps.chat.updateReply(replyId, { steps });
     // The first account answers; the next one only if it fails before writing a word or running a tool.
@@ -427,12 +451,13 @@ async function writeReply(
     await pending;
     const seconds = Math.max(1, Math.round((now() - started) / 1000));
     await deps.chat.updateReply(replyId, { ...withCards(text.trim() || '…'), steps: [...steps, `${seconds} s`], state: 'done' });
+    return { text: text.trim(), ok: true };
   } catch (e) {
     console.error('reply failed', e instanceof Error ? e.name : typeof e);
     await pending;
-    await deps.chat
-      .updateReply(replyId, { ...withCards(text.trim() ? `${text.trim()}\n\n${FAILED}` : FAILED), state: 'failed' })
-      .catch(() => {});
+    const said = text.trim() ? `${text.trim()}\n\n${FAILED}` : FAILED;
+    await deps.chat.updateReply(replyId, { ...withCards(said), state: 'failed' }).catch(() => {});
+    return { text: said, ok: false };
   }
 }
 
@@ -478,12 +503,15 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
   const now = new Date(deps.now ? deps.now() : Date.now());
   const reachOf = (who: ChatAgent, broughtInto?: string): { tools: AgentTools; system: string } => {
     let mine = restrictTo(tools, who.accounts);
-    const settings = isMainAgent(who) && !!deps.asPerson && !!accessToken;
-    if (settings && deps.asPerson && accessToken) {
-      mine = mergeTools(mine, settingsTools({ client: deps.asPerson(accessToken), orgId: who.orgId, agentId: who.id }));
+    // Settings read as whoever asked: none in a turn nobody asked for (a routine's, agent-routines.md decision 3).
+    const asked = !!deps.asPerson && !!accessToken;
+    const settings = isMainAgent(who) && asked;
+    if (asked && deps.asPerson && accessToken) {
+      // Every agent may propose its own routines; the main agent every setting.
+      mine = mergeTools(mine, settingsTools({ client: deps.asPerson(accessToken), orgId: who.orgId, agentId: who.id, onlySelf: !settings }));
     }
     if (deps.asks) mine = mergeTools(mine, ASK_TOOLS);
-    const system = systemPrompt(who, orgName, { broughtInto, accounts: mine.accounts, now, settings, canAsk: !!deps.asks });
+    const system = systemPrompt(who, orgName, { broughtInto, accounts: mine.accounts, now, settings, routines: asked, canAsk: !!deps.asks });
     return { tools: mine, system };
   };
   return { names, orgName, agents, reachOf };
@@ -603,6 +631,36 @@ export async function resumeAfterAccount(
   await writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId }, 'Retomando');
   await deps.chat.touchThread(thread.id).catch(() => {});
   return { resumed: true };
+}
+
+/** A routine of a chat agent, as the turn needs it (routines.ts). */
+export interface RoutineAsk {
+  title: string;
+  instruction: string;
+  /** Who made it, as they sign in the chat. */
+  from: string;
+  /** Who made it: their «Solo para mí» routine's cards are theirs to decide. */
+  userId: string;
+}
+
+/**
+ * A routine's turn for an agent that answers in chat (agent-routines.md): its
+ * instruction, as if its creator wrote it now, answered in the message
+ * `replyId` of their chat. No settings tools: nobody is there to read as.
+ * Returns what the agent said; `SIN NOVEDAD` when it had nothing to tell.
+ */
+export async function answerRoutine(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, replyId: string, ask: RoutineAsk): Promise<{ text: string; ok: boolean }> {
+  const { reachOf } = await orgReach(deps, agent.orgId, undefined);
+  const mine = reachOf(agent);
+  const turns = toTurns(await deps.chat.recentMessages(thread.id, 40), agent.id);
+  const line =
+    `${ask.from}: ${ask.instruction}\n\n` +
+    `(Es su rutina «${ask.title}»: te la ha lanzado su horario y nadie está esperando delante. ` +
+    `Hazla y contesta para esa persona, corto y con lo que importe. Si no hay nada que contarle, contesta exactamente ${NOTHING_NEW}, sin nada más, y no le llegará nada.)`;
+  const last = turns[turns.length - 1];
+  if (last?.role === 'user') last.content += `\n\n${line}`;
+  else turns.push({ role: 'user', content: line });
+  return writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId: ask.userId }, 'Con tu rutina');
 }
 
 function introTurn(orgName: string): ModelTurn {

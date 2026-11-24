@@ -65,6 +65,7 @@ function setup(opts: { launchFails?: boolean } = {}) {
       updates.push({ id, ...patch });
       if (patch.state && patch.state !== 'working') working = null;
     },
+    deleteMessage: async () => {},
     touchThread: async () => {},
     personalChat: async () => 'x',
     aiAccounts: async () => [],

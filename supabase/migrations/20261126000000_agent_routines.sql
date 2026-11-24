@@ -353,3 +353,9 @@ $$;
 
 revoke execute on function public.notify_owners(uuid, text) from public, anon, authenticated;
 grant execute on function public.notify_owners(uuid, text) to service_role;
+
+-- Who approves an agent's proposal (decision 1 of the plan): an owner, as for
+-- every other action, or the person who asked, for their own «Solo para mí»
+-- routine. The engine sets it from the tool, never from the card.
+alter table public.agent_actions
+  add column decider text not null default 'owner' check (decider in ('owner', 'requester'));
