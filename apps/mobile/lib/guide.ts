@@ -98,3 +98,16 @@ export function eitherOf(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? '';
   return `${names.slice(0, -1).join(', ')} o ${names[names.length - 1]}`;
 }
+
+const madridDay = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+
+/** When a guide's check passed, as a list reads it: «hoy», «ayer» or «el 20 nov», in Madrid. */
+export function checkedWhen(iso: string, now: Date = new Date()): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  const day = madridDay(at);
+  if (day === madridDay(now)) return 'hoy';
+  if (day === madridDay(new Date(now.getTime() - 86_400_000))) return 'ayer';
+  const date = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', timeZone: 'Europe/Madrid' }).format(at);
+  return `el ${date.replace('.', '')}`;
+}

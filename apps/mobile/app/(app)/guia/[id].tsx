@@ -19,6 +19,8 @@ import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 // always while it goes on, «Enséñame tu pantalla». Leaving keeps the guide
 // where it is: the card's «Empezar» opens it on the same step. What the person
 // typed stays on this screen only, and a secret leaves it only in the check.
+// An owner opens a member's checked guide here (from its card or from
+// Conexiones, even when its conversation is the member's own) to approve it.
 
 /** One dot per step shown so far, the last one being this one: the total isn't known. */
 function Dots({ steps }: { steps: number }) {
@@ -32,11 +34,23 @@ function Dots({ steps }: { steps: number }) {
   );
 }
 
-/** Where the guide stands once it no longer asks for anything. */
-function outcome(status: GuideStatus, blockedReason: string | null): { text: string; tone: 'ok' | 'muted' | 'no' } | null {
+/**
+ * Where the guide stands once it no longer asks for anything: for an owner who
+ * may approve it, what approving does; for one who just decided, what they decided.
+ */
+function outcome(
+  status: GuideStatus,
+  blockedReason: string | null,
+  mayApprove: boolean,
+  decided: 'approve' | 'reject' | null,
+): { text: string; tone: 'ok' | 'muted' | 'no' } | null {
+  if (decided === 'approve') return { text: 'Aprobado: el agente ya tiene el acceso y sigue en la conversación.', tone: 'ok' };
+  if (decided === 'reject') return { text: 'Rechazado: el agente no tiene este acceso.', tone: 'muted' };
   switch (status) {
     case 'checked':
-      return { text: 'Funciona. Falta que lo apruebe quien es propietario; entonces el agente sigue con lo que le pediste.', tone: 'muted' };
+      return mayApprove
+        ? { text: 'Funciona. Si lo apruebas, el agente tendrá este acceso y seguirá con lo que le pidieron.', tone: 'muted' }
+        : { text: 'Funciona. Falta que lo apruebe quien es propietario; entonces el agente sigue con lo que le pediste.', tone: 'muted' };
     case 'done':
       return { text: 'Funciona. El agente sigue con lo que le pediste en la conversación.', tone: 'ok' };
     case 'rejected':
@@ -90,7 +104,8 @@ export default function Guia() {
   const action = step ? stepAction(step) : null;
   const going = g.status === 'open' && action !== 'finished';
   const preparing = g.busy === 'step' || g.busy === 'photo';
-  const end = outcome(g.status, step?.blocked ?? view.blockedReason);
+  const approving = view.mayApprove && g.status === 'checked';
+  const end = outcome(g.status, step?.blocked ?? view.blockedReason, view.mayApprove, g.decided);
   const toneClass = { ok: 'text-ok', muted: 'text-muted', no: 'text-no' } as const;
 
   return (
@@ -146,9 +161,21 @@ export default function Guia() {
             <View className="mt-6">
               {end ? <Text className={`text-base ${toneClass[end.tone]}`}>{end.text}</Text> : null}
               {step?.done ? <Text className="mt-3 text-footnote text-muted">Para quitarle el acceso más adelante: {step.done.undo}</Text> : null}
-              <View className="mt-6">
-                <Button label="Volver a la conversación" onPress={close} />
-              </View>
+              {approving ? (
+                <View className="mt-6 gap-2">
+                  <Button label="Aprobar" busy={g.busy === 'approve'} disabled={g.busy !== null} onPress={() => void g.decide('approve')} />
+                  <Button label="Rechazar" variant="secondary" busy={g.busy === 'reject'} disabled={g.busy !== null} onPress={() => void g.decide('reject')} />
+                  {g.decideError ? (
+                    <View accessibilityLiveRegion="polite">
+                      <ErrorText>{g.decideError}</ErrorText>
+                    </View>
+                  ) : null}
+                </View>
+              ) : (
+                <View className="mt-6">
+                  <Button label={g.decided ? 'Volver' : 'Volver a la conversación'} onPress={close} />
+                </View>
+              )}
             </View>
           ) : null}
 

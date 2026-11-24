@@ -191,14 +191,15 @@ Once the access is there, the agent gets **one tool for it**, `<provider>_reques
 
 - **`start_guide`**, a tool every model-answering agent has, intercepted in `writeReply` like `ask_for_account`. Its input: `{ app, goal, why, auth, base_suffix?, header_name?, check_path, expect?: { field, includes } }`. One guide per message. It records the row and adds a `GuidePart`. The model reads back: «Guía mostrada: termina el mensaje diciendo qué harás cuando tengas el acceso».
 - **The prompt line:** use `ask_for_account` when the app is in the catalogue and connects with a button; use `start_guide` when it needs the person to do something in the app (a user, a key), for example a WordPress that is not on WordPress.com.
-- **`GET /guides/:id`:** what the screen needs: status, app, goal, the current step, the landing's `auth`, the agent's address, and whether the caller may approve.
-- **`POST /guides/:id/step`** `{ answer?, photo? }` returns the next step and saves it to the history. `photo` is `{ mediaType: 'image/jpeg', data }`, base64, refused above 2 MB. Anyone who may write in the thread may call it (decision 2).
+- **`GET /guides/:id`:** what the screen needs: status, app, goal, the current step, the landing's `auth`, the agent's address, and whether the caller may approve. Anyone who may read the thread may read it; so may an owner who cannot, while it is `checked` and once they decided it (a member's guide in their personal chat).
+- **`GET /orgs/:orgId/guides/pending`**, owners only: the organisation's `checked` guides (`{ guides: [{ id, app, agentId, agentName, completedByName, checkedAt }] }`), for Conexiones.
+- **`POST /guides/:id/step`** `{ answer?, photo? }` returns the next step and saves it to the history. `done` belongs to the closing step only: refused while the guide is open, required once the check passed; a model wrong twice there gives a fixed closing step whose `undo` is «Quita el usuario <agentEmail> en <app>.». A step with `use_connector` ends the guide `handed_over` and records an `account_ask` for that connector in the same message, so connector-in-chat's connect → grant → resume takes over. `photo` is `{ mediaType: 'image/jpeg', data }`, base64, refused above 2 MB. Anyone who may write in the thread may call it (decision 2).
 - **`POST /guides/:id/check`** `{ values }` runs the check, through `fetchPublic` with a 15-second timeout:
   - It passes: the secret goes to the vault. If the caller is an owner, the guide is done (connection row, status `done`). If not, it becomes `checked` and the card asks owners to approve.
   - It fails: plain Spanish, next to the field that caused it. 401: «Esa contraseña no vale: tiene que ser la de aplicación». 404 on the base: «No encuentro tu WordPress en esa dirección». The expectation is unmet: «El usuario no tiene el rol Editor». A private or unreachable address: «Esa dirección no se abre desde internet».
   - Claims are conditional updates, so two presses finish once.
-- **`POST /guides/:id/approve`** and **`/reject`**, owners only. Approving writes the connection. Rejecting removes the secret and tells the agent in the card's line.
-- **`POST /threads/:id/resume`** takes `{ guideId }` beside `{ askId }`. The guide must be `done` and not resumed yet; `resumed_at` is claimed conditionally. The agent reads «<who>: Ya tienes acceso a <app>. Sigue con lo que se te pidió.», as with an account.
+- **`POST /guides/:id/approve`** and **`/reject`**, owners only, whether or not they see the thread. Approving writes the connection and lets the agent go on in the guide's thread as the member who did the guide, answering once that reply is written (`{ status: 'done', resumed }`; `resumed` is false when the agent was answering, and the chat resumes it later, once). Rejecting removes the secret and tells the agent in the card's line.
+- **`POST /threads/:id/resume`** takes `{ guideId }` beside `{ askId }`. The guide must be `done` and not resumed yet; `resumed_at` is claimed conditionally, without touching `updated_at` (the closing step is saved on condition of it). The agent reads «<who>: Ya tienes acceso a <app>. Sigue con lo que se te pidió.», as with an account.
 - **`DELETE /connections/guided/:id`**, owners only: removes the row and the secret. The app shows the guide's `undo` text, so the person also removes the user in their own tool.
 
 ### App
@@ -208,17 +209,18 @@ Once the access is there, the agent gets **one tool for it**, `<provider>_reques
   - `checked`: «Aprobar» and «Rechazar» for owners; «Falta que lo apruebe Ana» for everyone else.
   - `done`: «Hecho por Luis · aprobado por Ana».
   - `blocked`: the reason.
-  - `handed_over`: the catalogue's connect button (`useAccountConnect`).
+  - `handed_over`: that it goes on with the account's card below it (the `account_ask` the engine added), with no button of its own.
 - **The guide screen**, `app/(app)/guia/[id].tsx`, is the shell:
   - The goal and progress dots at the top. Dots for the steps done plus the current one, since the total is unknown.
   - The blocks in the middle (`components/guide/GuideBlocks.tsx`, one component per block type).
   - At the bottom, always: «Enséñame tu pantalla».
+  - An owner who may approve reads what approving does, with «Aprobar» and «Rechazar».
 - **Photos:** camera or library on the phone (`expo-image-picker`); on the web, a file picker and paste. Each is resized to 1,568 px on the long side and JPEG 0.7 (`expo-image-manipulator`). Adding both is a native change: the next beta is a new build, which `beta.yml` already does.
 - **`AnnotatedShot`** draws the mark the model returns (a box in 0–1 coordinates and a short label) over the last photo the device sent.
 - **Secrets** stay in the screen's state, in a masked field, until the check. They are never logged and never sent with a step.
-- **Services** in `@ghostaff/shared/services`: `getGuide`, `guideStep`, `checkGuide`, `approveGuide`, `rejectGuide`, `resumeAfterGuide`, `removeGuidedAccess`.
+- **Services** in `@ghostaff/shared/services`: `getGuide`, `guideStep`, `checkGuide`, `approveGuide`, `rejectGuide`, `pendingGuides`, `resumeAfterGuide`, `removeGuidedAccess`.
 - **The chat resumes** a done guide that has not resumed yet, as it does for asks (`guidesToResume`, beside `asksToResume`).
-- **Conexiones** lists guided accesses under «Accesos de tus agentes» (app, agent, hint), each with «Quitar», which shows the `undo` text first.
+- **Conexiones** lists guided accesses under «Accesos de tus agentes» (app, agent, hint), each with «Quitar», which shows the `undo` text first. For owners, «Pendientes de aprobar» first: the `checked` guides (app, agent, who did it, when), each opening the guide, with «Aprobar» and «Rechazar».
 
 ### Out of this slice
 

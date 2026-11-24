@@ -1,10 +1,11 @@
 import type { ChatMessage, GuidePart, GuideStep, GuideView } from '@ghostaff/shared';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Platform, StyleSheet } from 'react-native';
 import GuideScreen from '@/app/(app)/guia/[id]';
 import { GuideCard } from '@/components/chat/GuideCard';
 import { AnnotatedShot } from '@/components/guide/AnnotatedShot';
 import { GuideBlocks } from '@/components/guide/GuideBlocks';
+import { checkedWhen } from '@/lib/guide';
 import { type GuideControls, guidesToResume } from '@/lib/hooks/useGuideCards';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
@@ -58,7 +59,6 @@ const controls = (over: Partial<GuideControls> = {}): GuideControls => ({
   resuming: () => false,
   open: jest.fn(),
   decide: jest.fn(async () => null),
-  connect: jest.fn(async () => null),
   ...over,
 });
 const owner = () => controls();
@@ -118,15 +118,14 @@ describe('the guide card in the chat', () => {
     }
   });
 
-  it('handed over: an owner connects the catalogue\'s app; a member reads who can', async () => {
+  it('handed over: it reads that it goes on with the account\'s card below, with no button of its own', async () => {
     const handed: GuidePart = { ...guide, status: 'handed_over', connector: 'wordpress', decidedBy: 'Luis' };
-    const o = owner();
-    const { rerender } = await render(<GuideCard guide={handed} controls={o} />);
-    await fireEvent.press(screen.getByText('Conectar WordPress.com'));
-    await waitFor(() => expect(o.connect).toHaveBeenCalledWith('wordpress'));
-    await rerender(<GuideCard guide={handed} controls={member()} />);
-    expect(screen.queryByText('Conectar WordPress.com')).toBeNull();
-    expect(screen.getByText('Lo conecta quien es propietario: Ana.')).toBeTruthy();
+    for (const c of [owner(), member(), reader()]) {
+      await render(<GuideCard guide={handed} controls={c} />);
+      expect(screen.getByText('Mejor con el botón de WordPress.com')).toBeTruthy();
+      expect(screen.getByText('Sigue con el botón de WordPress.com, aquí debajo.')).toBeTruthy();
+      expect(screen.queryByRole('button')).toBeNull();
+    }
   });
 
   it('no action while the agent is still writing that message', async () => {
@@ -361,5 +360,104 @@ describe('a value to copy', () => {
     await fireEvent.press(screen.getByLabelText('Copiar El correo del agente'));
     await waitFor(() => expect(mockCopy).toHaveBeenCalledWith('redes@panaderia.ghostaff.ai'));
     expect(await screen.findByText('Copiado')).toBeTruthy();
+  });
+});
+
+
+// Final review: an owner approves from the guide's screen (R19 b), and a member reads the truth there.
+
+describe('a guide waiting for an owner, on its screen', () => {
+  const closing: GuideStep = { blocks: [{ type: 'title', text: 'Acceso comprobado' }], done: { undo: 'Quita el usuario redes@panaderia.ghostaff.ai en WordPress.' } };
+  const checkedView = (mayApprove: boolean): GuideView => ({ ...baseView(closing), status: 'checked', mayApprove, undo: closing.done!.undo });
+  let requests: string[];
+  let approve: () => Promise<Response>;
+
+  const serve = (v: GuideView) => {
+    requests = [];
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url.endsWith('/guides/g1')) return reply(200, v);
+      if (url.endsWith('/guides/g1/approve')) return approve();
+      if (url.endsWith('/guides/g1/reject')) return reply(200, { status: 'rejected' });
+      throw new Error(`unexpected ${url}`);
+    }) as typeof fetch;
+  };
+
+  beforeEach(() => {
+    approve = async () => reply(200, { status: 'done', resumed: true });
+  });
+
+  it('an owner reads what approving does and approves it there; no step is asked', async () => {
+    serve(checkedView(true));
+    await render(<GuideScreen />);
+    expect(await screen.findByText(/Si lo apruebas, el agente tendrá este acceso/)).toBeTruthy();
+    expect(screen.queryByText(/Falta que lo apruebe/)).toBeNull();
+    await act(async () => {
+      await fireEvent.press(screen.getByRole('button', { name: 'Aprobar' }));
+    });
+    expect(await screen.findByText(/Aprobado: el agente ya tiene el acceso/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull();
+    expect(requests.filter((u) => u.endsWith('/approve'))).toHaveLength(1);
+    expect(requests.some((u) => u.endsWith('/step'))).toBe(false);
+  });
+
+  it('an owner rejects it there', async () => {
+    serve(checkedView(true));
+    await render(<GuideScreen />);
+    await act(async () => {
+      await fireEvent.press(await screen.findByRole('button', { name: 'Rechazar' }));
+    });
+    expect(await screen.findByText(/Rechazado: el agente no tiene este acceso/)).toBeTruthy();
+  });
+
+  it('a failed approval says why next to the buttons and keeps them', async () => {
+    approve = async () => reply(409, { error: 'already_decided', message: 'x' });
+    serve(checkedView(true));
+    await render(<GuideScreen />);
+    await act(async () => {
+      await fireEvent.press(await screen.findByRole('button', { name: 'Aprobar' }));
+    });
+    expect(await screen.findByText('Ya lo ha decidido otra persona.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Aprobar' })).toBeTruthy();
+  });
+
+  it('whoever did it, not an owner, reads that an owner has to approve it, with nothing to press', async () => {
+    serve(checkedView(false));
+    await render(<GuideScreen />);
+    expect(await screen.findByText(/Falta que lo apruebe quien es propietario/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull();
+  });
+});
+
+describe('the secret field on the web', () => {
+  it('asks the browser not to fill in the person\'s own password', async () => {
+    jest.replaceProperty(Platform, 'OS', 'web');
+    const noop = () => {};
+    await render(
+      <GuideBlocks
+        step={{ blocks: [{ type: 'secret', field: 'password', label: 'La contraseña de aplicación' }, { type: 'confirm' }] }}
+        values={{}}
+        onValue={noop}
+        fieldError={null}
+        shot={null}
+        busy={null}
+        onAnswer={noop}
+        onCheck={noop}
+        missing={[]}
+        connector={{ canConnect: false, run: async () => null }}
+      />,
+    );
+    expect(screen.getByLabelText('La contraseña de aplicación').props.autoComplete).toBe('new-password');
+    jest.restoreAllMocks();
+  });
+});
+
+describe('when a guide was checked', () => {
+  const now = new Date('2026-11-24T18:00:00+01:00');
+  it('reads as today, yesterday or the day', () => {
+    expect(checkedWhen('2026-11-24T09:00:00+01:00', now)).toBe('hoy');
+    expect(checkedWhen('2026-11-23T23:30:00+01:00', now)).toBe('ayer');
+    expect(checkedWhen('2026-11-20T10:00:00+01:00', now)).toBe('el 20 nov');
   });
 });

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type AiUsageDay, limitsFromRow } from '../aiUsage';
 import type { AccountProvider } from '../connectors';
-import type { GuideAnswer, GuideCheckOutcome, GuideCheckValues, GuidePhoto, GuideStatus, GuideStep, GuideView } from '../guides';
+import type { GuideAnswer, GuideCheckOutcome, GuideCheckValues, GuidePhoto, GuideStatus, GuideStep, GuideView, PendingGuide } from '../guides';
 import type {
   AccountConnectResult,
   Agent,
@@ -805,9 +805,19 @@ export async function checkGuide(engine: EngineAccess, guideId: string, values: 
   return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/check`, { values });
 }
 
-/** An owner lets the agent use what a member granted. */
-export async function approveGuide(engine: EngineAccess, guideId: string): Promise<{ status: 'done' }> {
+/**
+ * An owner lets the agent use what a member granted. Answers once the agent has
+ * gone on in the guide's conversation; `resumed` is false when it couldn't yet
+ * (the chat lets it go on when it next sees the guide done).
+ */
+export async function approveGuide(engine: EngineAccess, guideId: string): Promise<{ status: 'done'; resumed: boolean }> {
   return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/approve`);
+}
+
+/** The organisation's member guides waiting for an owner's approval, oldest first. Owners only. */
+export async function pendingGuides(engine: EngineAccess, orgId: string): Promise<PendingGuide[]> {
+  const out = await callEngine<{ guides: PendingGuide[] }>(engine, 'GET', `/orgs/${encodeURIComponent(orgId)}/guides/pending`);
+  return out.guides;
 }
 
 /** An owner turns down what a member granted; the secret leaves the vault. */

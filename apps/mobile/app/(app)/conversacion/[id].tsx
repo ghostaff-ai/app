@@ -56,7 +56,7 @@ export default function Conversacion() {
   const mine = !!head && (head.personal || head.createdBy === me);
   const level = head ? levels[head.agentId] : undefined;
   const canTalk = !!head && canWriteIn({ visibility: head.visibility, mine }, level);
-  const guides = useGuideCards({ orgId, messages, isOwner, owners, canTalk, returnPath: `conversacion/${id}` });
+  const guides = useGuideCards({ messages, isOwner, owners, canTalk });
   // The cards' state (asked for, going on) lives outside the messages: redraw them when it changes.
   const cardState = useMemo(() => ({ asks, guides }), [asks, guides]);
   // The card updates itself when the engine rewrites the message.

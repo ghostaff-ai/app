@@ -1,7 +1,7 @@
 import { type CatalogueConnector, CONNECTORS, type GuideAnswer, type GuideBlock, type GuideCheckValues, type GuideField, type GuideImage, type GuideStep } from '@ghostaff/shared';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
 import { AnnotatedShot } from '@/components/guide/AnnotatedShot';
 import { Icon, LockSimple } from '@/components/icons';
@@ -172,7 +172,8 @@ function SecretField({ field, label, value, onValue, error }: { field: GuideFiel
         secureTextEntry
         autoCapitalize="none"
         autoCorrect={false}
-        autoComplete="off"
+        // A browser ignores «off» on a password field and fills in the person's own password: «new-password» stops it.
+        autoComplete={Platform.OS === 'web' ? 'new-password' : 'off'}
         textContentType="none"
         importantForAutofill="no"
         spellCheck={false}

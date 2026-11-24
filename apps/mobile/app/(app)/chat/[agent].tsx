@@ -55,7 +55,7 @@ export default function Chat() {
   const owners = useMemo(() => members.filter((m) => m.role === 'owner').map((m) => m.displayName), [members]);
   const asks = useAccountAsks({ orgId, messages, agents, reloadAgents, owners, isOwner, returnPath: `chat/${agentId}` });
   const canTalk = !!agent && levels[agent.id] === 'talk';
-  const guides = useGuideCards({ orgId, messages, isOwner, owners, canTalk, returnPath: `chat/${agentId}` });
+  const guides = useGuideCards({ messages, isOwner, owners, canTalk });
   // The cards' state (asked for, going on) lives outside the messages: redraw them when it changes.
   const cardState = useMemo(() => ({ asks, guides }), [asks, guides]);
   // The card updates itself when the engine rewrites the message.

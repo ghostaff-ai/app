@@ -8,13 +8,17 @@ import type { GuideControls } from '@/lib/hooks/useGuideCards';
 // An agent asking, with a guide, for access to an app the catalogue lacks
 // (docs/plans/ready/guided-access.md), drawn like AccountAskCard. Anyone who
 // writes in the conversation may do the guide (decision 2); what a member
-// grants waits for an owner's «Aprobar». Once done, the card says who did it,
-// and who approved it.
+// grants waits for an owner's «Aprobar» (here, on the guide's screen or in
+// Conexiones). Once done, the card says who did it, and who approved it. A guide
+// handed over to the catalogue's button has no button of its own: the engine put
+// that account's card below it (AccountAskCard), which connects, grants and goes on.
 
 const catalogue = (id: string | undefined) => (id ? ((CONNECTORS as readonly CatalogueConnector[]).find((c) => c.id === id) ?? null) : null);
 
-function statusLine(guide: GuidePart, resuming: boolean): { text: string; tone: 'ok' | 'muted' } | null {
+function statusLine(guide: GuidePart, resuming: boolean, handedTo: CatalogueConnector | null): { text: string; tone: 'ok' | 'muted' } | null {
   switch (guide.status) {
+    case 'handed_over':
+      return handedTo ? { text: `Sigue con el botón de ${handedTo.name}, aquí debajo.`, tone: 'muted' } : null;
     case 'checked':
       return guide.doneBy ? { text: `Hecho por ${guide.doneBy}`, tone: 'muted' } : null;
     case 'done': {
@@ -48,23 +52,23 @@ function CardButton({ label, onPress, busy, disabled, quiet }: { label: string; 
 }
 
 export function GuideCard({ guide, controls, writing = false }: { guide: GuidePart; controls?: GuideControls; writing?: boolean }) {
-  const [busy, setBusy] = useState<'approve' | 'reject' | 'connect' | null>(null);
+  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
   // One decision at a time: a second tap (on either button) before the first re-renders is dropped.
   const running = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const handedTo = guide.status === 'handed_over' ? catalogue(guide.connector) : null;
-  const status = statusLine(guide, !!controls?.resuming(guide.guideId));
+  const status = statusLine(guide, !!controls?.resuming(guide.guideId), handedTo);
   const title = handedTo ? `Mejor con el botón de ${handedTo.name}` : `Necesito acceso a ${guide.app}`;
   // Nothing to press while the agent is still writing the message that carries the card.
   const live = !!controls && !writing;
 
-  const run = async (kind: 'approve' | 'reject' | 'connect') => {
+  const run = async (kind: 'approve' | 'reject') => {
     if (!controls || running.current) return;
     running.current = true;
     setBusy(kind);
     setError(null);
     try {
-      setError(kind === 'connect' ? await controls.connect(handedTo?.id ?? '') : await controls.decide(guide.guideId, kind));
+      setError(await controls.decide(guide.guideId, kind));
     } catch {
       setError('No se ha podido. Inténtalo otra vez.');
     } finally {
@@ -88,9 +92,6 @@ export function GuideCard({ guide, controls, writing = false }: { guide: GuidePa
           </>
         );
       else note = controls.owners.length ? `Falta que lo apruebe ${eitherOf(controls.owners)}` : 'Falta que lo apruebe quien es propietario';
-    } else if (handedTo) {
-      if (controls.isOwner) actions = <CardButton label={`Conectar ${handedTo.name}`} busy={busy === 'connect'} onPress={() => void run('connect')} />;
-      else note = `Lo conecta quien es propietario${controls.owners.length ? `: ${controls.owners.join(', ')}` : ''}.`;
     }
   }
 

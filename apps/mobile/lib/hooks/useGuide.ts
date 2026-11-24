@@ -1,7 +1,7 @@
 import { fieldsFor, type GuideAnswer, type GuideCheckValues, type GuideField, type GuidePhoto, type GuideStatus, type GuideStep, type GuideView } from '@ghostaff/shared';
-import { checkGuide, getGuide, guideStep } from '@ghostaff/shared/services';
+import { approveGuide, checkGuide, getGuide, guideStep, rejectGuide } from '@ghostaff/shared/services';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { guideErrorText, guideLoadProblem, type LoadProblem, movedOn } from '../guide';
+import { decideErrorText, guideErrorText, guideLoadProblem, type LoadProblem, movedOn } from '../guide';
 import type { ReadyShot, Shot } from '../guidePhoto';
 import { success } from '../haptics';
 import { useEngine } from './useConnections';
@@ -16,14 +16,19 @@ import { useEngine } from './useConnections';
 
 type StepInput = { answer?: GuideAnswer; photo?: GuidePhoto };
 
-/** What the screen is waiting for: a step, a step after a photo, or the check. */
-export type GuideBusy = 'step' | 'photo' | 'check' | null;
+/** What the screen is waiting for: a step, a step after a photo, the check, or an owner's decision. */
+export type GuideBusy = 'step' | 'photo' | 'check' | 'approve' | 'reject' | null;
 
 /** The check's complaint, next to the field it names. */
 export type FieldError = { field?: GuideField; message: string };
 
-/** Whether the guide still owes a step: the first one, or the closing one after a passed check. */
-export function owesStep(v: Pick<GuideView, 'step' | 'status' | 'undo'>): boolean {
+/**
+ * Whether the guide still owes a step: the first one, or the closing one after
+ * a passed check. Never to an owner who opened it to approve it: they may not
+ * write in its conversation, and the closing step is for whoever did the guide.
+ */
+export function owesStep(v: Pick<GuideView, 'step' | 'status' | 'undo' | 'mayApprove'>): boolean {
+  if (v.mayApprove) return false;
   if (v.status === 'open') return v.step === null;
   return (v.status === 'checked' || v.status === 'done') && !v.undo && !v.step?.done;
 }
@@ -42,6 +47,9 @@ export function useGuide(id: string | null) {
   const [values, setValues] = useState<GuideCheckValues>({});
   const [fieldError, setFieldError] = useState<FieldError | null>(null);
   const [shot, setShot] = useState<Shot | null>(null);
+  // An owner's decision taken on this screen, and why it didn't go through.
+  const [decided, setDecided] = useState<'approve' | 'reject' | null>(null);
+  const [decideError, setDecideError] = useState<string | null>(null);
   // The last step asked for and not answered, to try it again; with a photo, the photo to draw once it answers.
   const pending = useRef<{ input: StepInput; kind: 'step' | 'photo'; shot?: Shot } | null>(null);
   const reload = useRef<() => Promise<void>>(async () => {});
@@ -156,5 +164,47 @@ export function useGuide(id: string | null) {
     if (passed) await ask({});
   }, [engine, id, view, values, load, ask]);
 
-  return { view, loadProblem, step, status, steps, busy, error, retryable, values, fieldError, shot, setValue, answer, sendPhoto, check, retry, reload: reloadGuide };
+  /** An owner approves or rejects a member's grant. Approving answers once the agent has gone on in its conversation. */
+  const decide = useCallback(
+    async (decision: 'approve' | 'reject') => {
+      if (!engine || !id) return;
+      setBusy(decision);
+      setDecideError(null);
+      try {
+        await (decision === 'approve' ? approveGuide(engine, id) : rejectGuide(engine, id));
+        setDecided(decision);
+        setStatus(decision === 'approve' ? 'done' : 'rejected');
+        setView((v) => (v ? { ...v, mayApprove: false } : v));
+        success();
+      } catch (e) {
+        setDecideError(decideErrorText(e));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [engine, id],
+  );
+
+  return {
+    view,
+    loadProblem,
+    step,
+    status,
+    steps,
+    busy,
+    error,
+    retryable,
+    values,
+    fieldError,
+    shot,
+    decided,
+    decideError,
+    setValue,
+    answer,
+    sendPhoto,
+    check,
+    retry,
+    decide,
+    reload: reloadGuide,
+  };
 }

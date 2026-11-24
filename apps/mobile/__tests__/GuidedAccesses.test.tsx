@@ -1,4 +1,4 @@
-import type { Agent, Connection } from '@ghostaff/shared';
+import type { Agent, Connection, PendingGuide } from '@ghostaff/shared';
 import { EngineError } from '@ghostaff/shared/services';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import Connections from '@/app/(app)/(tabs)/empresa/conexiones';
@@ -13,11 +13,15 @@ let mockAgents: Agent[] = [];
 const mockReload = jest.fn();
 const mockGet = jest.fn();
 const mockRemove = jest.fn();
+const mockPending = jest.fn();
+const mockApprove = jest.fn();
+const mockReject = jest.fn();
+const mockPush = jest.fn();
 const mockEngine = { url: 'http://engine', token: 't' };
 
 jest.mock('@/lib/tabs', () => ({ useTabScreenTop: () => 0 }));
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a) } }));
 jest.mock('@/lib/org/ActiveOrgContext', () => ({ useActiveOrg: () => ({ active: { id: 'o1', role: mockRole } }) }));
 jest.mock('@/lib/hooks/useConnections', () => ({
   useConnections: () => ({ items: mockItems, reload: mockReload }),
@@ -29,6 +33,9 @@ jest.mock('@ghostaff/shared/services', () => ({
   ...jest.requireActual('@ghostaff/shared/services'),
   getGuidedAccessUndo: (...a: unknown[]) => mockGet(...a),
   removeGuidedAccess: (...a: unknown[]) => mockRemove(...a),
+  pendingGuides: (...a: unknown[]) => mockPending(...a),
+  approveGuide: (...a: unknown[]) => mockApprove(...a),
+  rejectGuide: (...a: unknown[]) => mockReject(...a),
   setAiOrder: jest.fn(),
 }));
 
@@ -67,6 +74,9 @@ beforeEach(() => {
   mockAgents = [{ id: 'a1', name: 'Redes' } as Agent];
   mockGet.mockResolvedValue({ app: 'WordPress', undo: UNDO });
   mockRemove.mockResolvedValue(undefined);
+  mockPending.mockResolvedValue([]);
+  mockApprove.mockResolvedValue({ status: 'done', resumed: true });
+  mockReject.mockResolvedValue({ status: 'rejected' });
 });
 
 describe('Accesos de tus agentes', () => {
@@ -154,5 +164,84 @@ describe('Accesos de tus agentes', () => {
     await press('Quitar');
     expect(await screen.findByText(/quítalo también allí/)).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Quitar acceso' })).toBeOnTheScreen();
+  });
+});
+
+
+// Final review (R19 a): an owner approves a member's guide here, whatever conversation it was done in.
+
+describe('Pendientes de aprobar', () => {
+  const luis: PendingGuide = { id: 'g1', app: 'WordPress', agentId: 'a1', agentName: 'Redes', completedByName: 'Luis', checkedAt: new Date().toISOString() };
+
+  /** Renders the screen with the pending guides read. */
+  const open = async () => {
+    await render(<Connections />);
+    await act(async () => {});
+  };
+
+  it('lists an owner the guides waiting for them: the app, the agent, who did it and when', async () => {
+    mockPending.mockResolvedValue([luis]);
+    await open();
+    expect(screen.getByText('Pendientes de aprobar')).toBeOnTheScreen();
+    expect(mockPending).toHaveBeenCalledWith(mockEngine, 'o1');
+    expect(screen.getByText('Redes · hecho por Luis hoy')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Aprobar' })).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Rechazar' })).toBeOnTheScreen();
+  });
+
+  it('a row opens the guide, to read it before deciding', async () => {
+    mockPending.mockResolvedValue([luis]);
+    await open();
+    await act(async () => {
+      await fireEvent.press(screen.getByTestId('pending-g1-open'));
+    });
+    expect(mockPush).toHaveBeenCalledWith('/guia/g1');
+  });
+
+  it('approving waits for the engine, then reads the list and the connections again', async () => {
+    mockPending.mockResolvedValueOnce([luis]).mockResolvedValue([]);
+    await open();
+    await press('Aprobar');
+    expect(mockApprove).toHaveBeenCalledWith(mockEngine, 'g1');
+    await waitFor(() => expect(screen.queryByText('Pendientes de aprobar')).toBeNull());
+    expect(mockReload).toHaveBeenCalled();
+  });
+
+  it('rejecting does the same with a rejection', async () => {
+    mockPending.mockResolvedValueOnce([luis]).mockResolvedValue([]);
+    await open();
+    await press('Rechazar');
+    expect(mockReject).toHaveBeenCalledWith(mockEngine, 'g1');
+    await waitFor(() => expect(screen.queryByText('Pendientes de aprobar')).toBeNull());
+  });
+
+  it('a decision that fails says why next to its row and keeps it', async () => {
+    mockPending.mockResolvedValue([luis]);
+    mockApprove.mockRejectedValue(new EngineError('already_decided', 409, 'x'));
+    await open();
+    await press('Aprobar');
+    expect(await screen.findByText('Ya lo ha decidido otra persona.')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Aprobar' })).toBeOnTheScreen();
+  });
+
+  it('a member sees no such section, and it is never asked for', async () => {
+    mockRole = 'member';
+    mockPending.mockResolvedValue([luis]);
+    await open();
+    expect(screen.queryByText('Pendientes de aprobar')).toBeNull();
+    expect(mockPending).not.toHaveBeenCalled();
+  });
+
+  it('is hidden when nothing waits', async () => {
+    await open();
+    expect(screen.queryByText('Pendientes de aprobar')).toBeNull();
+  });
+
+  it('when the list cannot be read, says so and reads it again on «Reintentar»', async () => {
+    mockPending.mockRejectedValueOnce(new EngineError('failed', 500, 'x')).mockResolvedValue([luis]);
+    await open();
+    expect(screen.getByText('No hemos podido cargar lo pendiente de aprobar.')).toBeOnTheScreen();
+    await press('Reintentar');
+    expect(await screen.findByText('Redes · hecho por Luis hoy')).toBeOnTheScreen();
   });
 });
