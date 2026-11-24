@@ -88,6 +88,7 @@ function setup(opts: { launchFails?: boolean } = {}) {
       return true;
     },
     staleRuns: async () => [...runs.values()].filter((r) => r.state === 'running' && r.messageId),
+    postRoutineCopies: async () => 0,
     postToPersonalChats: async (a, text) => {
       notices.push(`${a.name}: ${text}`);
       return 2;

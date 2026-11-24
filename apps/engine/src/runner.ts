@@ -67,6 +67,8 @@ export interface RunnerStore {
   claimSpec(runId: string, nonceHash: string): Promise<RunRecord | null>;
   /** Notes which AI account the run works on, so its usage lands on that account's card. */
   useConnection(runId: string, connectionId: string): Promise<void>;
+  /** A routine as its run is told it, with its creator's name (agent-routines.md); null when gone. */
+  routineAsk(routineId: string): Promise<{ title: string; instruction: string; audience: 'me' | 'team'; from: string } | null>;
 }
 
 export interface RunnerDeps {
@@ -218,7 +220,7 @@ async function failRun(chat: ChatDeps, deps: JobDeps, run: Pick<RunRecord, 'id' 
 async function launch(
   deps: JobDeps & { runner: RunnerDeps },
   agent: ChatAgent,
-  r: { origin: 'person' | 'schedule'; requestedBy: string | null; threadId: string | null; messageId: string | null },
+  r: { origin: 'person' | 'schedule' | 'routine'; requestedBy: string | null; threadId: string | null; messageId: string | null; routineId?: string },
 ): Promise<string> {
   const nonce = randomBytes(32).toString('base64url');
   const runId = await deps.jobs.startRun({ orgId: agent.orgId, agentId: agent.id, ...r, nonceHash: hashNonce(nonce) });
@@ -235,14 +237,29 @@ async function launch(
  * waits «working» until the run reports. Never throws: why it could not start
  * is written into the message.
  */
-export async function askRunner(chat: ChatDeps, deps: JobDeps, thread: ChatThreadHead, agent: ChatAgent, replyId: string, userId: string): Promise<void> {
+export async function askRunner(
+  chat: ChatDeps,
+  deps: JobDeps,
+  thread: ChatThreadHead,
+  agent: ChatAgent,
+  replyId: string,
+  userId: string,
+  /** A routine started it (agent-routines.md): its instruction is the request, not the thread. */
+  routineId?: string,
+): Promise<void> {
   let runId: string | null = null;
   try {
     const runner = deps.runner;
     if (!runner) throw new Error('our runner is not configured');
     const why = await preflight(chat, runner, agent.orgId);
     if (why) throw new RunnerFailure(why);
-    runId = await launch({ ...deps, runner }, agent, { origin: 'person', requestedBy: userId, threadId: thread.id, messageId: replyId });
+    runId = await launch({ ...deps, runner }, agent, {
+      origin: routineId ? 'routine' : 'person',
+      requestedBy: userId,
+      threadId: thread.id,
+      messageId: replyId,
+      ...(routineId ? { routineId } : {}),
+    });
     await chat.chat.updateReply(replyId, { steps: ['Trabajando en ello: tardo unos minutos'] });
   } catch (e) {
     runId = runId ?? (e as { runId?: string }).runId ?? null;
@@ -311,6 +328,8 @@ export function composePrompt(p: {
   now: Date;
   /** What a person asked (indication(): every message in its escaped mark), and who. */
   request: { text: string; from: string } | null;
+  /** The routine that started it, instead of a person (agent-routines.md). */
+  routine?: { title: string; instruction: string; audience: 'me' | 'team'; from: string } | null;
 }): string {
   const { agent, orgName } = p;
   const instructions = agentInstructionsPath(agent.slug);
@@ -326,7 +345,15 @@ export function composePrompt(p: {
       'haz commit y push, y sigue con lo que no dependa de ella: le llega sola a Hoy, en Ghostaff.',
     `Ahora es ${madridNow(p.now)}, hora de Madrid.`,
   ];
-  if (p.request) {
+  if (p.routine) {
+    const who = p.routine.audience === 'team' ? `a ${p.routine.from} y a cada persona que trabaja contigo` : `a ${p.routine.from}`;
+    parts.push(
+      `Esta ejecución la ha lanzado la rutina «${p.routine.title}» de ${p.routine.from}, a su hora: haz lo que pide. Tu tarea habitual (${usual}) es tu contexto; no la hagas entera salvo que la rutina lo pida.\n` +
+        `Tu último mensaje le llega ${who}, en su chat contigo en Ghostaff: escríbelo para quien lo lee, corto y con las cifras que importen. ` +
+        `Si no hay nada que contar, tu último mensaje es exactamente \`${NOTHING_NEW}\`, sin nada más, y no le llega nada.\n` +
+        `<indicacion>\n${p.routine.instruction.replace(/</g, '&lt;')}\n</indicacion>`,
+    );
+  } else if (p.request) {
     parts.push(
       `Esta ejecución la ha lanzado ${p.request.from} para hablar contigo desde Ghostaff. Atiende lo que pide: contesta, corrige o haz ` +
         `lo que pida. Tu tarea habitual (${usual}) es tu contexto; no la hagas entera salvo que te lo pida.\n` +
@@ -398,6 +425,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
     const thread = await chat.chat.thread(run.threadId);
     if (thread) request = requestOf(await chat.chat.recentMessages(thread.id, 40), thread, run);
   }
+  const routine = run.origin === 'routine' && run.routineId ? await runner.store.routineAsk(run.routineId) : null;
   const access = await recordAccess(runner, record, agent.id, run.id);
   return {
     run: run.id,
@@ -408,6 +436,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
       repo: record.repo,
       now: runner.now ? runner.now() : new Date(),
       request,
+      routine,
     }),
     model: agent.model,
     tools: agent.tools,

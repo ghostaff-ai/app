@@ -23,7 +23,7 @@ const toAgent = (r: Record<string, string>): ChatAgent => ({
   runner: r.runner as ChatAgent['runner'],
 });
 
-const RUN = 'id, org_id, agent_id, origin, state, thread_id, message_id, requested_by, nonce_hash, spec_fetched_at, connection_id';
+const RUN = 'id, org_id, agent_id, origin, state, thread_id, message_id, requested_by, nonce_hash, spec_fetched_at, connection_id, routine_id';
 const toRun = (r: Record<string, string | null>): RunRecord => ({
   id: r.id!,
   orgId: r.org_id!,
@@ -36,6 +36,7 @@ const toRun = (r: Record<string, string | null>): RunRecord => ({
   nonceHash: r.nonce_hash ?? null,
   specFetched: !!r.spec_fetched_at,
   connectionId: r.connection_id ?? null,
+  routineId: r.routine_id ?? null,
 });
 
 export function supabaseJobStore(admin: SupabaseClient): JobStore {
@@ -64,6 +65,7 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
             thread_id: x.threadId,
             message_id: x.messageId,
             nonce_hash: x.nonceHash ?? null,
+            routine_id: x.routineId ?? null,
           })
           .select('id')
           .single(),
@@ -98,6 +100,9 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
     },
     async postToPersonalChats(agent, text) {
       return check(await admin.rpc('post_to_personal_chats', { target_agent: agent.id, body: text })) as number;
+    },
+    async postRoutineCopies(routineId, text, except) {
+      return check(await admin.rpc('post_routine_copies', { target_routine: routineId, body: text, except_user: except })) as number;
     },
   };
 }
@@ -167,6 +172,18 @@ export function supabaseRunnerStore(admin: SupabaseClient): RunnerStore {
     },
     async useConnection(runId, connectionId) {
       check(await admin.from('agent_runs').update({ connection_id: connectionId }).eq('id', runId));
+    },
+    async routineAsk(routineId) {
+      const r = check(
+        await admin.from('agent_routines').select('org_id, created_by, audience, title, instruction').eq('id', routineId).maybeSingle(),
+      ) as { org_id: string; created_by: string | null; audience: 'me' | 'team'; title: string; instruction: string } | null;
+      if (!r) return null;
+      const m = r.created_by
+        ? (check(await admin.from('memberships').select('display_name').eq('org_id', r.org_id).eq('user_id', r.created_by).maybeSingle()) as {
+            display_name: string;
+          } | null)
+        : null;
+      return { title: r.title, instruction: r.instruction, audience: r.audience, from: m?.display_name ?? 'una persona del equipo' };
     },
   };
 }

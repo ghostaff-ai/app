@@ -1224,7 +1224,7 @@ export async function listDoneWithoutYou(client: SupabaseClient, orgId: string, 
 // database checks every change (rule 2), and these are the functions both the
 // screens and the agents' tool call (rule 6).
 
-interface RoutineRow {
+export interface RoutineRow {
   id: string;
   org_id: string;
   agent_id: string;
