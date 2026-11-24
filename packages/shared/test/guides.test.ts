@@ -137,6 +137,29 @@ describe('parseGuideStep', () => {
     expect(parseGuideStep('nope', landing)).toHaveProperty('error');
   });
 
+  it('a field never asks for a secret: its label cannot name one', () => {
+    const field = (label: string, f = 'username') => parseGuideStep({ blocks: [{ type: 'field', field: f, label }] }, landing);
+    for (const label of [
+      'Tu contraseña de WordPress',
+      'CONTRASEÑA',
+      'Tu contrasena',
+      'Password',
+      'La clave de tu web',
+      'Tu token',
+      'API key',
+      'Tu PIN',
+      'Código secreto',
+      'Your secret',
+    ]) {
+      const r = field(label);
+      expect(r, label).toHaveProperty('error');
+      expect((r as { error: string }).error).toMatch(/secret block/);
+    }
+    expect(field('Nombre de usuario')).toHaveProperty('step');
+    expect(field('Dirección de tu web', 'base_url')).toHaveProperty('step');
+    expect(field('Tu usuario de la pintura')).toHaveProperty('step');
+  });
+
   it('a choice image is one of the shipped drawings, never a URL', () => {
     const choice = (image: string) => ({
       blocks: [{ type: 'choice', question: '¿Qué ves?', options: [{ id: 'a', label: 'Menú', image }, { id: 'b', label: 'Otro' }] }],

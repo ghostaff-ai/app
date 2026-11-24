@@ -64,6 +64,32 @@ export const FALLBACK_STEP: GuideStep = {
   ],
 };
 
+/** A photo above this, decoded, is refused. */
+export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
+
+/** Something the person sent that the model cannot take; its message is for the person. No account was tried. */
+export class GuideInputError extends Error {}
+
+const UNREADABLE_PHOTO = 'Esa foto no se puede leer. Prueba con otra.';
+const PHOTO_TOO_BIG = 'Esa foto es demasiado grande. Prueba con una captura más pequeña.';
+
+/**
+ * Whether a photo is a JPEG the model can read: the media type, strict base64,
+ * the JPEG header (FF D8 FF) and at most MAX_PHOTO_BYTES decoded. A bad one
+ * would make every AI account answer 400 and be marked failing for nothing.
+ */
+export function validateGuidePhoto(photo: GuidePhoto): { ok: true } | { ok: false; message: string } {
+  const { mediaType, data } = (photo ?? {}) as Partial<GuidePhoto>;
+  if (mediaType !== 'image/jpeg' || typeof data !== 'string' || data.length === 0) return { ok: false, message: UNREADABLE_PHOTO };
+  // Checked on the text first, so an oversized photo is never decoded.
+  if (data.length > Math.ceil(MAX_PHOTO_BYTES / 3) * 4) return { ok: false, message: PHOTO_TOO_BIG };
+  if (data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) return { ok: false, message: UNREADABLE_PHOTO };
+  const bytes = Buffer.from(data, 'base64');
+  if (bytes.length > MAX_PHOTO_BYTES) return { ok: false, message: PHOTO_TOO_BIG };
+  if (bytes.length < 3 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) return { ok: false, message: UNREADABLE_PHOTO };
+  return { ok: true };
+}
+
 /** How many past entries the model reads: a long guide keeps its latest ones. */
 const MAX_HISTORY = 40;
 
@@ -335,10 +361,15 @@ function withPhoto(turns: ModelTurn[], photo: GuidePhoto | undefined): ModelTurn
 
 /**
  * The next step of a guide, after the person's `answer` and with their `photo`
- * (the latest one only). Throws when no AI account answers (AiFailure or the
- * provider's error); a step the model gets wrong twice gives FALLBACK_STEP.
+ * (the latest one only). Throws GuideInputError for a photo the model cannot
+ * read, before any account is tried; throws when no AI account answers
+ * (AiFailure or the provider's error); a step the model gets wrong twice gives FALLBACK_STEP.
  */
 export async function nextStep(deps: GuideModelDeps, guide: GuideState, answer?: GuideAnswer, photo?: GuidePhoto): Promise<GuideStep> {
+  if (photo !== undefined) {
+    const valid = validateGuidePhoto(photo);
+    if (!valid.ok) throw new GuideInputError(valid.message);
+  }
   const system = guideSystemPrompt(guide);
   const turns: ModelTurn[] = [{ role: 'user', content: guideTurn(guide, answer, !!photo) }];
   for (let round = 0; round < 2; round++) {

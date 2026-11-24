@@ -1,7 +1,7 @@
 import type { GuideAnswer, GuideLanding, GuidePhoto, GuideStep } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { type AiAccount, AiFailure, type AiUse, type ModelTurn, type Writer } from '../src/chat';
-import { FALLBACK_STEP, type GuideModelDeps, type GuideState, guideSystemPrompt, nextStep, SHOW_STEP, showStepSpec } from '../src/guideModel';
+import { FALLBACK_STEP, GuideInputError, type GuideModelDeps, type GuideState, guideSystemPrompt, nextStep, SHOW_STEP, showStepSpec, validateGuidePhoto } from '../src/guideModel';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 const REDES = '20000000-0000-0000-0000-000000000002';
@@ -20,7 +20,8 @@ const guide = (history: GuideState['history'] = []): GuideState => ({
   history,
 });
 
-const PHOTO: GuidePhoto = { mediaType: 'image/jpeg', data: '/9j/4AAQSkZJRgABAQ' };
+// A JPEG starts with FF D8 FF.
+const PHOTO: GuidePhoto = { mediaType: 'image/jpeg', data: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]).toString('base64') };
 
 const openUsers: GuideStep = {
   blocks: [
@@ -262,5 +263,44 @@ describe('the show_step tool and the prompt', () => {
     expect(p).toMatch(/https/);
     expect(p).toMatch(/plugin de seguridad/);
     expect(p).toMatch(/blocked/);
+  });
+});
+
+describe('a photo the model cannot read', () => {
+  const jpeg = (bytes: number) => {
+    const b = Buffer.alloc(bytes);
+    b.set([0xff, 0xd8, 0xff, 0xe0]);
+    return b.toString('base64');
+  };
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]).toString('base64');
+
+  it('accepts a JPEG up to 2 MB', () => {
+    expect(validateGuidePhoto(PHOTO)).toEqual({ ok: true });
+    expect(validateGuidePhoto({ mediaType: 'image/jpeg', data: jpeg(2 * 1024 * 1024) })).toEqual({ ok: true });
+  });
+
+  it.each([
+    ['PNG bytes labelled jpeg', { mediaType: 'image/jpeg', data: png }],
+    ['corrupt base64', { mediaType: 'image/jpeg', data: '/9j/4AAQ*not base64*' }],
+    ['base64 of the wrong length', { mediaType: 'image/jpeg', data: '/9j/4AA' }],
+    ['more than 2 MB', { mediaType: 'image/jpeg', data: jpeg(2 * 1024 * 1024 + 1) }],
+    ['another media type', { mediaType: 'image/png', data: PHOTO.data }],
+    ['no data', { mediaType: 'image/jpeg', data: '' }],
+  ])('%s throws GuideInputError before any account is tried', async (_name, photo) => {
+    expect(validateGuidePhoto(photo as GuidePhoto)).toMatchObject({ ok: false });
+    const s = scripted([{ step: openUsers }]);
+    const d = deps({ 'key-1': s.write });
+    let aiAccountsCalled = false;
+    d.aiAccounts = async () => {
+      aiAccountsCalled = true;
+      return [{ id: 'key-1', provider: 'anthropic' }];
+    };
+    const err = await nextStep(d, guide(), undefined, photo as GuidePhoto).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GuideInputError);
+    expect((err as Error).message).toMatch(/foto/);
+    expect(aiAccountsCalled).toBe(false);
+    expect(d.asked).toEqual([]);
+    expect(s.requests).toEqual([]);
+    expect(d.used).toEqual([]);
   });
 });

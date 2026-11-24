@@ -136,6 +136,16 @@ export function parseLanding(raw: unknown): GuideLanding | Failure {
   return landing;
 }
 
+/**
+ * Whether a label asks for a secret, in Spanish or English, ignoring case and
+ * accents. Long words match inside others («contraseñas», «apitoken»); «key»
+ * and «pin» only as words, so «pintura» passes. Errs on refusing.
+ */
+function namesASecret(label: string): boolean {
+  const plain = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return /contrasen|password|passwd|clave|token|secret/.test(plain) || /\b(keys?|pins?)\b/.test(plain);
+}
+
 function parseBlock(raw: unknown, landing: GuideLanding): GuideBlock | Failure {
   if (!isRecord(raw) || typeof raw.type !== 'string') return { error: 'each block must be an object with a type' };
   const text = (v: unknown, max: number, what: string): string | Failure => {
@@ -217,7 +227,12 @@ function parseBlock(raw: unknown, landing: GuideLanding): GuideBlock | Failure {
         return { error: `field ${String(f)} is not allowed for auth ${landing.auth}; allowed: ${fieldsFor(landing.auth).filter((x) => TEXT_FIELDS.includes(x)).join(', ')}` };
       }
       const l = text(raw.label, MAX_BULLET, 'field label');
-      return typeof l === 'string' ? { type: 'field', field: f as GuideTextField, label: l } : l;
+      if (typeof l !== 'string') return l;
+      // What is typed in a field travels to the model: one that names a secret would carry it there.
+      if (namesASecret(l)) {
+        return { error: `field label «${l}» names a secret; a field is plain text, ask for a password, token or key only with a secret block` };
+      }
+      return { type: 'field', field: f as GuideTextField, label: l };
     }
     case 'confirm':
       return { type: 'confirm' };
