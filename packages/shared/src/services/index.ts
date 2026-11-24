@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type AiUsageDay, limitsFromRow } from '../aiUsage';
 import type { AccountProvider } from '../connectors';
+import type { GuideAnswer, GuideCheckOutcome, GuideCheckValues, GuidePhoto, GuideStatus, GuideStep, GuideView } from '../guides';
 import type {
   AccountConnectResult,
   Agent,
@@ -771,6 +772,50 @@ export async function decideAction(engine: EngineAccess, actionId: string, decis
  */
 export async function resumeAfterAccount(engine: EngineAccess, threadId: string, askId: string): Promise<{ resumed: boolean }> {
   return callEngine(engine, 'POST', `/threads/${encodeURIComponent(threadId)}/resume`, { askId });
+}
+
+// Guides (docs/plans/ready/guided-access.md): the guide's screen reads one, asks
+// for each step and checks what the person typed; an owner decides a member's grant.
+
+/** The guide as its screen reads it, with the step it stopped at. */
+export async function getGuide(engine: EngineAccess, guideId: string): Promise<GuideView> {
+  return callEngine(engine, 'GET', `/guides/${encodeURIComponent(guideId)}`);
+}
+
+/**
+ * The next step, written by the guide's model: after an answer, a photo of the
+ * person's screen, or nothing (the first step, and the closing one after a
+ * passed check). Never a secret: those travel only in `checkGuide`.
+ */
+export async function guideStep(
+  engine: EngineAccess,
+  guideId: string,
+  input: { answer?: GuideAnswer; photo?: GuidePhoto } = {},
+): Promise<{ step: GuideStep; status: GuideStatus }> {
+  const body: { answer?: GuideAnswer; photo?: GuidePhoto } = {};
+  if (input.answer) body.answer = input.answer;
+  if (input.photo) body.photo = input.photo;
+  return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/step`, body);
+}
+
+/** Ghostaff tries the access with what the person typed; once it works, the secret is in the vault. */
+export async function checkGuide(engine: EngineAccess, guideId: string, values: GuideCheckValues): Promise<GuideCheckOutcome> {
+  return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/check`, { values });
+}
+
+/** An owner lets the agent use what a member granted. */
+export async function approveGuide(engine: EngineAccess, guideId: string): Promise<{ status: 'done' }> {
+  return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/approve`);
+}
+
+/** An owner turns down what a member granted; the secret leaves the vault. */
+export async function rejectGuide(engine: EngineAccess, guideId: string): Promise<{ status: 'rejected' }> {
+  return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/reject`);
+}
+
+/** Lets the agent go on once its guide is done; once, whoever asks (`already_done` after). */
+export async function resumeAfterGuide(engine: EngineAccess, threadId: string, guideId: string): Promise<{ resumed: boolean }> {
+  return callEngine(engine, 'POST', `/threads/${encodeURIComponent(threadId)}/resume`, { guideId });
 }
 
 /**

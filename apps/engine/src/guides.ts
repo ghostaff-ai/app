@@ -16,7 +16,7 @@
 // What the person typed in the check goes to `secretFrom` and the vault only:
 // never into the row, its history, a message, a log or an error.
 
-import { agentEmail, type GuideAnswer, type GuideAuth, type GuideField, type GuideLanding, type GuidePart, type GuidePhoto, type GuideStatus, type GuideStep, guidedProvider, isGuidePart, type MessagePart, normaliseBase, parseLanding } from '@ghostaff/shared';
+import { agentEmail, type GuideAnswer, type GuideAuth, type GuideCheckOutcome, type GuideField, type GuideLanding, type GuidePart, type GuidePhoto, type GuideStatus, type GuideStep, type GuideView, guidedProvider, isGuidePart, type MessagePart, normaliseBase, parseLanding } from '@ghostaff/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ChatAgent, ChatDeps, Resumable } from './chat';
 import { type Membership, Refusal, requireOwner } from './connections';
@@ -236,25 +236,6 @@ async function addressOf(deps: GuideDeps, g: GuideRecord): Promise<string> {
 const stepsOf = (history: readonly GuideHistoryEntry[]) =>
   history.filter((e): e is Extract<GuideHistoryEntry, { type: 'step' }> => e.type === 'step').map((e) => e.step);
 
-export interface GuideView {
-  id: string;
-  threadId: string;
-  status: GuideStatus;
-  app: string;
-  goal: string;
-  why: string;
-  auth: GuideAuth;
-  agentEmail: string;
-  /** The step shown last; null before the first (ask for it with POST /guides/:id/step). */
-  step: GuideStep | null;
-  /** How many steps have been shown, for the progress dots. */
-  steps: number;
-  /** Whether the caller is an owner and the guide waits for one. */
-  mayApprove: boolean;
-  blockedReason: string | null;
-  undo: string | null;
-}
-
 /** What the guide's screen needs. Anyone who may read the conversation may read it. */
 export async function getGuide(deps: GuideDeps, userId: string, id: unknown): Promise<GuideView> {
   const g = await load(deps, id);
@@ -408,7 +389,7 @@ async function grant(deps: GuideDeps, g: GuideRecord, base: string, secret: Guid
   }
 }
 
-export type CheckOutcome = { ok: true; status: 'checked' | 'done' } | { ok: false; field?: GuideField; message: string };
+export type CheckOutcome = GuideCheckOutcome;
 
 /**
  * Tries what the person typed against the app. When it works the credential

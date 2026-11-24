@@ -72,6 +72,32 @@ export type GuideAnswer =
   | { type: 'confirm'; ok: boolean }
   | { type: 'text'; field: GuideTextField; value: string };
 
+/** What the guide's screen reads (GET /guides/:id on the engine). */
+export interface GuideView {
+  id: string;
+  threadId: string;
+  status: GuideStatus;
+  app: string;
+  goal: string;
+  why: string;
+  auth: GuideAuth;
+  agentEmail: string;
+  /** The step shown last; null before the first (ask for it with an empty step). */
+  step: GuideStep | null;
+  /** How many steps have been shown, for the progress dots. */
+  steps: number;
+  /** Whether the caller is an owner and the guide waits for one. */
+  mayApprove: boolean;
+  blockedReason: string | null;
+  undo: string | null;
+}
+
+/** What the person typed, sent only in the check: the one place a secret travels. */
+export type GuideCheckValues = Partial<Record<GuideField, string>>;
+
+/** How the check went: what to fix next to which field, or where the guide stands now. */
+export type GuideCheckOutcome = { ok: true; status: 'checked' | 'done' } | { ok: false; field?: GuideField; message: string };
+
 const PROVIDER_IDS: readonly string[] = ACCOUNT_PROVIDERS;
 const AUTHS: readonly GuideAuth[] = ['basic', 'bearer', 'header'];
 const SECRET_FIELDS: readonly string[] = ['password', 'token', 'key'];
