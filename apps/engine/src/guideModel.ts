@@ -20,9 +20,11 @@ import {
   type GuideLanding,
   type GuidePhoto,
   type GuideStep,
+  type Limits,
   parseGuideStep,
+  type TokenUsage,
 } from '@ghostaff/shared';
-import { type AiAccount, AiFailure, type ChatDeps, type ChatStore, failureKind, type ModelTurn } from './chat';
+import { type AiAccount, AiFailure, type ChatDeps, type ChatStore, failureKind, type ModelTurn, recordUse } from './chat';
 import type { AgentTools, ToolSpec } from './tools';
 
 /** One thing that happened in a guide, oldest first. JSON, kept in `guides.history`; never a secret, never a photo. */
@@ -41,11 +43,15 @@ export interface GuideState {
   history: GuideHistoryEntry[];
 }
 
-/** The organisation's AI accounts and their writers, as a reply uses them. */
+/** The organisation's AI accounts, their writers and how their use is recorded, as a reply uses them. */
 export interface GuideModelDeps {
   orgId: string;
+  /** The guide's agent, recorded with each account's use. */
+  agentId?: string;
   aiAccounts: ChatStore['aiAccounts'];
   writerFor: ChatDeps['writerFor'];
+  recordAiUse: ChatStore['recordAiUse'];
+  costOf?: ChatDeps['costOf'];
 }
 
 export const SHOW_STEP = 'show_step';
@@ -265,13 +271,19 @@ function captureTools(landing: GuideLanding, attempt: Attempt): AgentTools {
   };
 }
 
-/** One model call, through the accounts in order: the next only if one fails before sending a step. */
+/**
+ * One model call, through the accounts in order: the next only if one fails
+ * before sending a step. Each account's use is recorded as a reply's is, so a
+ * failing one turns failing and its tokens are counted.
+ */
 async function ask(deps: GuideModelDeps, landing: GuideLanding, system: string, messages: ModelTurn[]): Promise<Attempt> {
   const accounts: AiAccount[] = await deps.aiAccounts(deps.orgId);
   if (accounts.length === 0) throw new AiFailure('refused', 'the organisation has no AI account');
+  const who = { orgId: deps.orgId, agentId: deps.agentId ?? null };
   for (const [i, account] of accounts.entries()) {
     const last = i === accounts.length - 1;
     const attempt: Attempt = { got: false, text: '' };
+    let usage: { model: string; tokens: TokenUsage; limits: Limits | null } | null = null;
     try {
       const write = await deps.writerFor(deps.orgId, account, { busyFails: !last });
       await write({
@@ -282,10 +294,16 @@ async function ask(deps: GuideModelDeps, landing: GuideLanding, system: string, 
           attempt.text += t;
         },
         onTool: () => {},
+        onUsage: (u) => {
+          usage = u;
+        },
       });
+      void recordUse(deps, deps.costOf, who, account, 'ok', usage);
       return attempt;
     } catch (e) {
-      console.warn('guide: ai account failed', account.provider, failureKind(e), e instanceof Error ? e.message.slice(0, 200) : typeof e);
+      const kind = failureKind(e);
+      console.warn('guide: ai account failed', account.provider, kind, e instanceof Error ? e.message.slice(0, 200) : typeof e);
+      if (kind !== 'busy') void recordUse(deps, deps.costOf, who, account, kind, usage, e instanceof AiFailure ? e.limits : null);
       if (attempt.got) return attempt;
       if (last) throw e;
     }

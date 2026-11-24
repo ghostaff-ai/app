@@ -7,15 +7,17 @@
 // on loopback, behind a token written only into the run's throwaway HOME,
 // serving the reply's gated tools, so a write still waits for an owner.
 //
-// A turn's images (a guide's photo of the person's screen) are written into
-// the throwaway HOME, the prompt names each file, and Claude Code gets its
-// `Read` tool allowed on those files only.
+// A turn's images (a guide's photo of the person's screen) are written into a
+// folder of their own inside the throwaway HOME, which becomes Claude Code's
+// working folder: what it may read there is the photo and nothing else (not
+// mcp.json, which stays in HOME). The prompt names each file, and `Read` is
+// allowed on those files only.
 //
 // What Claude Code reports on the way, its `rate_limit_event` lines and the
 // `result` event's usage, goes to the reply's onUsage: the subscription's card
 // shows its 5-hour and weekly limits from them.
 
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Limits, limitsFromEvent, mergeLimits, NO_TOKENS, tokensFromUsage } from '@ghostaff/shared';
 import { AiFailure, type ModelTurn, type Writer } from './chat';
@@ -124,7 +126,12 @@ async function runOnce(
       configPath = await writeMcpConfig(home.path, server);
     }
     const photos = await writePhotos(home.path, messages);
-    const child = run(claudeArgs(model, system, configPath, photos), { home: home.path, token, stdin: transcript(messages, photos) });
+    const child = run(claudeArgs(model, system, configPath, photos.paths), {
+      home: home.path,
+      token,
+      stdin: transcript(messages, photos.paths),
+      ...(photos.dir ? { cwd: photos.dir } : {}),
+    });
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -178,16 +185,22 @@ async function runOnce(
   }
 }
 
-/** Each turn's images as files in the run's HOME, in the order they appear; removed with it. */
-async function writePhotos(home: string, messages: ModelTurn[]): Promise<string[]> {
+/**
+ * Each turn's images as files, in the order they appear, in a folder of the
+ * run's HOME that holds nothing else (Claude Code's working folder); removed with HOME.
+ */
+async function writePhotos(home: string, messages: ModelTurn[]): Promise<{ dir: string | null; paths: string[] }> {
   const images = messages.flatMap((m) => m.images ?? []);
+  if (images.length === 0) return { dir: null, paths: [] };
+  const dir = join(home, 'photos');
+  await mkdir(dir, { mode: 0o700 });
   const paths: string[] = [];
   for (const [i, image] of images.entries()) {
-    const path = join(home, `photo-${i + 1}.jpg`);
+    const path = join(dir, `photo-${i + 1}.jpg`);
     await writeFile(path, Buffer.from(image.data, 'base64'), { mode: 0o600 });
     paths.push(path);
   }
-  return paths;
+  return { dir, paths };
 }
 
 /** Where Claude Code finds the reply's tools server: a file only the run's HOME holds, never an argument. */

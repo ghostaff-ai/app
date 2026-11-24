@@ -181,9 +181,9 @@ describe('an agent answering on the Claude subscription', () => {
   it("gives Claude Code the person's photo as a file in its HOME, named in the prompt, and removes it after", async () => {
     let seen: { files: string[]; photo: Buffer | null } = { files: [], photo: null };
     const r = toolRunner(async ({ home }) => {
-      const files = await readdir(home);
+      const files = await readdir(join(home, 'photos'));
       const name = files.find((f) => f.endsWith('.jpg'));
-      seen = { files, photo: name ? await readFile(join(home, name)) : null };
+      seen = { files, photo: name ? await readFile(join(home, 'photos', name)) : null };
     });
     const data = Buffer.from('a jpeg, honest').toString('base64');
     await subscriptionWriter(TOKEN, r.run, 'm')({
@@ -199,12 +199,56 @@ describe('an agent answering on the Claude subscription', () => {
     });
     const [call] = r.calls;
     const home = call?.home ?? '';
-    const photoPath = join(home, seen.files.find((f) => f.endsWith('.jpg')) ?? 'missing');
+    const photoPath = join(home, 'photos', seen.files.find((f) => f.endsWith('.jpg')) ?? 'missing');
     expect(seen.photo?.toString()).toBe('a jpeg, honest');
     expect(call?.args[call.args.indexOf('--tools') + 1]).toBe('Read');
     expect(call?.args[call.args.indexOf('--allowedTools') + 1]).toBe(`Read(/${photoPath})`);
     expect(r.calls[0]?.args).not.toContain('--mcp-config');
     expect(existsSync(home)).toBe(false);
+  });
+
+  it('runs Claude Code with a photo in a working folder that holds only the photo, away from mcp.json', async () => {
+    let seen: { cwd: string; files: string[] } = { cwd: '', files: [] };
+    const calls: { args: string[]; home: string; cwd?: string }[] = [];
+    const run: PrintRunner = (args, opts) => {
+      calls.push({ args, home: opts.home, cwd: opts.cwd });
+      return {
+        lines: (async function* () {
+          seen = { cwd: opts.cwd ?? '', files: await readdir(opts.cwd ?? opts.home) };
+          yield result();
+        })(),
+        done: Promise.resolve(0),
+        kill: async () => {},
+      };
+    };
+    const tools = { ...NO_TOOLS, specs: [{ name: 'show_step', description: 'd', input_schema: { type: 'object' as const, properties: {} } }] };
+    await subscriptionWriter(TOKEN, run, 'm')({
+      system: 'Eres la guía.',
+      messages: [{ role: 'user', content: 'Mira.', images: [{ mediaType: 'image/jpeg', data: 'AAAA' }] }],
+      tools,
+      onText: () => {},
+      onTool: () => {},
+    });
+    const [call] = calls;
+    const args = call?.args ?? [];
+    const mcpPath = args[args.indexOf('--mcp-config') + 1] ?? '';
+    expect(seen.cwd).not.toBe('');
+    expect(seen.cwd).not.toBe(call?.home);
+    expect(seen.files).toEqual(['photo-1.jpg']);
+    expect(mcpPath.startsWith(seen.cwd)).toBe(false);
+    expect(args[args.indexOf('--allowedTools') + 1]).toBe(`mcp__ghostaff,Read(/${join(seen.cwd, 'photo-1.jpg')})`);
+  });
+
+  it('keeps HOME as the working folder when there is no photo', async () => {
+    const r = toolRunner(async () => {});
+    await ask(subscriptionWriter(TOKEN, r.run, 'm'));
+    const cwds: (string | undefined)[] = [];
+    const run: PrintRunner = (args, opts) => {
+      cwds.push(opts.cwd);
+      return r.run(args, opts);
+    };
+    await ask(subscriptionWriter(TOKEN, run, 'm'));
+    expect(cwds).toEqual([undefined]);
   });
 
   it('names the photo file in the prompt, on the turn that carries it', () => {

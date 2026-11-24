@@ -443,12 +443,12 @@ async function writeReply(
             }
           },
         });
-        void recordUse(deps, agent, account, 'ok', got.usage);
+        void recordUse(deps.chat, deps.costOf, { orgId: agent.orgId, agentId: agent.id }, account, 'ok', got.usage);
         break;
       } catch (e) {
         const kind = failureKind(e);
         console.warn('ai account failed', account.provider, kind, e instanceof Error ? e.message.slice(0, 200) : typeof e);
-        if (kind !== 'busy') void recordUse(deps, agent, account, kind, got.usage, e instanceof AiFailure ? e.limits : null);
+        if (kind !== 'busy') void recordUse(deps.chat, deps.costOf, { orgId: agent.orgId, agentId: agent.id }, account, kind, got.usage, e instanceof AiFailure ? e.limits : null);
         if (started || last) throw e;
       }
     }
@@ -465,10 +465,11 @@ async function writeReply(
   }
 }
 
-/** Records one account's reply; never fails the reply. */
-async function recordUse(
-  deps: ChatDeps,
-  agent: ChatAgent,
+/** Records how one account did on a reply (or a guide's step); never fails it. */
+export async function recordUse(
+  store: Pick<ChatStore, 'recordAiUse'>,
+  costOf: ChatDeps['costOf'],
+  who: { orgId: string; agentId: string | null },
   account: AiAccount,
   outcome: AiUse['outcome'],
   usage: { model: string; tokens: TokenUsage; limits: Limits | null } | null,
@@ -476,15 +477,15 @@ async function recordUse(
 ): Promise<void> {
   const tokens = usage?.tokens ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   try {
-    await deps.chat.recordAiUse({
-      orgId: agent.orgId,
+    await store.recordAiUse({
+      orgId: who.orgId,
       connectionId: account.id,
-      agentId: agent.id,
+      agentId: who.agentId,
       source: 'chat',
       outcome,
       model: usage?.model ?? null,
       tokens,
-      costUsd: usage && deps.costOf ? deps.costOf(account, usage.model, tokens) : null,
+      costUsd: usage && costOf ? costOf(account, usage.model, tokens) : null,
       limits: usage?.limits ?? failureLimits,
     });
   } catch (e) {

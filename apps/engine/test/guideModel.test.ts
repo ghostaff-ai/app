@@ -1,9 +1,10 @@
 import type { GuideAnswer, GuideLanding, GuidePhoto, GuideStep } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
-import { type AiAccount, AiFailure, type ModelTurn, type Writer } from '../src/chat';
+import { type AiAccount, AiFailure, type AiUse, type ModelTurn, type Writer } from '../src/chat';
 import { FALLBACK_STEP, type GuideModelDeps, type GuideState, guideSystemPrompt, nextStep, SHOW_STEP, showStepSpec } from '../src/guideModel';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
+const REDES = '20000000-0000-0000-0000-000000000002';
 
 const wordpress: GuideLanding = {
   auth: 'basic',
@@ -62,11 +63,18 @@ function scripted(moves: Array<{ step: unknown } | { text: string } | { fail: Er
   return { write, requests };
 }
 
-function deps(writers: Record<string, Writer>, accounts: AiAccount[] = [{ id: 'key-1', provider: 'anthropic' }]): GuideModelDeps & { asked: string[] } {
+function deps(writers: Record<string, Writer>, accounts: AiAccount[] = [{ id: 'key-1', provider: 'anthropic' }]): GuideModelDeps & { asked: string[]; used: AiUse[] } {
   const asked: string[] = [];
+  const used: AiUse[] = [];
   return {
     orgId: ORG,
+    agentId: REDES,
     asked,
+    used,
+    recordAiUse: async (u) => {
+      used.push(u);
+    },
+    costOf: (account, _model, tokens) => (account.provider === 'claude' ? null : tokens.output / 1000),
     aiAccounts: async (org) => {
       expect(org).toBe(ORG);
       return accounts;
@@ -195,6 +203,25 @@ describe('a step of a guide, from the model', () => {
     ]);
     expect(await nextStep(d2, guide())).toEqual(openUsers);
     expect(d2.asked).toEqual(['sub']);
+  });
+
+  it('records each account it tried, like a reply: the failing one as failed, the one that answered as ok', async () => {
+    const tokens = { input: 900, output: 120, cacheRead: 0, cacheWrite: 0 };
+    const broken = scripted([{ fail: new AiFailure('limited', 'at its limit') }]);
+    const good: Writer = async (req) => {
+      await req.tools.run(SHOW_STEP, openUsers);
+      req.onUsage?.({ model: 'claude-opus-5-5', tokens, limits: null });
+    };
+    const d = deps({ sub: broken.write, 'key-1': good }, [
+      { id: 'sub', provider: 'claude' },
+      { id: 'key-1', provider: 'anthropic' },
+    ]);
+    expect(await nextStep(d, guide())).toEqual(openUsers);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(d.used).toEqual([
+      { orgId: ORG, connectionId: 'sub', agentId: REDES, source: 'chat', outcome: 'limited', model: null, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: null, limits: null },
+      { orgId: ORG, connectionId: 'key-1', agentId: REDES, source: 'chat', outcome: 'ok', model: 'claude-opus-5-5', tokens, costUsd: 0.12, limits: null },
+    ]);
   });
 
   it('fails when the organisation has no AI account, or none answers', async () => {
