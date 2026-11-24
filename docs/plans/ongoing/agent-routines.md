@@ -2,7 +2,7 @@
 
 **Priority:** high — «runs its routine work» is half of what Ghostaff promises, and today no customer can make an agent work on a timetable: only we can, by CLI
 **Gate:** none
-**Next:** build it on `feat/agent-routines` (worktree `.claude/worktrees/agent-routines`): migration and pgTAP first, then shared, engine, settings tools, app
+**Next:** once the deploy of #70 is on beta, make a «Solo para mí» routine with a chat agent a few minutes ahead and check it answers in your chat; then one by asking Secretaría, approving its card
 
 **Goal:** Anyone who talks to an agent can give it routines («cada viernes a las 9, mándame el resumen de ventas»), from a clock on top of its chat or by asking, and each routine's answer lands in their chat with that agent as if they had written to it at that hour.
 
@@ -73,12 +73,12 @@ Routines are settings: defined once in `packages/shared/src/services/settings.ts
 
 ## Tasks
 
-- [ ] Migration and pgTAP test
-- [ ] Shared: model, timetable helpers with unit tests, services
-- [ ] Engine: tick, chat turn, runner run, report, pause on creator gone, with unit tests
-- [ ] Settings tools and approval by the receiver, with tests
-- [ ] App: clock, list, form, agent page row, routine line in the chat
-- [ ] End-to-end flow in `.maestro/flows/ci/`
+- [x] Migration and pgTAP test
+- [x] Shared: model, timetable helpers with unit tests, services
+- [x] Engine: tick, chat turn, runner run, report, pause on creator gone, with unit tests
+- [x] Settings tools and approval by the receiver, with tests
+- [x] App: clock, list, form, agent page row, routine line in the chat
+- [x] End-to-end flow in `.maestro/flows/ci/`
 - [ ] Landed on beta and checked with a real routine
 - [ ] Next stage: the engine picks each turn's kind (below)
 
@@ -92,6 +92,10 @@ That is half of [agent-memory.md](../ready/agent-memory.md) decision 3: «whethe
 - **What a chat turn of a runner agent gets**: its instructions (`agents.task`, projected from the record), its memory stores once [agent-memory.md](../ready/agent-memory.md) lands, and the connected accounts' tools; no clone.
 - **The same for messages, not only routines**: a person writing to Legal also starts a container today.
 - **Measure first**: per routine run, origin, runner, time and tokens (`agent_runs`, the AI account's card), so the saving is seen, not guessed.
+
+## Done
+
+- 2026-11-24, [#70](https://github.com/ghostaff-ai/app/pull/70) merged: everything but beta. Checked locally: `pnpm check`, every pgTAP file, the screens on web against a local Supabase; CI green, end-to-end included. Not checked: a routine firing against a real AI account.
 
 ## Decisions
 
