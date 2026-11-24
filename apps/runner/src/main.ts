@@ -170,10 +170,12 @@ async function main(): Promise<number> {
     const git = asAgent(ids, env);
     git(['config', '--global', 'user.name', spec.author.name]);
     git(['config', '--global', 'user.email', spec.author.email]);
-    git(['config', '--global', 'credential.helper', `!node ${HELPER} ${tokens.port}`]);
+    // The helper answers git only for the record's own host, with the run's user.
+    const remote = new URL(spec.record.cloneUrl);
+    git(['config', '--global', 'credential.helper', `!node ${HELPER} ${tokens.port} ${remote.protocol.replace(':', '')} ${remote.host} ${spec.record.username}`]);
     git(['config', '--global', 'push.default', 'current']);
     const record = recordDir(ids.home);
-    git(['clone', '--quiet', `https://github.com/${spec.record.repo}.git`, record]);
+    git(['clone', '--quiet', spec.record.cloneUrl, record]);
     if (existsSync(join(record, '.githooks'))) asAgent(ids, env, record)(['config', 'core.hooksPath', '.githooks']);
 
     const decisions = join(record, spec.decisionsDir);

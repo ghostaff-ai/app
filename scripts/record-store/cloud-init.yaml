@@ -25,7 +25,7 @@ write_files:
       ExecStartPre=/bin/mkdir -p /home/forgejo-runner
       ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries __REGISTRY__
       ExecStartPre=-/usr/bin/docker rm -f forgejo
-      ExecStart=/usr/bin/docker run --rm --name forgejo -p 3000:3000 -v /mnt/disks/forgejo:/data \
+      ExecStart=/usr/bin/docker run --rm --pull always --name forgejo -p 3000:3000 -v /mnt/disks/forgejo:/data \
         -e USER_UID=1000 -e USER_GID=1000 \
         -e FORGEJO__database__DB_TYPE=sqlite3 \
         -e FORGEJO__server__ROOT_URL=http://__IP__:3000/ \

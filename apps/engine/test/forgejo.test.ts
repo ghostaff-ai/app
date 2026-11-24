@@ -184,8 +184,8 @@ describe('forgejoAdmin', () => {
     const admin = forgejoAdmin(CFG, f);
     expect(await admin.sweepRunTokens(user, new Date('2026-11-24T07:00:00Z'))).toBe(1);
     expect(deleted).toEqual([old]);
-    await admin.revokeRunToken(user, fresh);
-    await admin.revokeRunToken(user, 'ya-no-esta');
+    await admin.revokeRunTokens(user, '9b6a4c1e-1111-4222-8333-944455556666');
+    await admin.revokeRunTokens(user, '00000000-0000-4000-8000-000000000000');
     expect(deleted).toEqual([old, fresh]);
   });
 

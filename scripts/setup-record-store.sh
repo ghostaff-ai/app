@@ -52,10 +52,11 @@ gcloud artifacts repositories describe record-store --location "$R" --project "$
 retry gcloud artifacts repositories add-iam-policy-binding record-store --location "$R" --project "$P" \
   --member "serviceAccount:$VM_SA" --role roles/artifactregistry.reader
 if ! gcloud artifacts docker images describe "$IMAGE" --project "$P" >/dev/null 2>&1; then
+  # The VM is amd64: pushed for that platform explicitly, or a Mac with Apple Silicon would push its own arm64.
   docker pull --platform linux/amd64 "codeberg.org/forgejo/forgejo:$FORGEJO_VERSION"
   docker tag "codeberg.org/forgejo/forgejo:$FORGEJO_VERSION" "$IMAGE"
   gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin "https://$REGISTRY"
-  docker push "$IMAGE"
+  docker push --platform linux/amd64 "$IMAGE"
   docker logout "https://$REGISTRY" >/dev/null
 fi
 
@@ -67,8 +68,10 @@ gcloud compute firewall-rules describe record-store-from-vpc --project "$P" >/de
 gcloud compute addresses describe "$VM" --region "$R" --project "$P" >/dev/null 2>&1 ||
   gcloud compute addresses create "$VM" --region "$R" --project "$P" --subnet "$NETWORK" >/dev/null
 IP=$(gcloud compute addresses describe "$VM" --region "$R" --project "$P" --format 'value(address)')
-# Deploying the engine and the runner onto the VPC (Direct VPC egress) needs this on the deployer.
+# Deploying the engine and the runner onto the VPC (Direct VPC egress) needs these on the deployer: using the
+# subnet, and reading the record store's address (scripts/deploy-engine.sh, deploy-runner.sh).
 retry gcloud projects add-iam-policy-binding "$P" --member "serviceAccount:$DEPLOYER_SA" --role roles/compute.networkUser --condition None
+retry gcloud projects add-iam-policy-binding "$P" --member "serviceAccount:$DEPLOYER_SA" --role roles/compute.networkViewer --condition None
 
 echo "== The data disk and its daily snapshot, 30 days, in $R"
 gcloud compute resource-policies describe "$POLICY" --region "$R" --project "$P" >/dev/null 2>&1 ||

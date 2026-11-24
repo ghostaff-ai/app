@@ -15,8 +15,11 @@ export interface RunSpec {
   model: string;
   tools: string[];
   maxTurns: number;
-  /** The record token is new for this run (never cached or shared) and stops working at `expiresAt`. */
-  record: { repo: string; token: string; expiresAt: string };
+  /**
+   * The record: cloned from `cloneUrl` (GitHub, or our record store on the VPC) with `token` as the
+   * password of `username`. The token is new for this run (never cached or shared); renew it at `expiresAt`.
+   */
+  record: { repo: string; cloneUrl: string; username: string; token: string; expiresAt: string };
   author: { name: string; email: string };
   claudeToken: string;
   decisionsDir: string;
@@ -42,6 +45,11 @@ export const NOTHING_NEW = 'SIN NOVEDAD';
 
 const isRepo = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(s);
 const isName = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(s);
+/** A git URL with nothing in it a shell or git could read as an option: GitHub over HTTPS, or our record store. */
+const isCloneUrl = (s: unknown): s is string =>
+  typeof s === 'string' &&
+  (/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(s) || /^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?\/records\/[a-z0-9-]+\.git$/.test(s));
+const isGitUser = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/.test(s);
 
 /** The spec as the engine sent it, checked: nothing in it reaches a command line unchecked. */
 export function readSpec(body: unknown): RunSpec {
@@ -55,7 +63,8 @@ export function readSpec(body: unknown): RunSpec {
     typeof b.model === 'string' && /^[a-z0-9][a-z0-9.[\]-]{0,63}$/.test(b.model) &&
     Array.isArray(b.tools) && b.tools.every(isName) &&
     Number.isInteger(b.maxTurns) && (b.maxTurns as number) > 0 &&
-    isRepo(record.repo) && typeof record.token === 'string' && record.token.length > 0 &&
+    isRepo(record.repo) && isCloneUrl(record.cloneUrl) && isGitUser(record.username) &&
+    typeof record.token === 'string' && record.token.length > 0 &&
     typeof record.expiresAt === 'string' && !Number.isNaN(Date.parse(record.expiresAt)) &&
     typeof author.name === 'string' && typeof author.email === 'string' &&
     typeof b.claudeToken === 'string' && b.claudeToken.length > 0 &&

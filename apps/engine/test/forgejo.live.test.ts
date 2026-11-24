@@ -68,7 +68,8 @@ describe.skipIf(!url || !token)('the record store, live', () => {
       expect(await r.commit(head, [{ path: 'memoria/agentes/finanzas/informe.md', content: 'En dos líneas\n' }], 'corregido en la app')).toBe(true);
       expect(await r.commit(head, [{ path: 'memoria/agentes/finanzas/informe.md', content: 'Otra\n' }], 'tarde')).toBe(false);
 
-      await admin.revokeRunToken(user, t.name);
+      expect(await admin.agentUsers()).toContain(user);
+      await admin.revokeRunTokens(user, run);
       expect(() => git(['fetch', '-q', 'origin'])).toThrow();
     } finally {
       rmSync(dir, { recursive: true, force: true });

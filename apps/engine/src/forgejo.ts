@@ -203,11 +203,23 @@ export function forgejoAdmin(cfg: ForgejoConfig, f: Fetch = fetch, now: () => Da
       return { name, token: t.sha1 };
     },
 
-    /** Deletes a run's token; nothing when it is already gone. */
-    async revokeRunToken(username: string, name: string): Promise<void> {
-      const names = ((await call<Array<{ name: string }>>('GET', `/users/${username}/tokens`)) ?? []).map((t) => t.name);
-      if (!names.includes(name)) return;
-      await asUser(username, (auth) => call('DELETE', `/users/${username}/tokens/${encodeURIComponent(name)}`, undefined, auth));
+    /** Deletes a run's tokens (the first and any it renewed); nothing when they are already gone. */
+    async revokeRunTokens(username: string, runId: string): Promise<void> {
+      const prefix = `run-${runId.toLowerCase()}-`;
+      const names = ((await call<Array<{ name: string }>>('GET', `/users/${username}/tokens`)) ?? [])
+        .map((t) => t.name)
+        .filter((n) => n.toLowerCase().startsWith(prefix));
+      for (const n of names) await asUser(username, (auth) => call('DELETE', `/users/${username}/tokens/${encodeURIComponent(n)}`, undefined, auth));
+    },
+
+    /** Every agent's user, for the tick's sweep. */
+    async agentUsers(): Promise<string[]> {
+      const out: string[] = [];
+      for (let page = 1; ; page++) {
+        const users = (await call<Array<{ login: string }>>('GET', `/admin/users?limit=50&page=${page}`)) ?? [];
+        out.push(...users.map((u) => u.login).filter((l) => AGENT_USER.test(l)));
+        if (users.length < 50) return out;
+      }
     },
 
     /** Deletes this agent's run tokens made before `before`: those of runs that never reported. */

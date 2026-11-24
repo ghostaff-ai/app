@@ -125,7 +125,7 @@ async function setRecord(opts: { org: string; repo: string; installation: string
   if (!Number.isInteger(installation) || installation <= 0) throw new Error('--installation is the GitHub App installation id');
   const { data, error } = await admin()
     .from('organizations')
-    .update({ record_repo: opts.repo, record_installation: installation, record_sync_error: null })
+    .update({ record_host: 'github', record_repo: opts.repo, record_installation: installation, record_sync_error: null })
     .eq('slug', opts.org)
     .select('slug');
   if (error) throw error;

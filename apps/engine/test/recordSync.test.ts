@@ -6,7 +6,7 @@ import { createApp } from '../src/app';
 import { appJwt, freshRepoToken, repoTokens } from '../src/githubApp';
 import { type RecordOrg, type RecordSyncStore, syncOrg } from '../src/recordSync';
 
-const ORG: RecordOrg = { id: 'org-1', slug: 'ordago', repo: 'ordago-app/business', installation: 7 };
+const ORG: RecordOrg = { id: 'org-1', slug: 'ordago', repo: 'ordago-app/business', host: 'github', installation: 7 };
 
 const decisionYaml = (id: string) => `area: seo
 tipo: titulo-web
@@ -76,6 +76,8 @@ function store(rows: DecisionRow[] = []) {
   const s: RecordSyncStore = {
     orgsWithRecord: async () => [ORG],
     orgWithRecord: async () => ORG,
+    orgsWithoutRecord: async () => [],
+    setOwnRecord: async () => false,
     decisions: async () => rows,
     apply: async (p) => {
       applied.push(p);
@@ -109,7 +111,7 @@ describe('syncOrg', () => {
   it('reads por-decidir from GitHub into the database, without writing when nothing is answered', async () => {
     const gh = fakeGithub({ 'por-decidir/seo-a.yaml': decisionYaml('a'), 'por-decidir/README.md': '# no' });
     const db = store();
-    const r = await syncOrg({ store: db.s, tokens: async () => 'tok', fetch: gh.f }, ORG);
+    const r = await syncOrg({ store: db.s, tokens: async () => 'tok', forgejo: null, fetch: gh.f }, ORG);
     expect(r.ok).toBe(true);
     expect(db.applied[0]!.upserts.map((u) => u.record_id)).toEqual(['seo-a']);
     expect(db.applied[0]!.upserts[0]!.source_commit).toBe('head1');
@@ -124,7 +126,7 @@ describe('syncOrg', () => {
       'agentes/historial-decisiones.csv': 'fecha,agente,tipo,decision,con_nota,dias,id\n',
     });
     const db = store([appAnswered('seo-a'), appAnswered('seo-b')]);
-    const r = await syncOrg({ store: db.s, tokens: async () => 'tok', fetch: gh.f }, ORG);
+    const r = await syncOrg({ store: db.s, tokens: async () => 'tok', forgejo: null, fetch: gh.f }, ORG);
     expect(r.ok).toBe(true);
     expect(gh.commits).toHaveLength(1);
     expect(gh.commits[0]!.message).toBe('por-decidir: respuestas desde Ghostaff (seo-a, seo-b)');
@@ -136,7 +138,7 @@ describe('syncOrg', () => {
   it('leaves the write-back for the next tick when someone pushed meanwhile', async () => {
     const gh = fakeGithub({ 'por-decidir/seo-a.yaml': decisionYaml('a') }, { moved: true });
     const db = store([appAnswered('seo-a')]);
-    const r = await syncOrg({ store: db.s, tokens: async () => 'tok', fetch: gh.f }, ORG);
+    const r = await syncOrg({ store: db.s, tokens: async () => 'tok', forgejo: null, fetch: gh.f }, ORG);
     expect(r.ok).toBe(true);
     expect(r.summary).toContain('the record moved');
     expect(db.written).toEqual([]);
@@ -144,7 +146,7 @@ describe('syncOrg', () => {
 
   it('records a failure on the organisation instead of throwing', async () => {
     const db = store();
-    const r = await syncOrg({ store: db.s, tokens: async () => Promise.reject(new Error('no installation')), fetch: fakeGithub({}).f }, ORG);
+    const r = await syncOrg({ store: db.s, tokens: async () => Promise.reject(new Error('no installation')), forgejo: null, fetch: fakeGithub({}).f }, ORG);
     expect(r.ok).toBe(false);
     expect(db.states).toEqual(['no installation']);
   });
@@ -152,7 +154,7 @@ describe('syncOrg', () => {
   it('an empty or missing por-decidir closes nothing that is not there and syncs fine', async () => {
     const gh = fakeGithub({ 'README.md': 'x' });
     const db = store();
-    const r = await syncOrg({ store: db.s, tokens: async () => 'tok', fetch: gh.f }, ORG);
+    const r = await syncOrg({ store: db.s, tokens: async () => 'tok', forgejo: null, fetch: gh.f }, ORG);
     expect(r.ok).toBe(true);
     expect(db.applied[0]!.upserts).toEqual([]);
   });

@@ -22,7 +22,7 @@ export interface HookAgent {
 }
 
 const SAFE_USER = /^[a-z0-9][a-z0-9._-]{0,39}$/;
-const SAFE_SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const SAFE_SLUG = /^[a-z][a-z0-9_-]{0,40}$/; // agents.slug's own check
 
 export function preReceiveHook(adminUser: string, agents: HookAgent[]): string {
   if (!SAFE_USER.test(adminUser)) throw new Error(`unsafe admin username: ${adminUser}`);

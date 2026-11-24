@@ -2,7 +2,7 @@
 
 **Priority:** high — every organisation needs a record before agents can remember anything or have instructions of their own ([agent-memory.md](../ready/agent-memory.md), decision 2)
 **Gate:** none
-**Next:** stage 1: the engine's Forgejo client, the pre-receive hook and `scripts/setup-record-store.sh`, then run it on beta
+**Next:** land the PR; CI deploys the engine and the runner onto beta's VPC; then check on beta: a new organisation gets its record within a tick, and a run of an agent in it clones, pushes its memory and is refused on `memoria/empresa/`
 
 **Goal:** Every organisation, personal spaces included, gets a record (a git repo) on storage we own in the EU when it is created; the engine and our runner read and write it as they do Órdago's GitHub record today; an agent can push only what it may write.
 
@@ -85,14 +85,25 @@ On a local container: `POST /repos/{o}/{r}/contents` writes several files in one
 ## Tasks
 
 Stage 1, nothing switched on:
-- [ ] `forgejo.ts` and `recordHook.ts` with tests (a fake Forgejo for the client; the hook run by `sh` on a real git repo).
-- [ ] `setup-record-store.sh`; run on beta; Forgejo answers from inside the VPC; the admin token is in Secret Manager.
+- [x] `forgejo.ts` and `recordHook.ts` with tests (a fake Forgejo for the client; the hook run by `sh` on a real git repo; `test/forgejo.live.test.ts` against a real Forgejo).
+- [x] `setup-record-store.sh`, run on beta (2026-11-24): VM `record-store` at `10.132.0.2:3000`, disk with its daily snapshot, `FORGEJO_ADMIN_TOKEN` made by the VM on its first boot. The first try pushed Forgejo's arm64 image from a Mac; the script now pushes `linux/amd64` explicitly and the VM pulls on every start.
 
-Stage 2, switched on in beta:
-- [ ] Migration and the record interface; the sync reads and writes a Forgejo record.
-- [ ] A repo for every organisation (on creation, and the tick for the rest), with branch protection and the hook.
-- [ ] Runs on a Forgejo record: the agent's user, its token in the spec, revoked on report and swept by the tick; the runner clones from the spec's URL.
-- [ ] Deploy scripts; `architecture.md` and `secrets/inventory.yml` updated; checked on beta with organisation Ghostaff.
+Stage 2, switched on in beta when this lands:
+- [x] Migration (`record_host`) and the record interface; the sync reads and writes a Forgejo record.
+- [x] A repo for every organisation without one, made by the tick, with branch protection and the hook. Made on the next tick (five minutes at most), not at the instant the organisation is created: the app calls nothing new.
+- [x] Runs on a Forgejo record: the agent's user, its token in the spec, revoked on report and swept by the tick; the runner clones from the spec's URL, its credential helper scoped to that host and user.
+- [x] Deploy scripts onto the VPC when the record store exists; `architecture.md` and `secrets/inventory.yml` updated.
+- [ ] Checked on beta (Next).
+- [ ] Production: `bash scripts/setup-record-store.sh prod`, with the first release.
+
+## Rollout
+
+| Step | Beta | Production |
+|---|---|---|
+| VM, disk, snapshots, admin token | ✅ 2026-11-24 | ⬜ |
+| Engine and runner on the VPC (deploy) | ⬜ on merge | ⬜ |
+| Records made for every organisation | ⬜ | ⬜ |
+| A run on a Forgejo record checked | ⬜ | ⬜ |
 
 ## Out of scope
 

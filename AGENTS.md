@@ -39,7 +39,7 @@ packages/shared/   models, the record's file formats (por-decidir/), the data se
 supabase/          migrations, row-level-security tests (pgTAP), local config
 ```
 
-Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm pr:land` (land the current branch: Branches), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh beta|prod` (the engine to Cloud Run), `bash scripts/deploy-runner.sh beta|prod` (the runner's job; both run by CI on merge, [environments.md](docs/plans/ongoing/environments.md)), `bash scripts/setup-env.sh beta|prod` (a project's one-time setup), `pnpm db:start` / `pnpm db:test`
+Commands from the repo root: `pnpm check` (typecheck + unit tests), `pnpm pr:land` (land the current branch: Branches), `pnpm engine:dev` (the engine locally), `bash scripts/deploy-engine.sh beta|prod` (the engine to Cloud Run), `bash scripts/deploy-runner.sh beta|prod` (the runner's job; both run by CI on merge, [environments.md](docs/plans/ongoing/environments.md)), `bash scripts/setup-env.sh beta|prod` (a project's one-time setup), `bash scripts/setup-record-store.sh beta|prod` (its record store, [record-store.md](docs/plans/ongoing/record-store.md)), `pnpm db:start` / `pnpm db:test`
 (Postgres and the policy tests), `pnpm app:start` / `pnpm app:web` (Metro on the first free port of 8083, 8093 … 8173, from
 `scripts/metro-port.sh`; never a bare `expo start`). Setup is in the [README](README.md#setup).
 
