@@ -13,7 +13,7 @@ import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromPr
 import { type ActionDeps, approveAction, rejectAction } from './actions';
 import { CONNECTORS } from '@ghostaff/shared';
 import { agentHello, type ChatDeps, replyInThread, resumeInThread } from './chat';
-import { approveGuide, checkGuide, type GuideDeps, getGuide, guideStep, MAX_STEP_BODY, rejectGuide } from './guides';
+import { approveGuide, checkGuide, type GuideDeps, getGuide, guidedAccessUndo, guideStep, MAX_STEP_BODY, rejectGuide, removeGuidedAccess } from './guides';
 import { PHOTO_TOO_BIG } from './guideModel';
 import { reportRun } from './jobs';
 import { runRecordToken, runSpec } from './runner';
@@ -267,6 +267,10 @@ export function createApp(deps: AppDeps) {
   app.post('/guides/:id/approve', async (c) => c.json(await approveGuide(guides(), c.get('userId'), c.req.param('id'))));
 
   app.post('/guides/:id/reject', async (c) => c.json(await rejectGuide(guides(), c.get('userId'), c.req.param('id'))));
+
+  // A guided access (guides.ts), owners only: its undo text, then its removal (the credential and the row).
+  app.get('/connections/guided/:id', async (c) => c.json(await guidedAccessUndo(guides(), c.get('userId'), c.req.param('id'))));
+  app.delete('/connections/guided/:id', async (c) => c.json(await removeGuidedAccess(guides(), c.get('userId'), c.req.param('id'))));
 
   // Voice notes (voiceNotes.ts): the note in, the message out at once; then its transcript and the agent's answer.
   const voice = { chat: deps.chat, voice: deps.voice, transcriber: deps.transcriber, limiter: deps.transcribeLimiter ?? new NoteLimiter() };

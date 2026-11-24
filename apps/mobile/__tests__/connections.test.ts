@@ -101,6 +101,7 @@ describe('whether an organisation has an AI account its agents run on', () => {
     label: null,
     limits: {},
     lastUsedAt: null,
+    agentId: null,
   });
 
   it('counts a Claude subscription, an Anthropic key or Claude on Google Cloud', () => {
@@ -134,6 +135,7 @@ describe('an AI account in the list', () => {
     label: null,
     limits: {},
     lastUsedAt: null,
+    agentId: null,
   };
   const usage = { uses: 12, failures: 0, tokens: 1_234_000, costUsd: 18.4, lastAt: null, byDay: [], byAgent: [] };
 
@@ -192,6 +194,7 @@ describe('an AI account that is not first', () => {
     label: `Cuenta ${id}`,
     limits: {},
     lastUsedAt: null,
+    agentId: null,
   } as Connection);
   // As listConnections returns them: outside accounts (position 0) mixed in.
   const items = [account('google', 0, 'account'), account('a', 1), account('b', 2), account('c', 3)];

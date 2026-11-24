@@ -136,7 +136,7 @@ export const RULE_KIND = 'regla';
 // Connections: an organisation's links to outside accounts (supabase/migrations/
 // 20261114000000_connections.sql). Never a key: keys stay in the engine's vault.
 
-export type ConnectionKind = 'ai' | 'account';
+export type ConnectionKind = 'ai' | 'account' | 'guided';
 /** `claude` is a Claude subscription, signed in through the unmodified Claude Code the engine hosts. */
 export type AiProvider = 'anthropic' | 'openai' | 'vertex' | 'claude';
 export type ConnectionMethod = 'api_key' | 'cloud_project' | 'oauth' | 'mcp' | 'subscription';
@@ -145,12 +145,14 @@ export interface Connection {
   id: string;
   orgId: string;
   kind: ConnectionKind;
-  provider: AiProvider | AccountProvider;
+  provider: AiProvider | AccountProvider | string;
   method: ConnectionMethod;
   /** What the app shows to recognise it: a key's last 4 characters, the project, or the account's email. */
   hint: string;
-  /** A cloud project's project and region; an account's granted scopes; empty for a key. */
-  settings: { project?: string; region?: string; scopes?: string[] };
+  /** A cloud project's project and region; an account's granted scopes; a guided access's app; empty for a key. */
+  settings: { project?: string; region?: string; scopes?: string[]; app?: string };
+  /** The agent a guided access belongs to (it is that agent's own identity in the app); null for every other kind, or once the agent is gone. */
+  agentId: string | null;
   status: 'ok' | 'failing';
   /** Why it is failing: out of its limits, no longer accepted (key revoked, signed out), or anything else. */
   statusReason: 'limited' | 'refused' | 'failed' | null;

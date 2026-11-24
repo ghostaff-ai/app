@@ -5,10 +5,12 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
 import { Group } from '@/components/connections/Group';
+import { guidedRows } from '@/components/connections/GuidedAccesses';
 import { ArrowDown, ArrowUp, LockSimple, Icon, Plus } from '@/components/icons';
 import { Button, ListRow, ScreenTitle } from '@/components/ui';
 import { aiAccountName, aiUsageLine } from '@/lib/connections';
-import { useAiUsage, useConnections } from '@/lib/hooks/useConnections';
+import { useAgents } from '@/lib/hooks/useAgents';
+import { useAiUsage, useConnections, useEngine } from '@/lib/hooks/useConnections';
 import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
@@ -23,6 +25,8 @@ import { usePalette } from '@/lib/theme';
 // agents try them, each with its usage, and an owner moves them up and down
 // (multiple-ai-accounts.md). The engine keeps every token and key in the vault;
 // this screen only ever sees an account's email or a key's last 4 characters.
+// «Accesos de tus agentes» lists the guided accesses (an agent's own user or key in
+// an app, given through a guide) with «Quitar» for owners (guided-access.md).
 // It is the third tab on a phone; on a desktop a page of the sidebar
 // (docs/plans/ideas/desktop-web.md), with each section in a grid of three.
 
@@ -43,6 +47,9 @@ export default function Connections() {
         .sort((a, b) => a.connector.name.localeCompare(b.connector.name, 'es')),
     [items],
   );
+  const guided = useMemo(() => items.filter((i) => i.kind === 'guided'), [items]);
+  const { items: agents } = useAgents(active?.id ?? null);
+  const engine = useEngine();
   const [moveError, setMoveError] = useState<string | null>(null);
   const desktop = useIsDesktop();
   const top = useTabScreenTop();
@@ -136,6 +143,16 @@ export default function Connections() {
                 onPress={() => router.push(`/empresa/conexiones/${connector.id}`)}
               />
             ))}
+          </Group>
+        ) : null}
+
+        {guided.length > 0 ? (
+          <Group
+            desktop={desktop}
+            header="Accesos de tus agentes"
+            footer="Cada uno es el usuario propio de un agente en una app tuya. Solo ese agente lo usa."
+          >
+            {guidedRows({ items: guided, agents, owner, engine, onRemoved: () => void reload() })}
           </Group>
         ) : null}
       </View>

@@ -72,7 +72,7 @@ export interface NewGuidedAccess {
   connectedByName: string;
 }
 
-/** The database as guided accesses need it (service role). Removing an access adds `removeAccess`. */
+/** The database as guided accesses need it (service role). */
 export interface GuidedStore {
   /** The organisation's guided accesses; only one agent's when `agentId` is given. */
   accesses(orgId: string, agentId?: string): Promise<GuidedAccess[]>;
@@ -82,6 +82,10 @@ export interface GuidedStore {
    * `replacedGuideId` names the old guide, whose credential the caller removes.
    */
   createAccess(a: NewGuidedAccess): Promise<{ id: string; replacedGuideId: string | null }>;
+  /** Which organisation, guide and app a guided access belongs to; null when there is none with that id. */
+  find(id: string): Promise<{ orgId: string; guideId: string; app: string } | null>;
+  /** Deletes the access's row (its credential is the caller's to remove first). Nothing happens when it is gone. */
+  removeAccess(id: string): Promise<void>;
 }
 
 /** What the vault keeps under `guidedSecretName`. */
@@ -529,6 +533,19 @@ export function supabaseGuidedStore(admin: SupabaseClient): GuidedStore {
         .single();
       if (error) throw error;
       return { id: (data as { id: string }).id, replacedGuideId: null };
+    },
+    async find(id) {
+      const { data, error } = await admin.from('connections').select('org_id, settings').eq('id', id).eq('kind', 'guided').maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      const settings = (data.settings ?? {}) as Record<string, unknown>;
+      return typeof settings.guideId === 'string'
+        ? { orgId: data.org_id as string, guideId: settings.guideId, app: typeof settings.app === 'string' ? settings.app : '' }
+        : null;
+    },
+    async removeAccess(id) {
+      const { error } = await admin.from('connections').delete().eq('id', id).eq('kind', 'guided');
+      if (error) throw error;
     },
   };
 }

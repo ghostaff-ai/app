@@ -457,6 +457,7 @@ interface ConnectionRow {
   label?: string | null;
   limits?: unknown;
   last_used_at?: string | null;
+  agent_id?: string | null;
 }
 
 export function connectionFromRow(r: ConnectionRow): Connection {
@@ -477,11 +478,12 @@ export function connectionFromRow(r: ConnectionRow): Connection {
     label: r.label ?? null,
     limits: limitsFromRow(r.limits),
     lastUsedAt: r.last_used_at ?? null,
+    agentId: r.agent_id ?? null,
   };
 }
 
 export const CONNECTION_COLUMNS =
-  'id, org_id, kind, provider, method, hint, settings, status, status_reason, checked_at, connected_by_name, updated_at, position, label, limits, last_used_at';
+  'id, org_id, kind, provider, method, hint, settings, status, status_reason, checked_at, connected_by_name, updated_at, position, label, limits, last_used_at, agent_id';
 
 /** The organisation's connections. Every member sees them; only owners change them. */
 export async function listConnections(client: SupabaseClient, orgId: string): Promise<Connection[]> {
@@ -811,6 +813,16 @@ export async function approveGuide(engine: EngineAccess, guideId: string): Promi
 /** An owner turns down what a member granted; the secret leaves the vault. */
 export async function rejectGuide(engine: EngineAccess, guideId: string): Promise<{ status: 'rejected' }> {
   return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/reject`);
+}
+
+/** What an owner reads before removing an agent's access: how to remove its user in the app's own tool. `undo` is null when the guide never wrote it. */
+export async function getGuidedAccessUndo(engine: EngineAccess, accessId: string): Promise<{ app: string; undo: string | null }> {
+  return callEngine(engine, 'GET', `/connections/guided/${encodeURIComponent(accessId)}`);
+}
+
+/** An owner removes an agent's access: the credential leaves the vault and the connection goes. */
+export async function removeGuidedAccess(engine: EngineAccess, accessId: string): Promise<void> {
+  await callEngine(engine, 'DELETE', `/connections/guided/${encodeURIComponent(accessId)}`);
 }
 
 /** Lets the agent go on once its guide is done; once, whoever asks (`already_done` after). */

@@ -483,6 +483,34 @@ export async function rejectGuide(deps: GuideDeps, userId: string, id: unknown):
   return { status: 'rejected' };
 }
 
+async function ownedAccess(deps: GuideDeps, userId: string, id: unknown) {
+  if (!isUuid(id)) throw new Refusal(400, 'bad_request', 'access must be a uuid');
+  const access = await deps.accesses.find(id);
+  if (!access) throw new Refusal(404, 'not_found', 'access not found');
+  await requireOwner(deps.store, access.orgId, userId);
+  return { id, ...access };
+}
+
+/** What an owner reads before removing an access: how to remove the user in the app's own tool (the guide's `undo`). */
+export async function guidedAccessUndo(deps: GuideDeps, userId: string, id: unknown): Promise<{ app: string; undo: string | null }> {
+  const a = await ownedAccess(deps, userId, id);
+  return { app: a.app, undo: (await deps.store.guide(a.guideId))?.undo ?? null };
+}
+
+/**
+ * An owner removes an agent's access. The credential goes first: if the vault
+ * fails the row stays, still working, and the owner retries. If the row's
+ * removal fails after that, the retry finds the secret already gone (removing
+ * is idempotent) and deletes the row. Never a row left quietly pointing at a
+ * missing secret.
+ */
+export async function removeGuidedAccess(deps: GuideDeps, userId: string, id: unknown): Promise<{ removed: true }> {
+  const a = await ownedAccess(deps, userId, id);
+  await deps.vault.remove(guidedSecretName(a.orgId, a.guideId));
+  await deps.accesses.removeAccess(a.id);
+  return { removed: true };
+}
+
 /**
  * A done guide, for the agent to go on once (`resumeInThread` in chat.ts).
  * Refused while it is not done (a member's grant waits for an owner), and once it went on.

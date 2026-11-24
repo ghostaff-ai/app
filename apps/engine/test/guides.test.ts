@@ -100,8 +100,16 @@ function memoryAccesses() {
   const created: Array<Parameters<GuidedStore['createAccess']>[0]> = [];
   /** The guide whose access the next createAccess replaces, as the store reports it. */
   const replacing: { guideId: string | null } = { guideId: null };
+  /** The accesses that exist, by connection id; `removeFails` makes the next row removal throw. */
+  const rows = new Map<string, { orgId: string; guideId: string; app: string }>();
+  const flags = { removeFails: false };
   const store: GuidedStore = {
     accesses: async () => [],
+    find: async (id) => rows.get(id) ?? null,
+    removeAccess: async (id) => {
+      if (flags.removeFails) throw new Error('database down');
+      rows.delete(id);
+    },
     createAccess: async (a) => {
       created.push(a);
       const replacedGuideId = replacing.guideId;
@@ -109,7 +117,7 @@ function memoryAccesses() {
       return { id: `70000000-0000-0000-0000-00000000000${created.length}`, replacedGuideId };
     },
   };
-  return { store, created, replacing };
+  return { store, created, replacing, rows, flags };
 }
 
 function setup(opts: { write?: Writer; messages?: ChatMessage[]; levels?: Record<string, Level>; noAccount?: boolean; fetchStatus?: number; asks?: AskStore } = {}) {
@@ -633,5 +641,84 @@ describe('the agent going on after a guide', () => {
     expect(s.guides.rows.get(id)?.resumedAt).toBeNull();
     release();
     await replying;
+  });
+});
+
+describe('removing a guided access', () => {
+  const CONN = '70000000-0000-0000-0000-0000000000aa';
+  /** A done guide with its access and its credential, as a check by an owner leaves them. */
+  async function withAccess(undo: string | null = 'Borra el usuario redes en Usuarios.') {
+    const s = setup();
+    const id = await s.guides.seed();
+    s.guides.rows.get(id)!.undo = undo;
+    s.accesses.rows.set(CONN, { orgId: ORG, guideId: id, app: 'WordPress' });
+    await s.vault.put(guidedSecretName(ORG, id), JSON.stringify({ username: 'redes', password: PASSWORD }), {});
+    return { s, id };
+  }
+
+  it("an owner reads the guide's undo text before removing", async () => {
+    const { s } = await withAccess();
+    const res = await s.get('ana', `/connections/guided/${CONN}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ app: 'WordPress', undo: 'Borra el usuario redes en Usuarios.' });
+  });
+
+  it('only owners read it or remove: a member and a stranger are refused and nothing goes', async () => {
+    const { s, id } = await withAccess();
+    for (const user of ['luis', 'zoe']) {
+      expect((await s.get(user, `/connections/guided/${CONN}`)).status).toBe(403);
+      expect((await s.call(user, `/connections/guided/${CONN}`, undefined, 'DELETE')).status).toBe(403);
+    }
+    expect(s.accesses.rows.has(CONN)).toBe(true);
+    expect(await s.vault.get(guidedSecretName(ORG, id))).not.toBeNull();
+  });
+
+  it('the secret goes with the row', async () => {
+    const { s, id } = await withAccess();
+    const res = await s.call('ana', `/connections/guided/${CONN}`, undefined, 'DELETE');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ removed: true });
+    expect(s.accesses.rows.has(CONN)).toBe(false);
+    expect(await s.vault.get(guidedSecretName(ORG, id))).toBeNull();
+  });
+
+  it('an unknown or malformed access is 404 or 400', async () => {
+    const { s } = await withAccess();
+    expect((await s.call('ana', '/connections/guided/70000000-0000-0000-0000-0000000000bb', undefined, 'DELETE')).status).toBe(404);
+    expect((await s.call('ana', '/connections/guided/nope', undefined, 'DELETE')).status).toBe(400);
+  });
+
+  it('when the vault fails the row stays, so the access is not left pointing at a missing secret, and a retry finishes', async () => {
+    const { s, id } = await withAccess();
+    const remove = s.vault.remove.bind(s.vault);
+    let down = true;
+    s.vault.remove = async (name) => {
+      if (down) throw new Error(`vault down ${PASSWORD}`);
+      return remove(name);
+    };
+    const res = await s.call('ana', `/connections/guided/${CONN}`, undefined, 'DELETE');
+    expect(res.status).toBe(500);
+    expect(JSON.stringify(await res.json())).not.toContain(PASSWORD);
+    expect(s.accesses.rows.has(CONN)).toBe(true);
+    expect(await s.vault.get(guidedSecretName(ORG, id))).not.toBeNull();
+    down = false;
+    expect((await s.call('ana', `/connections/guided/${CONN}`, undefined, 'DELETE')).status).toBe(200);
+    expect(s.accesses.rows.has(CONN)).toBe(false);
+    expect(await s.vault.get(guidedSecretName(ORG, id))).toBeNull();
+  });
+
+  it('when the row cannot be removed after the secret, the owner is told and the retry removes it', async () => {
+    const { s } = await withAccess();
+    s.accesses.flags.removeFails = true;
+    expect((await s.call('ana', `/connections/guided/${CONN}`, undefined, 'DELETE')).status).toBe(500);
+    expect(s.accesses.rows.has(CONN)).toBe(true);
+    s.accesses.flags.removeFails = false;
+    expect((await s.call('ana', `/connections/guided/${CONN}`, undefined, 'DELETE')).status).toBe(200);
+    expect(s.accesses.rows.has(CONN)).toBe(false);
+  });
+
+  it('an access whose guide has no undo text yet says null', async () => {
+    const { s } = await withAccess(null);
+    expect(await (await s.get('ana', `/connections/guided/${CONN}`)).json()).toEqual({ app: 'WordPress', undo: null });
   });
 });
