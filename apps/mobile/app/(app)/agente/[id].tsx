@@ -144,15 +144,17 @@ export default function Agente() {
               chevron
               onPress={() => router.push(`/herramientas/${agent.id}`)}
             />
-            <ListRow
-              leading={<RowIcon icon={Prohibit} tone="danger" />}
-              title={confirming ? 'Cancelar' : 'Quitar del equipo'}
-              tone={confirming ? 'default' : 'danger'}
-              onPress={() => setConfirming((v) => !v)}
-            />
+            {agent.isMain ? null : (
+              <ListRow
+                leading={<RowIcon icon={Prohibit} tone="danger" />}
+                title={confirming ? 'Cancelar' : 'Quitar del equipo'}
+                tone={confirming ? 'default' : 'danger'}
+                onPress={() => setConfirming((v) => !v)}
+              />
+            )}
           </ListSection>
         ) : null}
-        {owner && confirming ? (
+        {owner && !agent.isMain && confirming ? (
           <View className="mt-3">
             <Button label={`Sí, quitar a ${agent.name}`} variant="danger" busy={busy} onPress={() => void remove()} />
           </View>

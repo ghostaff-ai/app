@@ -11,7 +11,7 @@ Anything an owner can change in the app, the organisation's main agent (Secretar
 ## Decisions (Álvaro, 2026-11-23, all the proposed picks)
 
 1. **Configuration only.** Code changes go through the developer agent, as pull requests.
-2. **Only the main agent**, Secretaría (`isMainAgent`: ghost `secretaria`). Other agents ask it.
+2. **Only the main agent**, Secretaría (`isMainAgent`: the role, `agents.is_main`). Other agents ask it.
 3. **Every change waits for an owner's «Aprobar».** Reading the settings needs no OK. Later, each kind of change can earn autonomy like any other kind of decision (the product plan's autonomy ladder).
 4. **The OK is asked where the person already is:** a card in the conversation when someone asked there; a decision in Hoy when the agent proposes on its own (not built yet: today the agent proposes only in chat).
 5. **Hard limits, never allowed even with an OK:**

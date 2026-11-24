@@ -14,7 +14,7 @@ const mockEngine = { url: 'http://engine', token: 't' };
 jest.mock('@/lib/hooks/useConnections', () => ({ useEngine: () => mockEngine }));
 
 const space = { id: 's1', slug: 'personal', name: 'Personal', kind: 'personal' as const, role: 'owner' as const, displayName: 'Ana' };
-const agents = [{ id: 'a1', orgId: 's1', ghost: 'secretaria' }] as never[];
+const agents = [{ id: 'a1', orgId: 's1', isMain: true }] as never[];
 
 describe('useFirstHello', () => {
   it('tries again when you come back to Hoy after the engine failed', async () => {

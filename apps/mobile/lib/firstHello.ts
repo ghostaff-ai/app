@@ -1,8 +1,8 @@
-import type { AgentGhost, MembershipRole } from '@ghostaff/shared';
+import type { MembershipRole } from '@ghostaff/shared';
 
-// Secretaría starts on her own (welcome-and-spaces.md): she is hired with every
+// The main agent starts on its own (welcome-and-spaces.md): it is hired with every
 // new space, and the first time an owner opens Hoy with an AI the agents can
-// run on, she introduces herself in her first thread. Once per agent per app
+// run on, it introduces itself in its first thread. Once per agent per app
 // session; after a failure, tried again on a visit at least RETRY_AFTER_MS later
 // (Hoy re-renders several times as it loads: an engine that is down isn't hit each time).
 
@@ -20,14 +20,14 @@ export interface FirstHelloDeps {
 export async function firstHello(
   { space, agents, aiReady }: {
     space: { id: string; role: MembershipRole } | null;
-    agents: { id: string; orgId: string; ghost: AgentGhost }[];
+    agents: { id: string; orgId: string; isMain: boolean }[];
     aiReady: boolean;
   },
   { hasThreads, hello, answer, tried, now }: FirstHelloDeps,
 ): Promise<void> {
   if (space?.role !== 'owner' || !aiReady) return;
-  // While you switch spaces the list may still be the last space's: only this space's Secretaría.
-  const her = agents.find((a) => a.ghost === 'secretaria' && a.orgId === space.id);
+  // While you switch spaces the list may still be the last space's: only this space's main agent (the role, not a ghost).
+  const her = agents.find((a) => a.isMain && a.orgId === space.id);
   if (!her) return;
   const failedAt = tried.get(her.id);
   if (failedAt !== undefined && (failedAt === Infinity || now() - failedAt < RETRY_AFTER_MS)) return;
