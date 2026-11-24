@@ -32,7 +32,7 @@ Jaime's idea (2026-11-24): each agent has **one chat**, and **everyone with acce
 ## Consequences to weigh
 
 - **Privacy.** Everything a person tells the agent is read by everyone with access to it. Today a member can ask Finanzas something without the owner reading it; in the group they can't. The access level per agent becomes the only privacy control.
-- **The agent's context.** With several people writing, the last 40 messages fill faster and mix topics; a running summary (three-tabs.md decision 3 already mentions it) or [agent-memory.md](../ready/agent-memory.md) matters sooner.
+- **The agent's context.** With several people writing, the last 40 messages fill faster and mix topics. Jaime doesn't think a turn should carry the last 40 messages at all, but its memory and a few recent ones: [agent-context.md](agent-context.md).
 - **Two people at once.** Only one reply is written per thread at a time; with a group, a second person's message while the agent is working needs a rule (queue it and answer after, or fold it into the same reply).
 - **Acting with the asker's rights** (team-chat.md decision 7) still works message by message: the agent acts as the person whose message it is answering.
 - **Simpler.** One thread per agent, no copies of the agent's own reports, no visibility to choose.
