@@ -687,7 +687,7 @@ export const ENGINE_SETTINGS: Record<string, FunctionReach> = {
   disconnect_account: { reach: 'never', why: 'keys and sign-ins are a person, on the provider' },
 };
 
-/** The organisation's main agent, the one that changes its settings: Secretaría. */
-export function isMainAgent(a: { ghost: string }): boolean {
-  return a.ghost === 'secretaria';
+/** The organisation's main agent, the one that changes its settings: a role (`agents.is_main`), not a ghost. */
+export function isMainAgent(a: { isMain?: boolean | null }): boolean {
+  return a.isMain === true;
 }
