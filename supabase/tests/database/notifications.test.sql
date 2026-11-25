@@ -3,14 +3,15 @@
 -- has a phone; the engine claims each row once and drops what was read since;
 -- nobody reads the outbox from the app, and a phone is only its person's.
 begin;
-select plan(35);
+select plan(40);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'ana@example.com'),
   ('00000000-0000-0000-0000-00000000000b', 'bea@example.com'),
   ('00000000-0000-0000-0000-00000000000c', 'carla@example.com'),
   ('00000000-0000-0000-0000-00000000000d', 'dani@example.com'),
-  ('00000000-0000-0000-0000-00000000000e', 'eva@example.com');
+  ('00000000-0000-0000-0000-00000000000e', 'eva@example.com'),
+  ('00000000-0000-0000-0000-00000000000f', 'lu@example.com');
 
 insert into public.organizations (id, slug, name) values
   ('10000000-0000-0000-0000-000000000001', 'panaderia', 'Panadería');
@@ -20,7 +21,8 @@ insert into public.memberships (org_id, user_id, role, display_name) values
   ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000b', 'member', 'Bea'),
   ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000c', 'member', 'Carla'),
   ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000d', 'member', 'Dani'),
-  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000e', 'member', 'Eva');
+  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000e', 'member', 'Eva'),
+  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000f', 'member', 'Lu');
 
 insert into public.agents (id, org_id, name, ghost, department, member_default) values
   ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Secretaría', 'secretaria', 'direccion', 'talk');
@@ -168,6 +170,45 @@ select results_eq(
 select is((select count(*) from claimed), 5::bigint, 'everything else unsent is claimed');
 select is((select count(*) from public.claim_pushes(100)), 0::bigint, 'a second call returns nothing');
 select is((select count(*) from public.push_outbox where claimed_at is null and sent_at is null), 0::bigint, '... as every row is claimed or done');
+
+-- A mention is a whole name: «@Lucía» is not Lu, «@lu,» is.
+set local role authenticated;
+set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';
+insert into ids select 'mentions', id from public.start_thread('20000000-0000-0000-0000-000000000001', 'Pregúntale a @Lucía', visibility => 'read');
+reset role;
+select is(public.follows_thread((select id from ids where name = 'mentions'), '00000000-0000-0000-0000-00000000000f'), false,
+  'a longer name that starts like hers does not make her a follower');
+set local role authenticated;
+select public.post_message((select id from ids where name = 'mentions'), '@lu, mira esto');
+reset role;
+select is(public.follows_thread((select id from ids where name = 'mentions'), '00000000-0000-0000-0000-00000000000f'), true,
+  '... her own name does, in any case');
+
+-- A private conversation stays private: Dani, mentioned and able to talk to
+-- the agent, hears nothing of it; its opener does.
+set local role authenticated;
+insert into ids select 'private', id from public.start_thread('20000000-0000-0000-0000-000000000001', 'Solo yo, aunque nombre a @Dani', visibility => 'private');
+reset role;
+insert into public.messages (id, thread_id, org_id, author_kind, author_agent, author_name, parts, state) values
+  ('40000000-0000-0000-0000-000000000006', (select id from ids where name = 'private'), '10000000-0000-0000-0000-000000000001',
+   'agent', '20000000-0000-0000-0000-000000000001', 'Secretaría', '[]', 'done');
+select results_eq(
+  $$ select user_id from public.push_outbox where message_id = '40000000-0000-0000-0000-000000000006' $$,
+  $$ values ('00000000-0000-0000-0000-00000000000a'::uuid) $$,
+  'a private conversation queues only its opener, not a member mentioned in it');
+
+-- A row a drain claimed a moment ago stays its own, even once read.
+set local role authenticated;
+set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';
+select public.mark_thread_read((select id from ids where name = 'shared'));
+set local role service_role;
+select is((select count(*) from public.claim_pushes(100) where message_id = '40000000-0000-0000-0000-000000000006'), 1::bigint,
+  'the private reply is claimed');
+reset role;
+select results_eq(
+  $$ select outcome from public.push_outbox where message_id = '40000000-0000-0000-0000-000000000004' and user_id = '00000000-0000-0000-0000-00000000000a' $$,
+  $$ values (null::text) $$,
+  'a claimed row read since is left to the drain that holds it');
 
 -- The daily one: two open decisions, one answered, one closed; Bea puts one
 -- aside; OK cards wait for whoever approves them, where they can see them.

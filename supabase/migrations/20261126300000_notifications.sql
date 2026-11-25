@@ -76,7 +76,8 @@ revoke all on public.push_outbox from anon, authenticated;
 
 /**
  * Whether a member follows a conversation: it is their chat with the agent,
- * they opened it, read it, wrote in it or were @mentioned in it. Runs as the
+ * they opened it, read it, wrote in it or were @mentioned in it (as a whole
+ * name: «@Ana» isn't «@Anabel»). Runs as the
  * caller, so a person asking about someone else learns only what they could
  * read anyway (never another's read marks); the trigger and the engine see all.
  */
@@ -98,8 +99,10 @@ as $$
         or exists (
           select 1 from public.memberships me, public.messages m, jsonb_array_elements(m.parts) p
           where me.org_id = t.org_id and me.user_id = member
+            and nullif(trim(me.display_name), '') is not null
             and m.thread_id = t.id and p->>'type' = 'text'
-            and position(lower('@' || me.display_name) in lower(p->>'text')) > 0
+            -- «@Ana» but not «@Anabel»: the name, its regex characters escaped, then no letter.
+            and p->>'text' ~* ('@' || regexp_replace(me.display_name, '([.^$*+?()\[\]{}|\\-])', '\\\1', 'g') || '($|[^[:alnum:]_])')
         )
       )
   );
@@ -298,6 +301,8 @@ begin
   set outcome = 'read', sent_at = now()
   from public.messages m, public.thread_reads r
   where o.kind = 'reply' and o.sent_at is null
+    -- Not a row a drain is sending now: the same rule as the claim below.
+    and (o.claimed_at is null or o.claimed_at < now() - interval '2 minutes')
     and m.id = o.message_id
     and r.thread_id = o.thread_id and r.user_id = o.user_id
     and r.read_at >= coalesce(m.finished_at, m.created_at);
