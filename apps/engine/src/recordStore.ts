@@ -59,6 +59,17 @@ export function supabaseRecordStore(db: SupabaseClient): RecordSyncStore {
     },
     apply: (plan) => applySync(db, plan),
     markWrittenBack: (ids) => markWrittenBack(db, ids),
+    async pointDecision(orgId, recordId, agentId) {
+      const { data, error } = await db
+        .from('decisions')
+        .update({ agent_id: agentId })
+        .eq('org_id', orgId)
+        .eq('record_id', recordId)
+        .select('id')
+        .maybeSingle<{ id: string }>();
+      if (error) throw error;
+      return data?.id ?? null;
+    },
     async instructedAgents(orgId) {
       const { data, error } = await db
         .from('agents')

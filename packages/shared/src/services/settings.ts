@@ -636,6 +636,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   delete_routine: { reach: 'never', why: 'an agent pauses a routine; deleting it is the person\'s, in the app' },
   answer_decision: { reach: 'never', why: "a decision is the person's to take" },
   unanswer_decision: { reach: 'never', why: "a decision is the person's to take" },
+  ask_about_decision: { reach: 'never', why: 'a person writing to an agent, not a setting; an agent asks with pedir_decision' },
   set_conversation_visibility: { reach: 'never', why: "a conversation's privacy is its opener's alone" },
   accept_invitation: { reach: 'never', why: 'a person joins an organisation themselves' },
   save_profile: { reach: 'never', why: "a person's own profile" },

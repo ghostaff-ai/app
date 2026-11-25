@@ -152,7 +152,8 @@ export function planSync(args: {
       options: (d.opciones ?? []).map((o) => (o.con ? { id: o.id, text: o.texto, if: o.con } : { id: o.id, text: o.texto })),
       recommended_option: pick ? pick.id : null,
       high_stakes: d.importancia === 'alta',
-      agent_id: matchAgent(d.propone, agents),
+      // A decision asked from the chat is pointed at its agent when opened; keep that when the name does not match.
+      agent_id: matchAgent(d.propone, agents) ?? row?.agent_id ?? null,
       source_commit: commit,
       synced_at: syncedAt,
       closed_at: null,

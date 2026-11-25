@@ -1,6 +1,7 @@
 import { AGENT_JOBS, type ChatMessage, MAIN_AGENT_JOB } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
+import type { DecisionOpener } from '../src/decisionAsks';
 import { type AiAccount, AiFailure, type AiUse, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, whoAnswers, type Writer } from '../src/chat';
 import type { AskRecord, AskStore } from '../src/accountAsks';
 import type { AsPerson } from '../src/settings';
@@ -51,6 +52,7 @@ function setup(
     asPerson?: AsPerson;
     asks?: AskStore;
     guidedToolsFor?: (orgId: string, agentId: string) => Promise<AgentTools>;
+    decisions?: DecisionOpener;
   } = {},
 ) {
   const threadAgent = opts.agent ?? finanzas;
@@ -129,6 +131,7 @@ function setup(
       asPerson: opts.asPerson,
       asks: opts.asks,
       guidedToolsFor: opts.guidedToolsFor,
+      decisions: opts.decisions,
     },
     accounts: {} as never,
     actions: {} as never,
@@ -552,6 +555,40 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     await call('ana', `/threads/${THREAD}/reply`);
     expect(proposed).toEqual([]);
     expect(told).toMatchObject({ isError: true, content: expect.stringContaining('tus propias herramientas') });
+  });
+});
+
+describe('an agent asking a person to decide (decision-model.md, decision 5)', () => {
+  it('opens the decision in the record and puts its card after the text', async () => {
+    const opened: string[] = [];
+    const decisions: DecisionOpener = {
+      open: async (a) => {
+        opened.push(a.base);
+        return { decisionId: 'row-1', recordId: a.base };
+      },
+      briefs: async () => new Map(),
+    };
+    const told: unknown[] = [];
+    const write: Writer = async ({ tools: t, system, onText }) => {
+      expect(system).toContain('pedir_decision');
+      told.push(await t.run('pedir_decision', { pregunta: '¿Pago a Harinas Sur?', contexto: '320 €', tipo: 'pagar-factura', recomienda: 'Pagarla' }));
+      onText('Te lo dejo para decidir.');
+    };
+    const { call, updates } = setup({ decisions, write });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(told[0]).toMatchObject({ isError: false });
+    expect(opened).toEqual(['finanzas-pago-a-harinas-sur']);
+    expect(updates[updates.length - 1]).toMatchObject({
+      state: 'done',
+      text: 'Te lo dejo para decidir.',
+      cards: [{ type: 'decision', decisionId: 'row-1', question: '¿Pago a Harinas Sur?' }],
+    });
+  });
+
+  it('without an opener, agents ask in their text and get no tool', async () => {
+    const { call, asked } = setup();
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect((asked[0] as unknown as { tools: AgentTools }).tools.specs.map((s) => s.name)).not.toContain('pedir_decision');
   });
 });
 

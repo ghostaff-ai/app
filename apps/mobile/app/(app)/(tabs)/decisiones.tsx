@@ -5,6 +5,7 @@ import { DecisionDeck, DeckToast } from '@/components/DecisionDeck';
 import { SealCheck, WarningCircle } from '@/components/icons';
 import { SpaceSwitcher } from '@/components/SpaceSwitcher';
 import { Button, EmptyState, ErrorText, Loading, Notice, ScreenTitle } from '@/components/ui';
+import { useAuth } from '@/lib/auth/AuthContext';
 import { useDeck } from '@/lib/hooks/useDecisions';
 import { useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -19,7 +20,8 @@ export default function Decisiones() {
   const top = useTabScreenTop();
   const desktop = useIsDesktop();
   const { active } = useActiveOrg();
-  const deck = useDeck(active?.id ?? null);
+  const { session } = useAuth();
+  const deck = useDeck(active?.id ?? null, session?.user.id ?? null);
   const { reload, clearLast } = deck;
 
   // Back from a decision's own screen: show what changed there.
@@ -53,7 +55,7 @@ export default function Decisiones() {
         <ErrorText>{deck.error}</ErrorText>
         {count > 0 ? (
           <View className="mt-3 flex-1">
-            <DecisionDeck cards={deck.cards} onMove={(d, kind, option) => void deck.act(d, kind, option)} toast={toast} />
+            <DecisionDeck cards={deck.cards} asked={deck.asked} onMove={(d, kind, option) => void deck.act(d, kind, option)} toast={toast} />
           </View>
         ) : (
           <View className="flex-1 justify-center">

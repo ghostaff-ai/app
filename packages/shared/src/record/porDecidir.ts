@@ -1,4 +1,4 @@
-import { isMap, parse, parseDocument } from 'yaml';
+import { isMap, parse, parseDocument, stringify } from 'yaml';
 import { RULE_KIND } from '../models';
 
 // The decision files an agent leaves for a person: one YAML file per decision
@@ -204,6 +204,43 @@ function readSources(v: unknown, id: string): RecordSource[] {
     }
     throw new Error(`${DECISIONS_DIR}/${id}.yaml: \`fuentes[${i}]\` is text or { texto, enlace }`);
   });
+}
+
+/**
+ * A new decision file, in the README's order, from what an agent asked (the engine's
+ * `pedir_decision`). Read back before it is returned, so it is never a file the reader refuses.
+ */
+export function writeDecision(d: RecordDecision): string {
+  const o: Record<string, unknown> = {
+    area: d.area,
+    tipo: d.tipo,
+    pregunta: d.pregunta,
+    contexto: d.contexto,
+    propone: d.propone,
+    creada: d.creada,
+  };
+  if (d.opciones?.length) o.opciones = d.opciones.map((x) => (x.con ? { id: x.id, texto: x.texto, con: x.con } : { id: x.id, texto: x.texto }));
+  if (d.recomienda) o.recomienda = d.recomienda;
+  if (d.con_si) o.con_si = d.con_si;
+  if (d.con_no) o.con_no = d.con_no;
+  if (d.cita) o.cita = d.cita;
+  if (d.fuentes?.length) o.fuentes = d.fuentes.map((f) => (f.enlace ? { texto: f.texto, enlace: f.enlace } : { texto: f.texto }));
+  if (d.vence) o.vence = d.vence;
+  if (d.importancia) o.importancia = d.importancia;
+  const yaml = stringify(o, { lineWidth: 0 });
+  readDecision(d.id, yaml);
+  return yaml;
+}
+
+/** A kebab-case slug of some words, at most `max` characters, for a decision's id. */
+export function kebab(text: string, max = 48): string {
+  const s = text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return s.slice(0, max).replace(/-+$/, '');
 }
 
 /** Writes the answer into the YAML without touching anything else (comments and order kept). */

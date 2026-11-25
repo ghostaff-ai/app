@@ -15,7 +15,8 @@
 // that needs them.
 
 import { type AgentGhost, type ChatMessage, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
-import type { AccountAskPart, ActionPart, GuidePart } from '@ghostaff/shared';
+import { type AccountAskPart, type ActionPart, type DecisionPart, type GuidePart, isDecisionPart, isDecisionQuotePart } from '@ghostaff/shared';
+import { DECISION_TOOL, DECISION_TOOLS, type DecisionBrief, decisionIds, decisionLine, type DecisionOpener, proposeDecision } from './decisionAsks';
 import { ASK_TOOL, ASK_TOOLS, askLines, askResumable, type AskStore, proposeAsk } from './accountAsks';
 import { GUIDE_TOOL, GUIDE_TOOLS, guideLines, guideResumable, type GuideStore, proposeGuide } from './guides';
 import { previewOf } from './actions';
@@ -33,6 +34,8 @@ export interface ChatAgent {
   id: string;
   orgId: string;
   name: string;
+  /** Its name in the record (`agentes/<slug>/`); absent for an agent without one. */
+  slug?: string | null;
   ghost: AgentGhost;
   /** The organisation's main agent (agents.is_main): the one with the settings tools. Not the same as its ghost. */
   isMain?: boolean;
@@ -141,7 +144,7 @@ export interface ChatStore {
 }
 
 /** A card in an agent's message, after its text. */
-export type Card = ActionPart | AccountAskPart | GuidePart;
+export type Card = ActionPart | AccountAskPart | GuidePart | DecisionPart;
 
 export interface ModelTurn {
   role: 'user' | 'assistant';
@@ -186,6 +189,8 @@ export interface ChatDeps {
   guidedToolsFor?(orgId: string, agentId: string): Promise<AgentTools>;
   /** An agent starting a guide to get an access (guides.ts); without it agents cannot. */
   guides?: GuideStore;
+  /** An agent asking a person to decide (decisionAsks.ts); without it agents ask in their text. */
+  decisions?: DecisionOpener;
   /** How often the growing text is written to the database. */
   flushMs?: number;
   now?: () => number;
@@ -256,7 +261,7 @@ const ROUTINE_LINES = [
 export function systemPrompt(
   agent: ChatAgent,
   orgName: string,
-  opts: { broughtInto?: string; accounts?: string[]; now?: Date; settings?: boolean; routines?: boolean; canAsk?: boolean; canGuide?: boolean } = {},
+  opts: { broughtInto?: string; accounts?: string[]; now?: Date; settings?: boolean; routines?: boolean; canAsk?: boolean; canGuide?: boolean; canDecide?: boolean } = {},
 ): string {
   const job = agentJob(agent);
   const broughtInto = opts.broughtInto;
@@ -272,7 +277,9 @@ export function systemPrompt(
     ...(opts.settings ? SETTINGS_LINES : []),
     ...(opts.routines ? ROUTINE_LINES : []),
     'No inventes datos de la organización. Si no sabes algo, pregúntalo.',
-    'Cuando algo necesite la decisión de una persona, dilo de forma explícita.',
+    opts.canDecide
+      ? `Cuando algo sea de una persona decidirlo (dinero, algo que se publica, un cliente, un cambio de plan), pídeselo con ${DECISION_TOOL} en vez de preguntarlo en el texto, y no actúes hasta que conteste. Lo que ya respondió no lo vuelvas a preguntar.`
+      : 'Cuando algo necesite la decisión de una persona, dilo de forma explícita.',
   ]
     .filter(Boolean)
     .join('\n');
@@ -306,11 +313,14 @@ export function whoAnswers(messages: ChatMessage[], threadAgent: ChatAgent, agen
 }
 
 /** The thread as model turns: the agent's own words as the assistant, everyone else's as the user, signed. */
-export function toTurns(messages: ChatMessage[], agentId: string): ModelTurn[] {
+export function toTurns(messages: ChatMessage[], agentId: string, briefs: ReadonlyMap<string, DecisionBrief> = new Map()): ModelTurn[] {
   const turns: ModelTurn[] = [];
   for (const m of messages) {
-    // An agent's cards asking for an account, or a guide, read as a line, so it knows where it stopped.
-    const text = [messageText(m.parts).trim(), ...askLines(m.parts), ...guideLines(m.parts)].filter(Boolean).join('\n\n');
+    // An agent's cards asking for an account, a guide or a decision read as a line, so it knows where it
+    // stopped and what was answered; a decision a person asks about goes before their words.
+    const quoted = m.parts.filter(isDecisionQuotePart).map((p) => decisionLine(briefs.get(p.decisionId), 'quoted', p.question));
+    const asked = m.parts.filter(isDecisionPart).map((p) => decisionLine(briefs.get(p.decisionId), 'mine', p.question));
+    const text = [...quoted, messageText(m.parts).trim(), ...askLines(m.parts), ...guideLines(m.parts), ...asked].filter(Boolean).join('\n\n');
     if (!text || (m.authorKind === 'agent' && m.state !== 'done')) continue;
     const mine = m.authorKind === 'agent' && m.authorAgentId === agentId;
     const role = mine ? 'assistant' : 'user';
@@ -322,6 +332,13 @@ export function toTurns(messages: ChatMessage[], agentId: string): ModelTurn[] {
   // The conversation starts with a person.
   while (turns[0]?.role === 'assistant') turns.shift();
   return turns;
+}
+
+/** The thread as model turns, with what became of the decisions in it. */
+async function turnsOf(deps: ChatDeps, messages: ChatMessage[], agentId: string): Promise<ModelTurn[]> {
+  const ids = decisionIds(messages.map((m) => m.parts));
+  const briefs = ids.length && deps.decisions ? await deps.decisions.briefs(ids).catch(() => new Map<string, DecisionBrief>()) : new Map<string, DecisionBrief>();
+  return toTurns(messages, agentId, briefs);
 }
 
 async function requireTalk(deps: ChatDeps, agentId: string, userId: string) {
@@ -390,6 +407,30 @@ async function writeReply(
           showCards();
         }
         return asked.outcome;
+      }
+      if (name === DECISION_TOOL && deps.decisions) {
+        try {
+          const asked = await proposeDecision(
+            deps.decisions,
+            {
+              orgId: agent.orgId,
+              agentId: agent.id,
+              propone: agent.slug || agent.name,
+              area: agent.department,
+              today: new Date(now()).toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' }).slice(0, 10),
+            },
+            input,
+            cards.filter((c): c is DecisionPart => c.type === 'decision'),
+          );
+          if (asked.part) {
+            cards.push(asked.part);
+            showCards();
+          }
+          return asked.outcome;
+        } catch (e) {
+          console.error('decision not opened', e instanceof Error ? e.message.slice(0, 200) : typeof e);
+          return { content: 'No he podido guardar la decisión ahora. Pregúntala en el texto de tu mensaje.', isError: true };
+        }
       }
       if (!tools.writes(name, input)) return tools.run(name, input);
       if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -553,7 +594,8 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
     }
     if (deps.asks) mine = mergeTools(mine, ASK_TOOLS);
     if (deps.guides) mine = mergeTools(mine, GUIDE_TOOLS);
-    const system = systemPrompt(who, orgName, { broughtInto, accounts: mine.accounts, now, settings, routines: asked, canAsk: !!deps.asks, canGuide: !!deps.guides });
+    if (deps.decisions) mine = mergeTools(mine, DECISION_TOOLS);
+    const system = systemPrompt(who, orgName, { broughtInto, accounts: mine.accounts, now, settings, routines: asked, canAsk: !!deps.asks, canGuide: !!deps.guides, canDecide: !!deps.decisions });
     return { tools: mine, system };
   };
   return { names, orgName, agents, reachOf };
@@ -613,7 +655,7 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
       // A second agent reads the first one's answer too.
       const history = i === 0 ? messages : await deps.chat.recentMessages(thread.id, 40);
       const mine = await reachOf(who, who.id === agent.id ? undefined : agent.name);
-      await writeReply(deps, replyId, who, mine.system, toTurns(history, who.id), mine.tools, { threadId: thread.id, userId });
+      await writeReply(deps, replyId, who, mine.system, await turnsOf(deps, history, who.id), mine.tools, { threadId: thread.id, userId });
       replied = true;
     }
   }
@@ -712,7 +754,7 @@ async function goOn(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, wa
   const threadAgent = agent.id === thread.agentId ? null : await deps.chat.agent(thread.agentId);
   const { reachOf } = await orgReach(deps, thread.orgId, accessToken);
   const mine = await reachOf(agent, threadAgent?.name);
-  const turns = toTurns(await deps.chat.recentMessages(thread.id, 40), agent.id);
+  const turns = await turnsOf(deps, await deps.chat.recentMessages(thread.id, 40), agent.id);
   const line = `${who}: Ya tienes acceso a ${waited.name}. Sigue con lo que se te pidió.`;
   const lastTurn = turns[turns.length - 1];
   if (lastTurn?.role === 'user') lastTurn.content += `\n\n${line}`;
@@ -740,7 +782,7 @@ export interface RoutineAsk {
 export async function answerRoutine(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, replyId: string, ask: RoutineAsk): Promise<{ text: string; ok: boolean }> {
   const { reachOf } = await orgReach(deps, agent.orgId, undefined);
   const mine = await reachOf(agent);
-  const turns = toTurns(await deps.chat.recentMessages(thread.id, 40), agent.id);
+  const turns = await turnsOf(deps, await deps.chat.recentMessages(thread.id, 40), agent.id);
   const line =
     `${ask.from}: ${ask.instruction}\n\n` +
     `(Es su rutina «${ask.title}»: te la ha lanzado su horario y nadie está esperando delante. ` +

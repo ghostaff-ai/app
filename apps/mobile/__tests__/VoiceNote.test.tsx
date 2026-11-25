@@ -3,6 +3,9 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { MessageView } from '@/components/chat/Message';
 import { VoiceNote } from '@/components/chat/VoiceNote';
 
+// The decision card reads the database; these tests are about other parts.
+jest.mock('@/components/chat/DecisionInChat', () => ({ DecisionInChat: () => null, DecisionQuote: () => null }));
+
 // A player that plays nothing, with a status the test moves.
 const mockStatus = { playing: false, currentTime: 0, duration: 0, didJustFinish: false };
 const mockPlayer = {

@@ -1,6 +1,7 @@
 import { type AgentLevel, type ChatMessage, type ChatThread, isVoicePart, messageText, type OrgMember } from '@ghostaff/shared';
 import {
   askAgent,
+  askAboutDecision,
   chatWith,
   conversationReaders,
   type EngineAccess,
@@ -286,6 +287,17 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
     [chatId, chat.send, agentId, engine],
   );
 
+  /** «Preguntar» on a decision: the message quotes it, in this chat (opened if it isn't yet). */
+  const askAbout = useCallback(
+    async (decisionId: string, body: string) => {
+      const m = await askAboutDecision(supabase, decisionId, body);
+      if (chatId) chat.add(m);
+      else setOpened(m.threadId);
+      if (engine) letAgentAnswer(engine, m.threadId, setError);
+    },
+    [chatId, chat.add, engine],
+  );
+
   /**
    * A voice note (voice.md): the engine stores it in the chat (opening it with
    * the first note) and answers at once; then it is transcribed and the agent
@@ -315,6 +327,7 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
     messages: chat.messages,
     error: error ?? chat.error,
     send,
+    askAbout,
     sendVoice,
     retryTranscript,
     reload,

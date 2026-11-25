@@ -1,5 +1,6 @@
 import { RULE_KIND, type DecisionSource } from '@ghostaff/shared';
 import { AUTONOMY_STREAK } from '@ghostaff/shared/services';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Pressable, Text, TextInput, View } from 'react-native';
 import { Button, ErrorText, Loading, Notice } from '@/components/ui';
@@ -253,6 +254,20 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
             )}
           </View>
         )}
+        {decision.agent ? (
+          // «Preguntar» (decision-model.md, decision 7): the agent's chat, with this decision quoted above the box.
+          <Pressable
+            testID="ask-agent"
+            accessibilityRole="button"
+            onPress={() =>
+              router.push({ pathname: '/chat/[agent]', params: { agent: decision.agent!.id, about: decision.id, q: decision.question } })
+            }
+            hitSlop={8}
+            className="mt-4 self-start"
+          >
+            <Text className="text-base font-semibold text-ink">Preguntar a {agent}</Text>
+          </Pressable>
+        ) : null}
         <ErrorText>{actionError}</ErrorText>
       </View>
       </KeyboardForm>

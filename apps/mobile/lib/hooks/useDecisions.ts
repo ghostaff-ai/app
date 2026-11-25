@@ -4,6 +4,7 @@ import {
   answerDecision,
   countWaiting,
   getDecision,
+  listAskedDecisions,
   listDecidedDecisions,
   listMySnoozes,
   listOpenDecisions,
@@ -149,7 +150,7 @@ export type DeckMove = { decision: Decision; kind: 'ok' | 'no' | 'later'; option
  * person, one at a time, and what they do with the top one. A card leaves at
  * once and comes back if the database says no; the last move can be undone.
  */
-export function useDeck(orgId: string | null) {
+export function useDeck(orgId: string | null, userId: string | null = null) {
   const inbox = useInbox(orgId);
   const [aside, setAside] = useState<Record<string, string>>({});
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
@@ -168,6 +169,19 @@ export function useDeck(orgId: string | null) {
   useEffect(() => {
     if (orgId) void listMySnoozes(supabase, orgId).then(setAside).catch(() => setAside({}));
   }, [orgId]);
+
+  // The cards the person asked their agent about («Preguntaste»); a nicety, so a failure shows none.
+  const [asked, setAsked] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    if (!orgId || !userId) return;
+    let alive = true;
+    void listAskedDecisions(supabase, orgId, userId)
+      .then((s) => alive && setAsked(s))
+      .catch(() => alive && setAsked(new Set()));
+    return () => {
+      alive = false;
+    };
+  }, [orgId, userId, inbox.decisions]);
 
   const cards = useMemo(() => deckOf(inbox.decisions, aside, { showAside, gone }), [inbox.decisions, aside, showAside, gone]);
   const asideTotal = useMemo(() => asideCount(inbox.decisions, aside), [inbox.decisions, aside]);
@@ -226,6 +240,7 @@ export function useDeck(orgId: string | null) {
 
   return {
     cards,
+    asked,
     asideTotal,
     showAside,
     setShowAside,

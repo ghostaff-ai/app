@@ -2,6 +2,9 @@ import type { ActionPart } from '@ghostaff/shared';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { ActionCard } from '@/components/chat/Message';
 
+// The decision card reads the database; these tests are about other parts.
+jest.mock('@/components/chat/DecisionInChat', () => ({ DecisionInChat: () => null, DecisionQuote: () => null }));
+
 const action: ActionPart = {
   type: 'action',
   actionId: 'a1',

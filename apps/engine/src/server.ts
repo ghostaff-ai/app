@@ -32,7 +32,8 @@ import { googleCaller } from './googleCaller';
 import { type ForgejoConfig, forgejoAdmin } from './forgejo';
 import { provisionRecords } from './recordProvision';
 import { recordAgentsOf, supabaseRecordStore } from './recordStore';
-import { canReach, type RecordSyncDeps, syncAll, syncOrg } from './recordSync';
+import { canReach, openDecision, type RecordSyncDeps, syncAll, syncOrg } from './recordSync';
+import { decisionBriefs } from './decisionAsks';
 import { expireRuns } from './jobs';
 import type { ChatDeps } from './chat';
 import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
@@ -226,6 +227,7 @@ const chatDeps: ChatDeps = {
   asks: supabaseAskStore(admin),
   guidedToolsFor: guidedTools,
   guides: guideStore,
+  decisions: { open: (a) => openDecision(recordSync, a), briefs: (ids) => decisionBriefs(admin, ids) },
 };
 // Voice notes' transcripts: Gemini on Vertex AI in the EU, billed to Ghostaff's own project (transcribe.ts).
 const gcpProject = process.env.GCP_PROJECT;

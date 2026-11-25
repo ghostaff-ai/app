@@ -65,6 +65,8 @@ export interface RecordSyncStore {
   agents(orgId: string): Promise<SyncAgent[]>;
   apply(plan: SyncPlan): Promise<void>;
   markWrittenBack(rowIds: string[]): Promise<void>;
+  /** Points the decision with this record id at the agent that asked; its row id, or null when it is not there. */
+  pointDecision(orgId: string, recordId: string, agentId: string): Promise<string | null>;
   /** The organisation's agents that have a slug, so a file of their own. */
   instructedAgents(orgId: string): Promise<InstructedAgent[]>;
   /** The agent's instructions from its file (`task` set), or its file gone (`task` kept as it was). */
@@ -259,6 +261,37 @@ export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<Org
     await deps.store.syncState(org.id, msg.slice(0, 500)).catch(() => {});
     return { org: org.slug, ok: false, summary: `${org.slug}: ${msg}` };
   }
+}
+
+/**
+ * An agent's new decision (decisionAsks.ts): `por-decidir/<id>.yaml` committed on the record's head
+ * with a free id from `base`, then the organisation synced so the row is there at once, pointed at
+ * the agent. Null when the organisation has no record this engine reaches. Throws when the record
+ * keeps moving under it.
+ */
+export async function openDecision(
+  deps: RecordSyncDeps,
+  a: { orgId: string; agentId: string; base: string; decision: (id: string) => string },
+): Promise<{ decisionId: string; recordId: string } | null> {
+  const org = await deps.store.orgWithRecord(a.orgId);
+  if (!org || !canReach(deps, org)) return null;
+  const repo = await repoOf(deps, org);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const head = await repo.head();
+    let id = a.base;
+    for (let n = 2; (await repo.file(`${DECISIONS_DIR}/${id}.yaml`, head.sha)) !== null; n++) {
+      if (n > 20) throw new Error(`no free decision id for ${a.base}`);
+      id = `${a.base}-${n}`;
+    }
+    const yaml = a.decision(id);
+    if (!(await repo.commit(head, [{ path: `${DECISIONS_DIR}/${id}.yaml`, content: yaml }], `por-decidir: ${id} (desde el chat)`))) continue;
+    const synced = await syncOrg(deps, org);
+    if (!synced.ok) throw new Error(synced.summary);
+    const decisionId = await deps.store.pointDecision(org.id, id, a.agentId);
+    if (!decisionId) throw new Error(`${id} did not reach the database`);
+    return { decisionId, recordId: id };
+  }
+  throw new Error('the record kept moving; try again');
 }
 
 /** Every organisation with a record this engine can reach, one after another. */

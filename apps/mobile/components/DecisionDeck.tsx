@@ -34,7 +34,7 @@ function useReducedMotion() {
 }
 
 /** One card's face: who asks and when, the question, one quoted line, «Con el sí / Con el no» and the pick. */
-function Face({ d }: { d: Decision }) {
+function Face({ d, asked }: { d: Decision; asked: boolean }) {
   const due = d.dueOn ? dueLabel(d.dueOn) : null;
   const asker = askerOf(d);
   return (
@@ -83,17 +83,20 @@ function Face({ d }: { d: Decision }) {
           Te recomiendo <Text className="font-semibold text-ink">{pickLabel(d)}</Text>
         </Text>
       ) : null}
-      <Text className="mt-1 text-footnote text-muted">Toca para ver todo y preguntar</Text>
+      <Text className="mt-1 text-footnote text-muted">{asked ? `Preguntaste a ${asker.name} · toca para verlo todo` : 'Toca para ver todo y preguntar'}</Text>
     </View>
   );
 }
 
 export function DecisionDeck({
   cards,
+  asked,
   onMove,
   toast,
 }: {
   cards: Decision[];
+  /** The cards the person asked their agent about: «Preguntaste». */
+  asked?: ReadonlySet<string>;
   onMove: (d: Decision, kind: DeckMove['kind'], option?: string) => void;
   /** «Deshacer» after a move: it takes the hint's place under the buttons. */
   toast?: ReactNode;
@@ -193,7 +196,7 @@ export function DecisionDeck({
             className="flex-1 rounded-[28px] bg-card p-6"
             style={{ shadowColor: '#16151E', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 3 }}
           >
-            <Face d={top} />
+            <Face d={top} asked={!!asked?.has(top.id)} />
           </Pressable>
           <Animated.View pointerEvents="none" style={{ position: 'absolute', bottom: 96, left: 24, opacity: okHint, backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 }}>
             <Text className="text-footnote font-semibold text-on-accent">{pick}</Text>
