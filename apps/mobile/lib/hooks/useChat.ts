@@ -17,7 +17,9 @@ import {
   transcribeVoiceNote,
   voiceNoteUrl,
 } from '@ghostaff/shared/services';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { supabase } from '../supabase';
 import { useEngine } from './useConnections';
 import type { RecordedNote } from './useVoiceNote';
@@ -111,12 +113,13 @@ export function addMessage(list: ChatMessage[], m: ChatMessage): ChatMessage[] {
 
 /**
  * One thread, live: its messages, new ones as anyone writes them, marked read
- * while it is open. `send` writes as the signed-in person.
+ * while the person can see it. `send` writes as the signed-in person.
  */
 export function useThread(threadId: string | null) {
   const [head, setHead] = useState<ThreadHead | null | undefined>(undefined);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const markRead = useMarkReadWhileSeen(threadId);
 
   useEffect(() => {
     if (!threadId) return;
@@ -127,7 +130,7 @@ export function useThread(threadId: string | null) {
           if (!alive) return;
           setHead(h);
           setMessages((live) => ms.reduce(addMessage, live));
-          if (h) void markThreadRead(supabase, threadId).catch(() => {});
+          if (h) markRead.found();
         })
         .catch((e: unknown) => {
           if (!alive) return;
@@ -143,7 +146,7 @@ export function useThread(threadId: string | null) {
       (m) => {
         if (!alive) return;
         setMessages((list) => addMessage(list, m));
-        void markThreadRead(supabase, threadId).catch(() => {});
+        markRead.now();
       },
       () => void load(),
     );
@@ -152,7 +155,7 @@ export function useThread(threadId: string | null) {
       alive = false;
       stop();
     };
-  }, [threadId]);
+  }, [threadId, markRead]);
 
   const engine = useEngine();
   const send = useCallback(
@@ -180,6 +183,58 @@ export function useThread(threadId: string | null) {
   }, [threadId]);
 
   return { head, messages, error, send, add, reloadHead };
+}
+
+/**
+ * Marks a thread read only while the person can see it: the app in the
+ * foreground and its screen focused. On Android the Realtime socket stays open
+ * in the background, so a reply arriving then would otherwise be marked read
+ * and its push closed unseen. What arrived meanwhile is marked when the app
+ * comes back, or the screen is focused again. `found()` says the thread exists
+ * and may be read (it loaded); `now()` marks it if it is seen.
+ */
+function useMarkReadWhileSeen(threadId: string | null) {
+  const focused = useRef(false);
+  const found = useRef(false);
+
+  const api = useMemo(() => {
+    const now = () => {
+      if (!threadId || !found.current || !focused.current || AppState.currentState !== 'active') return;
+      void markThreadRead(supabase, threadId).catch(() => {});
+    };
+    return {
+      now,
+      found: () => {
+        found.current = true;
+        now();
+      },
+      focus: (on: boolean) => {
+        focused.current = on;
+        now();
+      },
+    };
+  }, [threadId]);
+
+  // A new thread hasn't loaded yet.
+  useEffect(() => {
+    found.current = false;
+  }, [threadId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      api.focus(true);
+      return () => api.focus(false);
+    }, [api]),
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') api.now();
+    });
+    return () => sub.remove();
+  }, [api]);
+
+  return api;
 }
 
 /** How many people read a conversation, once known; null while loading or if it can't be read. */

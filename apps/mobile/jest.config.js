@@ -7,7 +7,7 @@ module.exports = {
   watchman: process.env.JEST_WATCHMAN !== 'false',
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   transformIgnorePatterns: [
-    '/node_modules/(?!(.pnpm|react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|react-navigation|@react-navigation/.*|nativewind|react-native-css-interop|@ghostaff|@supabase|phosphor-react-native))',
+    '/node_modules/(?!(.pnpm|react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|react-navigation|@react-navigation/.*|nativewind|react-native-css-interop|@ghostaff|@supabase|phosphor-react-native|standard-navigation))',
   ],
   moduleNameMapper: {
     '\\.glb$': '<rootDir>/test/glbStub.js',
