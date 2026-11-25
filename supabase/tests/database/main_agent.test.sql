@@ -2,7 +2,7 @@
 -- the database keeps it that way, and nobody removes it. Órdago and the
 -- organisations that predate the role are brought in by ensure_main_agent.
 begin;
-select plan(22);
+select plan(24);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000e1', 'olga@example.com');
@@ -105,6 +105,15 @@ select is(
 select is(
   (select count(*)::int from public.agents where org_id = '00000000-0000-0000-0000-0000000000f2'),
   2, '... and adds no row');
+
+-- The owners hear from the main agent, not from an older agent drawn as the secretaria ghost.
+insert into public.memberships (org_id, user_id, role, display_name)
+values ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000e1', 'owner', 'Olga');
+select is(public.notify_owners('00000000-0000-0000-0000-0000000000f2', 'He pausado una rutina.'), 1, 'notify_owners reaches the owner');
+select is(
+  (select t.agent_id from public.messages m join public.threads t on t.id = m.thread_id
+   where m.org_id = '00000000-0000-0000-0000-0000000000f2' and m.parts->0->>'text' = 'He pausado una rutina.'),
+  (select id from ordago_main), '... in the main agent''s chat, not Correo''s');
 
 -- Only the database's own functions call these.
 set local role authenticated;

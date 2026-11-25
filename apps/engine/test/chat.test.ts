@@ -498,12 +498,17 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     expect(asked[0]?.system).toContain('rutinas tuyas');
   });
 
-  it('gives no settings to an agent drawn as the secretaria ghost that is not the main agent', async () => {
+  it('gives an agent drawn as the secretaria ghost that is not the main agent only its own routines', async () => {
     const correo: ChatAgent = { ...secretaria, name: 'Correo', isMain: false };
     const { call, asked } = setup({ agent: correo, tools: google, asPerson: () => fakeSupabase({}).client });
     await call('ana', `/threads/${THREAD}/reply`);
     const names = (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
-    expect(names.some((n) => n.startsWith('settings_'))).toBe(false);
+    expect(names.filter((n) => n.startsWith('settings_')).sort()).toEqual([
+      'settings_create_routine',
+      'settings_pause_routine',
+      'settings_read_routines',
+      'settings_update_routine',
+    ]);
     expect(asked[0]?.system).not.toContain('agente principal');
   });
 

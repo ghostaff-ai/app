@@ -23,12 +23,12 @@ insert into public.memberships (org_id, user_id, role, display_name) values
   ('10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000c', 'owner', 'Carla');
 
 -- Finanzas: Bea talks to it, Dani only reads it. Legal is still one of Órdago's jobs.
-insert into public.agents (id, org_id, name, ghost, department, member_default, slug, runner, job_project, job_region, job_name, job_identity) values
-  ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Secretaría', 'secretaria', 'direccion', 'talk', null, 'chat', null, null, null, null),
-  ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'Finanzas', 'finanzas', 'finanzas', 'read', null, 'chat', null, null, null, null),
+insert into public.agents (id, org_id, name, ghost, department, member_default, slug, runner, job_project, job_region, job_name, job_identity, is_main) values
+  ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Secretaría', 'secretaria', 'direccion', 'talk', null, 'chat', null, null, null, null, true),
+  ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'Finanzas', 'finanzas', 'finanzas', 'read', null, 'chat', null, null, null, null, false),
   ('20000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', 'Legal', 'base', 'legal', 'talk',
-   'legal', 'ordago_job', 'ordago-agents', 'europe-west1', 'ordago-legal', 'ordago-legal@ordago-agents.iam.gserviceaccount.com'),
-  ('20000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000002', 'Finanzas', 'finanzas', 'finanzas', 'read', null, 'chat', null, null, null, null);
+   'legal', 'ordago_job', 'ordago-agents', 'europe-west1', 'ordago-legal', 'ordago-legal@ordago-agents.iam.gserviceaccount.com', false),
+  ('20000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000002', 'Finanzas', 'finanzas', 'finanzas', 'read', null, 'chat', null, null, null, null, false);
 insert into public.agent_access (org_id, agent_id, user_id, level) values
   ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000b', 'talk');
 

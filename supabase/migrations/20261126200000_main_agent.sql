@@ -210,5 +210,42 @@ begin
 end;
 $$;
 
+/** A word from the organisation's main agent in each owner's chat with it (a routine paused, say). */
+create or replace function public.notify_owners(target_org uuid, body text)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  a public.agents;
+  owner uuid;
+  chat uuid;
+  msg public.messages;
+  reached integer := 0;
+begin
+  select * into a from public.agents x where x.org_id = target_org and x.is_main;
+  if not found then
+    return 0;
+  end if;
+  if nullif(trim(body), '') is null then
+    raise exception 'a message is required' using errcode = '22023';
+  end if;
+  for owner in select m.user_id from public.memberships m where m.org_id = target_org and m.role = 'owner' loop
+    insert into public.threads (org_id, agent_id, title, created_by, personal_of)
+    values (a.org_id, a.id, a.name, null, owner)
+    on conflict (agent_id, personal_of) where personal_of is not null do nothing;
+    select t.id into chat from public.threads t where t.agent_id = a.id and t.personal_of = owner;
+
+    insert into public.messages (thread_id, org_id, author_kind, author_agent, author_name, parts, state, finished_at)
+    values (chat, a.org_id, 'agent', a.id, a.name, jsonb_build_array(jsonb_build_object('type', 'text', 'text', body)), 'done', clock_timestamp())
+    returning * into msg;
+    update public.threads set last_message_at = msg.created_at where id = chat;
+    reached := reached + 1;
+  end loop;
+  return reached;
+end;
+$$;
+
 -- Every organisation that exists gets its main agent.
 select public.ensure_main_agent(id) from public.organizations;
