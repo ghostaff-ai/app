@@ -66,6 +66,8 @@ export interface DecisionAnswer {
   /** Only for a rule answered OK: the wording the person signs. */
   signedText: string | null;
   source: 'record' | 'app';
+  /** With options: the id of the one chosen (null for a no given by an app from before options). */
+  option: string | null;
   /** Null while an answer given in the app is not yet in the record's file. */
   writtenBackAt: string | null;
 }
@@ -74,6 +76,20 @@ export interface DecisionAnswer {
 export interface DecisionSource {
   text: string;
   link?: string;
+}
+
+/** One of a decision's options: a short verb phrase, and what happens with it. */
+export interface DecisionOption {
+  id: string;
+  text: string;
+  if?: string;
+}
+
+/** The agent that asked, when the decision points at one of the organisation's agents. */
+export interface DecisionAgent {
+  id: string;
+  name: string;
+  ghost: string;
 }
 
 export interface Decision {
@@ -104,6 +120,13 @@ export interface Decision {
   sources: DecisionSource[];
   /** `YYYY-MM-DD`: the last day the answer is useful. */
   dueOn: string | null;
+  /** 2 or 3 options instead of yes or no; empty for a yes-or-no decision. */
+  options: DecisionOption[];
+  /** With options: the id of the agent's pick. */
+  recommendedOption: string | null;
+  /** `importancia: alta`: no swipe, and the pick hidden until the person chooses. */
+  highStakes: boolean;
+  agent: DecisionAgent | null;
   answer: DecisionAnswer | null;
   closedAt: string | null;
 }

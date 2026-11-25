@@ -22,6 +22,10 @@ const decision: Decision = {
   quote: null,
   sources: [],
   dueOn: null,
+  options: [],
+  recommendedOption: null,
+  highStakes: false,
+  agent: null,
   answer: null,
   closedAt: null,
 };
@@ -41,7 +45,7 @@ describe('DecisionCard', () => {
   it('drops the dot once answered and says whether the agent has it', async () => {
     const answered: Decision = {
       ...decision,
-      answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-12T09:00:00Z', note: null, signedText: null, source: 'app', writtenBackAt: null },
+      answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-12T09:00:00Z', note: null, signedText: null, source: 'app', option: null, writtenBackAt: null },
     };
     await render(<DecisionCard decision={answered} onPress={() => {}} />);
     expect(screen.queryByTestId('waiting-dot')).toBeNull();
@@ -66,7 +70,7 @@ describe('format', () => {
   });
 
   it('says an answer from the record is with the agent', () => {
-    expect(answerLabel({ answer: 'no', byName: 'Jaime', at: '', note: null, signedText: null, source: 'record', writtenBackAt: '' }, 'Finanzas')).toBe(
+    expect(answerLabel({ answer: 'no', byName: 'Jaime', at: '', note: null, signedText: null, source: 'record', option: null, writtenBackAt: '' }, 'Finanzas')).toBe(
       'No de Jaime · Finanzas ya lo tiene',
     );
   });

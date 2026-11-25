@@ -37,17 +37,51 @@ export interface DecisionUpsert {
   quote: string | null;
   sources: { text: string; link?: string }[];
   due_on: string | null;
+  options: { id: string; text: string; if?: string }[];
+  recommended_option: string | null;
+  high_stakes: boolean;
+  agent_id: string | null;
   source_commit: string | null;
   synced_at: string;
   closed_at: null;
   // Present only when the file carries an answer.
   answer?: 'ok' | 'no';
+  answer_option?: string | null;
   answered_by_name?: string;
   answered_at?: string;
   answer_note?: string | null;
   answer_text?: string | null;
   answer_source?: 'record';
   written_back_at?: string;
+}
+
+/** An organisation's agent, as the sync matches a file's `propone` to it. */
+export interface SyncAgent {
+  id: string;
+  slug: string | null;
+  name: string;
+  ghost: string;
+}
+
+const fold = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+/**
+ * The agent a file's `propone` names (decision-model.md, decision 4): by its slug, then by its
+ * name, then by its ghost when only one agent has it. Null when none, or more than one, fits.
+ */
+export function matchAgent(propone: string, agents: SyncAgent[]): string | null {
+  const p = fold(propone);
+  for (const key of [(a: SyncAgent) => a.slug ?? '', (a: SyncAgent) => a.name, (a: SyncAgent) => a.ghost]) {
+    const hits = agents.filter((a) => fold(key(a)) === p);
+    if (hits.length === 1) return hits[0]!.id;
+    if (hits.length > 1) return null;
+  }
+  return null;
 }
 
 export interface WriteBack {
@@ -72,10 +106,12 @@ export function planSync(args: {
   orgId: string;
   files: RecordFile[];
   existing: DecisionRow[];
+  /** The organisation's agents, to point each decision at the one that asked. */
+  agents?: SyncAgent[];
   commit: string | null;
   now: Date;
 }): SyncPlan {
-  const { orgId, files, existing, commit, now } = args;
+  const { orgId, files, existing, commit, now, agents = [] } = args;
   const syncedAt = now.toISOString();
   const byRecordId = new Map(existing.map((r) => [r.record_id, r]));
   const plan: SyncPlan = { upserts: [], close: [], writeBacks: [], invalid: [], conflicts: [] };
@@ -94,6 +130,7 @@ export function planSync(args: {
     seen.add(d.id);
     const row = byRecordId.get(d.id);
 
+    const pick = d.opciones?.find((o) => o.id === d.recomienda);
     const up: DecisionUpsert = {
       org_id: orgId,
       record_id: d.id,
@@ -105,12 +142,17 @@ export function planSync(args: {
       proposed_by: d.propone,
       created_on: d.creada.slice(0, 10),
       rule_proposal: d.regla?.propuesta ?? null,
-      recommendation: d.recomienda ?? null,
+      // With options, the pick's words: what an app from before options puts on its OK button.
+      recommendation: pick ? pick.texto : (d.recomienda ?? null),
       if_yes: d.con_si ?? null,
       if_no: d.con_no ?? null,
       quote: d.cita ?? null,
       sources: (d.fuentes ?? []).map((f) => (f.enlace ? { text: f.texto, link: f.enlace } : { text: f.texto })),
       due_on: d.vence ?? null,
+      options: (d.opciones ?? []).map((o) => (o.con ? { id: o.id, text: o.texto, if: o.con } : { id: o.id, text: o.texto })),
+      recommended_option: pick ? pick.id : null,
+      high_stakes: d.importancia === 'alta',
+      agent_id: matchAgent(d.propone, agents),
       source_commit: commit,
       synced_at: syncedAt,
       closed_at: null,
@@ -123,6 +165,7 @@ export function planSync(args: {
       }
       Object.assign(up, {
         answer: d.respuesta.decision,
+        answer_option: d.respuesta.opcion ?? (pick && d.respuesta.decision === 'ok' ? pick.id : null),
         answered_by_name: d.respuesta.por,
         answered_at: fromMadridMinute(d.respuesta.fecha),
         answer_note: d.respuesta.nota ?? null,
@@ -140,6 +183,7 @@ export function planSync(args: {
           fecha: madridMinute(new Date(row.answered_at)),
           ...(row.answer_note ? { nota: row.answer_note } : {}),
           ...(row.answer_text ? { texto: row.answer_text } : {}),
+          ...(row.answer_option && pick ? { opcion: row.answer_option } : {}),
         },
       });
     }

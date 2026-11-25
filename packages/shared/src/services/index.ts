@@ -16,6 +16,8 @@ import type {
   Connection,
   ConversationVisibility,
   Decision,
+  DecisionAgent,
+  DecisionOption,
   DecisionSource,
   Department,
   MembershipRole,
@@ -56,7 +58,14 @@ export interface DecisionRow {
   quote: string | null;
   sources: DecisionSource[] | null;
   due_on: string | null;
+  options: DecisionOption[] | null;
+  recommended_option: string | null;
+  high_stakes: boolean | null;
+  agent_id: string | null;
+  /** Embedded from agents through agent_id. */
+  agent?: DecisionAgent | null;
   answer: Answer | null;
+  answer_option: string | null;
   answered_by_name: string | null;
   answered_at: string | null;
   answer_note: string | null;
@@ -85,6 +94,10 @@ export function decisionFromRow(r: DecisionRow): Decision {
     quote: r.quote,
     sources: r.sources ?? [],
     dueOn: r.due_on,
+    options: r.options ?? [],
+    recommendedOption: r.recommended_option ?? null,
+    highStakes: !!r.high_stakes,
+    agent: r.agent ?? null,
     answer:
       r.answer && r.answered_at
         ? {
@@ -94,6 +107,7 @@ export function decisionFromRow(r: DecisionRow): Decision {
             note: r.answer_note,
             signedText: r.answer_text,
             source: r.answer_source ?? 'record',
+            option: r.answer_option ?? null,
             writtenBackAt: r.written_back_at,
           }
         : null,
@@ -102,7 +116,7 @@ export function decisionFromRow(r: DecisionRow): Decision {
 }
 
 const DECISION_COLUMNS =
-  'id, org_id, record_id, source_path, area, kind, question, context, proposed_by, created_on, rule_proposal, recommendation, if_yes, if_no, quote, sources, due_on, answer, answered_by_name, answered_at, answer_note, answer_text, answer_source, written_back_at, closed_at';
+  'id, org_id, record_id, source_path, area, kind, question, context, proposed_by, created_on, rule_proposal, recommendation, if_yes, if_no, quote, sources, due_on, options, recommended_option, high_stakes, agent_id, agent:agents(id, name, ghost), answer, answer_option, answered_by_name, answered_at, answer_note, answer_text, answer_source, written_back_at, closed_at';
 
 interface MembershipWithOrg {
   role: MembershipRole;
@@ -193,13 +207,16 @@ export async function getDecision(client: SupabaseClient, id: string): Promise<D
 
 export interface AnswerInput {
   decisionId: string;
-  answer: Answer;
+  /** For a decision with options, leave it to `option`: the database works out ok (the pick) or no. */
+  answer?: Answer;
+  /** The id of the option chosen, for a decision with options. */
+  option?: string;
   note?: string;
   /** Only for a rule answered OK. */
   signedText?: string;
 }
 
-/** OK or no. The database checks membership and signs with the person's display name. */
+/** OK or no, or one of the options. The database checks membership and signs with the person's display name. */
 export async function answerDecision(client: SupabaseClient, input: AnswerInput): Promise<Decision> {
   const { data, error } = await client
     .rpc('answer_decision', {
@@ -207,7 +224,9 @@ export async function answerDecision(client: SupabaseClient, input: AnswerInput)
       answer: input.answer,
       note: input.note?.trim() || null,
       signed_text: input.signedText?.trim() || null,
+      ...(input.option ? { option_id: input.option } : {}),
     })
+    .select(DECISION_COLUMNS)
     .single<DecisionRow>();
   if (error) throw error;
   return decisionFromRow(data);
@@ -215,7 +234,7 @@ export async function answerDecision(client: SupabaseClient, input: AnswerInput)
 
 /** Takes back an answer given in the app, while the agent does not have it yet. */
 export async function unanswerDecision(client: SupabaseClient, decisionId: string): Promise<Decision> {
-  const { data, error } = await client.rpc('unanswer_decision', { decision_id: decisionId }).single<DecisionRow>();
+  const { data, error } = await client.rpc('unanswer_decision', { decision_id: decisionId }).select(DECISION_COLUMNS).single<DecisionRow>();
   if (error) throw error;
   return decisionFromRow(data);
 }

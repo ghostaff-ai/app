@@ -142,7 +142,7 @@ export function useDecision(id: string | undefined) {
 }
 
 /** What the person did to the last card, so it can be undone. */
-export type DeckMove = { decision: Decision; kind: 'ok' | 'no' | 'later' };
+export type DeckMove = { decision: Decision; kind: 'ok' | 'no' | 'later'; option?: string };
 
 /**
  * The decision deck (three-tabs.md, decision 7): the cards that wait for the
@@ -180,7 +180,7 @@ export function useDeck(orgId: string | null) {
       return n;
     });
 
-  const act = useCallback(async (decision: Decision, kind: DeckMove['kind']) => {
+  const act = useCallback(async (decision: Decision, kind: DeckMove['kind'], option?: string) => {
     setError(null);
     leave(decision.id);
     try {
@@ -189,9 +189,9 @@ export function useDeck(orgId: string | null) {
         await snoozeDecision(supabase, decision.id, until);
         setAside((a) => ({ ...a, [decision.id]: until.toISOString() }));
       } else {
-        await answerDecision(supabase, { decisionId: decision.id, answer: kind });
+        await answerDecision(supabase, { decisionId: decision.id, ...(option ? { option } : { answer: kind }) });
       }
-      setLast({ decision, kind });
+      setLast({ decision, kind, ...(option ? { option } : {}) });
       if (kind !== 'later') inboxChanged();
     } catch (e) {
       stay(decision.id);

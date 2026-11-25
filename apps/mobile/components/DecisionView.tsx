@@ -8,7 +8,9 @@ import { success } from '@/lib/haptics';
 import { useDecision } from '@/lib/hooks/useDecisions';
 import { KeyboardForm } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
-import { GHOSTS, agentLabel, ghostFor } from '@/lib/team';
+import { StakesReveal } from '@/components/StakesReveal';
+import { type Choice, choicesOf } from '@/lib/deck';
+import { GHOSTS, askerOf } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
 
 // One decision, laid out so it can be decided in a minute (docs/plans/ongoing/
@@ -27,7 +29,9 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
   const [noteOpen, setNoteOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const [signed, setSigned] = useState('');
-  const [busy, setBusy] = useState<'ok' | 'no' | 'back' | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  // A high-stakes choice that differs from the agent's pick, waiting to be kept or switched.
+  const [held, setHeld] = useState<Choice | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,17 +42,27 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
   if (error || !decision) return <Notice title="No encontramos esta decisión" body={error ?? 'Puede que ya esté cerrada.'} />;
 
   const isRule = decision.kind === RULE_KIND;
-  const hasParts = !!(decision.quote || decision.ifYes || decision.ifNo || decision.sources.length);
-  const agent = agentLabel(decision.proposedBy);
+  const choices = choicesOf(decision);
+  const pick = choices.find((c) => c.pick);
+  const hasOptions = decision.options.length > 0;
+  const hasParts = !!(decision.quote || decision.ifYes || decision.ifNo || decision.sources.length || hasOptions);
+  const asker = askerOf(decision);
+  const agent = asker.name;
   const due = decision.dueOn && !decision.answer ? dueLabel(decision.dueOn) : null;
   const mine = decision.answer?.byName === active?.displayName;
   const canTakeBack = !!decision.answer && decision.answer.source === 'app' && !decision.answer.writtenBackAt && !decision.closedAt && mine;
 
-  const send = async (a: 'ok' | 'no') => {
-    setBusy(a);
+  const keyOf = (c: Choice) => c.option ?? c.answer;
+  const send = async (c: Choice) => {
+    setBusy(keyOf(c));
     setActionError(null);
     try {
-      await answer({ answer: a, note, ...(isRule && a === 'ok' ? { signedText: signed } : {}) });
+      await answer({
+        ...(c.option ? { option: c.option } : { answer: c.answer }),
+        note,
+        ...(isRule && c.answer === 'ok' ? { signedText: signed } : {}),
+      });
+      setHeld(null);
       success();
       onAnswered?.();
     } catch (e) {
@@ -71,19 +85,39 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
     }
   };
 
-  const okLabel = isRule ? 'Firmar la regla' : decision.recommendation ?? 'OK';
+  // A high-stakes choice other than the pick is held, to show the pick before it goes.
+  const choose = (c: Choice) => {
+    if (decision.highStakes && pick && !c.pick) setHeld(c);
+    else void send(c);
+  };
+  const buttonOf = (c: Choice, primary: boolean) => (
+    <Button
+      key={keyOf(c)}
+      testID={`choice-${keyOf(c)}`}
+      label={isRule && c.answer === 'ok' ? 'Firmar la regla' : c.label}
+      variant={primary ? 'primary' : 'secondary'}
+      busy={busy === keyOf(c)}
+      disabled={!!busy || (isRule && c.answer === 'ok' && !signed.trim())}
+      onPress={() => choose(c)}
+    />
+  );
 
   return (
     <View className="flex-1 bg-surface">
       {/* The note is typed at the bottom of the page: it and the buttons ride on the keyboard. */}
       <KeyboardForm
         footer={
-          decision.answer ? null : (
+          decision.answer ? null : held && pick ? (
+            <View className="px-5 pt-3">
+              <StakesReveal chosen={held} pick={pick} agent={agent} busy={!!busy} onKeep={() => void send(held)} onSwitch={() => void send(pick)} />
+            </View>
+          ) : hasOptions ? (
+            // Each option a button, the agent's pick the main one unless the stakes are high.
+            <View className="gap-2.5 px-5 pt-3">{choices.map((c) => buttonOf(c, c.pick && !decision.highStakes))}</View>
+          ) : (
             <View className="flex-row gap-3 px-5 pt-3">
-              <Button label="No" variant="secondary" busy={busy === 'no'} disabled={!!busy} onPress={() => void send('no')} />
-              <View className="flex-1">
-                <Button label={okLabel} busy={busy === 'ok'} disabled={!!busy || (isRule && !signed.trim())} onPress={() => void send('ok')} />
-              </View>
+              {choices[0] ? buttonOf(choices[0], false) : null}
+              <View className="flex-1">{choices[1] ? buttonOf(choices[1], !decision.highStakes) : null}</View>
             </View>
           )
         }
@@ -92,7 +126,7 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
         <View className="flex-row items-center">
           <Image
             testID="agent-ghost"
-            source={GHOSTS[ghostFor(decision.proposedBy)].picture}
+            source={GHOSTS[asker.ghost].picture}
             style={{ width: 56, height: 56 }}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
@@ -130,7 +164,19 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
           </View>
         ) : null}
 
-        {decision.ifYes || decision.ifNo ? (
+        {hasOptions ? (
+          <View testID="options" className="mt-4 gap-2">
+            {choices.map((c) => (
+              <View key={keyOf(c)} className="rounded-2xl bg-card p-3">
+                <Text className="text-footnote font-semibold text-ink">
+                  {c.label}
+                  {c.pick && !decision.highStakes ? <Text className="font-normal text-muted"> · te lo recomiendo</Text> : null}
+                </Text>
+                {c.if ? <Text className="mt-1 text-footnote leading-5 text-muted">{c.if}</Text> : null}
+              </View>
+            ))}
+          </View>
+        ) : decision.ifYes || decision.ifNo ? (
           <View className="mt-4 flex-row gap-3">
             <Outcome title={isRule ? 'Si la firmas' : 'Con el sí'} body={decision.ifYes} />
             <Outcome title="Con el no" body={decision.ifNo} />
@@ -172,7 +218,7 @@ export function DecisionView({ id, onAnswered }: { id: string | undefined; onAns
 
         {decision.answer ? (
           <View testID="answered" className="mt-6 rounded-2xl bg-card p-4">
-            <Text className="text-base font-semibold text-ink">{answerLabel(decision.answer, agent)}</Text>
+            <Text className="text-base font-semibold text-ink">{answerLabel(decision.answer, agent, decision.options)}</Text>
             {decision.answer.note ? <Text className="mt-2 text-base text-muted">Le dijiste: «{decision.answer.note}»</Text> : null}
             {decision.answer.signedText ? <Text className="mt-2 text-base text-ink">«{decision.answer.signedText}»</Text> : null}
             {canTakeBack ? (

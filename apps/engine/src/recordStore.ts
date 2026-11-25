@@ -1,7 +1,7 @@
 // The record sync's database side, with the service role (apps/engine only).
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { applySync, markWrittenBack } from '@ghostaff/shared/record';
+import { applySync, markWrittenBack, type SyncAgent } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
 import type { RecordAgent } from './recordProvision';
 import type { RecordOrg, RecordSyncStore } from './recordSync';
@@ -49,6 +49,11 @@ export function supabaseRecordStore(db: SupabaseClient): RecordSyncStore {
     },
     async decisions(orgId) {
       const { data, error } = await db.from('decisions').select('*').eq('org_id', orgId).returns<DecisionRow[]>();
+      if (error) throw error;
+      return data ?? [];
+    },
+    async agents(orgId) {
+      const { data, error } = await db.from('agents').select('id, slug, name, ghost').eq('org_id', orgId).returns<SyncAgent[]>();
       if (error) throw error;
       return data ?? [];
     },

@@ -80,6 +80,7 @@ function store(rows: DecisionRow[] = [], agents: InstructedAgent[] = []) {
     orgsWithoutRecord: async () => [],
     setOwnRecord: async () => false,
     decisions: async () => rows,
+    agents: async () => [],
     apply: async (p) => {
       applied.push(p);
     },

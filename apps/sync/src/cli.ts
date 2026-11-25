@@ -82,7 +82,10 @@ async function syncPorDecidir(opts: { org: string; record: string; writeBack: bo
   const { data: existing, error } = await db.from('decisions').select('*').eq('org_id', orgId).returns<DecisionRow[]>();
   if (error) throw error;
 
-  const plan = planSync({ orgId, files, existing: existing ?? [], commit, now: new Date() });
+  const { data: agents, error: agentsError } = await db.from('agents').select('id, slug, name, ghost').eq('org_id', orgId);
+  if (agentsError) throw agentsError;
+
+  const plan = planSync({ orgId, files, existing: existing ?? [], agents: agents ?? [], commit, now: new Date() });
 
   await applySync(db, plan);
 
