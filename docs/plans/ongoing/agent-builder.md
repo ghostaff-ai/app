@@ -176,7 +176,7 @@ Slice 2 depends on routines' functions ([agent-routines.md](../ongoing/agent-rou
 ### Task 1: the role in the database
 
 **Files:**
-- Create: `supabase/migrations/20261126200000_main_agent.sql`
+- Create: `supabase/migrations/20261126300000_main_agent.sql`
 - Create: `supabase/tests/database/main_agent.test.sql`
 - Modify: `supabase/tests/database/spaces.test.sql` (the «Secretaría hired» assertions check `is_main`)
 
