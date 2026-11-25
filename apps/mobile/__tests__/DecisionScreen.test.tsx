@@ -20,6 +20,10 @@ const base: Decision = {
   quote: 'PORKBUN LLC · ghostaff.ai renewal · 49,00 EUR',
   sources: [{ text: 'Extracto bunq, 12/11' }, { text: 'Factura', link: 'https://example.com/f.pdf' }],
   dueOn: null,
+  options: [],
+  recommendedOption: null,
+  highStakes: false,
+  agent: null,
   answer: null,
   closedAt: null,
 };
@@ -96,7 +100,7 @@ describe('DecisionScreen', () => {
     expect(mockAnswer).toHaveBeenCalledWith({ answer: 'ok', note: 'Apúntalo a marketing' });
 
     mockCurrent = {
-      decision: { ...base, answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-17T10:00:00Z', note: 'Apúntalo a marketing', signedText: null, source: 'app', writtenBackAt: null } },
+      decision: { ...base, answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-17T10:00:00Z', note: 'Apúntalo a marketing', signedText: null, source: 'app', option: null, writtenBackAt: null } },
       streak: 0,
     };
     await screen.rerender(<DecisionScreen />);
@@ -106,7 +110,7 @@ describe('DecisionScreen', () => {
 
   it('lets whoever answered take it back until the agent has it', async () => {
     mockCurrent = {
-      decision: { ...base, answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-17T10:00:00Z', note: null, signedText: null, source: 'app', writtenBackAt: null } },
+      decision: { ...base, answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-17T10:00:00Z', note: null, signedText: null, source: 'app', option: null, writtenBackAt: null } },
       streak: 6,
     };
     await render(<DecisionScreen />);
@@ -116,7 +120,7 @@ describe('DecisionScreen', () => {
 
   it('keeps the answer once the agent has it', async () => {
     mockCurrent = {
-      decision: { ...base, answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-17T10:00:00Z', note: null, signedText: null, source: 'app', writtenBackAt: '2026-11-17T10:05:00Z' } },
+      decision: { ...base, answer: { answer: 'ok', byName: 'Álvaro', at: '2026-11-17T10:00:00Z', note: null, signedText: null, source: 'app', option: null, writtenBackAt: '2026-11-17T10:05:00Z' } },
       streak: 7,
     };
     await render(<DecisionScreen />);

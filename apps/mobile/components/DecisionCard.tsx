@@ -1,7 +1,7 @@
 import type { Decision } from '@ghostaff/shared';
 import { Image, Pressable, Text, View } from 'react-native';
 import { answerLabel, dueLabel, shortDate } from '@/lib/format';
-import { GHOSTS, agentLabel, ghostFor } from '@/lib/team';
+import { GHOSTS, askerOf } from '@/lib/team';
 
 // A decision in the inbox: the ghost of the agent that asks, the question, and
 // who asks with when it is due. The orange dot means it waits for you.
@@ -10,6 +10,7 @@ import { GHOSTS, agentLabel, ghostFor } from '@/lib/team';
 export function DecisionCard({ decision, onPress, selected }: { decision: Decision; onPress: () => void; selected?: boolean }) {
   const waiting = !decision.answer;
   const due = waiting && decision.dueOn ? dueLabel(decision.dueOn) : null;
+  const asker = askerOf(decision);
   return (
     <Pressable
       accessibilityRole="button"
@@ -20,7 +21,7 @@ export function DecisionCard({ decision, onPress, selected }: { decision: Decisi
     >
       <Image
         testID="agent-ghost"
-        source={GHOSTS[ghostFor(decision.proposedBy)].picture}
+        source={GHOSTS[asker.ghost].picture}
         style={{ width: 48, height: 48, marginRight: 14 }}
         resizeMode="contain"
       />
@@ -31,7 +32,7 @@ export function DecisionCard({ decision, onPress, selected }: { decision: Decisi
         <View className="mt-1.5 flex-row flex-wrap items-center">
           {waiting ? <View testID="waiting-dot" className="mr-1.5 h-2 w-2 rounded-full bg-waiting" /> : null}
           <Text className="text-footnote text-muted">
-            {agentLabel(decision.proposedBy)}
+            {asker.name}
             {' · '}
           </Text>
           {due ? (
@@ -40,7 +41,7 @@ export function DecisionCard({ decision, onPress, selected }: { decision: Decisi
             <Text className="text-footnote text-muted">{shortDate(decision.createdOn)}</Text>
           )}
         </View>
-        {decision.answer ? <Text className="mt-1 text-footnote text-muted">{answerLabel(decision.answer, agentLabel(decision.proposedBy))}</Text> : null}
+        {decision.answer ? <Text className="mt-1 text-footnote text-muted">{answerLabel(decision.answer, asker.name, decision.options)}</Text> : null}
       </View>
     </Pressable>
   );

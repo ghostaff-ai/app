@@ -120,11 +120,11 @@ describe('paths and dates', () => {
 
 describe('sortInbox', () => {
   const base = { orgId: 'o', sourcePath: '', area: 'a', kind: 'k', question: '', context: '', proposedBy: 'p', ruleProposal: null, closedAt: null,
-    recommendation: null, ifYes: null, ifNo: null, quote: null, sources: [], dueOn: null };
+    recommendation: null, ifYes: null, ifNo: null, quote: null, sources: [], dueOn: null, options: [], recommendedOption: null, highStakes: false, agent: null };
   it('puts what waits for you first, newest first', () => {
     const ds: Decision[] = [
       { ...base, id: '1', recordId: '1', createdOn: '2026-11-10', answer: null },
-      { ...base, id: '2', recordId: '2', createdOn: '2026-11-11', answer: { answer: 'ok', byName: 'A', at: '', note: null, signedText: null, source: 'app', writtenBackAt: null } },
+      { ...base, id: '2', recordId: '2', createdOn: '2026-11-11', answer: { answer: 'ok', byName: 'A', at: '', note: null, signedText: null, source: 'app', option: null, writtenBackAt: null } },
       { ...base, id: '3', recordId: '3', createdOn: '2026-11-09', answer: null },
     ];
     expect(sortInbox(ds).map((d) => d.id)).toEqual(['1', '3', '2']);
@@ -185,5 +185,50 @@ vence: 2026-11-10
   it('keeps them when the answer is written back', () => {
     const out = writeAnswer(FULL, 'seo-glosario', { decision: 'ok', por: 'Álvaro', fecha: '2026-11-17 10:00' });
     expect(readDecision('seo-glosario', out).recomienda).toBe('Cambiarlo');
+  });
+});
+
+describe('readDecision, options and stakes', () => {
+  const OPTIONS = `${FILE}opciones:
+  - id: lunes
+    texto: El lunes a las 9:00
+    con: El lunes tuvo el doble de visitas.
+  - id: viernes
+    texto: El viernes por la tarde
+  - id: nada
+    texto: No publicarlo
+recomienda: lunes
+importancia: alta
+`;
+
+  it('reads the options, the pick by id and the stakes', () => {
+    const d = readDecision('seo-x', OPTIONS);
+    expect(d.opciones).toEqual([
+      { id: 'lunes', texto: 'El lunes a las 9:00', con: 'El lunes tuvo el doble de visitas.' },
+      { id: 'viernes', texto: 'El viernes por la tarde' },
+      { id: 'nada', texto: 'No publicarlo' },
+    ]);
+    expect(d.recomienda).toBe('lunes');
+    expect(d.importancia).toBe('alta');
+  });
+
+  it('keeps a yes-or-no file as it was', () => {
+    const d = readDecision('seo-x', `${FILE}recomienda: Cambiarlo\n`);
+    expect(d.opciones).toBeUndefined();
+    expect(d.recomienda).toBe('Cambiarlo');
+  });
+
+  it('refuses a pick that is not an option, one option, or a repeated id', () => {
+    expect(() => readDecision('seo-x', OPTIONS.replace('recomienda: lunes', 'recomienda: martes'))).toThrow(/recomienda/);
+    expect(() => readDecision('seo-x', `${FILE}opciones:\n  - id: a\n    texto: A\nrecomienda: a\n`)).toThrow(/2 or 3/);
+    expect(() => readDecision('seo-x', OPTIONS.replace('id: viernes', 'id: lunes'))).toThrow(/two options/);
+    expect(() => readDecision('seo-x', OPTIONS.replace('importancia: alta', 'importancia: media'))).toThrow(/importancia/);
+  });
+
+  it('writes the option chosen, with ok only for the pick', () => {
+    const y = writeAnswer(OPTIONS, 'seo-x', { decision: 'no', opcion: 'viernes', por: 'Álvaro', fecha: '2026-11-25 10:00' });
+    expect(readDecision('seo-x', y).respuesta).toEqual({ decision: 'no', opcion: 'viernes', por: 'Álvaro', fecha: '2026-11-25 10:00' });
+    expect(() => writeAnswer(OPTIONS, 'seo-x', { decision: 'ok', opcion: 'viernes', por: 'Á', fecha: '2026-11-25 10:00' })).toThrow(/recommended/);
+    expect(() => writeAnswer(OPTIONS, 'seo-x', { decision: 'no', opcion: 'martes', por: 'Á', fecha: '2026-11-25 10:00' })).toThrow(/options/);
   });
 });

@@ -53,7 +53,7 @@ export default function Decisiones() {
         <ErrorText>{deck.error}</ErrorText>
         {count > 0 ? (
           <View className="mt-3 flex-1">
-            <DecisionDeck cards={deck.cards} onMove={(d, kind) => void deck.act(d, kind)} toast={toast} />
+            <DecisionDeck cards={deck.cards} onMove={(d, kind, option) => void deck.act(d, kind, option)} toast={toast} />
           </View>
         ) : (
           <View className="flex-1 justify-center">

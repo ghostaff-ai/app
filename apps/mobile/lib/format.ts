@@ -1,4 +1,4 @@
-import type { DecisionAnswer } from '@ghostaff/shared';
+import type { DecisionAnswer, DecisionOption } from '@ghostaff/shared';
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -10,8 +10,9 @@ export function shortDate(isoDate: string): string {
 }
 
 /** One line on what was answered and whether the agent has it yet. */
-export function answerLabel(a: DecisionAnswer, agent: string): string {
-  const what = a.answer === 'ok' ? 'OK' : 'No';
+export function answerLabel(a: DecisionAnswer, agent: string, options: DecisionOption[] = []): string {
+  const chosen = a.option ? options.find((o) => o.id === a.option)?.text : null;
+  const what = chosen ? `«${chosen}»` : a.answer === 'ok' ? 'OK' : 'No';
   const who = a.byName ? ` de ${a.byName}` : '';
   const where = a.source === 'app' && !a.writtenBackAt ? ` · ${agent} aún no lo ha recogido` : ` · ${agent} ya lo tiene`;
   return `${what}${who}${where}`;

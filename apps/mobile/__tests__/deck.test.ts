@@ -1,5 +1,6 @@
 import type { Decision } from '@ghostaff/shared';
-import { asideCount, canSwipe, deckOf, pickLabel, tomorrowMorning } from '@/lib/deck';
+import { answeredLabel, asideCount, canSwipe, choicesOf, deckOf, pickLabel, tomorrowMorning } from '@/lib/deck';
+import { askerOf } from '@/lib/team';
 
 const d = (id: string, more: Partial<Decision> = {}): Decision => ({
   id,
@@ -19,12 +20,16 @@ const d = (id: string, more: Partial<Decision> = {}): Decision => ({
   quote: null,
   sources: [],
   dueOn: null,
+  options: [],
+  recommendedOption: null,
+  highStakes: false,
+  agent: null,
   answer: null,
   closedAt: null,
   ...more,
 });
 
-const answered: NonNullable<Decision['answer']> = { answer: 'ok', byName: 'Ana', at: '2026-11-21T10:00:00Z', note: null, signedText: null, source: 'app', writtenBackAt: null };
+const answered: NonNullable<Decision['answer']> = { answer: 'ok', byName: 'Ana', at: '2026-11-21T10:00:00Z', note: null, signedText: null, source: 'app', option: null, writtenBackAt: null };
 
 describe('the decision deck', () => {
   it('brings a card back tomorrow at 8:00', () => {
@@ -47,5 +52,38 @@ describe('the decision deck', () => {
     expect(pickLabel(d('r', { kind: 'regla' }))).toBe('Revisar la regla');
     expect(canSwipe(d('a'))).toBe(true);
     expect(canSwipe(d('r', { kind: 'regla' }))).toBe(false);
+  });
+
+  const options = {
+    options: [
+      { id: 'lunes', text: 'El lunes', if: 'Más visitas.' },
+      { id: 'viernes', text: 'El viernes' },
+    ],
+    recommendedOption: 'lunes',
+  };
+
+  it('offers each option, the pick marked, and names the pick after it', () => {
+    const c = d('o', options);
+    expect(choicesOf(c)).toEqual([
+      { label: 'El lunes', answer: 'ok', option: 'lunes', pick: true, if: 'Más visitas.' },
+      { label: 'El viernes', answer: 'no', option: 'viernes', pick: false },
+    ]);
+    expect(pickLabel(c)).toBe('El lunes');
+    expect(answeredLabel(c, { answer: 'no', option: 'viernes' })).toBe('El viernes');
+  });
+
+  it('offers no and the pick for a yes-or-no card, and Sí when the stakes are high', () => {
+    expect(choicesOf(d('a', { recommendation: 'Subir', ifYes: 'Más margen.' })).map((c) => [c.label, c.answer, c.if])).toEqual([
+      ['No', 'no', undefined],
+      ['Subir', 'ok', 'Más margen.'],
+    ]);
+    expect(choicesOf(d('a', { recommendation: 'Subir', highStakes: true })).map((c) => c.label)).toEqual(['No', 'Sí']);
+    expect(canSwipe(d('a', { highStakes: true }))).toBe(false);
+  });
+
+  it('shows the agent row that asked, else what propone says', () => {
+    expect(askerOf(d('a', { agent: { id: 'x', name: 'Pepa', ghost: 'redes' } }))).toEqual({ name: 'Pepa', ghost: 'redes' });
+    expect(askerOf(d('a', { agent: { id: 'x', name: 'Pepa', ghost: 'nope' } })).ghost).toBe('base');
+    expect(askerOf(d('a'))).toEqual({ name: 'Finanzas', ghost: 'finanzas' });
   });
 });

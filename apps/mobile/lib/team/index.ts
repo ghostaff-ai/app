@@ -60,3 +60,9 @@ export function agentLabel(agent: string): string {
   const a = agent.trim();
   return a.charAt(0).toUpperCase() + a.slice(1);
 }
+
+/** Who asks a decision, as the app shows them: the agent row it points at, else what `propone` says. */
+export function askerOf(d: { proposedBy: string; agent: { name: string; ghost: string } | null }): { name: string; ghost: GhostId } {
+  if (d.agent) return { name: d.agent.name, ghost: isGhostId(d.agent.ghost) ? d.agent.ghost : 'base' };
+  return { name: agentLabel(d.proposedBy), ghost: ghostFor(d.proposedBy) };
+}

@@ -20,6 +20,7 @@ import {
   readDecision,
   type RecordFile,
   recordIdFromPath,
+  type SyncAgent,
   type SyncPlan,
   writeAnswer,
 } from '@ghostaff/shared/record';
@@ -60,6 +61,8 @@ export interface RecordSyncStore {
   /** Marks the organisation's record as made in our record store; false when it got one meanwhile. */
   setOwnRecord(orgId: string, repo: string): Promise<boolean>;
   decisions(orgId: string): Promise<DecisionRow[]>;
+  /** Every agent of the organisation, to point each decision at the one that asked. */
+  agents(orgId: string): Promise<SyncAgent[]>;
   apply(plan: SyncPlan): Promise<void>;
   markWrittenBack(rowIds: string[]): Promise<void>;
   /** The organisation's agents that have a slug, so a file of their own. */
@@ -222,7 +225,7 @@ export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<Org
       const id = recordIdFromPath(x.name);
       return id ? [{ id, yaml: x.content }] : [];
     });
-    const plan = planSync({ orgId: org.id, files, existing: await deps.store.decisions(org.id), commit: head.sha, now });
+    const plan = planSync({ orgId: org.id, files, existing: await deps.store.decisions(org.id), agents: await deps.store.agents(org.id), commit: head.sha, now });
     await deps.store.apply(plan);
     const instructions = await projectInstructions(deps.store, gh, org.id, head.sha);
     const withInstructions = (summary: string) => [summary, ...instructions].join('\n');
