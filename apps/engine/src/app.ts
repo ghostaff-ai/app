@@ -20,6 +20,7 @@ import { runRecordToken, runSpec } from './runner';
 import { clientMetadataDocument } from './mcp';
 import { connectAi, type Deps, disconnectAi, Refusal, requireOwner } from './connections';
 import { bearer, type CallerFromToken } from './googleCaller';
+import type { PushDrain } from './notify';
 import { NoteLimiter, type Transcriber } from './transcribe';
 import { sendVoiceNote, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
 
@@ -62,6 +63,8 @@ export interface AppDeps extends Deps {
   transcribeLimiter?: NoteLimiter;
   /** Guides an agent starts to get an access (guides.ts); off when not configured. */
   guides?: GuideDeps;
+  /** The drain of pushes the engine's own writes queued (notify.ts); off when push is. */
+  pushes?: PushDrain;
 }
 
 type Env = { Variables: { userId: string; accessToken: string } };
@@ -76,6 +79,11 @@ export function createApp(deps: AppDeps) {
 
   // Bearer tokens, no cookies: any origin may call, the token is the guard.
   app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'DELETE'], allowHeaders: ['Authorization', 'Content-Type'] }));
+
+  // A request that wrote an agent's message answers once its pushes are out: after the answer, Cloud Run
+  // gives the instance no CPU, and they would wait for the tick. Requests that wrote none do not wait.
+  const pushes = deps.pushes;
+  if (pushes) app.use('*', (_c, next) => pushes.request(next));
 
   app.get('/health', (c) => c.json({ ok: true }));
 

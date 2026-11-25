@@ -175,7 +175,8 @@ const caller = googleCaller();
 // messages, and the tick drains whatever those missed.
 const pushTransport = pushFromEnv(process.env);
 const outbox = supabaseOutboxStore(admin);
-const afterAgentWrite = pushTransport ? drainSoon(outbox, pushTransport) : undefined;
+const pushDrain = pushTransport ? drainSoon(outbox, pushTransport) : undefined;
+const afterAgentWrite = pushDrain?.poke;
 // Ghostaff's own runner (runner.ts, apps/runner): the Cloud Run job `agent-runner` beside the engine, running as
 // RUNNER_IDENTITY (scripts/deploy-runner.sh). Without it, an agent on our runner says it cannot start.
 const runnerIdentity = process.env.RUNNER_IDENTITY?.trim().toLowerCase();
@@ -253,6 +254,7 @@ const app = createApp({
   claudeSignIn: { spawn: spawnSetupToken },
   voice: supabaseVoiceNoteStore(admin),
   transcriber,
+  pushes: pushDrain,
   accounts,
   actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId), guidedToolsFor: guidedTools, asPerson },
   guides: { chat: chatDeps, store: guideStore, accesses: guided, vault },

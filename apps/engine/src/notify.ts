@@ -2,10 +2,11 @@
 // once a day queue the one that says what waits. Only names leave in a payload
 // (the agent's, the organisation's), never message or card text.
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { apnsTransport, parseApnsSecret } from './push/apns';
 import { fcmTransport } from './push/fcm';
-import { byPlatform, type Device, type Push, type PushTransport } from './push/transport';
+import { byPlatform, type Device, type Outcome, type Push, type PushTransport } from './push/transport';
 
 export interface OutboxRow {
   id: string;
@@ -106,8 +107,11 @@ export async function drainOutbox(store: OutboxStore, transport: PushTransport, 
     try {
       result[await drainRow(store, transport, row)] += 1;
     } catch (e) {
-      // The row stays claimed, so the reclaim two minutes on retries it. Its id only: never its text.
-      console.error(`push ${row.id} not drained:`, messageOf(e));
+      // The row stays claimed, so the reclaim two minutes on retries it; counted, so that ends at
+      // MAX_ATTEMPTS even when the store keeps failing on it. Its id only: never its text.
+      const error = messageOf(e);
+      console.error(`push ${row.id} not drained:`, error);
+      await store.retryLater(row.id, error).catch((e2) => console.error(`push ${row.id} not counted for a retry:`, messageOf(e2)));
       result.retried += 1;
     }
   }
@@ -115,6 +119,11 @@ export async function drainOutbox(store: OutboxStore, transport: PushTransport, 
 }
 
 async function drainRow(store: OutboxStore, transport: PushTransport, row: OutboxRow): Promise<keyof DrainResult> {
+  // Failures counted by the store-failure path above can reach the cap without a verdict here.
+  if (row.attempts >= MAX_ATTEMPTS) {
+    await store.finish(row.id, 'gave_up', 'too many attempts');
+    return 'skipped';
+  }
   const devices = await store.devicesOf(row.userId);
   if (devices.length === 0) {
     await store.finish(row.id, 'no_device');
@@ -132,13 +141,25 @@ async function drainRow(store: OutboxStore, transport: PushTransport, row: Outbo
     }),
   );
 
-  for (const o of outcomes) if (o.outcome === 'dead') await store.forgetToken(o.device.token);
+  // The row's verdict first: a push that went out must be closed even if pruning a token then fails.
+  const verdict = await closeRow(store, row, outcomes);
+  for (const o of outcomes) {
+    if (o.outcome !== 'dead') continue;
+    // Best effort, and never the token in a log: the next push to it is `dead` again and retries this.
+    await store.forgetToken(o.device.token).catch((e) => console.error('a dead device not forgotten:', messageOf(e)));
+  }
+  return verdict;
+}
 
+async function closeRow(
+  store: OutboxStore,
+  row: OutboxRow,
+  outcomes: { outcome: Outcome; error: string }[],
+): Promise<keyof DrainResult> {
   if (outcomes.some((o) => o.outcome === 'delivered')) {
     await store.finish(row.id, 'sent');
     return 'sent';
   }
-
   const error = outcomes.find((o) => o.error)?.error || 'no device accepted the push';
   if (row.attempts + 1 >= MAX_ATTEMPTS) {
     await store.finish(row.id, 'gave_up', error);
@@ -148,20 +169,62 @@ async function drainRow(store: OutboxStore, transport: PushTransport, row: Outbo
   return 'retried';
 }
 
+/** The drain after the engine's own writes of agent messages (see `drainSoon`). */
+export interface PushDrain {
+  /** After a write that queued pushes: a drain 500 ms on, and the request it happened in waits for it. */
+  poke(): void;
+  /** Fires a pending drain now and waits for every drain running. Never throws: a failure is logged. */
+  settle(): Promise<void>;
+  /** Handles a request: when it poked, waits for its pushes before answering. */
+  request<T>(handle: () => Promise<T>): Promise<T>;
+}
+
 /**
  * For the engine's writes: a drain 500 ms after the first write of a burst, so
  * one drain sends a burst's pushes. The timer is not pushed back by later
- * writes, so a busy engine still drains. Fire and forget: a failure is logged,
- * never thrown, and the tick sends what it missed.
+ * writes, so a busy engine still drains. A request that wrote waits for its
+ * drain before answering, as Cloud Run gives an instance no CPU between
+ * requests; a write outside any request (work a request left running) has only
+ * the timer. Nothing here throws: a failure is logged and the tick sends what
+ * was missed.
  */
-export function drainSoon(store: OutboxStore, transport: PushTransport, ms = DRAIN_SOON_MS): () => void {
+export function drainSoon(store: OutboxStore, transport: PushTransport, ms = DRAIN_SOON_MS): PushDrain {
+  const requests = new AsyncLocalStorage<{ answering: boolean; poked: boolean }>();
+  const running = new Set<Promise<void>>();
   let pending: ReturnType<typeof setTimeout> | null = null;
-  return () => {
-    if (pending) return;
-    pending = setTimeout(() => {
-      pending = null;
-      drainOutbox(store, transport).catch((e) => console.error('pushes not drained:', messageOf(e)));
-    }, ms);
+
+  const fire = () => {
+    if (pending) clearTimeout(pending);
+    pending = null;
+    const drain = drainOutbox(store, transport).then(
+      () => undefined,
+      (e) => console.error('pushes not drained:', messageOf(e)),
+    );
+    running.add(drain);
+    void drain.finally(() => running.delete(drain));
+  };
+
+  const settle = async () => {
+    if (pending) fire();
+    await Promise.all(running);
+  };
+
+  return {
+    poke() {
+      const req = requests.getStore();
+      if (req?.answering) req.poked = true;
+      if (!pending) pending = setTimeout(fire, ms);
+    },
+    settle,
+    async request(handle) {
+      const req = { answering: true, poked: false };
+      try {
+        return await requests.run(req, handle);
+      } finally {
+        req.answering = false;
+        if (req.poked) await settle();
+      }
+    },
   };
 }
 

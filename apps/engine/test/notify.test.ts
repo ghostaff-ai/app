@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createApp } from '../src/app';
 import { supabaseChatStore } from '../src/chatStore';
 import { supabaseJobStore } from '../src/jobsStore';
 import {
@@ -267,9 +268,57 @@ describe('drainOutbox, one row at a time', () => {
     };
     expect(await drainOutbox(m.store, scripted({ a: 'delivered' }))).toEqual({ sent: 1, skipped: 0, retried: 1 });
     expect(m.closed).toEqual({ r2: 'sent' });
+    // Counted, so a row the store keeps failing on still reaches MAX_ATTEMPTS.
+    expect(m.retried.r1).toBe('connection reset');
     expect(logged(error)).toContain('r1');
     expect(logged(error)).toContain('connection reset');
     expect(logged(error)).not.toContain('Secreto');
+  });
+});
+
+describe('drainOutbox, when the store fails', () => {
+  it('closes a delivered row before forgetting dead tokens, and a failing forget does not undo the delivery', async () => {
+    const error = quiet('error');
+    const m = memory([row()], { u1: [phone('dead-token-xyz'), phone('ok')] });
+    const order: string[] = [];
+    const finish = m.store.finish;
+    m.store.finish = async (id, outcome) => {
+      order.push(`finish ${outcome}`);
+      await finish(id, outcome);
+    };
+    m.store.forgetToken = async () => {
+      order.push('forget');
+      throw new Error('delete failed');
+    };
+    expect(await drainOutbox(m.store, scripted({ 'dead-token-xyz': 'dead', ok: 'delivered' }))).toEqual({ sent: 1, skipped: 0, retried: 0 });
+    expect(order).toEqual(['finish sent', 'forget']);
+    expect(m.closed).toEqual({ r1: 'sent' });
+    expect(m.retried).toEqual({});
+    expect(logged(error)).toContain('delete failed');
+    expect(logged(error)).not.toContain('dead-token-xyz');
+  });
+
+  it('closes a row that already failed MAX_ATTEMPTS times without sending it again', async () => {
+    const m = memory([row({ attempts: MAX_ATTEMPTS })], { u1: [phone('a')] });
+    const t = scripted({ a: 'delivered' });
+    expect(await drainOutbox(m.store, t)).toEqual({ sent: 0, skipped: 1, retried: 0 });
+    expect(m.closed).toEqual({ r1: 'gave_up' });
+    expect(t.sent).toEqual([]);
+  });
+
+  it('carries on when even counting the retry fails', async () => {
+    const error = quiet('error');
+    const m = memory([row({ id: 'r1' }), row({ id: 'r2' })], { u1: [phone('a')] });
+    m.store.finish = async (id, outcome) => {
+      if (id === 'r1') throw new Error('finish failed');
+      m.closed[id] = outcome;
+    };
+    m.store.retryLater = async () => {
+      throw new Error('retry failed');
+    };
+    expect(await drainOutbox(m.store, scripted({ a: 'delivered' }))).toEqual({ sent: 1, skipped: 0, retried: 1 });
+    expect(m.closed).toEqual({ r2: 'sent' });
+    expect(logged(error)).toContain('retry failed');
   });
 });
 
@@ -382,15 +431,15 @@ describe('drainSoon', () => {
     const m = memory([], {});
     const claim = vi.spyOn(m.store, 'claim');
     const soon = drainSoon(m.store, scripted({}));
-    soon();
+    soon.poke();
     await vi.advanceTimersByTimeAsync(300);
-    soon();
-    soon();
+    soon.poke();
+    soon.poke();
     await vi.advanceTimersByTimeAsync(199);
     expect(claim).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(claim).toHaveBeenCalledTimes(1);
-    soon();
+    soon.poke();
     await vi.advanceTimersByTimeAsync(500);
     expect(claim).toHaveBeenCalledTimes(2);
   });
@@ -403,8 +452,128 @@ describe('drainSoon', () => {
       throw new Error('connection refused');
     };
     const soon = drainSoon(m.store, scripted({}));
-    expect(() => soon()).not.toThrow();
+    expect(() => soon.poke()).not.toThrow();
     await vi.advanceTimersByTimeAsync(500);
+    expect(logged(error)).toContain('connection refused');
+  });
+
+  it('settle drains a pending poke at once and waits for it', async () => {
+    vi.useFakeTimers();
+    const m = memory([row()], { u1: [phone('a')] });
+    const soon = drainSoon(m.store, scripted({ a: 'delivered' }));
+    soon.poke();
+    await soon.settle();
+    expect(m.closed).toEqual({ r1: 'sent' });
+    // The timer went with it: no second drain later.
+    const claim = vi.spyOn(m.store, 'claim');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(claim).not.toHaveBeenCalled();
+  });
+
+  it('settle waits for a drain already running', async () => {
+    vi.useFakeTimers();
+    const m = memory([row()], { u1: [phone('a')] });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const claim = m.store.claim;
+    m.store.claim = async (max) => {
+      await gate;
+      return claim(max);
+    };
+    const soon = drainSoon(m.store, scripted({ a: 'delivered' }));
+    soon.poke();
+    await vi.advanceTimersByTimeAsync(500);
+    let settled = false;
+    const settling = soon.settle().then(() => (settled = true));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    release();
+    await settling;
+    expect(m.closed).toEqual({ r1: 'sent' });
+  });
+
+  it('settle swallows a failing drain', async () => {
+    const error = quiet('error');
+    const m = memory([], {});
+    m.store.claim = async () => {
+      throw new Error('connection refused');
+    };
+    const soon = drainSoon(m.store, scripted({}));
+    soon.poke();
+    await expect(soon.settle()).resolves.toBeUndefined();
+    expect(logged(error)).toContain('connection refused');
+  });
+
+  it('a poke after its request answered falls back to the timer', async () => {
+    vi.useFakeTimers();
+    const m = memory([], {});
+    const claim = vi.spyOn(m.store, 'claim');
+    const soon = drainSoon(m.store, scripted({}));
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    let poked!: Promise<void>;
+    // Work the request started and left running: it writes after the answer.
+    await soon.request(async () => {
+      poked = gate.then(() => soon.poke());
+    });
+    open();
+    await poked;
+    expect(claim).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(claim).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a request that writes an agent message', () => {
+  const appWith = (pushes: ReturnType<typeof drainSoon>, tick: () => Promise<unknown>) =>
+    createApp({
+      store: {} as never,
+      vault: {} as never,
+      checks: {} as never,
+      userFromToken: async () => null,
+      chat: {} as never,
+      accounts: { publicUrl: 'https://engine' } as never,
+      actions: {} as never,
+      cron: { callerFromToken: async () => 'scheduler@p', audience: 'https://engine', callers: ['scheduler@p'], tick },
+      pushes,
+    });
+  const cron = { method: 'POST', headers: { Authorization: 'Bearer google-id' } };
+
+  it('answers only once its pushes are sent: Cloud Run gives no CPU after the answer', async () => {
+    const m = memory([row()], { u1: [phone('a')] });
+    const pushes = drainSoon(m.store, scripted({ a: 'delivered' }));
+    const app = appWith(pushes, async () => {
+      pushes.poke();
+      return {};
+    });
+    const res = await app.request('/cron', cron);
+    expect(res.status).toBe(200);
+    expect(m.closed).toEqual({ r1: 'sent' });
+  });
+
+  it('a request that wrote nothing does not drain, even with a drain pending', async () => {
+    vi.useFakeTimers();
+    const m = memory([row()], { u1: [phone('a')] });
+    const claim = vi.spyOn(m.store, 'claim');
+    const pushes = drainSoon(m.store, scripted({ a: 'delivered' }));
+    pushes.poke();
+    const res = await appWith(pushes, async () => ({})).request('/health');
+    expect(res.status).toBe(200);
+    expect(claim).not.toHaveBeenCalled();
+  });
+
+  it('answers even when the drain fails', async () => {
+    const error = quiet('error');
+    const m = memory([], {});
+    m.store.claim = async () => {
+      throw new Error('connection refused');
+    };
+    const pushes = drainSoon(m.store, scripted({}));
+    const res = await appWith(pushes, async () => {
+      pushes.poke();
+      return {};
+    }).request('/cron', cron);
+    expect(res.status).toBe(200);
     expect(logged(error)).toContain('connection refused');
   });
 });
