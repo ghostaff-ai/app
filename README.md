@@ -71,7 +71,12 @@ node scripts/apns-key.mjs <env> <AuthKey.p8> <keyId> <teamId>    # env: beta | p
 bash scripts/deploy-engine.sh <env>
 ```
 
-The key is read from the file and never printed. Until both exist the engine's pushes are off.
+The key is read from the file and never printed. `deploy-engine.sh` turns push on as soon as that secret
+exists, for both platforms at once (`FIREBASE_PROJECT` is always the environment's own project, from
+`scripts/env.sh`); until then the engine sends nothing. Once on, iPhones get their pushes. Android ones
+also need Firebase added to the project and `bash scripts/setup-env.sh <env>` run again (it enables FCM and
+gives the engine its sending role): before that, no Android build has a token to register, and a send
+that FCM refuses is retried and then given up, without touching iPhones.
 See [docs/architecture.md](docs/architecture.md#how-a-push-reaches-a-phone).
 
 ### The hosted beta project
