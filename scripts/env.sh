@@ -33,6 +33,8 @@ export ENGINE_URL="https://engine-$PROJECT_NUMBER.$R.run.app"
 # CI signs in through this provider, which accepts only ghostaff-ai/app on DEPLOY_BRANCH.
 export WIF_PROVIDER="projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/ghostaff-app"
 export DEPLOYER_SA="deployer@$P.iam.gserviceaccount.com"
+# Push notifications on Android: Firebase Cloud Messaging in the environment's own project.
+export FIREBASE_PROJECT="$P"
 
 # One set of apps for both environments (decision 2); only their secrets are copied into each project.
 # Google connectors: OAuth client «Ghostaff Conectores» in ghostaff-prod.

@@ -3,7 +3,9 @@
 // (the agent's, the organisation's), never message or card text.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Device, Push, PushTransport } from './push/transport';
+import { apnsTransport, parseApnsSecret } from './push/apns';
+import { fcmTransport } from './push/fcm';
+import { byPlatform, type Device, type Push, type PushTransport } from './push/transport';
 
 export interface OutboxRow {
   id: string;
@@ -38,7 +40,10 @@ export interface OutboxStore {
   claim(max: number): Promise<OutboxRow[]>;
   devicesOf(userId: string): Promise<Device[]>;
   finish(id: string, outcome: 'sent' | 'no_device' | 'gave_up', error?: string): Promise<void>;
-  /** attempts + 1, and release the claim so the next drain takes it. */
+  /**
+   * attempts + 1, and hold the claim from now: `claim_pushes` takes the row
+   * again two minutes later, which is the wait before the retry.
+   */
   retryLater(id: string, error: string): Promise<void>;
   forgetToken(token: string): Promise<void>;
   dailyCandidates(): Promise<Candidate[]>;
@@ -53,54 +58,131 @@ const DEFAULT_ZONE = 'Europe/Madrid';
 const DAILY_FROM_HOUR = 9;
 const DAILY_UNTIL_HOUR = 12;
 const UNIQUE_VIOLATION = '23505';
+const DRAIN_SOON_MS = 500;
+
+export interface DrainResult {
+  sent: number;
+  skipped: number;
+  retried: number;
+}
+
+/** An error's message: an `Error`'s, or a Supabase error's (a plain object), never the whole object. */
+function messageOf(e: unknown): string {
+  if (typeof e === 'object' && e !== null && 'message' in e && typeof e.message === 'string') return e.message;
+  return String(e);
+}
+
+// Configuration -----------------------------------------------------------------
+
+/**
+ * The transport the environment configures: `APNS_AUTH_KEY` (the secret
+ * `{ teamId, keyId, privateKey }`) for iPhones, `FIREBASE_PROJECT` for Android.
+ * Neither: `null`, and push is off. Says once which half is off and why.
+ */
+export function pushFromEnv(env: NodeJS.ProcessEnv): PushTransport | null {
+  const apnsSecret = env.APNS_AUTH_KEY?.trim();
+  const firebaseProject = env.FIREBASE_PROJECT?.trim();
+  if (!apnsSecret && !firebaseProject) {
+    console.warn('push off: no APNS_AUTH_KEY and no FIREBASE_PROJECT');
+    return null;
+  }
+
+  const apns = apnsSecret ? parseApnsSecret(apnsSecret) : null;
+  if (!apnsSecret) console.warn('iOS push off: no APNS_AUTH_KEY');
+  else if (!apns) console.warn('iOS push off: APNS_AUTH_KEY is not JSON {teamId, keyId, privateKey}');
+  if (!firebaseProject) console.warn('Android push off: no FIREBASE_PROJECT');
+
+  if (!apns && !firebaseProject) return null;
+  return byPlatform(apns ? apnsTransport(apns) : null, firebaseProject ? fcmTransport(firebaseProject) : null);
+}
 
 // Drain -------------------------------------------------------------------------
 
-export async function drainOutbox(
-  store: OutboxStore,
-  transport: PushTransport,
-  opts: { max?: number } = {},
-): Promise<{ sent: number; skipped: number; retried: number }> {
+export async function drainOutbox(store: OutboxStore, transport: PushTransport, opts: { max?: number } = {}): Promise<DrainResult> {
   const rows = await store.claim(opts.max ?? 100);
-  const result = { sent: 0, skipped: 0, retried: 0 };
+  const result: DrainResult = { sent: 0, skipped: 0, retried: 0 };
 
   for (const row of rows) {
-    const devices = await store.devicesOf(row.userId);
-    if (devices.length === 0) {
-      await store.finish(row.id, 'no_device');
-      result.skipped += 1;
-      continue;
-    }
-
-    const push: Push = { title: row.title, body: row.body, data: row.data, collapseId: row.collapseId };
-    const outcomes = await Promise.all(
-      devices.map(async (device) => {
-        try {
-          return { device, outcome: await transport.send(device, push), error: '' };
-        } catch (e) {
-          return { device, outcome: 'retry' as const, error: e instanceof Error ? e.message : String(e) };
-        }
-      }),
-    );
-
-    for (const o of outcomes) if (o.outcome === 'dead') await store.forgetToken(o.device.token);
-
-    if (outcomes.some((o) => o.outcome === 'delivered')) {
-      await store.finish(row.id, 'sent');
-      result.sent += 1;
-      continue;
-    }
-
-    const error = outcomes.find((o) => o.error)?.error || 'no device accepted the push';
-    if (row.attempts + 1 >= MAX_ATTEMPTS) {
-      await store.finish(row.id, 'gave_up', error);
-      result.skipped += 1;
-    } else {
-      await store.retryLater(row.id, error);
+    try {
+      result[await drainRow(store, transport, row)] += 1;
+    } catch (e) {
+      // The row stays claimed, so the reclaim two minutes on retries it. Its id only: never its text.
+      console.error(`push ${row.id} not drained:`, messageOf(e));
       result.retried += 1;
     }
   }
   return result;
+}
+
+async function drainRow(store: OutboxStore, transport: PushTransport, row: OutboxRow): Promise<keyof DrainResult> {
+  const devices = await store.devicesOf(row.userId);
+  if (devices.length === 0) {
+    await store.finish(row.id, 'no_device');
+    return 'skipped';
+  }
+
+  const push: Push = { title: row.title, body: row.body, data: row.data, collapseId: row.collapseId };
+  const outcomes = await Promise.all(
+    devices.map(async (device) => {
+      try {
+        return { device, outcome: await transport.send(device, push), error: '' };
+      } catch (e) {
+        return { device, outcome: 'retry' as const, error: messageOf(e) };
+      }
+    }),
+  );
+
+  for (const o of outcomes) if (o.outcome === 'dead') await store.forgetToken(o.device.token);
+
+  if (outcomes.some((o) => o.outcome === 'delivered')) {
+    await store.finish(row.id, 'sent');
+    return 'sent';
+  }
+
+  const error = outcomes.find((o) => o.error)?.error || 'no device accepted the push';
+  if (row.attempts + 1 >= MAX_ATTEMPTS) {
+    await store.finish(row.id, 'gave_up', error);
+    return 'skipped';
+  }
+  await store.retryLater(row.id, error);
+  return 'retried';
+}
+
+/**
+ * For the engine's writes: a drain 500 ms after the first write of a burst, so
+ * one drain sends a burst's pushes. The timer is not pushed back by later
+ * writes, so a busy engine still drains. Fire and forget: a failure is logged,
+ * never thrown, and the tick sends what it missed.
+ */
+export function drainSoon(store: OutboxStore, transport: PushTransport, ms = DRAIN_SOON_MS): () => void {
+  let pending: ReturnType<typeof setTimeout> | null = null;
+  return () => {
+    if (pending) return;
+    pending = setTimeout(() => {
+      pending = null;
+      drainOutbox(store, transport).catch((e) => console.error('pushes not drained:', messageOf(e)));
+    }, ms);
+  };
+}
+
+/**
+ * The tick's part: queue the daily pushes that are due, then drain. `off`
+ * without a transport, the outbox untouched. Never throws: a failure is
+ * logged, and a failing daily query does not hold back the drain.
+ */
+export async function pushTick(store: OutboxStore, transport: PushTransport | null, now: Date = new Date()): Promise<DrainResult | 'off'> {
+  if (!transport) return 'off';
+  try {
+    await store.queueDaily(planDaily(now, await store.dailyCandidates()));
+  } catch (e) {
+    console.error('daily pushes not queued:', messageOf(e));
+  }
+  try {
+    return await drainOutbox(store, transport);
+  } catch (e) {
+    console.error('pushes not drained:', messageOf(e));
+    return { sent: 0, skipped: 0, retried: 0 };
+  }
 }
 
 // Daily -------------------------------------------------------------------------
@@ -210,11 +292,12 @@ export function supabaseOutboxStore(admin: SupabaseClient): OutboxStore {
     },
     async retryLater(id, error) {
       // Nothing in SQL counts attempts. The row is ours (claimed), so read-then-write cannot race a second drain.
+      // The claim is renewed, not released: claim_pushes skips the row for two minutes, the wait before a retry.
       const current = check(await admin.from('push_outbox').select('attempts').eq('id', id).single()) as Raw;
       check(
         await admin
           .from('push_outbox')
-          .update({ attempts: (current.attempts as number) + 1, claimed_at: null, last_error: error })
+          .update({ attempts: (current.attempts as number) + 1, claimed_at: new Date().toISOString(), last_error: error })
           .eq('id', id),
       );
     },

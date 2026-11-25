@@ -32,6 +32,8 @@ connector Google GOOGLE_OAUTH_CLIENT_ID "$GOOGLE_CONNECTORS_CLIENT_ID" GOOGLE_OA
 connector Instagram INSTAGRAM_APP_ID "$INSTAGRAM_APP_ID" INSTAGRAM_APP_SECRET instagram-app-secret
 connector TikTok TIKTOK_CLIENT_KEY "$TIKTOK_CLIENT_KEY" TIKTOK_CLIENT_SECRET tiktok-client-secret
 connector "Record (GitHub App)" GITHUB_APP_ID "$GITHUB_APP_ID" GITHUB_APP_KEY github-app-registro-key
+# Push notifications: the Firebase project for Android, the APNs key (scripts/apns-key.mjs) for iPhones.
+connector Push FIREBASE_PROJECT "$FIREBASE_PROJECT" APNS_AUTH_KEY apns-auth-key
 
 # Our record store (scripts/setup-record-store.sh): when its address and its admin's token exist, the engine
 # reaches Forgejo over the VPC. Only private ranges go through it; everything else leaves as before.

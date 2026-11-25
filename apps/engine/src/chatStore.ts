@@ -21,7 +21,11 @@ function check<T>(r: { data: T; error: unknown }): T {
 
 const text = (t: string) => [{ type: 'text', text: t }];
 
-export function supabaseChatStore(admin: SupabaseClient): ChatStore {
+/**
+ * `afterAgentWrite` runs after each write that finishes an agent's message (the
+ * push outbox's trigger has just queued its notifications): the engine drains them.
+ */
+export function supabaseChatStore(admin: SupabaseClient, opts: { afterAgentWrite?: () => void } = {}): ChatStore {
   return {
     async levelFor(agentId, userId) {
       return check(await admin.rpc('agent_level_for', { target_agent: agentId, member: userId })) as Level;
@@ -89,6 +93,7 @@ export function supabaseChatStore(admin: SupabaseClient): ChatStore {
         if (patch.state !== 'working') row.finished_at = new Date().toISOString();
       }
       check(await admin.from('messages').update(row).eq('id', id));
+      if (patch.state && patch.state !== 'working') opts.afterAgentWrite?.();
     },
     async proposeAction(a) {
       const r = check(

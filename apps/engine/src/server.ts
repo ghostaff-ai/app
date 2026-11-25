@@ -36,6 +36,7 @@ import { canReach, type RecordSyncDeps, syncAll, syncOrg } from './recordSync';
 import { expireRuns } from './jobs';
 import type { ChatDeps } from './chat';
 import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
+import { drainSoon, pushFromEnv, pushTick, supabaseOutboxStore } from './notify';
 import { startRoutines, supabaseRoutineStore } from './routines';
 import { RECORD_STORE_TOKEN_HOURS, type RunnerDeps, startScheduled } from './runner';
 import { DEFAULT_TRANSCRIBE_MODEL, type GoogleRequest, vertexTranscriber } from './transcribe';
@@ -169,6 +170,12 @@ const recordSync: RecordSyncDeps = {
   forgejo,
 };
 const caller = googleCaller();
+// Push notifications (docs/plans/ready/decision-notifications.md): straight to APNs and FCM, off until
+// configured. A database trigger fills the outbox; the engine drains it after its own writes of agent
+// messages, and the tick drains whatever those missed.
+const pushTransport = pushFromEnv(process.env);
+const outbox = supabaseOutboxStore(admin);
+const afterAgentWrite = pushTransport ? drainSoon(outbox, pushTransport) : undefined;
 // Ghostaff's own runner (runner.ts, apps/runner): the Cloud Run job `agent-runner` beside the engine, running as
 // RUNNER_IDENTITY (scripts/deploy-runner.sh). Without it, an agent on our runner says it cannot start.
 const runnerIdentity = process.env.RUNNER_IDENTITY?.trim().toLowerCase();
@@ -196,7 +203,7 @@ const runner: RunnerDeps | undefined = runnerIdentity
   : undefined;
 const jobs = {
   runner,
-  jobs: supabaseJobStore(admin),
+  jobs: supabaseJobStore(admin, { afterAgentWrite }),
   launch: cloudRunLauncher(auth),
   async syncOrg(orgId: string) {
     const org = await recordSync.store.orgWithRecord(orgId);
@@ -209,7 +216,7 @@ const guidedTools = (orgId: string, agentId: string) => guidedToolsFor(guided, v
 // The guides that give them (guides.ts): started from a reply, driven by the app through the engine.
 const guideStore = supabaseGuideStore(admin);
 const chatDeps: ChatDeps = {
-  chat: supabaseChatStore(admin),
+  chat: supabaseChatStore(admin, { afterAgentWrite }),
   writerFor: writerFactory(vault, cloudToken),
   costOf,
   toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
@@ -279,7 +286,9 @@ const app = createApp({
         console.error('routines not started', e instanceof Error ? e.message : e);
         return 0;
       });
-      return { records: made.length, synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, started, routines };
+      // After the runs and routines, so what they just posted goes out in this tick. Never throws.
+      const pushes = await pushTick(outbox, pushTransport);
+      return { records: made.length, synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, started, routines, pushes };
     },
   },
 });
