@@ -36,7 +36,7 @@ export const MAX_STEP_BODY = Math.ceil(MAX_PHOTO_BYTES / 3) * 4 + 16_384;
 
 const NO_STEP = 'No he podido preparar el siguiente paso. Prueba otra vez en un momento.';
 
-/** One guide as the engine keeps it (`guides`, migration 20261126100000_guides.sql). */
+/** One guide as the engine keeps it (`guides`, migration 20261126200000_guides.sql). */
 export interface GuideRecord {
   id: string;
   orgId: string;

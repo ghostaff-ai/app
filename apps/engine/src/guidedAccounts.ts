@@ -35,7 +35,7 @@ export const CHECK_TIMEOUT_MS = 15_000;
 /** The most of an answer the engine reads; the model gets it clipped further (TOOL_OUTPUT_LIMIT). */
 const READ_LIMIT = 1_000_000;
 
-/** `connections.settings` of a guided access (migration 20261126100000_guides.sql). */
+/** `connections.settings` of a guided access (migration 20261126200000_guides.sql). */
 export interface GuidedSettings {
   /** The https origin the person typed, plus the landing's suffix. */
   base: string;

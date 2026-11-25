@@ -220,6 +220,7 @@ function setup(
     aiAccounts: async () => (opts.noAccount ? [] : [{ id: 'key-1', provider: 'anthropic' }]),
     recordAiUse: async () => {},
     proposeAction: async () => 'action-1',
+    deleteMessage: async () => {},
   };
   let write: Writer =
     opts.write ??

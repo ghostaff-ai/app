@@ -240,7 +240,7 @@ The inputs no task's happy path covers, most likely first. Each has its test in 
 
 - **Create** `packages/shared/src/guides.ts`, `packages/shared/test/guides.test.ts`.
 - **Modify** `packages/shared/src/chat.ts` (`GuidePart`, `isGuidePart`), `packages/shared/src/index.ts`, `packages/shared/src/services/index.ts`.
-- **Create** `supabase/migrations/20261126100000_guides.sql`, `supabase/tests/database/guides.test.sql`.
+- **Create** `supabase/migrations/20261126200000_guides.sql`, `supabase/tests/database/guides.test.sql`.
 - **Create** `apps/engine/src/guidedAccounts.ts` (the request tool, the check, the store over Supabase), `apps/engine/src/guideModel.ts` (one step from the model), `apps/engine/src/guides.ts` (`start_guide`, the routes' logic, finishing and approving), and their tests in `apps/engine/test/`.
 - **Modify** `apps/engine/src/chat.ts` (interception, the prompt line, the tool for every agent, guided tools for their agent in `orgReach`, resume with `guideId`, `ModelTurn.images`), `apps/engine/src/chatStore.ts` (`streamWith` maps images), `apps/engine/src/claudeWriter.ts` (the photo as a file, `Read` on it only), `apps/engine/src/vault.ts` (`guidedSecretName`), `apps/engine/src/app.ts` (routes), `apps/engine/src/server.ts` (wiring).
 - **Create** `apps/mobile/app/(app)/guia/[id].tsx`, `apps/mobile/components/guide/{GuideBlocks,AnnotatedShot,ShotButton}.tsx`, `apps/mobile/components/chat/GuideCard.tsx`, `apps/mobile/lib/hooks/useGuide.ts`, `apps/mobile/__tests__/guide.test.tsx`.

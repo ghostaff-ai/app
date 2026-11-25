@@ -191,6 +191,8 @@ describe('approving a write through a guided access', () => {
     label: 'WordPress: POST /wp/v2/posts',
     status: 'pending',
     messageState: 'done',
+    decider: 'owner',
+    requestedBy: null,
   });
   const store = (r: ActionRecord): ActionStore => ({
     membership: async () => ({ role: 'owner', displayName: 'Ana' }),

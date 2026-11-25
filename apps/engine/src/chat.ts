@@ -737,7 +737,7 @@ export interface RoutineAsk {
  */
 export async function answerRoutine(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, replyId: string, ask: RoutineAsk): Promise<{ text: string; ok: boolean }> {
   const { reachOf } = await orgReach(deps, agent.orgId, undefined);
-  const mine = reachOf(agent);
+  const mine = await reachOf(agent);
   const turns = toTurns(await deps.chat.recentMessages(thread.id, 40), agent.id);
   const line =
     `${ask.from}: ${ask.instruction}\n\n` +
