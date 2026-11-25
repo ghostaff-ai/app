@@ -133,7 +133,7 @@ describe('tokens as the organisation', () => {
 
   it('last an hour at most, for the whole of Google Cloud as that account', async () => {
     const g = google({ [tokenUrl]: [{ status: 200, data: { accessToken: 'ya29.a', expireTime: '2026-11-24T19:00:00Z' } }] });
-    expect(await mintCloudToken(deps(g.call, stored), ORG)).toEqual({ token: 'ya29.a', expiresAt: '2026-11-24T19:00:00Z' });
+    expect(await mintCloudToken(deps(g.call, stored), ORG)).toEqual({ account: EMAIL, token: 'ya29.a', expiresAt: '2026-11-24T19:00:00Z' });
     expect(g.calls[0]?.body).toEqual({ scope: ['https://www.googleapis.com/auth/cloud-platform'], lifetime: '3600s' });
   });
 

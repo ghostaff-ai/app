@@ -86,6 +86,11 @@ export interface RunnerDeps {
   recordStore: { admin: ForgejoAdmin; adminUser: string; agentsOf(orgId: string): Promise<RecordAgent[]> } | null;
   /** Who the agent's commits are by: `<agent> (Ghostaff)` and this address. */
   commitEmail: string;
+  /**
+   * A new token as the organisation's own Google Cloud account (cloudAccounts.ts mintCloudToken), never
+   * cached; null when it has none. Absent in an environment without a tenants project.
+   */
+  cloudToken?: (orgId: string) => Promise<{ account: string; token: string; expiresAt: string } | null>;
   now?: () => Date;
 }
 
@@ -101,6 +106,38 @@ export interface RunSpec {
   author: { name: string; email: string };
   claudeToken: string;
   decisionsDir: string;
+  /** The organisation's Google Cloud, when it has its own account there; null otherwise. */
+  google: RunGoogleAccess | null;
+}
+
+/**
+ * The organisation's Google Cloud for a run: a one-hour token as its own service account (never the
+ * engine's or the runner's), with what the organisation granted that account and nothing else, and the
+ * project `gcloud` and `bq` default to when the organisation named one (its Vertex connection's).
+ */
+export interface RunGoogleAccess {
+  account: string;
+  project: string | null;
+  token: string;
+  /** When to ask the engine for another (POST /runs/:id/google-token). */
+  expiresAt: string;
+}
+
+/** A Google Cloud token for a run, or null: an account Google is not ready to let us use yet does not stop the run. */
+async function googleToken(runner: RunnerDeps, orgId: string): Promise<{ account: string; token: string; expiresAt: string } | null> {
+  if (!runner.cloudToken) return null;
+  try {
+    return await runner.cloudToken(orgId);
+  } catch (e) {
+    console.error('no google cloud token for the run', e instanceof Error ? e.name : typeof e);
+    return null;
+  }
+}
+
+/** The project the organisation named for Google Cloud: its Vertex connection's, the first in its order. */
+async function googleProject(chat: ChatDeps, orgId: string): Promise<string | null> {
+  for (const a of await chat.chat.aiAccounts(orgId)) if (a.provider === 'vertex') return a.project;
+  return null;
 }
 
 /**
@@ -330,6 +367,8 @@ export function composePrompt(p: {
   request: { text: string; from: string } | null;
   /** The routine that started it, instead of a person (agent-routines.md). */
   routine?: { title: string; instruction: string; audience: 'me' | 'team'; from: string } | null;
+  /** The organisation's Google Cloud account, when the run has a token for it. */
+  google?: { account: string; project: string | null } | null;
 }): string {
   const { agent, orgName } = p;
   const instructions = agentInstructionsPath(agent.slug);
@@ -345,6 +384,15 @@ export function composePrompt(p: {
       'haz commit y push, y sigue con lo que no dependa de ella: le llega sola a Hoy, en Ghostaff.',
     `Ahora es ${madridNow(p.now)}, hora de Madrid.`,
   ];
+  if (p.google) {
+    parts.push(
+      `Tienes Google Cloud como la cuenta de servicio de ${orgName}, \`${p.google.account}\`: \`gcloud\` y \`bq\` ya la usan, ` +
+        `con lo que ${orgName} le ha concedido y nada más. ` +
+        (p.google.project
+          ? `Su proyecto por defecto es \`${p.google.project}\`; si tus instrucciones nombran otro para lanzar consultas, usa ese.`
+          : 'No hay proyecto por defecto: nómbralo en cada orden (`--project=…`, `bq --project_id=…`), el que digan tus instrucciones.'),
+    );
+  }
   if (p.routine) {
     const who = p.routine.audience === 'team' ? `a ${p.routine.from} y a cada persona que trabaja contigo` : `a ${p.routine.from}`;
     parts.push(
@@ -427,6 +475,8 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
   }
   const routine = run.origin === 'routine' && run.routineId ? await runner.store.routineAsk(run.routineId) : null;
   const access = await recordAccess(runner, record, agent.id, run.id);
+  const cloud = await googleToken(runner, run.orgId);
+  const google: RunGoogleAccess | null = cloud ? { ...cloud, project: await googleProject(chat, run.orgId) } : null;
   return {
     run: run.id,
     slug: agent.slug,
@@ -437,6 +487,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
       now: runner.now ? runner.now() : new Date(),
       request,
       routine,
+      google,
     }),
     model: agent.model,
     tools: agent.tools,
@@ -445,6 +496,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
     author: { name: `${agent.name} (Ghostaff)`, email: runner.commitEmail },
     claudeToken: subscription.token,
     decisionsDir: DECISIONS_DIR,
+    google,
   };
 }
 
@@ -461,6 +513,20 @@ export async function runRecordToken(deps: JobDeps, caller: string | null, runId
   if (!record) throw new Refusal(409, 'no_record', 'the organisation has no record');
   const access = await recordAccess(runner, record, run.agentId, run.id);
   return { token: access.token, expiresAt: access.expiresAt };
+}
+
+/**
+ * POST /runs/:id/google-token: a fresh Google Cloud token as the organisation's account, for a run that
+ * has its spec and still works (a token lasts an hour; a run up to three).
+ */
+export async function runGoogleToken(deps: JobDeps, caller: string | null, runId: string, body: unknown): Promise<{ token: string; expiresAt: string }> {
+  const runner = checkRunner(deps, caller);
+  const nonce = (body as { nonce?: unknown } | null)?.nonce;
+  const run = /^[0-9a-f-]{36}$/i.test(runId) ? await deps.jobs.run(runId) : null;
+  if (!run || !nonceMatches(nonce, run.nonceHash) || run.state !== 'running' || !run.specFetched) throw new Refusal(403, 'not_allowed', 'not this run');
+  const cloud = await googleToken(runner, run.orgId);
+  if (!cloud) throw new Refusal(409, 'no_google', 'the organisation has no Google Cloud account');
+  return { token: cloud.token, expiresAt: cloud.expiresAt };
 }
 
 /** For reportRun: the agent of a run our runner reports for, checked by its nonce; a Refusal when it does not match. */

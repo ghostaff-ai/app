@@ -44,6 +44,8 @@ export interface CloudAccountDeps {
 
 /** A token as the organisation's account, for at most an hour. */
 export interface CloudToken {
+  /** The organisation's service account the token is for. */
+  account: string;
   token: string;
   expiresAt: string;
 }
@@ -132,7 +134,7 @@ export async function mintCloudToken(deps: CloudAccountDeps, orgId: string): Pro
   if (res.status === 403 || res.status === 404) throw new CloudAccountNotReady(`no token as ${account.email}: ${res.status}`);
   const data = res.data as { accessToken?: string; expireTime?: string };
   if (res.status !== 200 || !data.accessToken || !data.expireTime) throw new Error(`no token as the organisation's account: ${res.status}`);
-  return { token: data.accessToken, expiresAt: data.expireTime };
+  return { account: account.email, token: data.accessToken, expiresAt: data.expireTime };
 }
 
 /**

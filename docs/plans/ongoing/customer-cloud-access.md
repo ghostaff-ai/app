@@ -2,7 +2,7 @@
 
 **Priority:** high — Órdago's agents read BigQuery and write buckets in `ordago-prod`, and none of that can move to Ghostaff without it, and every other Google Cloud use must not share one identity across customers as Vertex did
 **Gate:** none
-**Next:** the runner's token: the spec carries a fresh token as the organisation's account when it has a Google Cloud connection for data, and the image gains `gcloud` and `bq` (Tasks, «Runs» and «Runner»)
+**Next:** deploy the runner and the engine to beta (CI on merge); then Órdago's account in Conexiones (the Vertex form shows it), its grants in `ordago-prod` for Comercial, and Comercial moved
 
 The design is in [architecture.md](../../architecture.md#a-customers-google-cloud); this plan is the work. Jaime (2026-11-24): Órdago runs on Ghostaff as any customer would, and a customer with data in its own BigQuery can give an agent that data without Ghostaff holding one identity that reaches every customer.
 
@@ -25,8 +25,8 @@ The design is in [architecture.md](../../architecture.md#a-customers-google-clou
 - [x] **App**: the Vertex form shows the organisation's own account to grant.
 - [x] **Set up beta** (2026-11-24, PR #66 merged): `ghostaff-tenants-beta` created by `setup-env.sh beta`, `engine@ghostaff-beta` its service-account admin and nothing else there (checked).
 - [ ] **Set up production**: `bash scripts/setup-env.sh prod`, before the first release deploys production's engine. Try Claude on Vertex on the beta with a real project.
-- [ ] **Runs.** The spec carries `google: { project, token, expiresAt }` when the organisation has a Google Cloud connection for data; `POST /runs/:id/google-token` renews it. A fresh token per run (`mintCloudToken`), never the engine's cached one.
-- [ ] **Runner.** The image gains the Google Cloud CLI (`gcloud`, `bq`); the agent's environment points `gcloud` at the token (`CLOUDSDK_AUTH_ACCESS_TOKEN_FILE` in its throwaway HOME) and its default project at the customer's. Check that `bq` honours it before relying on it; the redaction of secrets in reports covers the token.
+- [x] **Runs** (`feat/runner-google-token`): the spec carries `google: { account, project, token, expiresAt }` (null without an account, or while Google is not ready to let the engine use it: the run goes on without Google Cloud); a fresh token per run (`mintCloudToken`, `RunnerDeps.cloudToken`); `POST /runs/:id/google-token` renews it (spec fetched, nonce, still running). The project is the organisation's Vertex connection's: there is no Google Cloud connection «for data» yet (App, data), and without one the prompt tells the agent to name the project in each command. The prompt names the account.
+- [x] **Runner**: the image has the Google Cloud CLI 594.0.0 (`gcloud`, `bq`; the image grows to about 2.2 GB); root writes the token to `/tmp/ghostaff-gcloud-*/token` (folder 0711 root, file 0640 root:agente), renews it every half minute once it is within five minutes of its end, and points the agent at it with `CLOUDSDK_AUTH_ACCESS_TOKEN_FILE` (plus `CLOUDSDK_CORE_PROJECT` when there is a project). Checked in the built image: `bq query` as `agente` works with only that file, and `agente` can neither list the folder nor overwrite or delete the file. The token is among the run's secrets, so reports redact it.
 - [ ] **App, data.** Conexiones → Google Cloud for data (not only Vertex): the account's email, the commands to grant it (copyable), «Comprobar» (asked as the account: `testIamPermissions`, BigQuery `datasets.get`) and what it found, and a line for organisations whose policy restricts sharing to their own domain.
 - [ ] **Órdago as the first customer.** In `ordago-prod` and `ordago-media`, grant Órdago's account the union of what the agents' accounts hold today ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md#what-each-agent-needs)), and check it from the app.
 
