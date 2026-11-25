@@ -19,7 +19,9 @@ import { usePalette } from '@/lib/theme';
 // on its own screen. A tap on the card opens all of it, with «Preguntar».
 // A decision with options shows each as a button, the pick the main one; a
 // high-stakes one takes no swipe and shows the pick only after you choose
-// (docs/plans/ready/decision-model.md, decisions 2 and 3).
+// (docs/plans/ready/decision-model.md, decisions 2 and 3). An agent's action
+// waiting for an OK is a card too: «Aprobar» runs it at once, so it takes no
+// swipe and no «Deshacer», and a tap opens its conversation.
 
 const native = Platform.OS !== 'web';
 
@@ -49,6 +51,11 @@ function Face({ d, asked }: { d: Decision; asked: boolean }) {
       <Text className="mt-4 font-display-medium text-[24px] leading-[30px] text-ink" numberOfLines={5}>
         {d.question}
       </Text>
+      {d.action && d.context ? (
+        <Text className="mt-3 rounded-2xl bg-surface p-3 text-[14px] leading-[19px] text-muted" numberOfLines={7}>
+          {d.context}
+        </Text>
+      ) : null}
       {d.quote ? (
         <Text className="mt-3 text-[15px] leading-[22px] text-muted" numberOfLines={3}>
           «{d.quote}»
@@ -78,12 +85,14 @@ function Face({ d, asked }: { d: Decision; asked: boolean }) {
       <View className="flex-1" />
       {d.highStakes ? (
         <Text className="text-footnote font-semibold text-ink">Importante: elige tú primero</Text>
-      ) : d.recommendation || d.options.length ? (
+      ) : !d.action && (d.recommendation || d.options.length) ? (
         <Text className="text-footnote text-muted">
           Te recomiendo <Text className="font-semibold text-ink">{pickLabel(d)}</Text>
         </Text>
       ) : null}
-      <Text className="mt-1 text-footnote text-muted">{asked ? `Preguntaste a ${asker.name} · toca para verlo todo` : 'Toca para ver todo y preguntar'}</Text>
+      <Text className="mt-1 text-footnote text-muted">
+        {d.action ? 'Toca para ver la conversación' : asked ? `Preguntaste a ${asker.name} · toca para verlo todo` : 'Toca para ver todo y preguntar'}
+      </Text>
     </View>
   );
 }
@@ -191,8 +200,8 @@ export function DecisionDeck({
             testID="deck-card"
             accessibilityRole="button"
             accessibilityLabel={`${askerOf(top).name} pregunta: ${top.question}`}
-            accessibilityHint="Abre la decisión entera"
-            onPress={() => router.push(`/decision/${top.id}`)}
+            accessibilityHint={top.action ? 'Abre la conversación' : 'Abre la decisión entera'}
+            onPress={() => router.push(top.action ? `/conversacion/${top.action.threadId}` : `/decision/${top.id}`)}
             className="flex-1 rounded-[28px] bg-card p-6"
             style={{ shadowColor: '#16151E', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 3 }}
           >
@@ -249,7 +258,9 @@ export function DecisionDeck({
       )}
       {toast ?? (
         <Text className="mt-3 min-h-11 shrink-0 text-center text-footnote text-muted">
-          {top.kind === RULE_KIND
+          {top.action
+            ? 'Al aprobarlo se hace enseguida y no se puede deshacer'
+            : top.kind === RULE_KIND
             ? 'Una regla se firma con sus palabras: tócala para revisarla'
             : top.highStakes
               ? 'Es importante: elige tú, y luego verás qué recomendaba'
@@ -266,15 +277,28 @@ export function DeckToast({ move, onUndo, onClose }: { move: DeckMove; onUndo: (
     const t = setTimeout(onClose, 6000);
     return () => clearTimeout(t);
   }, [move, onClose]);
-  const what = move.kind === 'later' ? 'Para mañana' : `Respondida: ${answeredLabel(move.decision, { answer: move.kind, option: move.option })}`;
+  // An action approved or turned down has run: it cannot be undone.
+  const final = !!move.decision.action && move.kind !== 'later';
+  const what =
+    move.kind === 'later'
+      ? 'Para mañana'
+      : move.decision.action
+        ? move.kind === 'ok'
+          ? 'Aprobado: se está haciendo'
+          : 'Rechazado'
+        : `Respondida: ${answeredLabel(move.decision, { answer: move.kind, option: move.option })}`;
   return (
     <View accessibilityLiveRegion="polite" className="mt-3 shrink-0 flex-row items-center rounded-2xl bg-accent py-1 pl-4 pr-1">
       <Text className="flex-1 text-[15px] text-on-accent" numberOfLines={1}>
         {what}
       </Text>
-      <Pressable testID="deck-undo" accessibilityRole="button" onPress={onUndo} hitSlop={6} className="min-h-11 justify-center px-3 active:opacity-60">
-        <Text className="text-[15px] font-semibold text-on-accent">Deshacer</Text>
-      </Pressable>
+      {final ? (
+        <View className="min-h-11" />
+      ) : (
+        <Pressable testID="deck-undo" accessibilityRole="button" onPress={onUndo} hitSlop={6} className="min-h-11 justify-center px-3 active:opacity-60">
+          <Text className="text-[15px] font-semibold text-on-accent">Deshacer</Text>
+        </Pressable>
+      )}
     </View>
   );
 }

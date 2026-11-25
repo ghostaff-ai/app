@@ -3,20 +3,27 @@ import { RULE_KIND } from '@ghostaff/shared';
 import {
   answerDecision,
   countWaiting,
+  decideAction,
   getDecision,
   listAskedDecisions,
   listDecidedDecisions,
+  listMyActionSnoozes,
   listMySnoozes,
   listOpenDecisions,
+  listPendingActions,
   okStreak,
+  snoozeAction,
   snoozeDecision,
+  sortInbox,
   unanswerDecision,
+  unsnoozeAction,
   unsnoozeDecision,
   type AnswerInput,
 } from '@ghostaff/shared/services';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { deckOf, asideCount, tomorrowMorning } from '../deck';
 import { supabase } from '../supabase';
+import { useEngine } from './useConnections';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -50,7 +57,17 @@ function useDecisionList(orgId: string | null, fetch: (orgId: string) => Promise
   return { decisions, loading, error, reload: load };
 }
 
-const fetchOpen = (orgId: string) => listOpenDecisions(supabase, orgId);
+// The open decisions and, beside them, the agents' actions waiting for this
+// person's OK (decision-model.md, PR 3). The actions are a nicety on top: if
+// they cannot be read, the decisions still are.
+const fetchOpen = async (orgId: string) => {
+  const [decisions, actions] = await Promise.all([listOpenDecisions(supabase, orgId), listPendingActions(supabase, orgId).catch(() => [])]);
+  return sortInbox([...decisions, ...actions]);
+};
+
+/** What the person put aside, decisions and OK cards, by id. */
+const fetchAside = (orgId: string) =>
+  Promise.all([listMySnoozes(supabase, orgId).catch(() => ({})), listMyActionSnoozes(supabase, orgId).catch(() => ({}))]).then(([d, a]) => ({ ...d, ...a }));
 const fetchDecided = (orgId: string) => listDecidedDecisions(supabase, orgId);
 
 // Every list of open decisions on screen (the deck, the tab's count, the
@@ -60,7 +77,7 @@ function inboxChanged() {
   for (const f of inboxListeners) f();
 }
 
-/** The open decisions of one organisation, what waits first. */
+/** The open decisions of one organisation and the OK cards waiting for the person, what waits first. */
 export function useInbox(orgId: string | null) {
   const list = useDecisionList(orgId, fetchOpen);
   const { reload } = list;
@@ -142,7 +159,7 @@ export function useDecision(id: string | undefined) {
   return { decision, loading, error, answer, takeBack, streak };
 }
 
-/** What the person did to the last card, so it can be undone. */
+/** What the person did to the last card, so it can be undone (an OK card's «Aprobar» or «No» cannot: it has run). */
 export type DeckMove = { decision: Decision; kind: 'ok' | 'no' | 'later'; option?: string };
 
 /**
@@ -152,6 +169,7 @@ export type DeckMove = { decision: Decision; kind: 'ok' | 'no' | 'later'; option
  */
 export function useDeck(orgId: string | null, userId: string | null = null) {
   const inbox = useInbox(orgId);
+  const engine = useEngine();
   const [aside, setAside] = useState<Record<string, string>>({});
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const [showAside, setShowAside] = useState(false);
@@ -161,13 +179,13 @@ export function useDeck(orgId: string | null, userId: string | null = null) {
 
   const reload = useCallback(async () => {
     if (!orgId) return;
-    const [snoozes] = await Promise.all([listMySnoozes(supabase, orgId).catch(() => ({})), reloadInbox()]);
+    const [snoozes] = await Promise.all([fetchAside(orgId), reloadInbox()]);
     setAside(snoozes);
     setGone(new Set());
   }, [orgId, reloadInbox]);
 
   useEffect(() => {
-    if (orgId) void listMySnoozes(supabase, orgId).then(setAside).catch(() => setAside({}));
+    if (orgId) void fetchAside(orgId).then(setAside);
   }, [orgId]);
 
   // The cards the person asked their agent about («Preguntaste»); a nicety, so a failure shows none.
@@ -200,8 +218,12 @@ export function useDeck(orgId: string | null, userId: string | null = null) {
     try {
       if (kind === 'later') {
         const until = tomorrowMorning();
-        await snoozeDecision(supabase, decision.id, until);
+        await (decision.action ? snoozeAction(supabase, decision.action.id, until) : snoozeDecision(supabase, decision.id, until));
         setAside((a) => ({ ...a, [decision.id]: until.toISOString() }));
+      } else if (decision.action) {
+        // The same as the chat card's buttons: the engine runs it, as this person.
+        if (!engine) throw new Error('No hay sesión: vuelve a entrar.');
+        await decideAction(engine, decision.action.id, kind === 'ok' ? 'approve' : 'reject');
       } else {
         await answerDecision(supabase, { decisionId: decision.id, ...(option ? { option } : { answer: kind }) });
       }
@@ -209,9 +231,9 @@ export function useDeck(orgId: string | null, userId: string | null = null) {
       if (kind !== 'later') inboxChanged();
     } catch (e) {
       stay(decision.id);
-      setError(message(e));
+      setError(decision.action && kind !== 'later' ? 'No se ha podido. Inténtalo otra vez, o desde la conversación.' : message(e));
     }
-  }, []);
+  }, [engine]);
 
   const clearLast = useCallback(() => setLast(null), []);
 
@@ -221,8 +243,9 @@ export function useDeck(orgId: string | null, userId: string | null = null) {
     const { decision, kind } = last;
     setLast(null);
     try {
+      if (decision.action && kind !== 'later') return; // it has run: nothing to take back
       if (kind === 'later') {
-        await unsnoozeDecision(supabase, decision.id);
+        await (decision.action ? unsnoozeAction(supabase, decision.action.id) : unsnoozeDecision(supabase, decision.id));
         setAside((a) => {
           const n = { ...a };
           delete n[decision.id];

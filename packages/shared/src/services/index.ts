@@ -32,6 +32,7 @@ import type {
   PendingInvitation,
   Profile,
 } from '../models';
+import { ACTION_KIND } from '../models';
 import { type ChatMessage, type ChatThread, isDecisionQuotePart, type MessagePart, type OrgMember } from '../chat';
 import type { Routine, RoutineAudience, RoutineWhen, Weekday } from '../routines';
 
@@ -263,6 +264,81 @@ export async function listMySnoozes(client: SupabaseClient, orgId: string, now =
     .returns<{ decision_id: string; until: string }[]>();
   if (error) throw error;
   return Object.fromEntries((data ?? []).map((r) => [r.decision_id, r.until]));
+}
+
+// The OK cards in Decisiones (supabase/migrations/20261126630000_action_cards.sql):
+// the actions waiting for this person's approval, as cards beside the decisions.
+
+export interface PendingActionRow {
+  id: string;
+  thread_id: string;
+  agent_id: string | null;
+  agent_name: string | null;
+  agent_ghost: string | null;
+  label: string;
+  preview: string;
+  created_at: string;
+}
+
+/** An action waiting for an OK, as a card of the deck: «Aprobar» or «No». Pure. */
+export function actionCardFromRow(r: PendingActionRow, orgId: string): Decision {
+  return {
+    id: r.id,
+    orgId,
+    recordId: '',
+    sourcePath: '',
+    area: '',
+    kind: ACTION_KIND,
+    question: r.label,
+    context: r.preview,
+    proposedBy: r.agent_name ?? 'agente',
+    createdOn: r.created_at.slice(0, 10),
+    ruleProposal: null,
+    recommendation: 'Aprobar',
+    ifYes: null,
+    ifNo: null,
+    quote: null,
+    sources: [],
+    dueOn: null,
+    options: [],
+    recommendedOption: null,
+    highStakes: false,
+    agent: r.agent_id && r.agent_name ? { id: r.agent_id, name: r.agent_name, ghost: r.agent_ghost ?? 'base' } : null,
+    answer: null,
+    closedAt: null,
+    action: { id: r.id, threadId: r.thread_id },
+  };
+}
+
+/** The actions waiting for the signed-in person's OK in this organisation, newest first. */
+export async function listPendingActions(client: SupabaseClient, orgId: string): Promise<Decision[]> {
+  const { data, error } = await client.rpc('my_pending_actions', { target_org: orgId });
+  if (error) throw error;
+  return ((data ?? []) as PendingActionRow[]).map((r) => actionCardFromRow(r, orgId));
+}
+
+/** «Más tarde» on an OK card: puts the action aside for the signed-in person until `until`. */
+export async function snoozeAction(client: SupabaseClient, actionId: string, until: Date): Promise<void> {
+  const { error } = await client.rpc('snooze_action', { target_action: actionId, until: until.toISOString() });
+  if (error) throw error;
+}
+
+/** Brings back an OK card the person put aside. */
+export async function unsnoozeAction(client: SupabaseClient, actionId: string): Promise<void> {
+  const { error } = await client.rpc('unsnooze_action', { target_action: actionId });
+  if (error) throw error;
+}
+
+/** The OK cards the person has put aside in this organisation and until when, by action id. */
+export async function listMyActionSnoozes(client: SupabaseClient, orgId: string, now = new Date()): Promise<Record<string, string>> {
+  const { data, error } = await client
+    .from('action_snoozes')
+    .select('action_id, until')
+    .eq('org_id', orgId)
+    .gt('until', now.toISOString())
+    .returns<{ action_id: string; until: string }[]>();
+  if (error) throw error;
+  return Object.fromEntries((data ?? []).map((r) => [r.action_id, r.until]));
 }
 
 /** How many OKs in a row, without a note correcting them, this agent has for this kind of decision. */
