@@ -39,7 +39,10 @@ name: After her first message the chat offers to tell her when the agent answers
       SUPABASE_URL: ${SUPABASE_URL}
       SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
 - stopApp
-- launchApp
+# Maestro grants every permission on launch by default; leave notifications unset so the app has something to ask.
+- launchApp:
+    permissions:
+      notifications: unset
 - extendedWaitUntil:
     visible:
       id: "agent-secretaria"
