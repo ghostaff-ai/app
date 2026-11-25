@@ -1,9 +1,11 @@
+import { forgetDevice } from '@ghostaff/shared/services';
 import type { Session } from '@supabase/supabase-js';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import { googleClientIds } from '../env';
+import { deviceToken } from '../push/pushClient';
 import { supabase } from '../supabase';
 import { SignInCancelled } from './errors';
 import { makeNonce } from './nonce';
@@ -82,6 +84,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signInWithApple: apple,
       async signOut() {
+        // This phone stops getting the person's pushes, asked while the session
+        // still says whose it is. Failing (offline) never keeps anyone signed in.
+        const device = await deviceToken();
+        if (device) await forgetDevice(supabase, device.token).catch(() => undefined);
         if (!isExpoGo && Platform.OS !== 'web') {
           // Forget the Google account too, so the next sign-in offers the choice again.
           await nativeGoogle()

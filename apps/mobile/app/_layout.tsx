@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from '@/lib/auth/AuthContext';
 import { KeyboardRoot } from '@/lib/keyboard';
 import { ActiveOrgProvider } from '@/lib/org/ActiveOrgContext';
 import { ProfileProvider } from '@/lib/profile/ProfileContext';
+import { PushProvider } from '@/lib/push/PushProvider';
 import { isConfigured } from '@/lib/supabase';
 import { colorVars, PALETTES, useScheme } from '@/lib/theme';
 
@@ -43,7 +44,9 @@ export default function RootLayout() {
         <AuthProvider>
           <ProfileProvider>
             <ActiveOrgProvider>
-              <Routes />
+              <PushProvider>
+                <Routes />
+              </PushProvider>
             </ActiveOrgProvider>
           </ProfileProvider>
         </AuthProvider>

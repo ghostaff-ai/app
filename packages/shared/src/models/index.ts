@@ -296,3 +296,18 @@ export interface NewAgent {
   ghost: AgentGhost;
   department: Department;
 }
+
+// Push notifications (docs/plans/ready/decision-notifications.md). A device
+// belongs to a person, not an organisation.
+export type DevicePlatform = 'ios' | 'android';
+
+/**
+ * What a push carries besides its title and body: never a message's text, only
+ * where a tap goes (`/chat/<agentId>`, `/conversacion/<threadId>`,
+ * `/decisiones`) and, when it belongs to one, the organisation to open it in.
+ */
+export interface PushData {
+  kind: 'reply' | 'daily';
+  orgId?: string;
+  route: string;
+}

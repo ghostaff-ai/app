@@ -1,7 +1,7 @@
 import { LegendList } from '@legendapp/list/react-native';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Image, Platform, Pressable, Text, View } from 'react-native';
 import { shortNext, soonest } from '@ghostaff/shared';
 import { agentJob, decideAction } from '@ghostaff/shared/services';
@@ -19,6 +19,7 @@ import { useAgentChat, useMembers, useMyLevels } from '@/lib/hooks/useChat';
 import { useRoutines } from '@/lib/hooks/useRoutines';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { usePush } from '@/lib/push/PushProvider';
 import { GHOSTS } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
 
@@ -44,6 +45,14 @@ export default function Chat() {
   const palette = usePalette();
   const headerHeight = useHeaderHeight();
   const engine = useEngine();
+  // While this chat is on screen, a push for its reply isn't shown.
+  const { setOnScreen } = usePush();
+  useFocusEffect(
+    useCallback(() => {
+      setOnScreen(`/chat/${agentId}`);
+      return () => setOnScreen(null);
+    }, [agentId, setOnScreen]),
+  );
 
   const me = session?.user.id;
   const agent = agents.find((a) => a.id === agentId);

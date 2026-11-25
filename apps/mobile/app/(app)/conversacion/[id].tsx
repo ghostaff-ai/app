@@ -17,6 +17,7 @@ import { useEngine } from '@/lib/hooks/useConnections';
 import { useMembers, useMyLevels, useReaders, useThread } from '@/lib/hooks/useChat';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { usePush } from '@/lib/push/PushProvider';
 import { GHOSTS } from '@/lib/team';
 
 // One titled conversation with an agent (team-chat.md, decisions 3, 6 and 9;
@@ -42,6 +43,14 @@ export default function Conversacion() {
       void reloadHead();
       void reloadReaders();
     }, [reloadHead, reloadReaders]),
+  );
+  // While this conversation is on screen, a push for its reply isn't shown.
+  const { setOnScreen } = usePush();
+  useFocusEffect(
+    useCallback(() => {
+      setOnScreen(`/conversacion/${id}`);
+      return () => setOnScreen(null);
+    }, [id, setOnScreen]),
   );
 
   const me = session?.user.id;

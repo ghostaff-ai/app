@@ -21,6 +21,7 @@ import type {
   DecisionOption,
   DecisionSource,
   Department,
+  DevicePlatform,
   MembershipRole,
   MyInvitation,
   MyOrganization,
@@ -1407,6 +1408,37 @@ export async function setRoutinePaused(client: SupabaseClient, routineId: string
 
 export async function deleteRoutine(client: SupabaseClient, routineId: string): Promise<void> {
   const { error } = await client.rpc('delete_routine', { target_routine: routineId });
+  if (error) throw error;
+}
+
+// --- Push notifications ---------------------------------------------------------
+// The person's own phone, not an organisation's: classified `never` in settings.ts.
+
+export interface DeviceRegistration {
+  token: string;
+  platform: DevicePlatform;
+  /** iPhone only: which APNs gateway the token belongs to. Null on Android. */
+  apnsEnvironment: 'production' | 'sandbox' | null;
+  bundleId: string;
+  /** IANA name (`Europe/Madrid`): the daily push goes out at 09:00 in it. */
+  timeZone: string;
+}
+
+/** This phone receives the signed-in person's pushes (a token another person held moves to them). */
+export async function registerDevice(client: SupabaseClient, d: DeviceRegistration): Promise<void> {
+  const { error } = await client.rpc('register_device', {
+    token: d.token,
+    platform: d.platform,
+    apns_environment: d.apnsEnvironment,
+    bundle_id: d.bundleId,
+    time_zone: d.timeZone,
+  });
+  if (error) throw error;
+}
+
+/** This phone stops receiving the signed-in person's pushes: on signing out. */
+export async function forgetDevice(client: SupabaseClient, token: string): Promise<void> {
+  const { error } = await client.rpc('forget_device', { token });
   if (error) throw error;
 }
 
