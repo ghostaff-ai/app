@@ -73,32 +73,44 @@ export function parseApnsSecret(raw: string): ApnsCredentials | null {
   }
 }
 
-/** One request per session: a drain sends a handful of pushes, not enough to keep a connection warm. */
-const http2Request: ApnsRequest = (host, path, headers, body) =>
-  new Promise((resolve, reject) => {
-    const session = connect(`https://${host}`);
-    const fail = (err: Error) => {
-      session.destroy();
-      reject(err);
-    };
-    session.on('error', fail);
-    const req = session.request({ ':method': 'POST', ':path': path, ...headers });
-    let status = 0;
-    let text = '';
-    req.setEncoding('utf8');
-    req.on('response', (h) => {
-      status = Number(h[':status'] ?? 0);
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * One request per session: a drain sends a handful of pushes, not enough to keep
+ * a connection warm. Settles exactly once; a stalled or closed stream rejects
+ * rather than hanging the drain on one send. `open` is injectable for tests.
+ */
+export function http2Request(timeoutMs = REQUEST_TIMEOUT_MS, open: typeof connect = connect): ApnsRequest {
+  return (host, path, headers, body) =>
+    new Promise((resolve, reject) => {
+      const session = open(`https://${host}`);
+      let settled = false;
+      const finish = (result: { status: number; body: string } | Error) => {
+        if (settled) return;
+        settled = true;
+        session.destroy();
+        if (result instanceof Error) reject(result);
+        else resolve(result);
+      };
+      session.on('error', finish);
+      session.on('close', () => finish(new Error('APNs session closed before a response')));
+      const req = session.request({ ':method': 'POST', ':path': path, ...headers });
+      let status = 0;
+      let text = '';
+      req.setEncoding('utf8');
+      req.setTimeout(timeoutMs, () => finish(new Error('APNs request timed out')));
+      req.on('response', (h) => {
+        status = Number(h[':status'] ?? 0);
+      });
+      req.on('data', (chunk: string) => {
+        text += chunk;
+      });
+      req.on('end', () => finish({ status, body: text }));
+      req.on('close', () => finish(new Error('APNs stream closed before a response')));
+      req.on('error', finish);
+      req.end(body);
     });
-    req.on('data', (chunk: string) => {
-      text += chunk;
-    });
-    req.on('end', () => {
-      session.close();
-      resolve({ status, body: text });
-    });
-    req.on('error', fail);
-    req.end(body);
-  });
+}
 
 function reasonOf(body: string): string | null {
   try {
@@ -114,9 +126,9 @@ function reasonOf(body: string): string | null {
 
 export function apnsTransport(
   creds: ApnsCredentials,
-  opts: { request?: ApnsRequest; now?: () => Date } = {},
+  opts: { request?: ApnsRequest; now?: () => Date; timeoutMs?: number } = {},
 ): PushTransport {
-  const request = opts.request ?? http2Request;
+  const request = opts.request ?? http2Request(opts.timeoutMs);
   const now = opts.now ?? (() => new Date());
   let cached: { jwt: string; mintedAt: number } | null = null;
 

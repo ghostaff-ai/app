@@ -1,6 +1,8 @@
 import { generateKeyPairSync, verify } from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import type { connect } from 'node:http2';
 import { describe, expect, it } from 'vitest';
-import { apnsTransport, parseApnsSecret, type ApnsRequest } from '../src/push/apns';
+import { apnsTransport, http2Request, parseApnsSecret, type ApnsRequest } from '../src/push/apns';
 import { byPlatform, type Device, type Push, type PushTransport } from '../src/push/transport';
 
 const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -131,5 +133,52 @@ describe('byPlatform', () => {
     expect(await t.send(device, push)).toBe('delivered');
     expect(await t.send({ ...device, platform: 'android' }, push)).toBe('retry');
     expect(await byPlatform(null, stub('dead')).send({ ...device, platform: 'android' }, push)).toBe('dead');
+  });
+});
+
+describe('default HTTP/2 request', () => {
+  /** A session whose stream we drive by hand. */
+  function fakeOpen() {
+    const session = Object.assign(new EventEmitter(), { destroy: () => undefined });
+    const req = Object.assign(new EventEmitter(), {
+      setEncoding: () => undefined,
+      setTimeout: (ms: number, cb: () => void) => void setTimeout(cb, ms),
+      end: () => undefined,
+    });
+    const open = (() => Object.assign(session, { request: () => req })) as unknown as typeof connect;
+    return { open, session, req };
+  }
+  const args = ['h', '/p', {}, ''] as const;
+
+  it('rejects when APNs accepts the stream and never answers', async () => {
+    const { open } = fakeOpen();
+    await expect(http2Request(20, open)(...args)).rejects.toThrow('timed out');
+  });
+
+  it('rejects when the stream or session closes without an end', async () => {
+    const a = fakeOpen();
+    const pa = http2Request(1000, a.open)(...args);
+    a.req.emit('close');
+    await expect(pa).rejects.toThrow('stream closed');
+    const b = fakeOpen();
+    const pb = http2Request(1000, b.open)(...args);
+    b.session.emit('close');
+    await expect(pb).rejects.toThrow('session closed');
+  });
+
+  it('resolves the response when the stream ends normally', async () => {
+    const { open, req } = fakeOpen();
+    const p = http2Request(1000, open)(...args);
+    req.emit('response', { ':status': 410 });
+    req.emit('data', '{"reason":"Unregistered"}');
+    req.emit('end');
+    req.emit('close');
+    await expect(p).resolves.toEqual({ status: 410, body: '{"reason":"Unregistered"}' });
+  });
+
+  it('maps a stalled request to retry through the transport', async () => {
+    const { open } = fakeOpen();
+    const t = apnsTransport(creds, { request: http2Request(20, open) });
+    expect(await t.send(device, push)).toBe('retry');
   });
 });
