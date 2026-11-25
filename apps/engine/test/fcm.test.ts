@@ -75,4 +75,27 @@ describe('FCM transport', () => {
     });
     expect(await noToken.send(device, push)).toBe('retry');
   });
+
+  it('gives up on a request that never answers: retry after the timeout', async () => {
+    const hang = (async (_url: string, init: RequestInit = {}) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+      })) as unknown as typeof fetch;
+    const t = fcmTransport('p', { accessToken: async () => 'at', fetch: hang, timeoutMs: 20 });
+    expect(await t.send(device, push)).toBe('retry');
+  });
+
+  it('gives up on an access token that never comes', async () => {
+    let fetched = false;
+    const t = fcmTransport('p', {
+      accessToken: () => new Promise<string>(() => {}),
+      fetch: (async () => {
+        fetched = true;
+        return new Response('{}');
+      }) as unknown as typeof fetch,
+      timeoutMs: 20,
+    });
+    expect(await t.send(device, push)).toBe('retry');
+    expect(fetched).toBe(false);
+  });
 });

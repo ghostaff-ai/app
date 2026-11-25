@@ -60,6 +60,8 @@ const DAILY_FROM_HOUR = 9;
 const DAILY_UNTIL_HOUR = 12;
 const UNIQUE_VIOLATION = '23505';
 const DRAIN_SOON_MS = 500;
+/** The longest a request waits for its pushes; what is still sending then goes on, or the reclaim and the tick retry it. */
+const REQUEST_WAIT_MS = 3_000;
 
 export interface DrainResult {
   sent: number;
@@ -171,11 +173,11 @@ async function closeRow(
 
 /** The drain after the engine's own writes of agent messages (see `drainSoon`). */
 export interface PushDrain {
-  /** After a write that queued pushes: a drain 500 ms on, and the request it happened in waits for it. */
+  /** After a write that queued pushes: a drain 500 ms on, and the request it happened in waits for it (3 s at most). */
   poke(): void;
   /** Fires a pending drain now and waits for every drain running. Never throws: a failure is logged. */
   settle(): Promise<void>;
-  /** Handles a request: when it poked, waits for its pushes before answering. */
+  /** Handles a request: when it poked, waits for its pushes before answering, 3 s at most. */
   request<T>(handle: () => Promise<T>): Promise<T>;
 }
 
@@ -184,11 +186,16 @@ export interface PushDrain {
  * one drain sends a burst's pushes. The timer is not pushed back by later
  * writes, so a busy engine still drains. A request that wrote waits for its
  * drain before answering, as Cloud Run gives an instance no CPU between
- * requests; a write outside any request (work a request left running) has only
- * the timer. Nothing here throws: a failure is logged and the tick sends what
- * was missed.
+ * requests, but never past `waitMs`: a person is waiting on it, and a drain
+ * held up by a provider is finished by the reclaim and the tick. A write outside
+ * any request (work a request left running) has only the timer. Nothing here
+ * throws: a failure is logged and the tick sends what was missed.
  */
-export function drainSoon(store: OutboxStore, transport: PushTransport, ms = DRAIN_SOON_MS): PushDrain {
+export function drainSoon(
+  store: OutboxStore,
+  transport: PushTransport,
+  { delayMs = DRAIN_SOON_MS, waitMs = REQUEST_WAIT_MS }: { delayMs?: number; waitMs?: number } = {},
+): PushDrain {
   const requests = new AsyncLocalStorage<{ answering: boolean; poked: boolean }>();
   const running = new Set<Promise<void>>();
   let pending: ReturnType<typeof setTimeout> | null = null;
@@ -213,7 +220,7 @@ export function drainSoon(store: OutboxStore, transport: PushTransport, ms = DRA
     poke() {
       const req = requests.getStore();
       if (req?.answering) req.poked = true;
-      if (!pending) pending = setTimeout(fire, ms);
+      if (!pending) pending = setTimeout(fire, delayMs);
     },
     settle,
     async request(handle) {
@@ -222,7 +229,11 @@ export function drainSoon(store: OutboxStore, transport: PushTransport, ms = DRA
         return await requests.run(req, handle);
       } finally {
         req.answering = false;
-        if (req.poked) await settle();
+        if (req.poked) {
+          let cap: ReturnType<typeof setTimeout> | undefined;
+          await Promise.race([settle(), new Promise<void>((r) => (cap = setTimeout(r, waitMs)))]);
+          clearTimeout(cap);
+        }
       }
     },
   };

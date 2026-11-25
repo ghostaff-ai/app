@@ -562,6 +562,36 @@ describe('a request that writes an agent message', () => {
     expect(claim).not.toHaveBeenCalled();
   });
 
+  it('waits for its pushes at most 3 s, and leaves the drain running', async () => {
+    vi.useFakeTimers();
+    const m = memory([row()], { u1: [phone('a')] });
+    const claim = m.store.claim;
+    // A stalled provider: the drain takes a minute.
+    m.store.claim = async (max) => {
+      await new Promise((r) => setTimeout(r, 60_000));
+      return claim(max);
+    };
+    const pushes = drainSoon(m.store, scripted({ a: 'delivered' }));
+    let answered = false;
+    const answer = Promise.resolve(
+      appWith(pushes, async () => {
+        pushes.poke();
+        return {};
+      }).request('/cron', cron),
+    ).then((res) => {
+      answered = true;
+      return res;
+    });
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(answered).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(answered).toBe(true);
+    expect((await answer).status).toBe(200);
+    expect(m.closed).toEqual({});
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(m.closed).toEqual({ r1: 'sent' });
+  });
+
   it('answers even when the drain fails', async () => {
     const error = quiet('error');
     const m = memory([], {});

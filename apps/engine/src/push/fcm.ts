@@ -25,21 +25,38 @@ function errorOf(body: unknown): { status: string; message: string; codes: strin
   };
 }
 
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/** `promise`, or the signal's reason once it aborts: for a call that takes no signal of its own. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    if (signal.aborted) return abort();
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
 export function fcmTransport(
   projectId: string,
-  opts: { accessToken?: () => Promise<string>; fetch?: typeof fetch } = {},
+  opts: { accessToken?: () => Promise<string>; fetch?: typeof fetch; timeoutMs?: number } = {},
 ): PushTransport {
   const accessToken = opts.accessToken ?? defaultAccessToken();
   const doFetch = opts.fetch ?? fetch;
+  const timeoutMs = opts.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const url = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
 
   return {
     async send(device: Device, push: Push): Promise<Outcome> {
+      // One deadline for the token and the request, so a stalled Google never holds the drain: it is a `retry`.
+      const signal = AbortSignal.timeout(timeoutMs);
       let res: Response;
       try {
+        const token = await untilAborted(accessToken(), signal);
         res = await doFetch(url, {
           method: 'POST',
-          headers: { authorization: `Bearer ${await accessToken()}`, 'content-type': 'application/json' },
+          signal,
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
           body: JSON.stringify({
             message: {
               token: device.token,
