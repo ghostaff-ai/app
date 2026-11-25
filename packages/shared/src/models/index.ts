@@ -217,11 +217,22 @@ export const AGENT_JOBS: Record<AgentGhost, { label: string; job: string }> = {
   productor: { label: 'Productor', job: 'Convierte encargos y material en bruto en piezas listas para publicar.' },
 };
 
+/**
+ * The name the main agent is hired under. The SQL repeats it once, in
+ * `hire_main_agent`, with a comment pointing here.
+ */
+export const MAIN_AGENT_NAME = 'Secretaría';
+
+/** The main agent's one-line job, by role: any agent drawn as the secretaria ghost keeps the ghost's own line. */
+export const MAIN_AGENT_JOB = 'Lleva tu equipo: crea contigo los agentes que necesitas y conoce cómo trabaja la empresa.';
+
 export interface Agent {
   id: string;
   orgId: string;
   name: string;
   ghost: AgentGhost;
+  /** The organisation's main agent (one per organisation, never removed): it changes settings and builds the team. A role, not a ghost. */
+  isMain: boolean;
   department: Department;
   /** The level a member has on it until an owner chooses one: talk for Secretaría, read for the rest. */
   memberDefault: AgentLevel;

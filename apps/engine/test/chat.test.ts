@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@ghostaff/shared';
+import { AGENT_JOBS, type ChatMessage, MAIN_AGENT_JOB } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { type AiAccount, AiFailure, type AiUse, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, whoAnswers, type Writer } from '../src/chat';
@@ -440,7 +440,7 @@ describe("an agent using its organisation's tools", () => {
 });
 
 describe("the main agent changing the organisation's settings (agent-settings.md)", () => {
-  const secretaria: ChatAgent = { id: AGENT, orgId: ORG, name: 'Secretaría', ghost: 'secretaria', department: 'direccion' };
+  const secretaria: ChatAgent = { id: AGENT, orgId: ORG, name: 'Secretaría', ghost: 'secretaria', department: 'direccion', isMain: true };
   const INVITATION = '60000000-0000-0000-0000-000000000001';
   const google: AgentTools = {
     specs: [{ name: 'google_calendar_list_events', description: 'Lista eventos', input_schema: { type: 'object', properties: {} } }],
@@ -472,6 +472,18 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     expect(asked[0]?.system).toContain('agente principal');
   });
 
+  it('tells the main agent its job by role, and a Correo drawn as the secretaria ghost the mail line', async () => {
+    const main = setup({ agent: secretaria });
+    await main.call('ana', `/threads/${THREAD}/reply`);
+    expect(main.asked[0]?.system).toContain(MAIN_AGENT_JOB);
+
+    const correo: ChatAgent = { ...secretaria, name: 'Correo', isMain: false };
+    const other = setup({ agent: correo });
+    await other.call('ana', `/threads/${THREAD}/reply`);
+    expect(other.asked[0]?.system).toContain(AGENT_JOBS.secretaria.job);
+    expect(other.asked[0]?.system).not.toContain(MAIN_AGENT_JOB);
+  });
+
   it('gives any other agent only the tools for its own routines (agent-routines.md)', async () => {
     const { call, asked } = setup({ tools: google, asPerson: () => fakeSupabase({}).client });
     await call('ana', `/threads/${THREAD}/reply`);
@@ -484,6 +496,20 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     ]);
     expect(asked[0]?.system).not.toContain('agente principal');
     expect(asked[0]?.system).toContain('rutinas tuyas');
+  });
+
+  it('gives an agent drawn as the secretaria ghost that is not the main agent only its own routines', async () => {
+    const correo: ChatAgent = { ...secretaria, name: 'Correo', isMain: false };
+    const { call, asked } = setup({ agent: correo, tools: google, asPerson: () => fakeSupabase({}).client });
+    await call('ana', `/threads/${THREAD}/reply`);
+    const names = (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
+    expect(names.filter((n) => n.startsWith('settings_')).sort()).toEqual([
+      'settings_create_routine',
+      'settings_pause_routine',
+      'settings_read_routines',
+      'settings_update_routine',
+    ]);
+    expect(asked[0]?.system).not.toContain('agente principal');
   });
 
   it('gives an agent only the accounts an owner let it use', async () => {
@@ -517,7 +543,7 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     let told: unknown;
     const { call, proposed } = setup({
       agent: secretaria,
-      asPerson: () => fakeSupabase({ agents: [{ id: AGENT, org_id: ORG, name: 'Secretaría', ghost: 'secretaria', accounts: null }] }).client,
+      asPerson: () => fakeSupabase({ agents: [{ id: AGENT, org_id: ORG, name: 'Secretaría', ghost: 'secretaria', is_main: true, accounts: null }] }).client,
       write: async ({ tools: t, onText }) => {
         told = await t.run('settings_agent_accounts', { agent_id: AGENT, providers: null });
         onText('Vale.');

@@ -1,3 +1,4 @@
+import { agentJob } from '@ghostaff/shared/services';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Image, RefreshControl, ScrollView, Text, View } from 'react-native';
@@ -140,7 +141,7 @@ export default function Equipo() {
                 accessibilityLabel={`${a.name}${unread ? ', mensajes sin leer' : ''}`}
                 leading={ghost}
                 title={a.name}
-                subtitle={said ?? a.description ?? GHOSTS[a.ghost].job}
+                subtitle={said ?? a.description ?? agentJob(a)}
                 emphasis={unread}
                 trailing={trailing}
                 onPress={() => router.push(`/chat/${a.id}`)}

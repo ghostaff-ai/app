@@ -4,7 +4,7 @@ import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useMemo } from 'react';
 import { Image, Platform, Pressable, Text, View } from 'react-native';
 import { shortNext, soonest } from '@ghostaff/shared';
-import { decideAction } from '@ghostaff/shared/services';
+import { agentJob, decideAction } from '@ghostaff/shared/services';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
 import { Clock, Icon } from '@/components/icons';
@@ -129,7 +129,7 @@ export default function Chat() {
           <View className="flex-1 items-center justify-center px-8">
             <Image source={g.picture} style={{ width: 120, height: 120 }} resizeMode="contain" />
             <Text className="mt-3 font-display text-title2 text-ink">{agent.name}</Text>
-            <Text className="mt-1 text-center text-base text-muted">{g.job}</Text>
+            <Text className="mt-1 text-center text-base text-muted">{agentJob(agent)}</Text>
             <Text className="mt-6 text-center text-footnote text-muted">Esta conversación es solo entre tú y {agent.name}.</Text>
           </View>
         ) : (

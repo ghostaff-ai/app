@@ -890,6 +890,7 @@ interface AgentRow {
   org_id: string;
   name: string;
   ghost: AgentGhost;
+  is_main?: boolean;
   department: Department;
   member_default: AgentLevel;
   chat_default?: ConversationVisibility;
@@ -906,6 +907,7 @@ export function agentFromRow(r: AgentRow): Agent {
     orgId: r.org_id,
     name: r.name,
     ghost: r.ghost,
+    isMain: r.is_main ?? false,
     department: r.department,
     memberDefault: r.member_default,
     chatDefault: r.chat_default ?? 'private',
@@ -917,7 +919,7 @@ export function agentFromRow(r: AgentRow): Agent {
   };
 }
 
-const AGENT_COLUMNS = 'id, org_id, name, ghost, department, member_default, chat_default, runner, description, schedule, accounts, created_at';
+const AGENT_COLUMNS = 'id, org_id, name, ghost, is_main, department, member_default, chat_default, runner, description, schedule, accounts, created_at';
 
 /** The organisation's agents, oldest first. */
 export async function listAgents(client: SupabaseClient, orgId: string): Promise<Agent[]> {

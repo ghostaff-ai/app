@@ -73,16 +73,16 @@ describe('the record’s pre-receive hook', () => {
     expect(push(FINANZAS, { 'memoria/agentes/secretaria/a.md': 'x\n' })).toContain('es de otro agente');
   });
 
-  it('keeps the company’s memory for Secretaría', () => {
-    expect(push(FINANZAS, { 'memoria/empresa/precios.md': 'x\n' })).toContain('la guarda Secretaría');
-    expect(push(FINANZAS, { 'memoria/empresa/clientes.md': null })).toContain('la guarda Secretaría');
+  it('keeps the company’s memory for the main agent', () => {
+    expect(push(FINANZAS, { 'memoria/empresa/precios.md': 'x\n' })).toContain('la cambian las personas desde Ghostaff');
+    expect(push(FINANZAS, { 'memoria/empresa/clientes.md': null })).toContain('la cambian las personas desde Ghostaff');
     expect(push(SECRETARIA, { 'memoria/empresa/precios.md': 'x\n' })).toBeNull();
   });
 
   it('refuses a rename out of the company’s memory, which a diff with renames would show only by its new name', () => {
     mkdirSync(join(work, 'memoria', 'agentes', 'finanzas'), { recursive: true });
     git(work, ['mv', 'memoria/empresa/clientes.md', 'memoria/agentes/finanzas/clientes.md']);
-    expect(push(FINANZAS, {})).toContain('la guarda Secretaría');
+    expect(push(FINANZAS, {})).toContain('la cambian las personas desde Ghostaff');
   });
 
   it('never lets an agent change instructions, even its own', () => {

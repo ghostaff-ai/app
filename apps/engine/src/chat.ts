@@ -14,7 +14,7 @@
 // (guides.ts). No record, no mail yet: it says so when asked for something
 // that needs them.
 
-import { AGENT_JOBS, type AgentGhost, type ChatMessage, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
+import { type AgentGhost, type ChatMessage, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
 import type { AccountAskPart, ActionPart, GuidePart } from '@ghostaff/shared';
 import { ASK_TOOL, ASK_TOOLS, askLines, askResumable, type AskStore, proposeAsk } from './accountAsks';
 import { GUIDE_TOOL, GUIDE_TOOLS, guideLines, guideResumable, type GuideStore, proposeGuide } from './guides';
@@ -22,7 +22,7 @@ import { previewOf } from './actions';
 import { Refusal } from './connections';
 import { askJob, type JobDeps } from './jobs';
 import { askRunner } from './runner';
-import { isMainAgent } from '@ghostaff/shared/services';
+import { agentJob, isMainAgent } from '@ghostaff/shared/services';
 import { NOTHING_NEW } from './runner';
 import { type AsPerson, settingsTools } from './settings';
 import { type AgentTools, mergeTools, NO_TOOLS, restrictTo } from './tools';
@@ -34,6 +34,8 @@ export interface ChatAgent {
   orgId: string;
   name: string;
   ghost: AgentGhost;
+  /** The organisation's main agent (agents.is_main): the one with the settings tools. Not the same as its ghost. */
+  isMain?: boolean;
   department: string;
   /** How it runs (supabase/migrations/20261121100000_agent_runners.sql); a job agent answers through its job. */
   runner?: 'chat' | 'ordago_job' | 'ghostaff';
@@ -256,7 +258,7 @@ export function systemPrompt(
   orgName: string,
   opts: { broughtInto?: string; accounts?: string[]; now?: Date; settings?: boolean; routines?: boolean; canAsk?: boolean; canGuide?: boolean } = {},
 ): string {
-  const job = AGENT_JOBS[agent.ghost]?.job ?? '';
+  const job = agentJob(agent);
   const broughtInto = opts.broughtInto;
   return [
     `Eres ${agent.name}, un agente del equipo de ${orgName} en Ghostaff, en el departamento de ${agent.department}.`,

@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ACCOUNT_PROVIDERS, type AccountProvider, connectorFor } from '../connectors';
-import { AGENT_GHOSTS, AGENT_LEVELS, type AgentGhost, type AgentLevel, CONVERSATION_VISIBILITIES, type ConversationVisibility, type Department, DEPARTMENTS } from '../models';
+import { AGENT_GHOSTS, AGENT_JOBS, AGENT_LEVELS, type AgentGhost, type AgentLevel, CONVERSATION_VISIBILITIES, type ConversationVisibility, type Department, DEPARTMENTS, MAIN_AGENT_JOB } from '../models';
 import { ALL_WEEKDAYS, describeWhen, invalidWhen, MAX_ROUTINES_PER_PERSON, type Routine, type RoutineAudience, type Weekday } from '../routines';
 import {
   createAgent,
@@ -649,8 +649,8 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   chat_with: { reach: 'not_a_setting' },
   conversation_readers: { reach: 'not_a_setting' },
   connections_place_last: { reach: 'not_a_setting' },
-  hire_secretaria: { reach: 'not_a_setting' },
-  invitations_not_personal: { reach: 'not_a_setting' },
+  ensure_main_agent: { reach: 'not_a_setting' },
+  hire_main_agent: { reach: 'not_a_setting' },
   is_member: { reach: 'not_a_setting' },
   is_owner: { reach: 'not_a_setting' },
   list_agent_access: { reach: 'not_a_setting' },
@@ -687,7 +687,12 @@ export const ENGINE_SETTINGS: Record<string, FunctionReach> = {
   disconnect_account: { reach: 'never', why: 'keys and sign-ins are a person, on the provider' },
 };
 
-/** The organisation's main agent, the one that changes its settings: Secretaría. */
-export function isMainAgent(a: { ghost: string }): boolean {
-  return a.ghost === 'secretaria';
+/** The organisation's main agent, the one that changes its settings: a role (`agents.is_main`), not a ghost. */
+export function isMainAgent(a: { isMain?: boolean | null }): boolean {
+  return a.isMain === true;
+}
+
+/** An agent's one-line job: the main agent's by role, any other agent's by its ghost. */
+export function agentJob(a: { ghost: AgentGhost; isMain?: boolean | null }): string {
+  return isMainAgent(a) ? MAIN_AGENT_JOB : AGENT_JOBS[a.ghost]?.job ?? '';
 }

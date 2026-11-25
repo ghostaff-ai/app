@@ -117,8 +117,12 @@ async function syncPorDecidir(opts: { org: string; record: string; writeBack: bo
 }
 
 async function addOrg(opts: { slug: string; name: string }) {
-  const { error } = await admin().from('organizations').upsert({ slug: opts.slug, name: opts.name }, { onConflict: 'slug' });
+  const db = admin();
+  const { data, error } = await db.from('organizations').upsert({ slug: opts.slug, name: opts.name }, { onConflict: 'slug' }).select('id').single();
   if (error) throw error;
+  // Not made through create_organization, so it has no main agent yet; safe to repeat.
+  const { error: mainError } = await db.rpc('ensure_main_agent', { target_org: data.id });
+  if (mainError) throw mainError;
   console.log(`organisation ${opts.slug} ready`);
 }
 

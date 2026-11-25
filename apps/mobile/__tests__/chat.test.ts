@@ -2,11 +2,12 @@ import type { Agent, ChatMessage, ChatThread } from '@ghostaff/shared';
 import { audienceLine, canWriteIn, readOnlyNote, shortTime, showAuthors, teamRows, vacancies, widens } from '@/lib/chat';
 import { addMessage } from '@/lib/hooks/useChat';
 
-const agent = (id: string, ghost: Agent['ghost']): Agent => ({
+const agent = (id: string, ghost: Agent['ghost'], isMain = ghost === 'secretaria'): Agent => ({
   id,
   orgId: 'o',
   name: id,
   ghost,
+  isMain,
   department: 'direccion',
   runner: 'chat',
   description: null,
@@ -87,6 +88,11 @@ describe('the chat rules', () => {
     expect(rows.map((r) => r.agent.id)).toEqual(['sec', 'red', 'fin', 'inc']);
     expect(rows[1]?.last?.id).toBe('red-chat');
     expect(rows.map((r) => r.unread)).toEqual([false, true, false, false]);
+  });
+
+  it('puts the main agent first by its role, even when it is not drawn as secretaria', () => {
+    const team = [agent('fin', 'finanzas'), agent('main', 'base', true), agent('sec', 'secretaria', false)];
+    expect(teamRows(team, []).map((r) => r.agent.id)).toEqual(['main', 'sec', 'fin']);
   });
 
   it('adds a row for each titled conversation the person follows, by its last word', () => {

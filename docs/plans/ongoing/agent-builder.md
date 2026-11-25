@@ -2,7 +2,7 @@
 
 **Priority:** high — Jaime (2026-11-24): «un agente de finanzas no me dice nada»; today an agent is a costume (ghost, name, department) and every organisation's real work is its own
 **Gate:** none
-**Next:** Task 1 of [slice 1](#build-slice-1-the-main-agent-as-a-role), in a worktree off `develop`: the migration `20261126200000_main_agent.sql` and its pgTAP test
+**Next:** write slice 2's tasks (drafts and «Nuevo agente») against `develop` once slice 1 (`feat/main-agent`) has landed
 
 ## Goal
 
@@ -67,7 +67,8 @@ Afterwards the same card is one tap away (the ghost on top of its chat), with al
 - `hire_secretaria` becomes `hire_main_agent`: same place in `create_organization` and `create_personal_space`, inserts with `is_main = true` and the name from one constant, `MAIN_AGENT_NAME` (`packages/shared`), «Secretaría» until the name is chosen. Renaming later is one constant and one migration for existing rows (`where is_main and name = 'Secretaría'`).
 - `delete_agent` refuses the main agent (`42501`); its card shows no «Quitar del equipo».
 - Every other check on the ghost moves to the role: `firstHello.ts` (her hello), `create_agent`'s `member_default` (`talk` for the main agent), and `writesCompany` in `recordProvision.ts` (who writes `memoria/empresa/`, enforced by the record's pre-receive hook).
-- `AGENT_JOBS.secretaria.job` becomes the main agent's job: it leads the team, creates agents with you and knows the organisation (*wording is a builder's call; Spanish, «tú»*). The ghost art stays.
+- The main agent's job line is `MAIN_AGENT_JOB`, chosen by the role (`agentJob()` in `packages/shared/src/services/settings.ts`) wherever an agent's line is shown or prompted; `AGENT_JOBS.secretaria.job` keeps the ghost's mail line, so an agent merely drawn as that ghost (Órdago's Correo) never claims to lead the team. *Changed while building (2026-11-24): the plan first rewrote the ghost's line, which the final review caught.* The ghost art stays.
+- **Nobody pushes `memoria/empresa/` for now.** The right follows the role, and the main agent is a chat agent; the record's hook only lists agents on our runner, so until the main agent runs there the company's memory changes only through people in Ghostaff. Órdago's record is on GitHub, where there is no hook at all.
 - The chat agent with `is_main` gets the settings lines (as today) plus the builder lines below when the thread is a creation thread.
 - `settings_create_agent` stays, so «créame un agente que…» in the main agent's normal chat is answered with «Te abro Nuevo agente» and a link to the screen (*my call*: one way to create, not two).
 
@@ -145,6 +146,8 @@ Slice 2 depends on routines' functions ([agent-routines.md](../ongoing/agent-rou
 
 ## Build slice 1: the main agent as a role
 
+**Built** on `feat/main-agent` (2026-11-24): four tasks, each reviewed, a whole-branch review and one fix wave; web-checked on a new company. Before production, check whether Órdago has a chat agent drawn as `secretaria` (it would be promoted instead of a new main agent being hired), and expect the main agent's hello in every organisation where it is new.
+
 > **For agentic workers:** use superpowers:subagent-driven-development or superpowers:executing-plans to work through these tasks. Steps are `- [ ]` checkboxes. Work in a worktree off `develop` (AGENTS.md, Branches) and land with `pnpm pr:land`.
 
 **Goal:** «main agent» is a row's role (`agents.is_main`), not the `secretaria` ghost: one per organisation, never removed, hired with every new space, and hired by the migration where an organisation has no chat agent to take it.
@@ -156,7 +159,7 @@ Slice 2 depends on routines' functions ([agent-routines.md](../ongoing/agent-rou
 ### Global constraints
 
 - `MAIN_AGENT_NAME = 'Secretaría'` until Jaime picks the name. The SQL repeats it in one place, `hire_main_agent`, with a comment pointing at the constant.
-- The main agent's job (`AGENT_JOBS.secretaria.job`): «Lleva tu equipo: crea contigo los agentes que necesitas y conoce cómo trabaja la empresa.»
+- The main agent's job (`MAIN_AGENT_JOB`, by role; see the design): «Lleva tu equipo: crea contigo los agentes que necesitas y conoce cómo trabaja la empresa.»
 - Error for removing the main agent: `'the main agent stays'`, errcode `42501`.
 - Code and comments in English; anything a person sees in Spanish (AGENTS.md rule 5).
 
@@ -173,7 +176,7 @@ Slice 2 depends on routines' functions ([agent-routines.md](../ongoing/agent-rou
 ### Task 1: the role in the database
 
 **Files:**
-- Create: `supabase/migrations/20261126200000_main_agent.sql`
+- Create: `supabase/migrations/20261126300000_main_agent.sql`
 - Create: `supabase/tests/database/main_agent.test.sql`
 - Modify: `supabase/tests/database/spaces.test.sql` (the «Secretaría hired» assertions check `is_main`)
 

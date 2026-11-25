@@ -1,7 +1,7 @@
 import { firstHello, type FirstHelloDeps, RETRY_AFTER_MS } from '@/lib/firstHello';
 
-const secretaria = { id: 'a1', orgId: 's1', ghost: 'secretaria' as const };
-const redes = { id: 'a2', orgId: 's1', ghost: 'redes' as const };
+const secretaria = { id: 'a1', orgId: 's1', isMain: true };
+const redes = { id: 'a2', orgId: 's1', isMain: false };
 const owner = { id: 's1', role: 'owner' as const };
 
 const deps = (over: Partial<FirstHelloDeps> = {}): FirstHelloDeps => ({
@@ -29,8 +29,15 @@ describe('Secretaría says hello on a new space', () => {
 
   it('never greets with another space\'s Secretaría, still listed while you switch', async () => {
     const d = deps();
-    const elsewhere = { id: 'b1', orgId: 's2', ghost: 'secretaria' as const };
+    const elsewhere = { id: 'b1', orgId: 's2', isMain: true };
     await firstHello({ space: owner, agents: [elsewhere], aiReady: true }, d);
+    expect(d.hello).not.toHaveBeenCalled();
+  });
+
+  it('never greets a custom agent drawn as the secretaria ghost: only the main agent', async () => {
+    const d = deps();
+    const drawnAsHer = { id: 'a3', orgId: 's1', ghost: 'secretaria' as const, isMain: false };
+    await firstHello({ space: owner, agents: [drawnAsHer], aiReady: true }, d);
     expect(d.hello).not.toHaveBeenCalled();
   });
 
