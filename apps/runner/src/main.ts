@@ -10,14 +10,15 @@
 // This process is root, and keeps every secret to itself. It proves who it is
 // with a Google ID token from the metadata server and the nonce, fetches its
 // spec once (prompt, model, tools, the record and a GitHub token for it, the
-// organisation's Claude subscription), serves the record token to git on
+// organisation's Claude subscription and, when it has one, a token as its own
+// Google Cloud account, kept in a file root renews), serves the record token to git on
 // 127.0.0.1 through a credential helper, clones the record as the user
 // `agente` and runs the unmodified Claude Code there as `agente`, with nothing
 // in its environment but its credential, HOME, PATH and LANG. At the end, or
 // on any crash before it, it reports to the engine (best effort).
 
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { chmodSync, chownSync, existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -35,6 +36,7 @@ import {
   newDecisions,
   noteworthy,
   passwdIds,
+  type GoogleAccess,
   readSpec,
   redact,
   type Report,
@@ -113,6 +115,51 @@ async function serveRecordToken(first: { token: string; expiresAt: string }): Pr
   return { port: (server.address() as AddressInfo).port, close: () => server.close() };
 }
 
+/**
+ * The organisation's Google Cloud token, in a file `gcloud` and `bq` read on every call
+ * (CLOUDSDK_AUTH_ACCESS_TOKEN_FILE). Root writes it and renews it through the engine before it
+ * expires; the agent can read it, not replace it: the folder is root's, the file root's and its group's.
+ */
+function serveGoogleToken(first: GoogleAccess, gid: number): { file: string; close(): void } {
+  const dir = mkdtempSync('/tmp/ghostaff-gcloud-');
+  chmodSync(dir, 0o711);
+  const file = join(dir, 'token');
+  const write = (token: string) => {
+    const next = join(dir, 'token.next');
+    writeFileSync(next, token, { mode: 0o640 });
+    chownSync(next, 0, gid);
+    chmodSync(next, 0o640);
+    renameSync(next, file);
+  };
+  write(first.token);
+  let expiresAt = first.expiresAt;
+  let renewing = false;
+  const timer = setInterval(async () => {
+    if (renewing || !tokenNearExpiry(expiresAt, Date.now())) return;
+    renewing = true;
+    try {
+      const r = await callEngine(`/runs/${run}/google-token`, { nonce });
+      if (r.ok) {
+        const fresh = (await r.json()) as { token: string; expiresAt: string };
+        secrets.push(fresh.token);
+        write(fresh.token);
+        expiresAt = fresh.expiresAt;
+      }
+    } catch (e) {
+      console.error('google token not renewed', crashText(e, secrets));
+    } finally {
+      renewing = false;
+    }
+  }, 30_000);
+  return {
+    file,
+    close() {
+      clearInterval(timer);
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+
 /** git as the agent, never blocking: the record token server above answers git's helper from this process (exec.ts). */
 function asAgent(ids: { uid: number; gid: number }, env: Record<string, string>, cwd?: string) {
   return (args: string[]) => runCommand('git', args, { uid: ids.uid, gid: ids.gid, env, cwd: cwd ?? env.HOME });
@@ -125,13 +172,14 @@ function runClaude(
   spec: RunSpec,
   ids: { uid: number; gid: number; home: string },
   cwd: string,
+  google: { tokenFile: string; project: string | null } | null,
 ): Promise<{ code: number | null; last: string; usage?: unknown; rateLimit?: unknown }> {
   return new Promise((resolve, reject) => {
     const child = spawn('claude', claudeArgs(spec), {
       uid: ids.uid,
       gid: ids.gid,
       cwd,
-      env: agentEnv(spec.claudeToken, ids.home),
+      env: agentEnv(spec.claudeToken, ids.home, google),
       stdio: ['pipe', 'pipe', 'inherit'],
     });
     let last = '';
@@ -161,9 +209,11 @@ async function main(): Promise<number> {
   }
   const spec = readSpec(await res.json());
   secrets.push(spec.claudeToken, spec.record.token);
+  if (spec.google) secrets.push(spec.google.token);
 
   const ids = passwdIds(readFileSync('/etc/passwd', 'utf8'), AGENT_USER);
   const tokens = await serveRecordToken(spec.record);
+  const google = spec.google ? serveGoogleToken(spec.google, ids.gid) : null;
   try {
     const env = gitEnv(ids.home);
     const git = asAgent(ids, env);
@@ -179,7 +229,7 @@ async function main(): Promise<number> {
 
     const decisions = join(record, spec.decisionsDir);
     const before = new Set(yamlNames(decisions));
-    const { code, last, usage, rateLimit } = await runClaude(spec, ids, record);
+    const { code, last, usage, rateLimit } = await runClaude(spec, ids, record, google && spec.google ? { tokenFile: google.file, project: spec.google.project } : null);
     const result = resultOf(last);
     const ok = code === 0 && result.ok;
     const opened = newDecisions(decisionFiles(decisions), before, spec.slug, secrets);
@@ -195,6 +245,7 @@ async function main(): Promise<number> {
     return ok ? 0 : 1;
   } finally {
     tokens.close();
+    google?.close();
   }
 }
 

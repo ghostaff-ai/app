@@ -57,6 +57,23 @@ describe('the spec', () => {
   it('gives Claude Code only its credential, HOME, PATH and LANG', () => {
     expect(Object.keys(agentEnv('tok', '/home/agente')).sort()).toEqual(['CLAUDE_CODE_OAUTH_TOKEN', 'HOME', 'LANG', 'PATH']);
   });
+
+  it('points gcloud and bq at the token file and the organisation’s project, never the token itself', () => {
+    const env = agentEnv('tok', '/home/agente', { tokenFile: '/tmp/ghostaff-gcloud-x/token', project: 'ordago-prod' });
+    expect(env).toMatchObject({ CLOUDSDK_AUTH_ACCESS_TOKEN_FILE: '/tmp/ghostaff-gcloud-x/token', CLOUDSDK_CORE_PROJECT: 'ordago-prod', CLOUDSDK_CORE_DISABLE_PROMPTS: '1' });
+    expect(Object.values(env).join(' ')).not.toContain('ya29');
+    expect(agentEnv('tok', '/home/agente', { tokenFile: '/t', project: null }).CLOUDSDK_CORE_PROJECT).toBeUndefined();
+  });
+
+  it('reads the organisation’s Google Cloud, and refuses anything odd in it', () => {
+    const google = { account: 'org-0123456789abcdef01234567@ghostaff-tenants-beta.iam.gserviceaccount.com', project: 'ordago-prod', token: 'ya29.a0AfB_byC-token', expiresAt: '2026-11-21T11:00:00Z' };
+    expect(readSpec({ ...SPEC, google }).google).toEqual(google);
+    expect(readSpec({ ...SPEC, google: null }).google).toBeNull();
+    expect(readSpec({ ...SPEC, google: { ...google, project: null } }).google?.project).toBeNull();
+    expect(() => readSpec({ ...SPEC, google: { ...google, project: 'ordago-prod; rm -rf /' } })).toThrow();
+    expect(() => readSpec({ ...SPEC, google: { ...google, token: 'ya29 token\nX=1' } })).toThrow();
+    expect(() => readSpec({ ...SPEC, google: { ...google, account: 'someone@gmail.com' } })).toThrow();
+  });
 });
 
 describe('the end of a run', () => {

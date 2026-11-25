@@ -23,6 +23,19 @@ export interface RunSpec {
   author: { name: string; email: string };
   claudeToken: string;
   decisionsDir: string;
+  /**
+   * The organisation's Google Cloud: a one-hour token as its own service account, and the project
+   * `gcloud` and `bq` default to (null: none). Absent or null when the organisation has no account.
+   */
+  google?: GoogleAccess | null;
+}
+
+export interface GoogleAccess {
+  account: string;
+  project: string | null;
+  token: string;
+  /** When to ask the engine for another (POST /runs/:id/google-token). */
+  expiresAt: string;
 }
 
 /** The report the engine takes at POST /runs/report. */
@@ -50,6 +63,23 @@ const isCloneUrl = (s: unknown): s is string =>
   typeof s === 'string' &&
   (/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(s) || /^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?\/records\/[a-z0-9-]+\.git$/.test(s));
 const isGitUser = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/.test(s);
+/** A Google Cloud project id, as Google allows them. */
+const isProject = (s: unknown): s is string => typeof s === 'string' && /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(s);
+const isServiceAccount = (s: unknown): s is string =>
+  typeof s === 'string' && /^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$/.test(s);
+/** A token that can go in a file as one line: no whitespace, nothing a shell would read. */
+const isAccessToken = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9._~+/=-]{20,4096}$/.test(s);
+
+function isGoogle(g: unknown): boolean {
+  if (g === undefined || g === null) return true;
+  const x = g as Record<string, unknown>;
+  return (
+    isServiceAccount(x.account) &&
+    (x.project === null || isProject(x.project)) &&
+    isAccessToken(x.token) &&
+    typeof x.expiresAt === 'string' && !Number.isNaN(Date.parse(x.expiresAt))
+  );
+}
 
 /** The spec as the engine sent it, checked: nothing in it reaches a command line unchecked. */
 export function readSpec(body: unknown): RunSpec {
@@ -68,7 +98,8 @@ export function readSpec(body: unknown): RunSpec {
     typeof record.expiresAt === 'string' && !Number.isNaN(Date.parse(record.expiresAt)) &&
     typeof author.name === 'string' && typeof author.email === 'string' &&
     typeof b.claudeToken === 'string' && b.claudeToken.length > 0 &&
-    typeof b.decisionsDir === 'string' && /^[a-z0-9_-]+$/.test(b.decisionsDir);
+    typeof b.decisionsDir === 'string' && /^[a-z0-9_-]+$/.test(b.decisionsDir) &&
+    isGoogle(b.google);
   if (!ok) throw new Error('the engine sent a spec this runner cannot read');
   return b as unknown as RunSpec;
 }
@@ -96,12 +127,24 @@ export function claudeArgs(spec: Pick<RunSpec, 'model' | 'tools' | 'maxTurns'>):
  * a local proxy that holds the token outside the agent's reach
  * (docs/plans/ongoing/ordago-agents-in-ghostaff.md, step 5).
  */
-export function agentEnv(claudeToken: string, home: string): Record<string, string> {
+export function agentEnv(
+  claudeToken: string,
+  home: string,
+  /** The organisation's Google Cloud: `gcloud` and `bq` read the token from this file, which root renews. */
+  google?: { tokenFile: string; project: string | null } | null,
+): Record<string, string> {
   return {
     CLAUDE_CODE_OAUTH_TOKEN: claudeToken,
     HOME: home,
     PATH: '/usr/local/bin:/usr/bin:/bin',
     LANG: 'C.UTF-8',
+    ...(google
+      ? {
+          CLOUDSDK_AUTH_ACCESS_TOKEN_FILE: google.tokenFile,
+          CLOUDSDK_CORE_DISABLE_PROMPTS: '1',
+          ...(google.project ? { CLOUDSDK_CORE_PROJECT: google.project } : {}),
+        }
+      : {}),
   };
 }
 
