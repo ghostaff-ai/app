@@ -21,7 +21,18 @@ const mockEngine = { url: 'http://engine', token: 't' };
 
 jest.mock('@/lib/tabs', () => ({ useTabScreenTop: () => 0 }));
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
-jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a) } }));
+// The screen coming into view again: `mockRefocus()` runs what it runs on focus.
+let mockRefocus: () => void = () => {};
+jest.mock('expo-router', () => ({
+  router: { push: (...a: unknown[]) => mockPush(...a) },
+  useFocusEffect: (effect: () => void) => {
+    const { useEffect } = require('react');
+    useEffect(() => {
+      mockRefocus = effect;
+      effect();
+    }, [effect]);
+  },
+}));
 jest.mock('@/lib/org/ActiveOrgContext', () => ({ useActiveOrg: () => ({ active: { id: 'o1', role: mockRole } }) }));
 jest.mock('@/lib/hooks/useConnections', () => ({
   useConnections: () => ({ items: mockItems, reload: mockReload }),
@@ -215,13 +226,31 @@ describe('Pendientes de aprobar', () => {
     await waitFor(() => expect(screen.queryByText('Pendientes de aprobar')).toBeNull());
   });
 
-  it('a decision that fails says why next to its row and keeps it', async () => {
+  it('a decision that fails says why next to its row and keeps it while it still waits', async () => {
     mockPending.mockResolvedValue([luis]);
+    mockApprove.mockRejectedValue(new EngineError('still_writing', 409, 'x'));
+    await open();
+    await press('Aprobar');
+    expect(await screen.findByText('El agente aún está escribiendo. Prueba otra vez en un momento.')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Aprobar' })).toBeOnTheScreen();
+  });
+
+  it('one someone else already decided leaves the list, and the connections are read again', async () => {
+    mockPending.mockResolvedValueOnce([luis]).mockResolvedValue([]);
     mockApprove.mockRejectedValue(new EngineError('already_decided', 409, 'x'));
     await open();
     await press('Aprobar');
-    expect(await screen.findByText('Ya lo ha decidido otra persona.')).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: 'Aprobar' })).toBeOnTheScreen();
+    await waitFor(() => expect(screen.queryByText('Pendientes de aprobar')).toBeNull());
+    expect(mockReload).toHaveBeenCalled();
+  });
+
+  it('is read again each time the screen comes into view: a guide finished meanwhile shows', async () => {
+    await open();
+    expect(screen.queryByText('Pendientes de aprobar')).toBeNull();
+    mockPending.mockResolvedValue([luis]);
+    await act(async () => mockRefocus());
+    expect(screen.getByText('Redes · hecho por Luis hoy')).toBeOnTheScreen();
+    expect(mockPending).toHaveBeenCalledTimes(2);
   });
 
   it('a member sees no such section, and it is never asked for', async () => {

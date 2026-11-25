@@ -10,6 +10,11 @@ import { supabase } from '../supabase';
 // is connected on its page.
 const mounted = new Set<() => Promise<void>>();
 
+/** Reads the connections again in every screen showing them: for a change made where they aren't listed (a guide's own screen). */
+export async function reloadConnections(): Promise<void> {
+  await Promise.all([...mounted].map((l) => l()));
+}
+
 /** An organisation's connections, read from the database as the signed-in person. */
 export function useConnections(orgId: string | null) {
   const [items, setItems] = useState<Connection[]>([]);
@@ -45,9 +50,7 @@ export function useConnections(orgId: string | null) {
   }, [load]);
 
   /** Read again, here and in every other screen showing connections. */
-  const reload = useCallback(async () => {
-    await Promise.all([...mounted].map((l) => l()));
-  }, []);
+  const reload = useCallback(() => reloadConnections(), []);
 
   return { items, loading, loaded: !!orgId && loadedFor === orgId, error, reload };
 }

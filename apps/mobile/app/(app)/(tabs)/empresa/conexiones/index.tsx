@@ -105,8 +105,8 @@ export default function Connections() {
           reload={pending.reload}
           decide={async (id, d) => {
             const problem = await pending.decide(id, d);
-            // An approval writes the agent's access: «Accesos de tus agentes» shows it.
-            if (!problem) await reload();
+            // An approval, here or by someone else first, writes the agent's access: «Accesos de tus agentes» shows it.
+            await reload();
             return problem;
           }}
         />

@@ -11,7 +11,14 @@ import { type GuideControls, guidesToResume, useGuideCards } from '@/lib/hooks/u
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 // Stable, as the real useEngine is (memoised on the token).
 const mockEngine = { url: 'http://engine', token: 't' };
-jest.mock('@/lib/hooks/useConnections', () => ({ useEngine: () => mockEngine, useConnections: () => ({ items: [], reload: jest.fn() }) }));
+// Conexiones is read again wherever it shows once an access is granted here.
+const mockReloadConnections = jest.fn(async () => {});
+jest.mock('@/lib/hooks/useConnections', () => ({
+  useEngine: () => mockEngine,
+  useConnections: () => ({ items: [], reload: jest.fn() }),
+  reloadConnections: () => mockReloadConnections(),
+}));
+beforeEach(() => mockReloadConnections.mockClear());
 jest.mock('@/lib/hooks/useAccountConnect', () => ({ useAccountConnect: () => ({ connect: jest.fn(), busy: null, ready: true }) }));
 jest.mock('@/lib/org/ActiveOrgContext', () => ({ useActiveOrg: () => ({ active: { id: 'o1', role: 'member' } }) }));
 jest.mock('expo-router', () => ({
@@ -219,6 +226,34 @@ describe('the guide screen', () => {
     expect(requests.filter((r) => r.url.endsWith('/step')).every((r) => !r.body?.includes('abcd'))).toBe(true);
   });
 
+  /** Goes through both steps to a check the engine answers with `outcome`. */
+  const passCheck = async (outcome: 'done' | 'checked') => {
+    const served = globalThis.fetch as jest.Mock;
+    const inner = served.getMockImplementation()!;
+    served.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).endsWith('/guides/g1/check') ? (inner(input, init), ok({ ok: true, status: outcome })) : inner(input, init),
+    );
+    await render(<GuideScreen />);
+    await fireEvent.changeText(await screen.findByLabelText('La dirección de tu web'), 'panaderia.es');
+    await fireEvent.changeText(screen.getByLabelText('La contraseña de aplicación'), 'abcd efgh ijkl mnop');
+    await fireEvent.press(screen.getByText('Ya está'));
+    await fireEvent.changeText(await screen.findByLabelText('Tu usuario'), 'ana');
+    await act(async () => {
+      await fireEvent.press(screen.getByText('Comprobar'));
+    });
+    await waitFor(() => expect(requests.filter((r) => r.url.endsWith('/step'))).toHaveLength(2));
+  };
+
+  it('an owner\'s passed check is the agent\'s access already: Conexiones is read again', async () => {
+    await passCheck('done');
+    expect(mockReloadConnections).toHaveBeenCalledTimes(1);
+  });
+
+  it('a member\'s passed check waits for an owner: Conexiones has nothing new yet', async () => {
+    await passCheck('checked');
+    expect(mockReloadConnections).not.toHaveBeenCalled();
+  });
+
   it('shows the goal, the progress and, always, «Enséñame tu pantalla»', async () => {
     await render(<GuideScreen />);
     expect(await screen.findByText('Acceso a tu web')).toBeTruthy();
@@ -400,6 +435,8 @@ describe('a guide waiting for an owner, on its screen', () => {
     expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull();
     expect(requests.filter((u) => u.endsWith('/approve'))).toHaveLength(1);
     expect(requests.some((u) => u.endsWith('/step'))).toBe(false);
+    // The agent has the access now: Conexiones lists it.
+    expect(mockReloadConnections).toHaveBeenCalledTimes(1);
   });
 
   it('an owner rejects it there', async () => {
@@ -420,6 +457,7 @@ describe('a guide waiting for an owner, on its screen', () => {
     });
     expect(await screen.findByText('Ya lo ha decidido otra persona.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Aprobar' })).toBeTruthy();
+    expect(mockReloadConnections).not.toHaveBeenCalled();
   });
 
   it('whoever did it, not an owner, reads that an owner has to approve it, with nothing to press', async () => {

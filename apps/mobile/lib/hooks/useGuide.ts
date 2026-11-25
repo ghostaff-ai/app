@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { decideErrorText, guideErrorText, guideLoadProblem, type LoadProblem, movedOn } from '../guide';
 import type { ReadyShot, Shot } from '../guidePhoto';
 import { success } from '../haptics';
-import { useEngine } from './useConnections';
+import { reloadConnections, useEngine } from './useConnections';
 
 // A guide's screen (docs/plans/ongoing/guided-access.md): the guide as the engine
 // keeps it, the step it stopped at, and what the person does on each step.
@@ -153,6 +153,8 @@ export function useGuide(id: string | null) {
       // The secret is in the vault now: nothing here needs it any more.
       setValues((v) => ({ base_url: v.base_url, username: v.username }));
       setStatus(out.status);
+      // An owner's grant is the agent's access already: Conexiones lists it.
+      if (out.status === 'done') void reloadConnections();
       success();
     } catch (e) {
       if (movedOn(e)) void load();
@@ -175,6 +177,7 @@ export function useGuide(id: string | null) {
         setDecided(decision);
         setStatus(decision === 'approve' ? 'done' : 'rejected');
         setView((v) => (v ? { ...v, mayApprove: false } : v));
+        if (decision === 'approve') void reloadConnections();
         success();
       } catch (e) {
         setDecideError(decideErrorText(e));

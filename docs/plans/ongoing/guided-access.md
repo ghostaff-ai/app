@@ -2,7 +2,7 @@
 
 **Priority:** high — Jaime (2026-11-24): «una parte super importante del producto que hay que trabajar muy mucho»: the agent will need access we never built a connector for, and a non-technical person has to be able to give it
 **Gate:** none
-**Next:** on `feat/guided-access`, make «Pendientes de aprobar» refresh on focus and after a decision elsewhere (a 409 must clear the row); then `pnpm pr:land`; then Task 8 on beta
+**Next:** Task 8 on beta: Jaime picks a public WordPress test site; then a phone with the next native beta (expo-image-picker, expo-image-manipulator, expo-clipboard)
 
 ## Goal
 
@@ -334,6 +334,6 @@ Seen working: unit and route tests for every step; the app on the web with a sta
 
 Not checked yet (Task 8): a real WordPress, a real model reading a real screenshot, native camera and permissions, Claude Code accepting the `Read(//abs/path)` rule, a hosting that drops the `Authorization` header (WordPress answers 401 `rest_not_logged_in`; the guide should say so instead of blaming the password).
 
-Open before landing: «Pendientes de aprobar» loads only on mount, so a new pending guide doesn't show until the app restarts, and a row decided elsewhere stays (its 409 doesn't clear it).
+Fixed before landing: «Pendientes de aprobar» is read each time Conexiones comes into view and after every decision, so a row someone else decided (409) leaves; a grant made on the guide's own screen (an owner's passed check, an approval) reads the connections again wherever they show.
 
 Follow-ups noted in review, not blocking: a race between approve's card update and its resume claim (claim earlier); a handover's ask skipping `ask_for_account`'s duplicate and "already have it" checks; `callEngine` without a timeout; a `version` column instead of `updated_at` for optimistic updates; orphaned vault secrets when an agent is deleted or a `checked` guide is never decided.
