@@ -113,6 +113,32 @@ export function isVoicePart(p: MessagePart): p is VoicePart & MessagePart {
   return p.type === 'voice' && typeof (p as { path?: unknown }).path === 'string';
 }
 
+/**
+ * A decision an agent asked for in its message (docs/plans/ready/decision-model.md,
+ * decision 5): the card shows the decision row, answered from there or from the deck.
+ * The question is kept so the message reads even before the row loads.
+ */
+export type DecisionPart = {
+  type: 'decision';
+  decisionId: string;
+  question: string;
+};
+
+export function isDecisionPart(p: MessagePart): p is DecisionPart & MessagePart {
+  return p.type === 'decision' && typeof (p as { decisionId?: unknown }).decisionId === 'string';
+}
+
+/** A decision a person asks its agent about («Preguntar», decision 7), quoted above their words. */
+export type DecisionQuotePart = {
+  type: 'decision_quote';
+  decisionId: string;
+  question: string;
+};
+
+export function isDecisionQuotePart(p: MessagePart): p is DecisionQuotePart & MessagePart {
+  return p.type === 'decision_quote' && typeof (p as { decisionId?: unknown }).decisionId === 'string';
+}
+
 export interface ChatMessage {
   id: string;
   threadId: string;

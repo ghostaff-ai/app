@@ -32,6 +32,8 @@ import { usePalette } from '@/lib/theme';
 // The clock on the right is the agent's routines (agent-routines.md): an
 // outline when the person has none with it, the next one's day and hour
 // when they do; it opens them.
+// «Preguntar» on a decision lands here with it (`about`, `q`): it shows above
+// the box, and the next message carries it (decision-model.md, decision 7).
 
 // Under the person's first message of the session, once: would they like to be
 // told when the agent answers? «Sí» opens the phone's own dialog; «Ahora no» is
@@ -66,14 +68,27 @@ function PushAsk({ onAnswered }: { onAnswered: () => void }) {
 }
 
 export default function Chat() {
-  const { agent: agentId } = useLocalSearchParams<{ agent: string }>();
+  const { agent: agentId, about, q } = useLocalSearchParams<{ agent: string; about?: string; q?: string }>();
+  // The decision the next message is about, until it is sent or put away.
+  const [aboutId, setAboutId] = useState<string | null>(about ?? null);
+  useEffect(() => {
+    if (about) setAboutId(about);
+  }, [about]);
   const { session } = useAuth();
   const { active } = useActiveOrg();
   const orgId = active?.id ?? null;
   const { items: agents, loading: agentsLoading, reload: reloadAgents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels, loading: levelsLoading } = useMyLevels(orgId);
-  const { messages, loading, error, send, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
+  const { messages, loading, error, send: sendPlain, askAbout, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
+  const send = useCallback(
+    async (body: string) => {
+      if (!aboutId) return sendPlain(body);
+      await askAbout(aboutId, body);
+      setAboutId(null);
+    },
+    [aboutId, sendPlain, askAbout],
+  );
   const { items: routines, reload: reloadRoutines } = useRoutines(orgId, agentId ?? null);
   const palette = usePalette();
   const headerHeight = useHeaderHeight();
@@ -224,6 +239,25 @@ export default function Chat() {
         )}
         {error ? <Text className="px-4 pb-1 text-footnote text-no">{error}</Text> : null}
         {showPushAsk ? <PushAsk onAnswered={() => setAsked(true)} /> : null}
+        {canTalk && aboutId ? (
+          <View testID="asking-about" className="mx-4 mb-1 flex-row items-center rounded-2xl bg-card py-1 pl-3 pr-1">
+            <View className="flex-1 border-l-2 border-line pl-2">
+              <Text className="text-caption text-muted">Sobre la decisión</Text>
+              <Text className="text-footnote font-semibold text-ink" numberOfLines={2}>
+                {q ?? 'La decisión que abriste'}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Quitar la decisión del mensaje"
+              onPress={() => setAboutId(null)}
+              hitSlop={6}
+              className="min-h-11 min-w-11 items-center justify-center active:opacity-60"
+            >
+              <Text className="text-lg text-muted">×</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {canTalk ? (
           <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={sendAndNote} onVoiceNote={engine ? sendVoice : undefined} />
         ) : (

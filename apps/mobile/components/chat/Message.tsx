@@ -1,7 +1,8 @@
-import { type ActionPart, type ChatMessage, isAccountAskPart, isActionPart, isGuidePart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
+import { type ActionPart, type ChatMessage, isAccountAskPart, isActionPart, isDecisionPart, isDecisionQuotePart, isGuidePart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
+import { DecisionInChat, DecisionQuote } from '@/components/chat/DecisionInChat';
 import { GuideCard } from '@/components/chat/GuideCard';
 import { Markdown } from '@/components/chat/Markdown';
 import { VoiceNote } from '@/components/chat/VoiceNote';
@@ -246,6 +247,8 @@ export function MessageView({
   const actions = message.parts.filter(isActionPart);
   const accountAsks = message.parts.filter(isAccountAskPart);
   const guideParts = message.parts.filter(isGuidePart);
+  const decisions = message.parts.filter(isDecisionPart);
+  const quote = message.parts.find(isDecisionQuotePart);
 
   if (message.authorKind === 'agent') {
     return (
@@ -274,6 +277,9 @@ export function MessageView({
         {guideParts.map((g) => (
           <GuideCard key={g.guideId} guide={g} controls={guides} writing={message.state === 'working'} />
         ))}
+        {decisions.map((d) => (
+          <DecisionInChat key={d.decisionId} part={d} writing={message.state === 'working'} />
+        ))}
       </View>
     );
   }
@@ -283,6 +289,7 @@ export function MessageView({
     return (
       <View className={`flex-row justify-end px-4 ${showAuthor ? 'pt-4' : 'pt-1'}`}>
         <View className="max-w-[80%] rounded-2xl rounded-br-md bg-accent px-3.5 py-2">
+          {quote ? <DecisionQuote part={quote} onAccent /> : null}
           {voice ? (
             <VoiceNote
               part={voice}
@@ -304,6 +311,7 @@ export function MessageView({
       <View className="ml-2 max-w-[78%]">
         {showAuthor ? <Text className="mb-0.5 ml-1 text-caption font-semibold text-muted">{message.authorName}</Text> : null}
         <View className="rounded-2xl rounded-bl-md border border-line bg-card px-3.5 py-2">
+          {quote ? <DecisionQuote part={quote} /> : null}
           <Body text={text} names={names} className="text-base leading-6 text-ink" />
         </View>
       </View>

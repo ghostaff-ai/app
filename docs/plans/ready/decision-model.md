@@ -2,7 +2,7 @@
 
 **Priority:** high — step 3 of [three-tabs.md](../ongoing/three-tabs.md) (decision 8); the deck is only as good as what a decision can say
 **Gate:** none — Álvaro took every pick (2026-11-25)
-**Next:** pull request 2: the engine's `pedir_decision` tool, the card in the agent's chat, «Preguntar»
+**Next:** pull request 3: the action cards as decisions (decision 6); and a chat agent acting on its own once its decision is answered (below)
 
 Álvaro asked (2026-11-23) for decisions to be «really modelled in our system». As of `d80952f` (2026-11-24) a decision is a row copied from a `por-decidir/*.yaml` file in an organisation's record on GitHub, answered only OK or No, with the asking agent as free text (`proposed_by`). Three consequences:
 
@@ -15,6 +15,8 @@
 - **2026-11-25, decision 1 overtaken.** While this plan waited, [record-store.md](../ongoing/record-store.md) landed: every organisation gets a record in our own store when it is created (beta now; production with the first release). So decisions stay files in the record, as today (option b, without building it here), and «in the database» is not needed. Decision 5's tool commits the file to the organisation's record, whatever its host.
 - **2026-11-25, the format.** Órdago's `por-decidir/README.md` has `opciones`, `recomienda` as the pick's id, `importancia: alta` and `respuesta.opcion` (ordago-app/business `3a0b7a9`).
 - **Pull request 1** (decisions 2–4): the reader and writer (`porDecidir.ts`), the sync (options, stakes, the agent matched from `propone`, the option written back), the columns and `answer_decision(…, option_id)` (`20261126100000_decision_options.sql`, pgTAP `decision_options`), and the deck and the decision screen: each option a button, the pick the main one; a high-stakes card takes no swipe, shows «No / Sí» and reveals the pick only when you choose otherwise. An app from before this still answers: its OK takes the pick.
+- **Pull request 2** (decisions 5, 7): a chat agent has `pedir_decision` (`apps/engine/src/decisionAsks.ts`): the engine writes the file into the organisation's record (`openDecision` in `recordSync.ts`), syncs it and points the row at the agent; the message carries a `decision` part, drawn as a card answered in place (`DecisionInChat.tsx`). The agent reads in its turns what became of its decisions. «Preguntar a …» on the decision screen opens the agent's chat with the decision above the box; the message carries it (`ask_about_decision`, a `decision_quote` part), and the deck says «Preguntaste». A runner agent still asks by writing the file itself, as its prompt says.
+- **Open:** a chat agent learns an answer the next time someone writes to it; nothing wakes it when the decision is answered. That waits for the notifications work ([decision-notifications.md](../ideas/decision-notifications.md)) or a small trigger of its own.
 
 ## Decisions (Álvaro took all my picks, 2026-11-25)
 

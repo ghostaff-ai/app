@@ -32,7 +32,7 @@ import type {
   PendingInvitation,
   Profile,
 } from '../models';
-import type { ChatMessage, ChatThread, MessagePart, OrgMember } from '../chat';
+import { type ChatMessage, type ChatThread, isDecisionQuotePart, type MessagePart, type OrgMember } from '../chat';
 import type { Routine, RoutineAudience, RoutineWhen, Weekday } from '../routines';
 
 // The only place the app talks to the database. Screens, hooks and components
@@ -1185,6 +1185,30 @@ export async function chatWith(client: SupabaseClient, agentId: string, body: st
   const { data, error } = await client.rpc('chat_with', { target_agent: agentId, body }).single<MessageRow>();
   if (error) throw error;
   return messageFromRow(data);
+}
+
+/** «Preguntar» on a decision: writes to the agent that asked, in your chat with it, with the decision quoted. */
+export async function askAboutDecision(client: SupabaseClient, decisionId: string, body: string): Promise<ChatMessage> {
+  const { data, error } = await client.rpc('ask_about_decision', { target_decision: decisionId, body }).single<MessageRow>();
+  if (error) throw error;
+  return messageFromRow(data);
+}
+
+/** The decisions of the organisation the signed-in person has asked an agent about: «Preguntaste» in the deck. */
+export async function listAskedDecisions(client: SupabaseClient, orgId: string, userId: string): Promise<Set<string>> {
+  const { data, error } = await client
+    .from('messages')
+    .select('parts')
+    .eq('org_id', orgId)
+    .eq('author_user', userId)
+    .contains('parts', [{ type: 'decision_quote' }])
+    .order('created_at', { ascending: false })
+    .limit(200)
+    .returns<{ parts: MessagePart[] }[]>();
+  if (error) throw error;
+  const ids = new Set<string>();
+  for (const m of data ?? []) for (const p of m.parts) if (isDecisionQuotePart(p)) ids.add(p.decisionId);
+  return ids;
 }
 
 export async function postMessage(client: SupabaseClient, threadId: string, body: string): Promise<ChatMessage> {

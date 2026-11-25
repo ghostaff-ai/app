@@ -38,12 +38,12 @@ export function supabaseChatStore(admin: SupabaseClient, opts: { afterAgentWrite
       return r ? { id: r.id, orgId: r.org_id, agentId: r.agent_id, title: r.title } : null;
     },
     async agent(id) {
-      const r = check(await admin.from('agents').select('id, org_id, name, ghost, is_main, department, runner, accounts').eq('id', id).maybeSingle());
-      return r ? { id: r.id, orgId: r.org_id, name: r.name, ghost: r.ghost, isMain: r.is_main, department: r.department, runner: r.runner, accounts: r.accounts } : null;
+      const r = check(await admin.from('agents').select('id, org_id, name, slug, ghost, is_main, department, runner, accounts').eq('id', id).maybeSingle());
+      return r ? { id: r.id, orgId: r.org_id, name: r.name, slug: r.slug, ghost: r.ghost, isMain: r.is_main, department: r.department, runner: r.runner, accounts: r.accounts } : null;
     },
     async orgAgents(orgId) {
-      const rows = check(await admin.from('agents').select('id, org_id, name, ghost, is_main, department, runner, accounts').eq('org_id', orgId)) ?? [];
-      return rows.map((r) => ({ id: r.id, orgId: r.org_id, name: r.name, ghost: r.ghost, isMain: r.is_main, department: r.department, runner: r.runner, accounts: r.accounts }));
+      const rows = check(await admin.from('agents').select('id, org_id, name, slug, ghost, is_main, department, runner, accounts').eq('org_id', orgId)) ?? [];
+      return rows.map((r) => ({ id: r.id, orgId: r.org_id, name: r.name, slug: r.slug, ghost: r.ghost, isMain: r.is_main, department: r.department, runner: r.runner, accounts: r.accounts }));
     },
     async orgName(orgId) {
       const r = check(await admin.from('organizations').select('name').eq('id', orgId).single());

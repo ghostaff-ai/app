@@ -4,7 +4,7 @@ import type { DecisionRow } from '@ghostaff/shared/services';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { appJwt, freshRepoToken, repoTokens } from '../src/githubApp';
-import { type InstructedAgent, type RecordOrg, type RecordSyncStore, syncOrg } from '../src/recordSync';
+import { type InstructedAgent, openDecision, type RecordOrg, type RecordSyncStore, syncOrg } from '../src/recordSync';
 
 const ORG: RecordOrg = { id: 'org-1', slug: 'ordago', repo: 'ordago-app/business', host: 'github', installation: 7 };
 
@@ -81,6 +81,7 @@ function store(rows: DecisionRow[] = [], agents: InstructedAgent[] = []) {
     setOwnRecord: async () => false,
     decisions: async () => rows,
     agents: async () => [],
+    pointDecision: async () => null,
     apply: async (p) => {
       applied.push(p);
     },
@@ -190,6 +191,32 @@ describe('syncOrg', () => {
     const r = await syncOrg({ store: db.s, tokens: async () => 'tok', forgejo: null, fetch: gh.f }, ORG);
     expect(r.ok).toBe(true);
     expect(db.applied[0]!.upserts).toEqual([]);
+  });
+});
+
+describe('openDecision', () => {
+  it('commits the agent\'s decision under a free id, syncs, and points the row at the agent', async () => {
+    const gh = fakeGithub({ 'por-decidir/redes-cuando.yaml': decisionYaml('x') });
+    const db = store();
+    const pointed: string[] = [];
+    db.s.pointDecision = async (_org, recordId, agentId) => {
+      pointed.push(`${recordId}:${agentId}`);
+      return 'row-9';
+    };
+    const r = await openDecision(
+      { store: db.s, tokens: async () => 'tok', forgejo: null, fetch: gh.f },
+      { orgId: ORG.id, agentId: 'agent-1', base: 'redes-cuando', decision: (id) => decisionYaml(id) },
+    );
+    expect(r).toEqual({ decisionId: 'row-9', recordId: 'redes-cuando-2' });
+    expect(Object.keys(gh.commits[0]!.files)).toEqual(['por-decidir/redes-cuando-2.yaml']);
+    expect(db.applied).toHaveLength(1);
+    expect(pointed).toEqual(['redes-cuando-2:agent-1']);
+  });
+
+  it('returns null for an organisation without a record it reaches', async () => {
+    const db = store();
+    db.s.orgWithRecord = async () => null;
+    expect(await openDecision({ store: db.s, tokens: null, forgejo: null }, { orgId: 'x', agentId: 'a', base: 'b', decision: () => '' })).toBeNull();
   });
 });
 
