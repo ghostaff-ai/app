@@ -35,8 +35,10 @@ revoke insert, update, delete, truncate on public.device_tokens from anon, authe
 
 -- What the engine sends. Only the engine (service role) touches it: row-level
 -- security on, no policy, nothing granted to the app. `sent_at` with `outcome`
--- closes a row: «sent», «read» (read before it went out), «no_device» or
--- «gave_up». A claimed row left unsent two minutes is claimed again.
+-- closes a row: «sent», «read» (read before it went out), «no_device»,
+-- «gave_up», or «stale» (a reply still unsent an hour on, as while push was
+-- off: too late to say «te ha contestado»). A claimed row left unsent two
+-- minutes is claimed again.
 create table public.push_outbox (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -56,7 +58,7 @@ create table public.push_outbox (
   created_at timestamptz not null default now(),
   claimed_at timestamptz,
   sent_at timestamptz,
-  outcome text check (outcome in ('sent', 'read', 'no_device', 'gave_up')),
+  outcome text check (outcome in ('sent', 'read', 'no_device', 'gave_up', 'stale')),
   attempts integer not null default 0,
   last_error text,
   check ((sent_at is null) = (outcome is null)),
@@ -296,6 +298,15 @@ begin
   if max_rows is null or max_rows < 1 then
     raise exception 'max_rows must be at least 1' using errcode = '22023';
   end if;
+
+  -- A reply an hour old is news no longer: the backlog of a time push was off
+  -- (or down) is closed, not sent all at once.
+  update public.push_outbox o
+  set outcome = 'stale', sent_at = now()
+  where o.kind = 'reply' and o.sent_at is null
+    and o.created_at < now() - interval '1 hour'
+    -- Not a row a drain is sending now: the same rule as the claim below.
+    and (o.claimed_at is null or o.claimed_at < now() - interval '2 minutes');
 
   update public.push_outbox o
   set outcome = 'read', sent_at = now()

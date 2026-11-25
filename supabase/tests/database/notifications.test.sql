@@ -3,7 +3,7 @@
 -- has a phone; the engine claims each row once and drops what was read since;
 -- nobody reads the outbox from the app, and a phone is only its person's.
 begin;
-select plan(40);
+select plan(42);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'ana@example.com'),
@@ -209,6 +209,27 @@ select results_eq(
   $$ select outcome from public.push_outbox where message_id = '40000000-0000-0000-0000-000000000004' and user_id = '00000000-0000-0000-0000-00000000000a' $$,
   $$ values (null::text) $$,
   'a claimed row read since is left to the drain that holds it');
+
+-- A backlog (push was off): a reply queued over an hour ago is closed, not
+-- sent; a fresh one, and a daily one of any age, still go out.
+insert into public.push_outbox (user_id, org_id, kind, thread_id, message_id, local_day, title, body, created_at) values
+  ('00000000-0000-0000-0000-00000000000c', '10000000-0000-0000-0000-000000000001', 'reply', (select id from ids where name = 'private'),
+   '40000000-0000-0000-0000-000000000006', null, 'Secretaría', 'Te ha contestado', now() - interval '61 minutes'),
+  ('00000000-0000-0000-0000-00000000000c', '10000000-0000-0000-0000-000000000001', 'reply', (select id from ids where name = 'private'),
+   '40000000-0000-0000-0000-000000000005', null, 'Secretaría', 'Te ha contestado', now() - interval '59 minutes'),
+  ('00000000-0000-0000-0000-00000000000c', '10000000-0000-0000-0000-000000000001', 'daily', null, null, '2026-11-24',
+   'Panadería', '1 decisión te espera', now() - interval '1 day');
+set local role service_role;
+select results_eq(
+  $$ select kind, message_id from public.claim_pushes(100) where user_id = '00000000-0000-0000-0000-00000000000c' order by kind $$,
+  $$ values ('daily', null::uuid), ('reply', '40000000-0000-0000-0000-000000000005'::uuid) $$,
+  'a reply under an hour old and a daily one are claimed, a reply over an hour old is not');
+reset role;
+select results_eq(
+  $$ select outcome, sent_at is not null from public.push_outbox
+     where user_id = '00000000-0000-0000-0000-00000000000c' and message_id = '40000000-0000-0000-0000-000000000006' $$,
+  $$ values ('stale', true) $$,
+  '... it is closed as stale');
 
 -- The daily one: two open decisions, one answered, one closed; Bea puts one
 -- aside; OK cards wait for whoever approves them, where they can see them.
