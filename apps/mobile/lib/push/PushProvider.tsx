@@ -1,15 +1,16 @@
 import type { PushData } from '@ghostaff/shared';
 import { registerDevice } from '@ghostaff/shared/services';
-import { router, useRootNavigationState, type Href } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { useActiveOrg } from '../org/ActiveOrgContext';
 import { supabase } from '../supabase';
-import { deviceToken, onTap, permission as readPermission, requestPermission, setForegroundFilter, type Permission } from './pushClient';
+import { deviceToken, onTap, permission as readPermission, requestPermission, setForegroundFilter, type Device, type Permission } from './pushClient';
+import { rememberRegisteredToken } from './registeredToken';
 
 // Receiving pushes: registers this phone once the person is signed in and has
-// allowed notifications, opens what a tapped push points at (in its
-// organisation), and hides a reply for the chat already on screen. Asking is
+// allowed notifications, holds a tapped push until the (app) layout can open it
+// (useOpenPushTap), and hides a reply for the chat already on screen. Asking is
 // the chat's job (`ask`), never at launch (decision-notifications.md, part 2).
 
 interface PushValue {
@@ -21,13 +22,32 @@ interface PushValue {
   setOnScreen: (route: string | null) => void;
 }
 
+interface PendingTap {
+  tap: PushData | null;
+  clear: () => void;
+}
+
 const PushContext = createContext<PushValue | null>(null);
+const PendingTapContext = createContext<PendingTap | null>(null);
+
+/** The design's default (decision-notifications.md), for a phone that names no zone or one the database doesn't know. */
+export const FALLBACK_TIME_ZONE = 'Europe/Madrid';
+
+async function register(device: Device): Promise<void> {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || FALLBACK_TIME_ZONE;
+  try {
+    await registerDevice(supabase, { ...device, timeZone });
+  } catch (e) {
+    // 22023: register_device doesn't know the phone's zone.
+    if ((e as { code?: unknown } | null)?.code !== '22023' || timeZone === FALLBACK_TIME_ZONE) throw e;
+    await registerDevice(supabase, { ...device, timeZone: FALLBACK_TIME_ZONE });
+  }
+  await rememberRegisteredToken(device.token);
+}
 
 export function PushProvider({ children }: { children: ReactNode }) {
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const userId = session?.user.id ?? null;
-  const org = useActiveOrg();
-  const navReady = !!useRootNavigationState()?.key;
   const [permission, setPermission] = useState<Permission>('undetermined');
   const [tap, setTap] = useState<PushData | null>(null);
   const onScreen = useRef<string | null>(null);
@@ -48,6 +68,11 @@ export function PushProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Nobody signed in: a held tap belongs to whoever was, never to the next account.
+  useEffect(() => {
+    if (!authLoading && !userId) setTap(null);
+  }, [authLoading, userId, tap]);
+
   useEffect(() => {
     if (!userId) {
       registered.current = null;
@@ -61,7 +86,7 @@ export function PushProvider({ children }: { children: ReactNode }) {
       if (!alive || !device || registered.current === key) return;
       registered.current = key;
       try {
-        await registerDevice(supabase, { ...device, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+        await register(device);
       } catch {
         // The next launch tries again; until then this phone just gets no pushes.
         if (registered.current === key) registered.current = null;
@@ -71,17 +96,6 @@ export function PushProvider({ children }: { children: ReactNode }) {
       alive = false;
     };
   }, [userId, permission]);
-
-  // A tap, the one that started the app included, waits until there is a
-  // screen to open it on: navigation mounted and the person inside an
-  // organisation. Opened any earlier, the layout's own redirects would undo it.
-  const { active, organizations, loading, choose } = org;
-  useEffect(() => {
-    if (!tap || !navReady || !userId || loading || !active) return;
-    setTap(null);
-    if (tap.orgId && tap.orgId !== active.id && organizations.some((o) => o.id === tap.orgId)) choose(tap.orgId);
-    router.push(tap.route as Href);
-  }, [tap, navReady, userId, loading, active, organizations, choose]);
 
   const ask = useCallback(async () => {
     const p = await requestPermission();
@@ -93,12 +107,37 @@ export function PushProvider({ children }: { children: ReactNode }) {
     onScreen.current = route;
   }, []);
 
+  const clear = useCallback(() => setTap(null), []);
   const value = useMemo<PushValue>(() => ({ permission, ask, setOnScreen }), [permission, ask, setOnScreen]);
-  return <PushContext.Provider value={value}>{children}</PushContext.Provider>;
+  const pending = useMemo<PendingTap>(() => ({ tap, clear }), [tap, clear]);
+  return (
+    <PushContext.Provider value={value}>
+      <PendingTapContext.Provider value={pending}>{children}</PendingTapContext.Provider>
+    </PushContext.Provider>
+  );
 }
 
 export function usePush(): PushValue {
   const v = useContext(PushContext);
   if (!v) throw new Error('usePush outside PushProvider');
   return v;
+}
+
+/**
+ * Opens a tapped push, the one that started the app included, once `ready`:
+ * called by the (app) layout with «past every step of the way in», so its
+ * Stack is mounted and none of its guards will redirect the route away. Opens
+ * it in the push's organisation when that is another of the person's.
+ */
+export function useOpenPushTap(ready: boolean): void {
+  const pending = useContext(PendingTapContext);
+  if (!pending) throw new Error('useOpenPushTap outside PushProvider');
+  const { tap, clear } = pending;
+  const { active, organizations, choose } = useActiveOrg();
+  useEffect(() => {
+    if (!tap || !ready || !active) return;
+    clear();
+    if (tap.orgId && tap.orgId !== active.id && organizations.some((o) => o.id === tap.orgId)) choose(tap.orgId);
+    router.push(tap.route as Href);
+  }, [tap, ready, active, organizations, choose, clear]);
 }
