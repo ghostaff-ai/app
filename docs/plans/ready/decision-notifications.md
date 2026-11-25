@@ -1,8 +1,8 @@
 # Notifications: an agent's reply and the decisions that wait reach a person without opening the app
 
 **Priority:** high — Telegram is today the only thing that reaches a person outside the app, and it goes off once Órdago's agents run on our runner ([ordago-agents-in-ghostaff.md](../ongoing/ordago-agents-in-ghostaff.md), decision 3)
-**Gate:** decision:Jaime — approve this design (2026-11-24)
-**Next:** on Jaime's yes, move to `ready/`, write the implementation plan, build on its own branch and land with `pnpm pr:land`
+**Gate:** none — design approved by Jaime (2026-11-25)
+**Next:** write the implementation plan (File Structure and Tasks) and build it on `feat/notifications`
 
 **Goal:** When an agent finishes a message in a conversation a person can see and hasn't read, that person's phone says so («Legal · Te ha contestado») within seconds, and a tap opens that chat; once a day at 09:00 their time, if decisions wait for them, one notification says how many, and a tap opens Decisiones. Nothing from the record's words leaves for Apple or Google.
 
@@ -33,7 +33,7 @@ Telegram tells Órdago's founders when an agent answered, reported, opened a dec
 
 How the engine learns that an agent message is finished and who to tell:
 
-- **A. A database trigger fills an outbox; the engine drains it** — **chosen (Jaime, 2026-11-24).** When an agent message becomes `done` or `failed`, Postgres writes one row per person to notify. The engine drains the outbox right after it writes a message, and the tick drains it every five minutes as the safety net. Every path that writes agent messages, today's and tomorrow's, is covered without remembering to call anything; who is told is one SQL rule, the one that changes if [group-chat-per-agent.md](group-chat-per-agent.md) is decided.
+- **A. A database trigger fills an outbox; the engine drains it** — **chosen (Jaime, 2026-11-24).** When an agent message becomes `done` or `failed`, Postgres writes one row per person to notify. The engine drains the outbox right after it writes a message, and the tick drains it every five minutes as the safety net. Every path that writes agent messages, today's and tomorrow's, is covered without remembering to call anything; who is told is one SQL rule, the one that changes if [group-chat-per-agent.md](../ideas/group-chat-per-agent.md) is decided.
 - **B. Call `notify()` from each place that closes a message.** More direct, but ten places today and every new one must remember; a missed path is a reply nobody hears about.
 - **C. Only the tick**, scanning unread agent messages every five minutes. Least code, up to five minutes late: too slow for «te ha contestado».
 
