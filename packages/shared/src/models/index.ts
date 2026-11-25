@@ -129,9 +129,25 @@ export interface Decision {
   agent: DecisionAgent | null;
   answer: DecisionAnswer | null;
   closedAt: string | null;
+  /**
+   * Set when the card is not a decision but an action an agent wants to do outside
+   * Ghostaff (agent_actions), waiting for this person's OK: «Aprobar» runs it through
+   * the engine, as the chat's card does. It is never a row in decisions, so it keeps
+   * its conversation's privacy (decision-model.md, PR 3).
+   */
+  action?: DecisionAction;
+}
+
+/** The action behind an OK card in the deck, and the conversation it came from. */
+export interface DecisionAction {
+  id: string;
+  threadId: string;
 }
 
 export const RULE_KIND = 'regla';
+
+/** The `kind` of an OK card for an agent's action: not a class of decision, so it earns no autonomy. */
+export const ACTION_KIND = 'accion';
 
 // Connections: an organisation's links to outside accounts (supabase/migrations/
 // 20261114000000_connections.sql). Never a key: keys stay in the engine's vault.

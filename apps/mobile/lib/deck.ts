@@ -31,10 +31,11 @@ export function asideCount(decisions: Decision[], aside: Record<string, string>)
 /**
  * Whether a card may be answered with a swipe. A rule is signed, in its own
  * words, on its own screen; a high-stakes one is chosen, not swiped
- * (decision-model.md, decision 3); everything else takes the agent's pick.
+ * (decision-model.md, decision 3); nor is an agent's action, which runs at
+ * once and cannot be undone; everything else takes the agent's pick.
  */
 export function canSwipe(d: Decision): boolean {
-  return d.kind !== RULE_KIND && !d.highStakes;
+  return d.kind !== RULE_KIND && !d.highStakes && !d.action;
 }
 
 /** The main button's words: the action the agent recommends, as a verb. */

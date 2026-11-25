@@ -52,6 +52,7 @@ describe('the decision deck', () => {
     expect(pickLabel(d('r', { kind: 'regla' }))).toBe('Revisar la regla');
     expect(canSwipe(d('a'))).toBe(true);
     expect(canSwipe(d('r', { kind: 'regla' }))).toBe(false);
+    expect(canSwipe(d('x', { kind: 'accion', action: { id: 'x', threadId: 't' } }))).toBe(false); // it runs at once
   });
 
   const options = {
