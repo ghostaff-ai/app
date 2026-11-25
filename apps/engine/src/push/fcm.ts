@@ -62,10 +62,12 @@ export function fcmTransport(
               token: device.token,
               notification: { title: push.title, body: push.body },
               data: push.data,
+              // collapse_key folds pushes still waiting on Google's side; the tag makes a conversation's
+              // newer notification replace the one already on the phone's screen (APNs' collapse id does both).
               android: {
                 priority: 'high',
                 ...(push.collapseId ? { collapse_key: push.collapseId } : {}),
-                notification: { channel_id: 'default' },
+                notification: { channel_id: 'default', ...(push.collapseId ? { tag: push.collapseId } : {}) },
               },
             },
           }),

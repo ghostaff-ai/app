@@ -26,16 +26,19 @@ describe('FCM transport', () => {
           token: 'tok-a',
           notification: { title: 'Ana', body: 'Tienes una decisión' },
           data: { thread: 't1' },
-          android: { priority: 'high', collapse_key: 'c1', notification: { channel_id: 'default' } },
+          // The tag makes a conversation's newer notification replace the one on screen.
+          android: { priority: 'high', collapse_key: 'c1', notification: { channel_id: 'default', tag: 'c1' } },
         },
       },
     });
   });
 
-  it('omits collapse_key when there is none', async () => {
+  it('omits collapse_key and the tag when there is none', async () => {
     const { transport, calls } = transportAnswering(200);
     await transport.send(device, { ...push, collapseId: null });
-    expect((calls[0]!.body as { message: { android: object } }).message.android).not.toHaveProperty('collapse_key');
+    const android = (calls[0]!.body as { message: { android: { notification: object } } }).message.android;
+    expect(android).not.toHaveProperty('collapse_key');
+    expect(android.notification).toEqual({ channel_id: 'default' });
   });
 
   it('maps failures to a verdict', async () => {
