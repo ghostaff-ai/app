@@ -10,6 +10,7 @@ export { ArrowDownIcon as ArrowDown } from 'phosphor-react-native/src/icons/Arro
 export { ArrowUpIcon as ArrowUp } from 'phosphor-react-native/src/icons/ArrowUp';
 export { ArrowsClockwiseIcon as ArrowsClockwise } from 'phosphor-react-native/src/icons/ArrowsClockwise';
 export { BuildingsIcon as Buildings } from 'phosphor-react-native/src/icons/Buildings';
+export { CameraIcon as Camera } from 'phosphor-react-native/src/icons/Camera';
 export { CaretDownIcon as CaretDown } from 'phosphor-react-native/src/icons/CaretDown';
 export { CaretRightIcon as CaretRight } from 'phosphor-react-native/src/icons/CaretRight';
 export { ChatsCircleIcon as ChatsCircle } from 'phosphor-react-native/src/icons/ChatsCircle';

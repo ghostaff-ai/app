@@ -154,6 +154,15 @@ const config: ExpoConfig = {
         enableBackgroundPlayback: false,
       },
     ],
+    [
+      'expo-image-picker',
+      {
+        // A guide asks for a photo of the person's screen when they're lost (guided-access.md). Photos only, never video.
+        cameraPermission: 'Ghostaff usa la cámara para que hagas una foto de tu pantalla cuando una guía te pida verla.',
+        photosPermission: 'Ghostaff abre tus fotos para que elijas una captura de pantalla cuando una guía te pida verla.',
+        microphonePermission: false,
+      },
+    ],
     ...(googleIosUrlScheme ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }] as [string, object]] : []),
     'expo-router',
     'expo-splash-screen',

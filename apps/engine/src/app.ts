@@ -12,7 +12,9 @@ import { type ClaudeSession, type ClaudeSessionDeps, claudeSession, MAX_MESSAGE 
 import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromProvider, startAccountConnect } from './accounts';
 import { type ActionDeps, approveAction, rejectAction } from './actions';
 import { CONNECTORS } from '@ghostaff/shared';
-import { agentHello, type ChatDeps, replyInThread, resumeAfterAccount } from './chat';
+import { agentHello, type ChatDeps, replyInThread, resumeInThread } from './chat';
+import { approveGuide, checkGuide, type GuideDeps, getGuide, guidedAccessUndo, guideStep, MAX_STEP_BODY, pendingGuides, rejectGuide, removeGuidedAccess } from './guides';
+import { PHOTO_TOO_BIG } from './guideModel';
 import { reportRun } from './jobs';
 import { runRecordToken, runSpec } from './runner';
 import { clientMetadataDocument } from './mcp';
@@ -58,6 +60,8 @@ export interface AppDeps extends Deps {
   transcriber?: Transcriber;
   /** Voice notes' per-person limit (30 an hour by default); injectable for tests. */
   transcribeLimiter?: NoteLimiter;
+  /** Guides an agent starts to get an access (guides.ts); off when not configured. */
+  guides?: GuideDeps;
 }
 
 type Env = { Variables: { userId: string; accessToken: string } };
@@ -222,11 +226,55 @@ export function createApp(deps: AppDeps) {
   // Answers when the reply is written: Cloud Run keeps the CPU only while a request is open.
   app.post('/threads/:id/reply', async (c) => c.json(await replyInThread(deps.chat, c.get('userId'), c.req.param('id'), c.get('accessToken'))));
 
-  // The agent goes on once the account it asked for is there; answers when its reply is written.
+  // The agent goes on once the account it asked for, or the guide it started, is there; answers when its reply is written.
   app.post('/threads/:id/resume', async (c) => {
     const body = await c.req.json().catch(() => null);
-    return c.json(await resumeAfterAccount(deps.chat, c.get('userId'), c.req.param('id'), body, c.get('accessToken')));
+    return c.json(await resumeInThread(deps.chat, c.get('userId'), c.req.param('id'), body, c.get('accessToken')));
   });
+
+  // Guides (guides.ts): the screen reads one, asks for its next step, checks what the person typed; an owner decides a member's grant.
+  const guides = () => {
+    if (!deps.guides) throw new Refusal(503, 'unavailable', 'guides are off here');
+    return deps.guides;
+  };
+  app.get('/guides/:id', async (c) => c.json(await getGuide(guides(), c.get('userId'), c.req.param('id'))));
+
+  // Owners only: the organisation's member guides waiting for their approval, for Conexiones.
+  app.get('/orgs/:orgId/guides/pending', async (c) => c.json(await pendingGuides(guides(), c.get('userId'), c.req.param('orgId'))));
+
+  // Answers when the model has written the step. A photo above 2 MB is refused before anything else is read.
+  app.post('/guides/:id/step', async (c) => {
+    const g = guides();
+    if (Number(c.req.header('Content-Length') ?? 0) > MAX_STEP_BODY) throw new Refusal(413, 'too_big', PHOTO_TOO_BIG);
+    const raw = await c.req.text();
+    if (raw.length > MAX_STEP_BODY) throw new Refusal(413, 'too_big', PHOTO_TOO_BIG);
+    let body: unknown = undefined;
+    if (raw.trim()) {
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        body = null;
+      }
+    }
+    return c.json(await guideStep(g, c.get('userId'), c.req.param('id'), body));
+  });
+
+  // What the person typed: never logged, never echoed (guides.ts).
+  app.post('/guides/:id/check', async (c) => {
+    const g = guides();
+    const body = await c.req.json().catch(() => null);
+    c.header('Cache-Control', 'no-store');
+    return c.json(await checkGuide(g, c.get('userId'), c.req.param('id'), body));
+  });
+
+  // Answers once the agent has gone on in the guide's conversation (Cloud Run keeps the CPU only while a request is open).
+  app.post('/guides/:id/approve', async (c) => c.json(await approveGuide(guides(), c.get('userId'), c.req.param('id'))));
+
+  app.post('/guides/:id/reject', async (c) => c.json(await rejectGuide(guides(), c.get('userId'), c.req.param('id'))));
+
+  // A guided access (guides.ts), owners only: its undo text, then its removal (the credential and the row).
+  app.get('/connections/guided/:id', async (c) => c.json(await guidedAccessUndo(guides(), c.get('userId'), c.req.param('id'))));
+  app.delete('/connections/guided/:id', async (c) => c.json(await removeGuidedAccess(guides(), c.get('userId'), c.req.param('id'))));
 
   // Voice notes (voiceNotes.ts): the note in, the message out at once; then its transcript and the agent's answer.
   const voice = { chat: deps.chat, voice: deps.voice, transcriber: deps.transcriber, limiter: deps.transcribeLimiter ?? new NoteLimiter() };

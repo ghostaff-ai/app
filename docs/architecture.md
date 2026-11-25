@@ -131,6 +131,7 @@ Per organisation, never shared:
 | Record access | The organisation's installation of our GitHub App | GitHub | A one-hour token for that repo only |
 | Record access, **Target** | A Forgejo user per agent, created by the engine with the agent | Our record store | A token for that agent's user, write on its organisation's repo only, deleted when the run reports |
 | Outside accounts (Google, Microsoft, makers' MCP servers) | The owner's OAuth sign-in | Vault | Their tools, through the engine; a write waits for approval |
+| Agent's own identity in a customer's tool | A person's guide ([Guided accesses](#guided-accesses)) | Vault | Nothing: the engine adds it to the agent's own requests |
 | Customer's Google Cloud | The organisation's own service account, below | Their IAM | A one-hour token for that account (**Target**: today only the engine's Vertex calls use it) |
 
 ### A customer's Google Cloud
@@ -158,6 +159,16 @@ runner@  ── no role anywhere
 What this accepts: every agent of an organisation shares that organisation's grants (no per-agent least privilege yet); the token is readable by the agent during its hour, like the record's; a customer whose organisation policy restricts sharing to its own domain has to allow Ghostaff's tenants project first. Rejected: a shared account (the confused deputy above); customers' JSON keys (long-lived, and many organisations forbid creating them); an account per agent now (quota, and no customer has asked). Workload Identity Federation is the path for AWS or Azure customers, later. The work is [customer-cloud-access.md](plans/ongoing/customer-cloud-access.md).
 
 Other secrets an agent needs (a mailbox password, a social network's token, a voice API key) follow the same shape: a secret per organisation in the vault, handed only to the runs of the agents that need it, and in the end a connector of their own rather than a loose variable.
+
+### Guided accesses
+
+For an app with an HTTP API and no connector (first case: a self-hosted WordPress), an agent gets **its own identity in the customer's tool**: a user or key made for it, never a person's. Its address is `<agent>@<org>.ghostaff.ai`, one per agent (decision 1 of [guided-access.md](plans/ongoing/guided-access.md)), so the customer's own audit log says which agent did what. An agent starts a guide, a person follows it and types the credential; the engine checks it before keeping it.
+
+- **One generic landing**, so a new app needs a guide and no engine code: `auth` (`basic`, `bearer` or `header`), a `base` (the address the person typed, https only, plus the agent's suffix) and a `check` (a GET under `base` that must answer 2xx, optionally with one expected JSON field).
+- **The credential lives in the vault** under one secret per guide (`guidedSecretName`) and is added by the engine to each request. The model never sees it, and it is cut out of what the app answers.
+- **It belongs to one agent**: a `connections` row with `kind = 'guided'` and its `agent_id`. Only that agent gets the tool, whatever `agents.accounts` says.
+- **One scoped tool, `<provider>_request`**: only paths under `base`, only public addresses (`fetchPublic`, so nothing inside a network), `_method` overrides refused. A GET reads and runs at once; every other method waits for an owner's approval like any write.
+- **A member may do the guide; an owner approves it** before the agent uses it. Only an owner removes an access, which deletes the secret first and then the row (`DELETE /connections/guided/:id`). The guide's `undo` line tells the person how to remove the user in their own tool, since Ghostaff cannot.
 
 ### Principle: the agent asks a person for the access it lacks
 

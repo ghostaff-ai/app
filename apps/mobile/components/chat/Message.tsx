@@ -1,11 +1,13 @@
-import { type ActionPart, type ChatMessage, isAccountAskPart, isActionPart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
+import { type ActionPart, type ChatMessage, isAccountAskPart, isActionPart, isGuidePart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
+import { GuideCard } from '@/components/chat/GuideCard';
 import { Markdown } from '@/components/chat/Markdown';
 import { VoiceNote } from '@/components/chat/VoiceNote';
 import { Clock, Icon } from '@/components/icons';
 import type { AskControls } from '@/lib/hooks/useAccountAsks';
+import type { GuideControls } from '@/lib/hooks/useGuideCards';
 import { GHOSTS, type GhostId } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
 
@@ -216,6 +218,7 @@ export function MessageView({
   asks,
   routineTitle,
   me,
+  guides,
 }: {
   message: ChatMessage;
   mine: boolean;
@@ -236,10 +239,13 @@ export function MessageView({
   routineTitle?: string | null;
   /** The viewer: their own «Solo para mí» routine's card is theirs to decide, owner or not. */
   me?: string;
+  /** What an agent's guide cards can do here (guided-access.md). */
+  guides?: GuideControls;
 }) {
   const text = messageText(message.parts);
   const actions = message.parts.filter(isActionPart);
   const accountAsks = message.parts.filter(isAccountAskPart);
+  const guideParts = message.parts.filter(isGuidePart);
 
   if (message.authorKind === 'agent') {
     return (
@@ -264,6 +270,9 @@ export function MessageView({
         ))}
         {accountAsks.map((a) => (
           <AccountAskCard key={a.askId} ask={a} controls={asks} writing={message.state === 'working'} />
+        ))}
+        {guideParts.map((g) => (
+          <GuideCard key={g.guideId} guide={g} controls={guides} writing={message.state === 'working'} />
         ))}
       </View>
     );

@@ -9,12 +9,15 @@
 // An agent has the tools of the connected accounts an owner lets it use
 // (accounts.ts, docs/plans/ongoing/connectors.md); the main agent also the
 // organisation's settings (settings.ts). One it lacks, it asks for with a card
-// in its message, and goes on once it has it (accountAsks.ts). No record, no
-// mail yet: it says so when asked for something that needs them.
+// in its message, and goes on once it has it (accountAsks.ts); access to an app
+// with no connect button, it gets through a guide the person follows
+// (guides.ts). No record, no mail yet: it says so when asked for something
+// that needs them.
 
 import { AGENT_JOBS, type AgentGhost, type ChatMessage, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
-import { type AccountAskPart, type ActionPart, type CatalogueConnector, CONNECTORS } from '@ghostaff/shared';
-import { ASK_TOOL, ASK_TOOLS, askLines, type AskStore, needFor, proposeAsk } from './accountAsks';
+import type { AccountAskPart, ActionPart, GuidePart } from '@ghostaff/shared';
+import { ASK_TOOL, ASK_TOOLS, askLines, askResumable, type AskStore, proposeAsk } from './accountAsks';
+import { GUIDE_TOOL, GUIDE_TOOLS, guideLines, guideResumable, type GuideStore, proposeGuide } from './guides';
 import { previewOf } from './actions';
 import { Refusal } from './connections';
 import { askJob, type JobDeps } from './jobs';
@@ -22,7 +25,7 @@ import { askRunner } from './runner';
 import { isMainAgent } from '@ghostaff/shared/services';
 import { NOTHING_NEW } from './runner';
 import { type AsPerson, settingsTools } from './settings';
-import { type AgentTools, mergeTools, restrictTo } from './tools';
+import { type AgentTools, mergeTools, NO_TOOLS, restrictTo } from './tools';
 
 export type Level = 'none' | 'read' | 'talk';
 
@@ -136,11 +139,13 @@ export interface ChatStore {
 }
 
 /** A card in an agent's message, after its text. */
-export type Card = ActionPart | AccountAskPart;
+export type Card = ActionPart | AccountAskPart | GuidePart;
 
 export interface ModelTurn {
   role: 'user' | 'assistant';
   content: string;
+  /** Pictures that go with this turn, before its text (a guide's photo of the person's screen). */
+  images?: { mediaType: 'image/jpeg'; data: string }[];
 }
 
 /**
@@ -175,6 +180,10 @@ export interface ChatDeps {
   jobs?: JobDeps;
   /** An agent asking for an account it lacks (accountAsks.ts); without it agents cannot ask. */
   asks?: AskStore;
+  /** The tools of one agent's guided accesses (guidedAccounts.ts); without it no agent has any. */
+  guidedToolsFor?(orgId: string, agentId: string): Promise<AgentTools>;
+  /** An agent starting a guide to get an access (guides.ts); without it agents cannot. */
+  guides?: GuideStore;
   /** How often the growing text is written to the database. */
   flushMs?: number;
   now?: () => number;
@@ -200,13 +209,19 @@ export function madridNow(at: Date): string {
 }
 
 /** What the agent is told about its reach: the connected accounts it may use, or that it has none. */
-function reachLines(accounts: string[], today: string, canAsk: boolean): string[] {
-  const ask = canAsk
+function reachLines(accounts: string[], today: string, canAsk: boolean, canGuide: boolean): string[] {
+  const askLine = canAsk
     ? `Si para lo que te piden necesitas una cuenta de fuera que no tienes (un calendario, documentos, facturas, una red social…), pídela con ${ASK_TOOL} en vez de decir que no puedes, y termina el mensaje diciendo qué harás cuando la tengas.`
     : '';
+  const guideLine = canGuide
+    ? canAsk
+      ? `Usa ${ASK_TOOL} cuando la app está en el catálogo y se conecta con un botón; usa ${GUIDE_TOOL} cuando hace falta que la persona haga algo en la app (crearte un usuario, una clave), por ejemplo un WordPress que no está en WordPress.com.`
+      : `Si para darte acceso a una app hace falta que la persona haga algo en ella (crearte un usuario, una clave), por ejemplo un WordPress que no está en WordPress.com, usa ${GUIDE_TOOL}.`
+    : '';
+  const ask = [askLine, guideLine].filter(Boolean).join(' ');
   if (accounts.length === 0) {
     return [
-      canAsk
+      canAsk || canGuide
         ? 'Todavía no tienes acceso al registro de la organización ni a su correo.'
         : 'Todavía no tienes acceso al registro de la organización, a su correo ni a otras herramientas. Si te piden algo que lo necesita, dilo claramente y explica qué harías y qué necesitarías.',
       ask,
@@ -239,7 +254,7 @@ const ROUTINE_LINES = [
 export function systemPrompt(
   agent: ChatAgent,
   orgName: string,
-  opts: { broughtInto?: string; accounts?: string[]; now?: Date; settings?: boolean; routines?: boolean; canAsk?: boolean } = {},
+  opts: { broughtInto?: string; accounts?: string[]; now?: Date; settings?: boolean; routines?: boolean; canAsk?: boolean; canGuide?: boolean } = {},
 ): string {
   const job = AGENT_JOBS[agent.ghost]?.job ?? '';
   const broughtInto = opts.broughtInto;
@@ -251,7 +266,7 @@ export function systemPrompt(
       : '',
     'Hablas en una conversación compartida: pueden escribir varias personas de la organización; cada mensaje de una persona empieza con su nombre.',
     'Contesta en español, en primera persona y de tú, breve y concreto, sin fórmulas de cortesía. Usa listas solo si ayudan.',
-    ...reachLines(opts.accounts ?? [], madridNow(opts.now ?? new Date()), opts.canAsk ?? false),
+    ...reachLines(opts.accounts ?? [], madridNow(opts.now ?? new Date()), opts.canAsk ?? false, opts.canGuide ?? false),
     ...(opts.settings ? SETTINGS_LINES : []),
     ...(opts.routines ? ROUTINE_LINES : []),
     'No inventes datos de la organización. Si no sabes algo, pregúntalo.',
@@ -292,8 +307,8 @@ export function whoAnswers(messages: ChatMessage[], threadAgent: ChatAgent, agen
 export function toTurns(messages: ChatMessage[], agentId: string): ModelTurn[] {
   const turns: ModelTurn[] = [];
   for (const m of messages) {
-    // An agent's cards asking for an account read as a line, so it knows where it stopped.
-    const text = [messageText(m.parts).trim(), ...askLines(m.parts)].filter(Boolean).join('\n\n');
+    // An agent's cards asking for an account, or a guide, read as a line, so it knows where it stopped.
+    const text = [messageText(m.parts).trim(), ...askLines(m.parts), ...guideLines(m.parts)].filter(Boolean).join('\n\n');
     if (!text || (m.authorKind === 'agent' && m.state !== 'done')) continue;
     const mine = m.authorKind === 'agent' && m.authorAgentId === agentId;
     const role = mine ? 'assistant' : 'user';
@@ -344,10 +359,23 @@ async function writeReply(
     pending = pending.then(() => deps.chat.updateReply(replyId, withCards(snapshot))).catch(() => {});
   };
   // A writing tool never runs here: it becomes a card for an owner to approve (actions.ts).
-  // Asking for an account becomes a card too, for an owner to connect it (accountAsks.ts).
+  // Asking for an account becomes a card too, for an owner to connect it (accountAsks.ts), and so does a guide (guides.ts).
   const gated: AgentTools = {
     ...tools,
     async run(name, input) {
+      if (name === GUIDE_TOOL && deps.guides) {
+        const started = await proposeGuide(
+          deps.guides,
+          { orgId: agent.orgId, threadId: who.threadId, messageId: replyId, agentId: agent.id, userId: who.userId },
+          input,
+          cards.filter((c): c is GuidePart => c.type === 'guide'),
+        );
+        if (started.part) {
+          cards.push(started.part);
+          showCards();
+        }
+        return started.outcome;
+      }
       if (name === ASK_TOOL && deps.asks) {
         const asked = await proposeAsk(
           deps.asks,
@@ -361,7 +389,7 @@ async function writeReply(
         }
         return asked.outcome;
       }
-      if (!tools.writes(name)) return tools.run(name, input);
+      if (!tools.writes(name, input)) return tools.run(name, input);
       if (typeof input !== 'object' || input === null || Array.isArray(input)) {
         return { content: 'La entrada de la herramienta tiene que ser un objeto.', isError: true };
       }
@@ -439,12 +467,12 @@ async function writeReply(
             }
           },
         });
-        void recordUse(deps, agent, account, 'ok', got.usage);
+        void recordUse(deps.chat, deps.costOf, { orgId: agent.orgId, agentId: agent.id }, account, 'ok', got.usage);
         break;
       } catch (e) {
         const kind = failureKind(e);
         console.warn('ai account failed', account.provider, kind, e instanceof Error ? e.message.slice(0, 200) : typeof e);
-        if (kind !== 'busy') void recordUse(deps, agent, account, kind, got.usage, e instanceof AiFailure ? e.limits : null);
+        if (kind !== 'busy') void recordUse(deps.chat, deps.costOf, { orgId: agent.orgId, agentId: agent.id }, account, kind, got.usage, e instanceof AiFailure ? e.limits : null);
         if (started || last) throw e;
       }
     }
@@ -461,10 +489,11 @@ async function writeReply(
   }
 }
 
-/** Records one account's reply; never fails the reply. */
-async function recordUse(
-  deps: ChatDeps,
-  agent: ChatAgent,
+/** Records how one account did on a reply (or a guide's step); never fails it. */
+export async function recordUse(
+  store: Pick<ChatStore, 'recordAiUse'>,
+  costOf: ChatDeps['costOf'],
+  who: { orgId: string; agentId: string | null },
   account: AiAccount,
   outcome: AiUse['outcome'],
   usage: { model: string; tokens: TokenUsage; limits: Limits | null } | null,
@@ -472,15 +501,15 @@ async function recordUse(
 ): Promise<void> {
   const tokens = usage?.tokens ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   try {
-    await deps.chat.recordAiUse({
-      orgId: agent.orgId,
+    await store.recordAiUse({
+      orgId: who.orgId,
       connectionId: account.id,
-      agentId: agent.id,
+      agentId: who.agentId,
       source: 'chat',
       outcome,
       model: usage?.model ?? null,
       tokens,
-      costUsd: usage && deps.costOf ? deps.costOf(account, usage.model, tokens) : null,
+      costUsd: usage && costOf ? costOf(account, usage.model, tokens) : null,
       limits: usage?.limits ?? failureLimits,
     });
   } catch (e) {
@@ -490,8 +519,9 @@ async function recordUse(
 
 /**
  * What the organisation's agents can reach in a reply: each gets the accounts
- * an owner let it use; the main agent also the settings, read as whoever
- * asked; every agent the tool to ask for an account it lacks.
+ * an owner let it use, and its own guided accesses; the main agent also the
+ * settings, read as whoever asked; every agent the tool to ask for an account
+ * it lacks.
  */
 async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | undefined) {
   const [names, orgName, agents, tools] = await Promise.all([
@@ -501,8 +531,17 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
     deps.toolsFor(orgId),
   ]);
   const now = new Date(deps.now ? deps.now() : Date.now());
-  const reachOf = (who: ChatAgent, broughtInto?: string): { tools: AgentTools; system: string } => {
+  const reachOf = async (who: ChatAgent, broughtInto?: string): Promise<{ tools: AgentTools; system: string }> => {
     let mine = restrictTo(tools, who.accounts);
+    // A guided access is this agent's own identity in the app: only it gets the tool, whatever agents.accounts says.
+    // Reading them failing must not cost the reply, which has already started.
+    if (deps.guidedToolsFor) {
+      const guided = await deps.guidedToolsFor(orgId, who.id).catch((e: unknown) => {
+        console.error('guided tools failed', e instanceof Error ? e.name : typeof e);
+        return NO_TOOLS;
+      });
+      mine = mergeTools(mine, guided);
+    }
     // Settings read as whoever asked: none in a turn nobody asked for (a routine's, agent-routines.md decision 3).
     const asked = !!deps.asPerson && !!accessToken;
     const settings = isMainAgent(who) && asked;
@@ -511,7 +550,8 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
       mine = mergeTools(mine, settingsTools({ client: deps.asPerson(accessToken), orgId: who.orgId, agentId: who.id, onlySelf: !settings }));
     }
     if (deps.asks) mine = mergeTools(mine, ASK_TOOLS);
-    const system = systemPrompt(who, orgName, { broughtInto, accounts: mine.accounts, now, settings, routines: asked, canAsk: !!deps.asks });
+    if (deps.guides) mine = mergeTools(mine, GUIDE_TOOLS);
+    const system = systemPrompt(who, orgName, { broughtInto, accounts: mine.accounts, now, settings, routines: asked, canAsk: !!deps.asks, canGuide: !!deps.guides });
     return { tools: mine, system };
   };
   return { names, orgName, agents, reachOf };
@@ -542,7 +582,7 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
     if (messages.length === 0) {
       const replyId = await deps.chat.startReply(thread, agent, ['Presentándome']);
       if (!replyId) break;
-      const mine = reachOf(agent);
+      const mine = await reachOf(agent);
       await writeReply(deps, replyId, agent, mine.system, [introTurn(orgName)], mine.tools, { threadId: thread.id, userId }, 'Presentándome');
       replied = true;
       continue;
@@ -570,7 +610,7 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
       }
       // A second agent reads the first one's answer too.
       const history = i === 0 ? messages : await deps.chat.recentMessages(thread.id, 40);
-      const mine = reachOf(who, who.id === agent.id ? undefined : agent.name);
+      const mine = await reachOf(who, who.id === agent.id ? undefined : agent.name);
       await writeReply(deps, replyId, who, mine.system, toTurns(history, who.id), mine.tools, { threadId: thread.id, userId });
       replied = true;
     }
@@ -579,13 +619,31 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
   return { replied };
 }
 
+/** What an agent waited for and now has: an account it asked for (accountAsks.ts) or a guide finished (guides.ts). */
+export interface Resumable {
+  agentId: string;
+  /** The app, as «Ya tienes acceso a <name>» says it. */
+  name: string;
+  /** Refuses (409 not_yet) while the agent cannot use it yet. */
+  ready(agent: ChatAgent): Promise<void>;
+  /** Marks it gone on with; false when it already was, so a second call is refused. */
+  claim(userId: string): Promise<boolean>;
+  /** Undoes the claim when the agent could not go on after all (another reply was being written). */
+  release(): Promise<void>;
+  /** Once the agent goes on: its card says who made it possible. */
+  settle(who: string): Promise<void>;
+  /** How a member signs, for the closing turn and the card. */
+  memberName(userId: string): Promise<string | null>;
+}
+
 /**
- * Lets an agent go on once the account it asked for is there (accountAsks.ts,
- * connector-in-chat.md). The app asks when it sees the account connected; the
- * engine checks it is, for that agent, and goes on once: the ask moves open →
- * done before the reply starts, so a second call is refused.
+ * Lets an agent go on once what it waited for is there: the account it asked
+ * for (`askId`, connector-in-chat.md) or the guide it started (`guideId`,
+ * guided-access.md). The app asks when it sees it; the engine checks it, for
+ * that agent, and goes on once: it is claimed before the reply starts, so a
+ * second call is refused.
  */
-export async function resumeAfterAccount(
+export async function resumeInThread(
   deps: ChatDeps,
   userId: string,
   threadId: unknown,
@@ -593,44 +651,72 @@ export async function resumeAfterAccount(
   accessToken?: string,
 ): Promise<{ resumed: boolean }> {
   if (!isUuid(threadId)) throw new Refusal(400, 'bad_request', 'thread must be a uuid');
-  const askId = (body as { askId?: unknown } | null)?.askId;
-  if (!isUuid(askId)) throw new Refusal(400, 'bad_request', 'askId must be a uuid');
-  if (!deps.asks) throw new Refusal(503, 'unavailable', 'asking for accounts is off here');
+  const b = (typeof body === 'object' && body !== null ? body : {}) as { askId?: unknown; guideId?: unknown };
+  let find: (threadId: string) => Promise<Resumable>;
+  if (b.guideId !== undefined) {
+    const guideId = b.guideId;
+    if (!isUuid(guideId)) throw new Refusal(400, 'bad_request', 'guideId must be a uuid');
+    const guides = deps.guides;
+    if (!guides) throw new Refusal(503, 'unavailable', 'guides are off here');
+    find = (t) => guideResumable(guides, t, guideId);
+  } else {
+    const askId = b.askId;
+    if (!isUuid(askId)) throw new Refusal(400, 'bad_request', 'askId must be a uuid');
+    const asks = deps.asks;
+    if (!asks) throw new Refusal(503, 'unavailable', 'asking for accounts is off here');
+    find = (t) => askResumable(asks, t, askId);
+  }
   const thread = await deps.chat.thread(threadId);
   if (!thread) throw new Refusal(404, 'not_found', 'thread not found');
   await requireTalkIn(deps, thread.id, userId);
-  const ask = await deps.asks.ask(askId);
-  if (!ask || ask.threadId !== thread.id) throw new Refusal(404, 'not_found', 'ask not found');
-  if (ask.status !== 'open') throw new Refusal(409, 'already_done', 'the agent already went on');
-  if (ask.messageState === 'working') throw new Refusal(409, 'still_writing', 'the agent is still writing that message');
-  const agent = await deps.chat.agent(ask.agentId);
+  const waited = await find(thread.id);
+  const agent = await deps.chat.agent(waited.agentId);
   if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
   // An agent brought in by an @mention: the person must be able to talk to it too.
   if (agent.id !== thread.agentId) await requireTalk(deps, agent.id, userId);
-  const connector = (CONNECTORS as readonly CatalogueConnector[]).find((c) => c.id === ask.connector) ?? null;
-  if (needFor(connector, await deps.asks.accountStates(agent.orgId), agent.accounts) !== 'have') {
-    throw new Refusal(409, 'not_yet', 'the agent does not have that account yet');
-  }
-  if (!(await deps.asks.claim(ask.id, userId))) throw new Refusal(409, 'already_done', 'the agent already went on');
+  await goOn(deps, thread, agent, waited, userId, accessToken);
+  return { resumed: true };
+}
+
+/**
+ * Lets an agent go on in `threadId` as `actorId`, without checking the caller
+ * against the thread: for an owner's approval of a member's guide, which the
+ * owner may approve from a conversation they cannot see (the member's personal
+ * chat). The agent answers as if the member who did the guide had asked (no
+ * settings tools: there is no session of theirs to read them as). Resolves when
+ * the reply is written; refuses as `resumeInThread` does (`already_done`, `busy`).
+ */
+export async function resumeAs(deps: ChatDeps, threadId: string, waited: Resumable, actorId: string): Promise<{ resumed: true }> {
+  const thread = await deps.chat.thread(threadId);
+  if (!thread) throw new Refusal(404, 'not_found', 'thread not found');
+  const agent = await deps.chat.agent(waited.agentId);
+  if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
+  await goOn(deps, thread, agent, waited, actorId);
+  return { resumed: true };
+}
+
+/** The agent goes on, once: claimed before its reply starts, written as `actorId` asked. Whoever calls has checked who may. */
+async function goOn(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, waited: Resumable, actorId: string, accessToken?: string): Promise<void> {
+  await waited.ready(agent);
+  if (!(await waited.claim(actorId))) throw new Refusal(409, 'already_done', 'the agent already went on');
   const replyId = await deps.chat.startReply(thread, agent, ['Retomando']);
   if (!replyId) {
     // Another reply is being written; the person can go on once it ends.
-    await deps.asks.reopen(ask.id);
+    await waited.release();
     throw new Refusal(409, 'busy', 'the agent is answering; try again when it ends');
   }
-  const who = (await deps.asks.memberName(agent.orgId, userId)) ?? 'Alguien';
-  await deps.asks.updateCard(ask.messageId, ask.id, { status: 'done', doneBy: who });
+  const who = (await waited.memberName(actorId)) ?? 'Alguien';
+  await waited.settle(who);
   const threadAgent = agent.id === thread.agentId ? null : await deps.chat.agent(thread.agentId);
   const { reachOf } = await orgReach(deps, thread.orgId, accessToken);
-  const mine = reachOf(agent, threadAgent?.name);
+  const mine = await reachOf(agent, threadAgent?.name);
   const turns = toTurns(await deps.chat.recentMessages(thread.id, 40), agent.id);
-  const goOn = `${who}: Ya tienes acceso a ${ask.name}. Sigue con lo que se te pidió.`;
+  const line = `${who}: Ya tienes acceso a ${waited.name}. Sigue con lo que se te pidió.`;
   const lastTurn = turns[turns.length - 1];
-  if (lastTurn?.role === 'user') lastTurn.content += `\n\n${goOn}`;
-  else turns.push({ role: 'user', content: goOn });
-  await writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId }, 'Retomando');
+  if (lastTurn?.role === 'user') lastTurn.content += `\n\n${line}`;
+  else turns.push({ role: 'user', content: line });
+  await writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId: actorId }, 'Retomando');
   await deps.chat.touchThread(thread.id).catch(() => {});
-  return { resumed: true };
 }
 
 /** A routine of a chat agent, as the turn needs it (routines.ts). */
@@ -651,7 +737,7 @@ export interface RoutineAsk {
  */
 export async function answerRoutine(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, replyId: string, ask: RoutineAsk): Promise<{ text: string; ok: boolean }> {
   const { reachOf } = await orgReach(deps, agent.orgId, undefined);
-  const mine = reachOf(agent);
+  const mine = await reachOf(agent);
   const turns = toTurns(await deps.chat.recentMessages(thread.id, 40), agent.id);
   const line =
     `${ask.from}: ${ask.instruction}\n\n` +

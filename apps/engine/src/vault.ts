@@ -37,6 +37,14 @@ export function accountSecretName(orgId: string, provider: string): string {
   return `org-${orgId}-account-${provider}`.replace(/[^A-Za-z0-9_-]/g, '-');
 }
 
+/**
+ * A guided access's credential (guidedAccounts.ts), one per guide: the JSON
+ * `{ username?, password? | token? | key? }`, from the moment its check passes.
+ */
+export function guidedSecretName(orgId: string, guideId: string): string {
+  return `org-${orgId}-guided-${guideId}`.replace(/[^A-Za-z0-9_-]/g, '-');
+}
+
 export class MemoryVault implements Vault {
   readonly secrets = new Map<string, { value: string; labels: Record<string, string> }>();
   async put(name: string, value: string, labels: Record<string, string>) {

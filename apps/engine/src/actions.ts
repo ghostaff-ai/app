@@ -13,7 +13,7 @@ import { type ActionPart, isActionPart, type MessagePart } from '@ghostaff/share
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type Membership, Refusal, requireOwner } from './connections';
 import { type AsPerson, isSettingTool, runSetting } from './settings';
-import type { AgentTools } from './tools';
+import { type AgentTools, mergeTools } from './tools';
 
 export interface ActionRecord {
   id: string;
@@ -46,6 +46,8 @@ export interface ActionStore {
 export interface ActionDeps {
   actions: ActionStore;
   toolsFor(orgId: string): Promise<AgentTools>;
+  /** The tools of one agent's guided accesses (guidedAccounts.ts): a request it proposed runs with them. */
+  guidedToolsFor?(orgId: string, agentId: string): Promise<AgentTools>;
   /** A client signed in as the approving owner: a settings change runs as them (settings.ts). */
   asPerson?: AsPerson;
 }
@@ -70,6 +72,12 @@ async function requireRequester(store: ActionStore, a: ActionRecord, userId: str
   return m;
 }
 
+/** The tools an action runs with: the organisation's accounts, and the guided accesses of the agent that proposed it. */
+async function toolsOf(deps: ActionDeps, a: ActionRecord): Promise<AgentTools> {
+  const org = await deps.toolsFor(a.orgId);
+  return a.agentId && deps.guidedToolsFor ? mergeTools(org, await deps.guidedToolsFor(a.orgId, a.agentId)) : org;
+}
+
 /** Runs the action as stored, with the organisation's connected account, and shows how it went. */
 export async function approveAction(
   deps: ActionDeps,
@@ -91,7 +99,7 @@ export async function approveAction(
     const outcome =
       setting && deps.asPerson && accessToken && a.agentId
         ? await runSetting({ client: deps.asPerson(accessToken), orgId: a.orgId, agentId: a.agentId }, a.tool, a.input)
-        : await (await deps.toolsFor(a.orgId)).run(a.tool, a.input);
+        : await (await toolsOf(deps, a)).run(a.tool, a.input);
     status = outcome.isError ? 'failed' : 'done';
     result = outcome.content.slice(0, 4000);
   } finally {

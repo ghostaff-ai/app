@@ -293,12 +293,16 @@ export interface PrintRun {
   kill(): Promise<void>;
 }
 
-/** Runs `claude` with `args`, `stdin` written in and closed, the token in its environment. */
-export type PrintRunner = (args: string[], opts: { home: string; token: string; stdin: string }) => PrintRun;
+/**
+ * Runs `claude` with `args`, `stdin` written in and closed, the token in its
+ * environment. It works in `cwd` when given (a folder holding only a guide's
+ * photo), else in `home`.
+ */
+export type PrintRunner = (args: string[], opts: { home: string; token: string; stdin: string; cwd?: string }) => PrintRun;
 
-export const runClaudePrint: PrintRunner = (args, { home, token, stdin }) => {
+export const runClaudePrint: PrintRunner = (args, { home, token, stdin, cwd }) => {
   const child = spawn('claude', args, {
-    cwd: home,
+    cwd: cwd ?? home,
     env: childEnv(home, { CLAUDE_CODE_OAUTH_TOKEN: token }),
     stdio: ['pipe', 'pipe', 'ignore'],
     detached: true,

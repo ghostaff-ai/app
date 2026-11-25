@@ -4,3 +4,4 @@ export * from './connectors';
 export * from './aiUsage';
 export * from './spaces';
 export * from './routines';
+export * from './guides';

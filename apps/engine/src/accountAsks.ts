@@ -3,7 +3,7 @@
 // (chat.ts) turns the call into a card in the message, «Necesito acceso a
 // Notion», and records it here. Once the account is connected, working and
 // given to the agent, the chat asks the engine to let the agent go on
-// (`resumeAfterAccount` in chat.ts), which it does once.
+// (`resumeInThread` in chat.ts, through `askResumable`), which it does once.
 //
 // The agent can only ask. Connecting stays an owner signing in to the provider
 // in the app, and giving an agent an account stays an owner's press: nothing
@@ -11,6 +11,8 @@
 
 import { type AccountAskPart, type AccountStates, accountNeed, CONNECTORS, type CatalogueConnector, isAccountAskPart, type MessagePart } from '@ghostaff/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ChatAgent, Resumable } from './chat';
+import { Refusal } from './connections';
 import type { AgentTools, ToolOutcome, ToolSpec } from './tools';
 
 export const ASK_TOOL = 'ask_for_account';
@@ -157,6 +159,31 @@ export function askLine(p: AccountAskPart): string {
 /** The lines for the cards of a message, empty when it has none. */
 export function askLines(parts: readonly MessagePart[]): string[] {
   return parts.filter(isAccountAskPart).map(askLine);
+}
+
+/**
+ * An open ask, for the agent to go on once (`resumeInThread` in chat.ts): only
+ * when the account is connected, working and given to the agent, and only once.
+ */
+export async function askResumable(store: AskStore, threadId: string, askId: string): Promise<Resumable> {
+  const ask = await store.ask(askId);
+  if (!ask || ask.threadId !== threadId) throw new Refusal(404, 'not_found', 'ask not found');
+  if (ask.status !== 'open') throw new Refusal(409, 'already_done', 'the agent already went on');
+  if (ask.messageState === 'working') throw new Refusal(409, 'still_writing', 'the agent is still writing that message');
+  return {
+    agentId: ask.agentId,
+    name: ask.name,
+    async ready(agent: ChatAgent) {
+      const connector = (CONNECTORS as readonly CatalogueConnector[]).find((c) => c.id === ask.connector) ?? null;
+      if (needFor(connector, await store.accountStates(agent.orgId), agent.accounts) !== 'have') {
+        throw new Refusal(409, 'not_yet', 'the agent does not have that account yet');
+      }
+    },
+    claim: (userId) => store.claim(ask.id, userId),
+    release: () => store.reopen(ask.id),
+    settle: (who) => store.updateCard(ask.messageId, ask.id, { status: 'done', doneBy: who }),
+    memberName: (userId) => store.memberName(ask.orgId, userId),
+  };
 }
 
 /** The AskStore over Supabase with the service role. */

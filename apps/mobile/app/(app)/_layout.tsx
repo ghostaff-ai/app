@@ -69,6 +69,7 @@ export default function AppLayout() {
         <Stack.Screen name="chat/[agent]" options={{ title: '' }} />
         <Stack.Screen name="rutinas/[agent]" options={{ title: 'Rutinas' }} />
         <Stack.Screen name="rutina" options={{ ...modal, title: 'Nueva rutina' }} />
+        <Stack.Screen name="guia/[id]" options={{ title: '' }} />
         <Stack.Screen name="anadir-agente" options={{ title: 'Añadir agente' }} />
         <Stack.Screen
           name="contratar"

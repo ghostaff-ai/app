@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type AiUsageDay, limitsFromRow } from '../aiUsage';
 import type { AccountProvider } from '../connectors';
+import type { GuideAnswer, GuideCheckOutcome, GuideCheckValues, GuidePhoto, GuideStatus, GuideStep, GuideView, PendingGuide } from '../guides';
 import type {
   AccountConnectResult,
   Agent,
@@ -456,6 +457,7 @@ interface ConnectionRow {
   label?: string | null;
   limits?: unknown;
   last_used_at?: string | null;
+  agent_id?: string | null;
 }
 
 export function connectionFromRow(r: ConnectionRow): Connection {
@@ -476,11 +478,12 @@ export function connectionFromRow(r: ConnectionRow): Connection {
     label: r.label ?? null,
     limits: limitsFromRow(r.limits),
     lastUsedAt: r.last_used_at ?? null,
+    agentId: r.agent_id ?? null,
   };
 }
 
 export const CONNECTION_COLUMNS =
-  'id, org_id, kind, provider, method, hint, settings, status, status_reason, checked_at, connected_by_name, updated_at, position, label, limits, last_used_at';
+  'id, org_id, kind, provider, method, hint, settings, status, status_reason, checked_at, connected_by_name, updated_at, position, label, limits, last_used_at, agent_id';
 
 /** The organisation's connections. Every member sees them; only owners change them. */
 export async function listConnections(client: SupabaseClient, orgId: string): Promise<Connection[]> {
@@ -771,6 +774,70 @@ export async function decideAction(engine: EngineAccess, actionId: string, decis
  */
 export async function resumeAfterAccount(engine: EngineAccess, threadId: string, askId: string): Promise<{ resumed: boolean }> {
   return callEngine(engine, 'POST', `/threads/${encodeURIComponent(threadId)}/resume`, { askId });
+}
+
+// Guides (docs/plans/ongoing/guided-access.md): the guide's screen reads one, asks
+// for each step and checks what the person typed; an owner decides a member's grant.
+
+/** The guide as its screen reads it, with the step it stopped at. */
+export async function getGuide(engine: EngineAccess, guideId: string): Promise<GuideView> {
+  return callEngine(engine, 'GET', `/guides/${encodeURIComponent(guideId)}`);
+}
+
+/**
+ * The next step, written by the guide's model: after an answer, a photo of the
+ * person's screen, or nothing (the first step, and the closing one after a
+ * passed check). Never a secret: those travel only in `checkGuide`.
+ */
+export async function guideStep(
+  engine: EngineAccess,
+  guideId: string,
+  input: { answer?: GuideAnswer; photo?: GuidePhoto } = {},
+): Promise<{ step: GuideStep; status: GuideStatus }> {
+  const body: { answer?: GuideAnswer; photo?: GuidePhoto } = {};
+  if (input.answer) body.answer = input.answer;
+  if (input.photo) body.photo = input.photo;
+  return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/step`, body);
+}
+
+/** Ghostaff tries the access with what the person typed; once it works, the secret is in the vault. */
+export async function checkGuide(engine: EngineAccess, guideId: string, values: GuideCheckValues): Promise<GuideCheckOutcome> {
+  return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/check`, { values });
+}
+
+/**
+ * An owner lets the agent use what a member granted. Answers once the agent has
+ * gone on in the guide's conversation; `resumed` is false when it couldn't yet
+ * (the chat lets it go on when it next sees the guide done).
+ */
+export async function approveGuide(engine: EngineAccess, guideId: string): Promise<{ status: 'done'; resumed: boolean }> {
+  return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/approve`);
+}
+
+/** The organisation's member guides waiting for an owner's approval, oldest first. Owners only. */
+export async function pendingGuides(engine: EngineAccess, orgId: string): Promise<PendingGuide[]> {
+  const out = await callEngine<{ guides: PendingGuide[] }>(engine, 'GET', `/orgs/${encodeURIComponent(orgId)}/guides/pending`);
+  return out.guides;
+}
+
+/** An owner turns down what a member granted; the secret leaves the vault. */
+export async function rejectGuide(engine: EngineAccess, guideId: string): Promise<{ status: 'rejected' }> {
+  return callEngine(engine, 'POST', `/guides/${encodeURIComponent(guideId)}/reject`);
+}
+
+/** What an owner reads before removing an agent's access: how to remove its user in the app's own tool. `undo` is null when the guide never wrote it. */
+export async function getGuidedAccessUndo(engine: EngineAccess, accessId: string): Promise<{ app: string; undo: string | null }> {
+  return callEngine(engine, 'GET', `/connections/guided/${encodeURIComponent(accessId)}`);
+}
+
+/** An owner removes an agent's access: the credential leaves the vault and the connection goes. */
+export async function removeGuidedAccess(engine: EngineAccess, accessId: string): Promise<void> {
+  await callEngine(engine, 'DELETE', `/connections/guided/${encodeURIComponent(accessId)}`);
+}
+
+/** Lets the agent go on once its guide is done; once, whoever asks (`already_done` after). */
+export async function resumeAfterGuide(engine: EngineAccess, threadId: string, guideId: string): Promise<{ resumed: boolean }> {
+  return callEngine(engine, 'POST', `/threads/${encodeURIComponent(threadId)}/resume`, { guideId });
 }
 
 /**

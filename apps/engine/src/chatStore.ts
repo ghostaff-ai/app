@@ -215,7 +215,17 @@ export const MAX_TOOL_ROUNDS = 8;
  */
 export function streamWith(client: Anthropic | AnthropicVertex): Writer {
   return async ({ system, messages, tools, onText, onTool, onUsage }) => {
-    const history: Anthropic.MessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
+    const history: Anthropic.MessageParam[] = messages.map((m) =>
+      m.images?.length
+        ? {
+            role: m.role,
+            content: [
+              ...m.images.map((i) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: i.mediaType, data: i.data } })),
+              { type: 'text' as const, text: m.content },
+            ],
+          }
+        : { role: m.role, content: m.content },
+    );
     let used = NO_TOKENS;
     const done = () => onUsage?.({ model: CHAT_MODEL, tokens: used, limits: null });
     let wrote = false;
