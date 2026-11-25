@@ -7,7 +7,7 @@ import { appEnv } from '../env';
 // The phone's side of push, and the only file that imports expo-notifications
 // (pushClient.web.ts answers for the web). The engine sends straight to APNs
 // and FCM with the native token, never through Expo's push service
-// (docs/plans/ready/decision-notifications.md).
+// (docs/plans/ongoing/decision-notifications.md).
 
 export type Permission = 'granted' | 'denied' | 'undetermined' | 'unsupported';
 

@@ -48,7 +48,7 @@ Guidelines that shaped the picks: Slack's agent design (show progress, threads w
 - [x] The mic on Hoy, Equipo and Registro opens a new thread with Secretaría (or the first agent the person may talk to). Speaking is the keyboard's own dictation for now.
 - [x] Legend List for the messages and react-native-keyboard-controller on the phone (a new native module: the next beta is a build, not an over-the-air update).
 - Checked on the web against local Supabase (two people, Realtime, a mention, a vacancy filled); not yet on a phone.
-- Left for later: an @person sends no push yet (notifications are their own plan), and @agent doesn't bring that agent into the thread until agents talk.
+- Left for later: an @person sends no push yet (see [decision-notifications.md](decision-notifications.md)), and @agent doesn't bring that agent into the thread until agents talk.
 
 **Step 3, agents talking** (branch `feat/agents-talk`, 2026-11-18):
 

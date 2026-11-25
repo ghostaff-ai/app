@@ -1,4 +1,4 @@
--- Push notifications (docs/plans/ready/decision-notifications.md): a person's
+-- Push notifications (docs/plans/ongoing/decision-notifications.md): a person's
 -- phones, and an outbox the engine drains to Apple and Google. When an agent
 -- message is finished, a trigger queues one row per person who sees the
 -- conversation, follows it and has a phone; once a day the engine adds one for

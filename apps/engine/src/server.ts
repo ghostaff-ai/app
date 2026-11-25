@@ -170,7 +170,7 @@ const recordSync: RecordSyncDeps = {
   forgejo,
 };
 const caller = googleCaller();
-// Push notifications (docs/plans/ready/decision-notifications.md): straight to APNs and FCM, off until
+// Push notifications (docs/plans/ongoing/decision-notifications.md): straight to APNs and FCM, off until
 // configured. A database trigger fills the outbox; the engine drains it after its own writes of agent
 // messages, and the tick drains whatever those missed.
 const pushTransport = pushFromEnv(process.env);

@@ -1,8 +1,8 @@
 # Notifications: an agent's reply and the decisions that wait reach a person without opening the app
 
-**Priority:** high — Telegram is today the only thing that reaches a person outside the app, and it goes off once Órdago's agents run on our runner ([ordago-agents-in-ghostaff.md](../ongoing/ordago-agents-in-ghostaff.md), decision 3)
-**Gate:** none — design approved by Jaime (2026-11-25)
-**Next:** write the implementation plan (File Structure and Tasks) and build it on `feat/notifications`
+**Priority:** high — Telegram is today the only thing that reaches a person outside the app, and it goes off once Órdago's agents run on our runner ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md), decision 3)
+**Gate:** `blocked:founder — APNs key and Firebase per environment (design part 6)`
+**Next:** `Jaime stores the APNs key with scripts/apns-key.mjs and adds Firebase to ghostaff-beta and ghostaff-prod; then check a real reply push on the beta`
 
 **Goal:** When an agent finishes a message in a conversation a person can see and hasn't read, that person's phone says so («Legal · Te ha contestado») within seconds, and a tap opens that chat; once a day at 09:00 their time, if decisions wait for them, one notification says how many, and a tap opens Decisiones. Nothing from the record's words leaves for Apple or Google.
 
@@ -121,13 +121,32 @@ Once, after the person sends their **first message to an agent**: a line of ours
 
 ## What it replaces
 
-[app-design.md](../ongoing/app-design.md) decision 14 («one a day at the person's hour, plus a push only for a decision due today or money leaving») is replaced on Jaime's word (2026-11-24, he asked for a notification when an agent writes in the chat): a push per agent reply, collapsed per conversation, plus the daily one. «Due today» and «money leaving» stay as later kinds on the same sender.
+[app-design.md](app-design.md) decision 14 («one a day at the person's hour, plus a push only for a decision due today or money leaving») is replaced on Jaime's word (2026-11-24, he asked for a notification when an agent writes in the chat): a push per agent reply, collapsed per conversation, plus the daily one. «Due today» and «money leaving» stay as later kinds on the same sender.
 
 ## Picks in this design that Jaime can change
 
 The two kinds and their wording; names but never text in a push; one push per thread, replacing; no quiet hours for replies; 09:00 in the phone's time zone with no settings screen (the phone's settings turn it off; a screen would need Secretaría to change it too, AGENTS.md rule 6); the ask after the first message to an agent; who is told following today's conversation model, followers only in a shared one; no push per decision beyond the run's report; OK cards in the daily count for owners only.
 
 ---
+
+## Progress
+
+Tasks 1 to 6 are built on `feat/notifications` (task 7, these documents, lands with them):
+
+- `284a167` feat(db): device tokens, push outbox and the trigger that fills it
+- `8c59ccc` fix(db): whole-name mentions, and leave a claimed push to its drain
+- `dce0f91` feat(engine): add push transports for apns and fcm, ported from cultuvilla
+- `3d76aae` feat(engine): drain the push outbox and plan the daily one
+- `6e63ce4` fix(engine): time out and settle stalled apns http2 requests
+- `f5d3375` feat(engine): send pushes after agent writes and on every tick
+- `6903209` fix(db): close replies over an hour old as stale instead of sending a backlog
+- `48ba1b7` fix(engine): send a request's pushes before it answers, and close rows before pruning
+- `47564c8` fix(engine): cap a request's wait for its pushes at 3 s, and time out fcm calls
+- `8c05617` feat(mobile): receive pushes and open what they point at
+- `43406d1` fix(mobile): open a tapped push from the app layout, and bound sign-out's forget
+- `f6ddb8f` feat(mobile): ask once, after the first message, before the phone's dialog
+
+**Not verified.** No push has reached a real device yet: it needs the APNs key and Firebase (Gate). The Maestro flow `push-ask.yaml` first runs in CI.
 
 # Implementation plan
 

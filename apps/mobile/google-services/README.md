@@ -12,7 +12,7 @@
 An FCM token only takes pushes from the project it was made in, and the
 engine sends through its own Google Cloud project (`FIREBASE_PROJECT` in
 `scripts/env.sh`), so each package lives in the project of the engine that
-serves it ([decision-notifications.md](../../../docs/plans/ready/decision-notifications.md),
+serves it ([decision-notifications.md](../../../docs/plans/ongoing/decision-notifications.md),
 part 6). A founder adds the Android app to that Firebase project once, then:
 
 ```bash

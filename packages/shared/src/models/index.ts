@@ -297,7 +297,7 @@ export interface NewAgent {
   department: Department;
 }
 
-// Push notifications (docs/plans/ready/decision-notifications.md). A device
+// Push notifications (docs/plans/ongoing/decision-notifications.md). A device
 // belongs to a person, not an organisation.
 export type DevicePlatform = 'ios' | 'android';
 

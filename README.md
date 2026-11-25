@@ -60,6 +60,20 @@ in `apps/mobile/app.config.ts`. The web client's secret is only for the browser 
   install straight from its link; it is signed with the same key the beta's Android OAuth client knows.
 - While the Google app is in Testing, only its test users can use Google (Audience page).
 
+### Push notifications
+
+Android needs each environment's `google-services.json` in `apps/mobile/google-services/` (steps in its
+[README](apps/mobile/google-services/README.md)). iPhones need the APNs key in the environment's Secret
+Manager, stored once per environment and then deployed with the engine:
+
+```bash
+node scripts/apns-key.mjs <env> <AuthKey.p8> <keyId> <teamId>    # env: beta | prod
+bash scripts/deploy-engine.sh <env>
+```
+
+The key is read from the file and never printed. Until both exist the engine's pushes are off.
+See [docs/architecture.md](docs/architecture.md#how-a-push-reaches-a-phone).
+
 ### The hosted beta project
 
 `ghostaff-beta` (Frankfurt). Its keys live encrypted in `secrets/secrets.enc.yml` (listed in
