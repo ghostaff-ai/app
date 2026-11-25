@@ -1,8 +1,8 @@
 # Notifications: an agent's reply and the decisions that wait reach a person without opening the app
 
 **Priority:** high — Telegram is today the only thing that reaches a person outside the app, and it goes off once Órdago's agents run on our runner ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md), decision 3)
-**Gate:** `blocked:founder — APNs key and Firebase per environment (design part 6)`
-**Next:** `Jaime stores the APNs key with scripts/apns-key.mjs and adds Firebase to ghostaff-beta and ghostaff-prod; then check a real reply push on the beta`
+**Gate:** `blocked:founder — APNs key, Firebase and a re-run of setup-env.sh per environment (design part 6)`
+**Next:** `Jaime stores the APNs key with scripts/apns-key.mjs, adds Firebase to ghostaff-beta and ghostaff-prod, then re-runs bash scripts/setup-env.sh beta|prod (FCM's API and the engine's role); then check a real reply push on the beta`
 
 **Goal:** When an agent finishes a message in a conversation a person can see and hasn't read, that person's phone says so («Legal · Te ha contestado») within seconds, and a tap opens that chat; once a day at 09:00 their time, if decisions wait for them, one notification says how many, and a tap opens Decisiones. Nothing from the record's words leaves for Apple or Google.
 
@@ -93,6 +93,7 @@ Once, after the person sends their **first message to an agent**: a line of ours
 
 - **An APNs key** on team `8HWS4483VD` (team-scoped, Sandbox & Production), put into Secret Manager of `ghostaff-beta` and `ghostaff-prod` under the same name by a script (never pasted). The push key `54D676WU4J` of Órdago's app serves if its file is still at hand.
 - **Firebase** on `ghostaff-beta` (packages `ai.ghostaff.app.beta`, `.dev`) and `ghostaff-prod` (`ai.ghostaff.app`), and their `google-services.json`.
+- **Then re-run `bash scripts/setup-env.sh beta|prod`** for each environment: it enables `fcm.googleapis.com` and gives the engine's service account `roles/firebasecloudmessaging.admin`, without which FCM v1 refuses its sends (`cloudmessaging.messages.create`). Safe to re-run.
 - The Push Notifications capability on the three iOS App IDs (EAS adds it on the next build when the entitlement appears; checked then).
 - Before the store: «Device or other IDs» in Play Data Safety and the device token in the privacy text.
 
