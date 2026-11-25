@@ -218,7 +218,8 @@ create trigger messages_notify
 /**
  * Registers the signed-in person's phone, or refreshes it. A token someone
  * else held moves to the caller: the phone changed hands, or someone else
- * signed in on it, and the first person stops getting its pushes.
+ * signed in on it, and the first person stops getting its pushes. A token
+ * must look like its platform's, and a person keeps their ten newest phones.
  */
 create function public.register_device(token text, platform text, apns_environment text, bundle_id text, time_zone text)
 returns void
@@ -244,6 +245,15 @@ begin
   if register_device.platform = 'android' and register_device.apns_environment is not null then
     raise exception 'only an iPhone has an APNs environment' using errcode = '22023';
   end if;
+  -- The token goes into APNs' URL path and FCM's JSON body: only its platform's characters. An APNs
+  -- token is 64 hex digits today; up to 200 leaves room for Apple to lengthen it.
+  if register_device.platform = 'ios' and register_device.token !~ '^[0-9a-fA-F]{64,200}$' then
+    raise exception 'an iPhone''s device token is 64 to 200 hex digits' using errcode = '22023';
+  end if;
+  -- (Postgres caps a regex count at 255: the 4096 bound on an Android token is the length check above.)
+  if register_device.platform = 'android' and register_device.token !~ '^[A-Za-z0-9_:-]+$' then
+    raise exception 'an Android device token is letters, digits and _ : -' using errcode = '22023';
+  end if;
   if nullif(trim(register_device.bundle_id), '') is null or length(register_device.bundle_id) > 255 then
     raise exception 'a bundle id is required' using errcode = '22023';
   end if;
@@ -261,6 +271,16 @@ begin
         bundle_id = excluded.bundle_id,
         time_zone = excluded.time_zone,
         updated_at = excluded.updated_at;
+
+  -- Ten phones a person at most, so one account can't make every push fan out without end: the
+  -- most recently registered stay, and the app registers again each time it starts.
+  delete from public.device_tokens d
+  where d.user_id = auth.uid()
+    and d.token not in (
+      select k.token from public.device_tokens k
+      where k.user_id = auth.uid()
+      order by k.updated_at desc, k.token
+      limit 10);
 end;
 $$;
 

@@ -3,7 +3,7 @@
 -- has a phone; the engine claims each row once and drops what was read since;
 -- nobody reads the outbox from the app, and a phone is only its person's.
 begin;
-select plan(42);
+select plan(48);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'ana@example.com'),
@@ -34,7 +34,7 @@ set local role authenticated;
 
 -- Phones: everyone but Carla.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';
-select public.register_device('tok-ana', 'ios', 'sandbox', 'ai.ghostaff.app.dev', 'Europe/Madrid');
+select public.register_device('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ios', 'sandbox', 'ai.ghostaff.app.dev', 'Europe/Madrid');
 insert into ids select 'ana_chat', thread_id from public.chat_with('20000000-0000-0000-0000-000000000001', 'Hola');
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000d", "role": "authenticated"}';
 select public.register_device('tok-dani', 'android', null, 'ai.ghostaff.app.dev', 'Europe/Madrid');
@@ -58,6 +58,22 @@ select throws_ok(
 select throws_ok(
   $$ select public.register_device('tok-y', 'ios', null, 'ai.ghostaff.app.dev', 'Europe/Madrid') $$,
   '22023', null, 'an iPhone says which APNs environment it uses');
+-- A token goes into a URL path (APNs) or a JSON body (FCM): only its platform's characters.
+select throws_ok(
+  $$ select public.register_device('tok-y', 'ios', 'sandbox', 'ai.ghostaff.app.dev', 'Europe/Madrid') $$,
+  '22023', null, 'an iPhone''s token is hex');
+select throws_ok(
+  $$ select public.register_device(repeat('a', 63), 'ios', 'sandbox', 'ai.ghostaff.app.dev', 'Europe/Madrid') $$,
+  '22023', null, '... of at least 64 digits');
+select throws_ok(
+  $$ select public.register_device(repeat('a', 201), 'ios', 'sandbox', 'ai.ghostaff.app.dev', 'Europe/Madrid') $$,
+  '22023', null, '... and at most 200');
+select throws_ok(
+  $$ select public.register_device(E'tok-y\r\nx: 1', 'android', null, 'ai.ghostaff.app.dev', 'Europe/Madrid') $$,
+  '22023', null, 'an Android token has no line breaks');
+select throws_ok(
+  $$ select public.register_device('tok/../y', 'android', null, 'ai.ghostaff.app.dev', 'Europe/Madrid') $$,
+  '22023', null, '... nor slashes or dots');
 
 -- The engine writes in Bea's chat.
 reset role;
@@ -253,7 +269,7 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
 select public.snooze_decision('50000000-0000-0000-0000-000000000001', now() + interval '1 day');
 -- Her newer phone sets her time zone.
-select public.register_device('tok-bea-2', 'ios', 'production', 'ai.ghostaff.app', 'Europe/Madrid');
+select public.register_device('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'ios', 'production', 'ai.ghostaff.app', 'Europe/Madrid');
 
 set local role service_role;
 select results_eq(
@@ -283,14 +299,23 @@ select results_eq(
   'registering a token another person held moves it to the caller');
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
 select results_eq(
-  $$ select token from public.device_tokens $$, $$ values ('tok-bea-2') $$, '... and the first person no longer has it');
-select public.forget_device('tok-ana');
+  $$ select token from public.device_tokens $$, $$ values ('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb') $$, '... and the first person no longer has it');
+select public.forget_device('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
 reset role;
-select is((select count(*) from public.device_tokens where token = 'tok-ana'), 1::bigint, 'forget_device cannot delete someone else''s phone');
+select is((select count(*) from public.device_tokens where token = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), 1::bigint, 'forget_device cannot delete someone else''s phone');
 set local role authenticated;
-select public.forget_device('tok-bea-2');
+select public.forget_device('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
 reset role;
-select is((select count(*) from public.device_tokens where token = 'tok-bea-2'), 0::bigint, '... and deletes your own');
+select is((select count(*) from public.device_tokens where token = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'), 0::bigint, '... and deletes your own');
+
+-- Ten phones a person at most: an eleventh pushes out the one registered longest ago.
+set local role authenticated;
+set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000e", "role": "authenticated"}';
+select public.register_device('eva-' || i, 'android', null, 'ai.ghostaff.app.dev', 'Europe/Madrid') from generate_series(1, 10) i;
+select results_eq(
+  $$ select count(*), bool_or(token = 'tok-eva'), bool_and(token like 'eva-%') from public.device_tokens $$,
+  $$ values (10::bigint, false, true) $$,
+  'a person keeps their ten most recent phones');
 
 set local role anon;
 select throws_ok(
