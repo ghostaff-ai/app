@@ -1,4 +1,4 @@
--- Push notifications (20261126300000_notifications.sql): an agent's finished
+-- Push notifications (20261126400000_notifications.sql): an agent's finished
 -- message queues one row per person who sees the conversation, follows it and
 -- has a phone; the engine claims each row once and drops what was read since;
 -- nobody reads the outbox from the app, and a phone is only its person's.

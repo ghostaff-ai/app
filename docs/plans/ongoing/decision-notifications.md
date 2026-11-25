@@ -184,7 +184,7 @@ Tasks 1 to 6 are built on `feat/notifications` (task 7, these documents, lands w
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/20261125500000_notifications.sql` (new) | `device_tokens`, `push_outbox`, `follows_thread`, the trigger, the unread fix in `my_threads`, `register_device`, `forget_device`, `claim_pushes`, `daily_push_candidates` |
+| `supabase/migrations/20261126400000_notifications.sql` (new) | `device_tokens`, `push_outbox`, `follows_thread`, the trigger, the unread fix in `my_threads`, `register_device`, `forget_device`, `claim_pushes`, `daily_push_candidates` |
 | `supabase/tests/database/notifications.test.sql` (new) | pgTAP for all of it |
 | `packages/shared/src/services/settings.ts` | classify the new functions |
 | `packages/shared/src/services/index.ts`, `packages/shared/src/models/index.ts` | `registerDevice`, `forgetDevice`, `DevicePlatform`, `PushData` |
@@ -201,7 +201,7 @@ Tasks 1 to 6 are built on `feat/notifications` (task 7, these documents, lands w
 
 ### Task 1: Database
 
-**Files:** Create `supabase/migrations/20261125500000_notifications.sql` (pick the next free timestamp after the latest migration on `develop` at build time), `supabase/tests/database/notifications.test.sql`. Modify `packages/shared/src/services/settings.ts`.
+**Files:** Create `supabase/migrations/20261126400000_notifications.sql` (pick the next free timestamp after the latest migration on `develop` at build time), `supabase/tests/database/notifications.test.sql`. Modify `packages/shared/src/services/settings.ts`.
 
 **Interfaces — produces:**
 - `public.device_tokens(user_id uuid, token text unique, platform text check in ('ios','android'), apns_environment text null check in ('production','sandbox'), bundle_id text, time_zone text, updated_at timestamptz)`; RLS on, select own rows only, no write grants.
