@@ -1,14 +1,14 @@
 import { LegendList } from '@legendapp/list/react-native';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Platform, Pressable, Text, View } from 'react-native';
 import { shortNext, soonest } from '@ghostaff/shared';
 import { agentJob, decideAction } from '@ghostaff/shared/services';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
 import { Clock, Icon } from '@/components/icons';
-import { Loading, Notice } from '@/components/ui';
+import { Button, Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { showAuthors } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
@@ -19,6 +19,8 @@ import { useAgentChat, useMembers, useMyLevels } from '@/lib/hooks/useChat';
 import { useRoutines } from '@/lib/hooks/useRoutines';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
+import { usePush } from '@/lib/push/PushProvider';
+import { loadAskState, saveDecline, shouldAsk, type AskState } from '@/lib/push/softAsk';
 import { GHOSTS } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
 
@@ -30,6 +32,38 @@ import { usePalette } from '@/lib/theme';
 // The clock on the right is the agent's routines (agent-routines.md): an
 // outline when the person has none with it, the next one's day and hour
 // when they do; it opens them.
+
+// Under the person's first message of the session, once: would they like to be
+// told when the agent answers? «Sí» opens the phone's own dialog; «Ahora no» is
+// remembered (softAsk.ts). Never on the web, where there is nothing to turn on.
+function PushAsk({ onAnswered }: { onAnswered: () => void }) {
+  const { ask } = usePush();
+  return (
+    <View testID="push-ask" className="px-4 pb-2">
+      <Text className="text-footnote text-muted">¿Te aviso cuando te conteste?</Text>
+      <View className="mt-1 flex-row gap-2">
+        <Button
+          label="Sí, avísame"
+          variant="secondary"
+          size="small"
+          onPress={() => {
+            onAnswered();
+            void ask();
+          }}
+        />
+        <Button
+          label="Ahora no"
+          variant="plain"
+          size="small"
+          onPress={() => {
+            onAnswered();
+            void saveDecline(new Date());
+          }}
+        />
+      </View>
+    </View>
+  );
+}
 
 export default function Chat() {
   const { agent: agentId } = useLocalSearchParams<{ agent: string }>();
@@ -44,6 +78,30 @@ export default function Chat() {
   const palette = usePalette();
   const headerHeight = useHeaderHeight();
   const engine = useEngine();
+  // While this chat is on screen, a push for its reply isn't shown.
+  const { permission, setOnScreen } = usePush();
+  useFocusEffect(
+    useCallback(() => {
+      setOnScreen(`/chat/${agentId}`);
+      return () => setOnScreen(null);
+    }, [agentId, setOnScreen]),
+  );
+
+  // Asking for notifications: after the first message sent in this session, if the policy allows.
+  const [sentOne, setSentOne] = useState(false);
+  const [askState, setAskState] = useState<AskState | null>(null);
+  const [asked, setAsked] = useState(false);
+  useEffect(() => {
+    void loadAskState().then(setAskState);
+  }, []);
+  const sendAndNote = useCallback(
+    async (text: string) => {
+      await send(text);
+      setSentOne(true);
+    },
+    [send],
+  );
+  const showPushAsk = sentOne && !asked && askState !== null && shouldAsk(permission, askState, new Date());
 
   const me = session?.user.id;
   const agent = agents.find((a) => a.id === agentId);
@@ -165,8 +223,9 @@ export default function Chat() {
           />
         )}
         {error ? <Text className="px-4 pb-1 text-footnote text-no">{error}</Text> : null}
+        {showPushAsk ? <PushAsk onAnswered={() => setAsked(true)} /> : null}
         {canTalk ? (
-          <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={send} onVoiceNote={engine ? sendVoice : undefined} />
+          <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={sendAndNote} onVoiceNote={engine ? sendVoice : undefined} />
         ) : (
           <ReadOnlyComposer note={owner ? `Pide acceso a ${owner}` : null} />
         )}

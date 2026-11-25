@@ -1,0 +1,66 @@
+appId: ${APP_ID}
+name: After her first message the chat offers to tell her when the agent answers
+---
+# Notifications are asked for in the chat, once, after the person's first
+# message and before the phone's own dialog (docs/plans/ongoing/decision-notifications.md).
+# A new owner writes to Secretaría, sees «¿Te aviso cuando te conteste?» and
+# taps «Ahora no», which never opens the phone's dialog. No engine runs in e2e,
+# so the agent stays quiet: the line doesn't wait for her answer.
+- evalScript: ${output.email = 'e2e-push-' + Date.now() + '@ghostaff.test'}
+- evalScript: ${output.company = 'Taller E2E ' + Date.now().toString().slice(-6)}
+- runFlow:
+    file: ../subflows/sign-in-email.yaml
+    env:
+      EMAIL: ${output.email}
+- extendedWaitUntil:
+    visible: "¿Cómo te llamas?"
+    timeout: 30000
+- tapOn: "Nombre y apellido"
+- inputText: "Olga E2E"
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "¿Para qué vas a usar Ghostaff?"
+    timeout: 30000
+- tapOn: "Para mi empresa.*"
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "Por ejemplo, Panadería Ana"
+    timeout: 15000
+- tapOn: "Por ejemplo, Panadería Ana"
+- inputText: ${output.company}
+- tapOn: "Crear"
+- extendedWaitUntil:
+    visible: "Conecta tu IA"
+    timeout: 30000
+- runScript:
+    file: ../../scripts/connect-ai.js
+    env:
+      COMPANY: ${output.company}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+- stopApp
+# Maestro grants every permission on launch by default; leave notifications unset so the app has something to ask.
+- launchApp:
+    permissions:
+      notifications: unset
+- extendedWaitUntil:
+    visible:
+      id: "agent-secretaria"
+    timeout: 60000
+# Secretaría's chat.
+- tapOn:
+    id: "agent-secretaria"
+- extendedWaitUntil:
+    visible: "Escribe a Secretaría"
+    timeout: 20000
+# Nothing is asked before she has written.
+- assertNotVisible: "¿Te aviso cuando te conteste?"
+- tapOn: "Escribe a Secretaría"
+- inputText: "Hola desde el taller"
+- tapOn: "Enviar"
+- extendedWaitUntil:
+    visible: "¿Te aviso cuando te conteste?"
+    timeout: 20000
+- assertVisible: "Sí, avísame"
+- tapOn: "Ahora no"
+- assertNotVisible: "¿Te aviso cuando te conteste?"

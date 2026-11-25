@@ -39,7 +39,8 @@ const toRun = (r: Record<string, string | null>): RunRecord => ({
   routineId: r.routine_id ?? null,
 });
 
-export function supabaseJobStore(admin: SupabaseClient): JobStore {
+/** `afterAgentWrite` runs after each post of agent messages, as in `supabaseChatStore`. */
+export function supabaseJobStore(admin: SupabaseClient, opts: { afterAgentWrite?: () => void } = {}): JobStore {
   return {
     async job(agentId) {
       const r = check(
@@ -99,10 +100,14 @@ export function supabaseJobStore(admin: SupabaseClient): JobStore {
       return rows.map((r) => ({ id: r.id, orgId: r.org_id, agentId: r.agent_id, origin: r.origin, state: r.state, threadId: r.thread_id, messageId: r.message_id }));
     },
     async postToPersonalChats(agent, text) {
-      return check(await admin.rpc('post_to_personal_chats', { target_agent: agent.id, body: text })) as number;
+      const reached = check(await admin.rpc('post_to_personal_chats', { target_agent: agent.id, body: text })) as number;
+      opts.afterAgentWrite?.();
+      return reached;
     },
     async postRoutineCopies(routineId, text, except) {
-      return check(await admin.rpc('post_routine_copies', { target_routine: routineId, body: text, except_user: except })) as number;
+      const reached = check(await admin.rpc('post_routine_copies', { target_routine: routineId, body: text, except_user: except })) as number;
+      opts.afterAgentWrite?.();
+      return reached;
     },
   };
 }

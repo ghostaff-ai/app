@@ -42,7 +42,7 @@ The direction is **«A calm desk»**: one ghost greets you with one sentence; un
 
 **Rhythm and reach**
 
-14. Notifications: **one a day** at the person's hour, plus a push only for a decision due today or money leaving.
+14. Notifications: **a push per agent reply** (one per conversation, replacing the last) and **one a day** at 09:00 the person's time when decisions wait. Replaced on Jaime's word (2026-11-24); see [decision-notifications.md](decision-notifications.md).
 15. Weekly summary: **audio plus cards**, each sentence linked to its source in the record.
 16. A home-screen widget («3 te esperan» with the ghost), later.
 17. Agents speak in the **first person** and use «tú».

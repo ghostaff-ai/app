@@ -25,7 +25,7 @@ echo "== APIs"
 gcloud services enable --project "$P" \
   run.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
   cloudresourcemanager.googleapis.com iam.googleapis.com iamcredentials.googleapis.com \
-  sts.googleapis.com aiplatform.googleapis.com cloudscheduler.googleapis.com
+  sts.googleapis.com aiplatform.googleapis.com cloudscheduler.googleapis.com fcm.googleapis.com
 
 echo "== Service accounts"
 for a in engine:"Ghostaff engine" scheduler:"Ghostaff tick" runner:"Ghostaff agent runner" deployer:"Ghostaff CI deployer"; do
@@ -42,6 +42,9 @@ grant() { retry gcloud projects add-iam-policy-binding "$P" --member "serviceAcc
 grant "$(sa engine)" roles/secretmanager.admin
 # Dictation: the engine calls Gemini on Vertex AI in the EU, billed to this project (docs/plans/ongoing/voice.md).
 grant "$(sa engine)" roles/aiplatform.user
+# Android pushes: the engine sends through FCM v1 as itself (cloudmessaging.messages.create), to the
+# Firebase app on this same project (FIREBASE_PROJECT, scripts/env.sh; docs/plans/ongoing/decision-notifications.md).
+grant "$(sa engine)" roles/firebasecloudmessaging.admin
 # The runner has no role at all: it proves who it is to the engine with its ID token.
 # The deployer builds and deploys, and nothing else: no secret's value, no IAM on the project.
 grant "$DEPLOYER_SA" roles/run.admin

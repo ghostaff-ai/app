@@ -101,6 +101,18 @@ About 16–18 $ per environment, 35 $ for beta and production, whatever the numb
 
 **How a turn uses it.** A chat turn reads instructions and memory from the database's projection and writes memory through tools shaped like Anthropic's memory tool, which land in the projection and go back to the record as a commit. A runner turn has the record cloned and reads and writes the files directly. The sync is `por-decidir/`'s: the record wins; an edit made outside it is written back on top of the head it read.
 
+## How a push reaches a phone
+
+An agent's reply, and once a day the decisions that wait, reach a person who has the app closed. The path ([decision-notifications.md](plans/ongoing/decision-notifications.md)):
+
+1. **Trigger.** `messages_notify` (`supabase/migrations/20261126400000_notifications.sql`) fires when an agent message becomes `done` or `failed` and writes one `push_outbox` row per person to tell, so every path that writes agent messages is covered without calling anything. Phones register in `device_tokens` through `register_device` (a token shaped like its platform's, ten phones a person at most) and leave through `forget_device`, both `security definer`.
+2. **Drain.** The engine (`apps/engine/src/notify.ts`) claims rows with `claim_pushes`, which closes replies older than an hour as `stale` instead of sending a backlog, and sends each through `apps/engine/src/push/`: APNs over HTTP/2 for iPhones, FCM v1 for Android, both with a 10 s timeout. A failed row is retried up to `MAX_ATTEMPTS` times, the two-minute reclaim of a claimed row being the backoff. A request that wrote an agent message waits at most 3 s for its pushes (`drainSoon`) before answering, because Cloud Run throttles CPU outside requests; the tick drains whatever that missed every five minutes and queues the daily push (`planDaily`, from `daily_push_candidates`, 09:00 in the phone's time zone).
+3. **The phone.** `apps/mobile/lib/push/` offers notifications in the chat after the first message to an agent, and only a «yes» there shows the phone's own dialog; a «no» is asked again a week later, three times at most (`softAsk`). It registers the token (`PushProvider`, `registeredToken`) and reads a tapped push (`pushClient`; on iOS from the trigger's `payload`, since direct APNs pushes don't fill `content.data`). The `(app)` layout opens the chat or Decisiones only once its gates (signed in, organisation chosen) pass.
+
+**Only names travel.** A payload carries the agent's and the organisation's name and ids, never a message's or a card's text: Apple and Google see nothing of the record. One push per conversation replaces the last (`collapseId`).
+
+**Configuration.** The engine's Google Cloud project is also its Firebase project (`FIREBASE_PROJECT` in `scripts/env.sh`): the engine sends FCM v1 as its own service account, which `scripts/setup-env.sh` gives `roles/firebasecloudmessaging.admin` (with `fcm.googleapis.com` enabled). It reads the APNs key from the Secret Manager secret `apns-auth-key` (`scripts/apns-key.mjs` writes it). `scripts/deploy-engine.sh` wires both together once that secret exists; before, the engine's pushes are off and the outbox only fills, and nothing else changes.
+
 ## Keeping organisations apart
 
 Invariant 1 of the product: an organisation's record, data, documents and keys never mix with another's. Each layer enforces it on its own:

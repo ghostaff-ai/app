@@ -1,3 +1,6 @@
+/// <reference types="node" />
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ExpoConfig } from 'expo/config';
 
 // One app, three environments, as in cultuvilla/app: `APP_ENV` picks the
@@ -66,6 +69,14 @@ const googleIosUrlScheme = googleIosClientId
   ? `com.googleusercontent.apps.${googleIosClientId.replace(/\.apps\.googleusercontent\.com$/, '')}`
   : '';
 
+// Android push: expo-notifications gets the phone's FCM token from the native
+// Firebase config, one file per env (google-services/README.md says which
+// Firebase project each comes from). It holds no secret, so it is committed.
+// Wired only when present, so a checkout without it still builds, minus push.
+// Resolved against this file: the config is read from the repo root too.
+const googleServicesFile = `./google-services/${env}.json`;
+const hasGoogleServicesFile = existsSync(resolve(__dirname, googleServicesFile));
+
 function projectUrlFromKey(key: string): string | null {
   try {
     const payload = (key.split('.')[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
@@ -112,6 +123,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: bundleIdPerEnv[env],
+    ...(hasGoogleServicesFile ? { googleServicesFile } : {}),
     adaptiveIcon: {
       foregroundImage: './assets/icon/adaptive-foreground.png',
       backgroundColor: '#0b0b0f',
@@ -145,6 +157,9 @@ const config: ExpoConfig = {
       },
     ],
     'expo-apple-authentication',
+    // Pushes straight from our engine to APNs and FCM (no Expo push service).
+    // A push that arrives before the app has made its channel lands in this one.
+    ['expo-notifications', { defaultChannel: 'default' }],
     [
       'expo-audio',
       {

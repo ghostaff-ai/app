@@ -1,9 +1,11 @@
+import { forgetDevice } from '@ghostaff/shared/services';
 import type { Session } from '@supabase/supabase-js';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import { googleClientIds } from '../env';
+import { clearRegisteredToken, registeredToken } from '../push/registeredToken';
 import { supabase } from '../supabase';
 import { SignInCancelled } from './errors';
 import { makeNonce } from './nonce';
@@ -82,6 +84,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signInWithApple: apple,
       async signOut() {
+        // This phone stops getting the person's pushes, asked while the session
+        // still says whose it is. Failing or stalling (offline) never keeps
+        // anyone signed in: it gets a few seconds, then sign-out goes on.
+        await within(FORGET_DEVICE_MS, forgetThisPhone()).catch(() => undefined);
         if (!isExpoGo && Platform.OS !== 'web') {
           // Forget the Google account too, so the next sign-in offers the choice again.
           await nativeGoogle()
@@ -105,6 +111,26 @@ export function useAuth(): AuthValue {
 }
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+export const FORGET_DEVICE_MS = 3000;
+
+// The token this phone registered, not one read now: once notifications are
+// off in the phone's settings it can't be read, and its row would stay with
+// this person.
+async function forgetThisPhone(): Promise<void> {
+  const token = await registeredToken();
+  if (!token) return;
+  await forgetDevice(supabase, token);
+  await clearRegisteredToken();
+}
+
+function within<T>(ms: number, work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('timed out')), ms);
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
 
 // Loaded on first use, never at import: the module looks its native half up
 // when it loads and throws where there is none (Expo Go, the web, tests).

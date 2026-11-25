@@ -10,6 +10,7 @@ import { useIsDesktop } from '@/lib/layout';
 import { headerFor } from '@/lib/header';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
+import { useOpenPushTap } from '@/lib/push/PushProvider';
 import { usePalette } from '@/lib/theme';
 
 // Signed in. The way in has four steps, each a guard: a profile first
@@ -34,8 +35,19 @@ export default function AppLayout() {
   const seenConnections = useRef(false);
   if (connections.loaded) seenConnections.current = true;
 
-  if (org.loading || me.loading || (org.active && !seenConnections.current)) return <Loading />;
+  const waiting = org.loading || me.loading || (!!org.active && !seenConnections.current);
   const error = me.error ?? org.error;
+  const hasProfile = !!me.profile;
+  const inOrg = hasProfile && !!org.active;
+  // An owner whose organisation has no AI account to run on connects one first.
+  // If the connections can't be read, let them in: the engine still says what's missing.
+  const needsAi =
+    inOrg && org.active?.role === 'owner' && connections.loaded && !connections.error && !canRunAgents(connections.items);
+  // A tapped push opens only past every step, with this Stack mounted: any
+  // earlier, a guard below would redirect it away.
+  useOpenPushTap(!waiting && !error && inOrg && !needsAi);
+
+  if (waiting) return <Loading />;
   if (error)
     return (
       <Notice
@@ -44,13 +56,6 @@ export default function AppLayout() {
         action={<Button label="Reintentar" onPress={() => { me.reload(); org.reload(); }} />}
       />
     );
-
-  const hasProfile = !!me.profile;
-  const inOrg = hasProfile && !!org.active;
-  // An owner whose organisation has no AI account to run on connects one first.
-  // If the connections can't be read, let them in: the engine still says what's missing.
-  const needsAi =
-    inOrg && org.active?.role === 'owner' && connections.loaded && !connections.error && !canRunAgents(connections.items);
   // Where each step sends someone who isn't there yet (or is past it).
   const step = !hasProfile ? '/bienvenida' : !org.active ? '/empezar' : needsAi ? '/conectar-ia' : '/';
 

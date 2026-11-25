@@ -25,6 +25,7 @@ expect beta WIF_PROVIDER projects/1002624835789/locations/global/workloadIdentit
 expect beta DEPLOYER_SA deployer@ghostaff-beta.iam.gserviceaccount.com
 expect beta R europe-west1
 expect beta TENANTS_P ghostaff-tenants-beta
+expect beta FIREBASE_PROJECT ghostaff-beta
 
 expect prod P ghostaff-prod
 expect prod PROJECT_NUMBER 664656500315
@@ -34,6 +35,7 @@ expect prod SUPABASE_REF krhhndjjqmmkzjmwwazv
 expect prod SUPABASE_URL https://krhhndjjqmmkzjmwwazv.supabase.co
 expect prod DEPLOY_BRANCH main
 expect prod DEPLOYER_SA deployer@ghostaff-prod.iam.gserviceaccount.com
+expect prod FIREBASE_PROJECT ghostaff-prod
 
 # A laptop picks a gcloud configuration; CI uses the credentials its auth step set.
 [ "$(value beta CLOUDSDK_ACTIVE_CONFIG_NAME)" = ghostaff-prod ] || fail "outside CI the gcloud configuration defaults to 'ghostaff-prod' (signed in as ghostaff.ai@gmail.com)"

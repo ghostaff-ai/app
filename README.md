@@ -60,6 +60,25 @@ in `apps/mobile/app.config.ts`. The web client's secret is only for the browser 
   install straight from its link; it is signed with the same key the beta's Android OAuth client knows.
 - While the Google app is in Testing, only its test users can use Google (Audience page).
 
+### Push notifications
+
+Android needs each environment's `google-services.json` in `apps/mobile/google-services/` (steps in its
+[README](apps/mobile/google-services/README.md)). iPhones need the APNs key in the environment's Secret
+Manager, stored once per environment and then deployed with the engine:
+
+```bash
+node scripts/apns-key.mjs <env> <AuthKey.p8> <keyId> <teamId>    # env: beta | prod
+bash scripts/deploy-engine.sh <env>
+```
+
+The key is read from the file and never printed. `deploy-engine.sh` turns push on as soon as that secret
+exists, for both platforms at once (`FIREBASE_PROJECT` is always the environment's own project, from
+`scripts/env.sh`); until then the engine sends nothing. Once on, iPhones get their pushes. Android ones
+also need Firebase added to the project and `bash scripts/setup-env.sh <env>` run again (it enables FCM and
+gives the engine its sending role): before that, no Android build has a token to register, and a send
+that FCM refuses is retried and then given up, without touching iPhones.
+See [docs/architecture.md](docs/architecture.md#how-a-push-reaches-a-phone).
+
 ### The hosted beta project
 
 `ghostaff-beta` (Frankfurt). Its keys live encrypted in `secrets/secrets.enc.yml` (listed in

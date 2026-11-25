@@ -1,8 +1,8 @@
 # Notifications: an agent's reply and the decisions that wait reach a person without opening the app
 
-**Priority:** high — Telegram is today the only thing that reaches a person outside the app, and it goes off once Órdago's agents run on our runner ([ordago-agents-in-ghostaff.md](../ongoing/ordago-agents-in-ghostaff.md), decision 3)
-**Gate:** none — design approved by Jaime (2026-11-25)
-**Next:** write the implementation plan (File Structure and Tasks) and build it on `feat/notifications`
+**Priority:** high — Telegram is today the only thing that reaches a person outside the app, and it goes off once Órdago's agents run on our runner ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md), decision 3)
+**Gate:** `blocked:founder — APNs key, Firebase and a re-run of setup-env.sh per environment (design part 6)`
+**Next:** `Jaime stores the APNs key with scripts/apns-key.mjs, adds Firebase to ghostaff-beta and ghostaff-prod, then re-runs bash scripts/setup-env.sh beta|prod (FCM's API and the engine's role); then check a real reply push on the beta`
 
 **Goal:** When an agent finishes a message in a conversation a person can see and hasn't read, that person's phone says so («Legal · Te ha contestado») within seconds, and a tap opens that chat; once a day at 09:00 their time, if decisions wait for them, one notification says how many, and a tap opens Decisiones. Nothing from the record's words leaves for Apple or Google.
 
@@ -69,7 +69,7 @@ Once, after the person sends their **first message to an agent**: a line of ours
 - **`push_outbox`**: `id`, `user_id`, `org_id`, `kind` (`reply`/`daily`), `thread_id`, `message_id`, `agent_id`, `payload jsonb` (title, body, route), `created_at`, `sent_at`, `attempts`, `last_error`; unique `(user_id, message_id)` for replies and `(user_id, kind, local_day)` for the daily one. Row-level security on with **no policy**: only the engine's service role touches it.
 - **The trigger** `messages_notify` on `public.messages`, after insert or update of `state`: when `author_kind = 'agent'` and the row becomes `done` or `failed` (inserted so, or from `working`), insert one `reply` row for each recipient of part 1 (the personal chat's person; a shared conversation's followers who can read it) with at least one device. The «follows» rule moves out of `my_threads` into one function both use. Security definer, `search_path = ''`.
 - **`my_threads`**: its unread flag compares `read_at` with `coalesce(finished_at, created_at)` of the last message.
-- **Functions** (security definer, checking `auth.uid()`): `register_device(token, platform, apns_environment, bundle_id, time_zone)` (a token held by someone else moves to the caller: the phone changed hands), `forget_device(token)` (on sign-out). Both classified `never` in `packages/shared/src/services/settings.ts` (AGENTS.md rule 6): a person's own phone is not an organisation setting an agent may propose; unclassified, `apps/engine/test/settings.test.ts` fails.
+- **Functions** (security definer, checking `auth.uid()`): `register_device(token, platform, apns_environment, bundle_id, time_zone)` (a token held by someone else moves to the caller: the phone changed hands; a token must look like its platform's, 64 to 200 hex digits on an iPhone, letters, digits and `_:-` on Android; a person keeps their ten most recently registered phones), `forget_device(token)` (on sign-out). Both classified `never` in `packages/shared/src/services/settings.ts` (AGENTS.md rule 6): a person's own phone is not an organisation setting an agent may propose; unclassified, `apps/engine/test/settings.test.ts` fails.
 - **pgTAP**, `supabase/tests/database/notifications.test.sql`: a reply in a personal chat queues only its person; a shared `read` conversation queues its followers who can read it, not a reader who never opened it, and nobody with `none`; a reply that finishes after the person's read mark is still unread; a `working` message, a person's message and a second update of a `done` message queue nothing; nobody reads `push_outbox` from the app; another person cannot read, move or delete my device; the functions refuse an anonymous caller.
 
 ### 4. The engine
@@ -93,6 +93,7 @@ Once, after the person sends their **first message to an agent**: a line of ours
 
 - **An APNs key** on team `8HWS4483VD` (team-scoped, Sandbox & Production), put into Secret Manager of `ghostaff-beta` and `ghostaff-prod` under the same name by a script (never pasted). The push key `54D676WU4J` of Órdago's app serves if its file is still at hand.
 - **Firebase** on `ghostaff-beta` (packages `ai.ghostaff.app.beta`, `.dev`) and `ghostaff-prod` (`ai.ghostaff.app`), and their `google-services.json`.
+- **Then re-run `bash scripts/setup-env.sh beta|prod`** for each environment: it enables `fcm.googleapis.com` and gives the engine's service account `roles/firebasecloudmessaging.admin`, without which FCM v1 refuses its sends (`cloudmessaging.messages.create`). Safe to re-run.
 - The Push Notifications capability on the three iOS App IDs (EAS adds it on the next build when the entitlement appears; checked then).
 - Before the store: «Device or other IDs» in Play Data Safety and the device token in the privacy text.
 
@@ -121,13 +122,43 @@ Once, after the person sends their **first message to an agent**: a line of ours
 
 ## What it replaces
 
-[app-design.md](../ongoing/app-design.md) decision 14 («one a day at the person's hour, plus a push only for a decision due today or money leaving») is replaced on Jaime's word (2026-11-24, he asked for a notification when an agent writes in the chat): a push per agent reply, collapsed per conversation, plus the daily one. «Due today» and «money leaving» stay as later kinds on the same sender.
+[app-design.md](app-design.md) decision 14 («one a day at the person's hour, plus a push only for a decision due today or money leaving») is replaced on Jaime's word (2026-11-24, he asked for a notification when an agent writes in the chat): a push per agent reply, collapsed per conversation, plus the daily one. «Due today» and «money leaving» stay as later kinds on the same sender.
 
 ## Picks in this design that Jaime can change
 
 The two kinds and their wording; names but never text in a push; one push per thread, replacing; no quiet hours for replies; 09:00 in the phone's time zone with no settings screen (the phone's settings turn it off; a screen would need Secretaría to change it too, AGENTS.md rule 6); the ask after the first message to an agent; who is told following today's conversation model, followers only in a shared one; no push per decision beyond the run's report; OK cards in the daily count for owners only.
 
 ---
+
+## Progress
+
+Tasks 1 to 7 are built on `feat/notifications`, rebased on `develop` `5eb8f30` (2026-11-25):
+
+- `040ec64` feat(db): device tokens, push outbox and the trigger that fills it
+- `f366dd8` fix(db): whole-name mentions, and leave a claimed push to its drain
+- `a52842f` feat(engine): add push transports for apns and fcm, ported from cultuvilla
+- `a9176c6` feat(engine): drain the push outbox and plan the daily one
+- `2f2c54b` fix(engine): time out and settle stalled apns http2 requests
+- `75eecbd` feat(engine): send pushes after agent writes and on every tick
+- `3834e4e` fix(db): close replies over an hour old as stale instead of sending a backlog
+- `256f40b` fix(engine): send a request's pushes before it answers, and close rows before pruning
+- `b794afa` fix(engine): cap a request's wait for its pushes at 3 s, and time out fcm calls
+- `111624d` feat(mobile): receive pushes and open what they point at
+- `c801bc9` fix(mobile): open a tapped push from the app layout, and bound sign-out's forget
+- `7777efe` feat(mobile): ask once, after the first message, before the phone's dialog
+- `bf33111` docs: the push path
+
+The whole-branch review's fixes (2026-11-25): the migration moved off `main_agent`'s version, a thread marked read only while it is on screen with the app active (Android kept marking in the background), FCM's API and the engine's role in `setup-env.sh`, token format and ten phones a person in `register_device`, APNs' path escaped and its session closed on a throw, and Android's notification tag:
+
+- `187bdaa` fix(db): move the notifications migration after main_agent's version
+- `109e6fd` fix(mobile): mark a thread read only while it is on screen and the app is active
+- `e11c14a` fix(infra): let the engine send through fcm: its api and the engine's messaging role
+- `0d35779` fix(db): refuse a device token that isn't its platform's, and keep ten phones a person
+- `f25a9c8` fix(engine): escape the apns token in the path, and close the session when a request throws
+- `cfe1aed` fix(engine): replace a conversation's android notification with its newer one
+- this documents commit
+
+**Not verified.** No push has reached a real device yet: it needs the APNs key and Firebase (Gate). The Maestro flow `push-ask.yaml` first runs in CI.
 
 # Implementation plan
 
@@ -165,7 +196,7 @@ The two kinds and their wording; names but never text in a push; one push per th
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/20261125500000_notifications.sql` (new) | `device_tokens`, `push_outbox`, `follows_thread`, the trigger, the unread fix in `my_threads`, `register_device`, `forget_device`, `claim_pushes`, `daily_push_candidates` |
+| `supabase/migrations/20261126400000_notifications.sql` (new) | `device_tokens`, `push_outbox`, `follows_thread`, the trigger, the unread fix in `my_threads`, `register_device`, `forget_device`, `claim_pushes`, `daily_push_candidates` |
 | `supabase/tests/database/notifications.test.sql` (new) | pgTAP for all of it |
 | `packages/shared/src/services/settings.ts` | classify the new functions |
 | `packages/shared/src/services/index.ts`, `packages/shared/src/models/index.ts` | `registerDevice`, `forgetDevice`, `DevicePlatform`, `PushData` |
@@ -182,7 +213,7 @@ The two kinds and their wording; names but never text in a push; one push per th
 
 ### Task 1: Database
 
-**Files:** Create `supabase/migrations/20261125500000_notifications.sql` (pick the next free timestamp after the latest migration on `develop` at build time), `supabase/tests/database/notifications.test.sql`. Modify `packages/shared/src/services/settings.ts`.
+**Files:** Create `supabase/migrations/20261126400000_notifications.sql` (pick the next free timestamp after the latest migration on `develop` at build time), `supabase/tests/database/notifications.test.sql`. Modify `packages/shared/src/services/settings.ts`.
 
 **Interfaces — produces:**
 - `public.device_tokens(user_id uuid, token text unique, platform text check in ('ios','android'), apns_environment text null check in ('production','sandbox'), bundle_id text, time_zone text, updated_at timestamptz)`; RLS on, select own rows only, no write grants.
