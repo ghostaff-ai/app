@@ -94,21 +94,26 @@ export function http2Request(timeoutMs = REQUEST_TIMEOUT_MS, open: typeof connec
       };
       session.on('error', finish);
       session.on('close', () => finish(new Error('APNs session closed before a response')));
-      const req = session.request({ ':method': 'POST', ':path': path, ...headers });
-      let status = 0;
-      let text = '';
-      req.setEncoding('utf8');
-      req.setTimeout(timeoutMs, () => finish(new Error('APNs request timed out')));
-      req.on('response', (h) => {
-        status = Number(h[':status'] ?? 0);
-      });
-      req.on('data', (chunk: string) => {
-        text += chunk;
-      });
-      req.on('end', () => finish({ status, body: text }));
-      req.on('close', () => finish(new Error('APNs stream closed before a response')));
-      req.on('error', finish);
-      req.end(body);
+      // A header node refuses (a stray character in a topic, say) throws here: close the session too.
+      try {
+        const req = session.request({ ':method': 'POST', ':path': path, ...headers });
+        let status = 0;
+        let text = '';
+        req.setEncoding('utf8');
+        req.setTimeout(timeoutMs, () => finish(new Error('APNs request timed out')));
+        req.on('response', (h) => {
+          status = Number(h[':status'] ?? 0);
+        });
+        req.on('data', (chunk: string) => {
+          text += chunk;
+        });
+        req.on('end', () => finish({ status, body: text }));
+        req.on('close', () => finish(new Error('APNs stream closed before a response')));
+        req.on('error', finish);
+        req.end(body);
+      } catch (e) {
+        finish(e instanceof Error ? e : new Error(String(e)));
+      }
     });
 }
 
@@ -155,7 +160,7 @@ export function apnsTransport(
       try {
         res = await request(
           APNS_HOST[device.apnsEnvironment ?? 'production'],
-          `/3/device/${device.token}`,
+          `/3/device/${encodeURIComponent(device.token)}`,
           headers,
           JSON.stringify(payload),
         );

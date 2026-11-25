@@ -84,6 +84,12 @@ describe('APNs request', () => {
     expect(calls[0]!.host).toBe('api.sandbox.push.apple.com');
     expect(calls[0]!.headers['apns-collapse-id']).toBe('c1');
   });
+
+  it('escapes the token in the path, so a malformed one stays one path segment', async () => {
+    const { request, calls } = fakeRequest();
+    await apnsTransport(creds, { request }).send({ ...device, token: 'ab/../cd?x' }, push);
+    expect(calls[0]!.path).toBe('/3/device/ab%2F..%2Fcd%3Fx');
+  });
 });
 
 describe('APNs outcomes', () => {
@@ -174,6 +180,21 @@ describe('default HTTP/2 request', () => {
     req.emit('end');
     req.emit('close');
     await expect(p).resolves.toEqual({ status: 410, body: '{"reason":"Unregistered"}' });
+  });
+
+  it('closes the session and rejects when the request throws after it opened', async () => {
+    let destroyed = 0;
+    const session = Object.assign(new EventEmitter(), {
+      destroy: () => {
+        destroyed += 1;
+      },
+      request: () => {
+        throw new TypeError('Invalid value for header');
+      },
+    });
+    const open = (() => session) as unknown as typeof connect;
+    await expect(http2Request(1000, open)(...args)).rejects.toThrow('Invalid value for header');
+    expect(destroyed).toBe(1);
   });
 
   it('maps a stalled request to retry through the transport', async () => {
