@@ -1,8 +1,8 @@
 # One ghostaff.ai: the website for visitors, the app on a desktop layout once you sign in
 
 **Priority:** high — Jaime (2026-11-21): the web is a way in and where the product is sold, and today the app on a computer is the phone app stretched
-**Gate:** decision:Jaime gives the go for step 3, one domain (recheck 2026-12-03)
-**Next:** ask Jaime whether to start step 3 (Tasks, stage 2): the Expo web build on Firebase Hosting beside the Astro site, in a PR of its own
+**Gate:** blocked:Jaime — signed in as ghostaff.ai@gmail.com, the Google web client's origin, the domain at Porkbun (Handoff) (recheck 2026-12-03)
+**Next:** Jaime goes live with the Handoff's steps: a preview channel first, then ghostaff.ai on Firebase Hosting
 
 Jaime's request (2026-11-21), after seeing the app on `localhost:8083`: on a computer it is the phone app in a browser window, one 400-px column on a wide screen. He wants one web at `ghostaff.ai` that sells the product to a visitor and, once they sign in, gives them everything the app does, laid out for a computer. Sketches of the desktop screens (2026-11-21, before the three tabs): [Ghostaff en escritorio](https://claude.ai/artifact/AwAH4NaD8rFB8weuW6TUZA) (Hoy, Equipo, Conexiones).
 
@@ -26,7 +26,7 @@ Linear and Notion work this way: the same domain sells the product to a visitor 
 
 1. **The website stays in Astro** (`ghostaff-ai/web`). It must load fast, be readable by Google and carry the scroll-driven film; Astro sends plain HTML and only loads JavaScript where a ghost or the film needs it. Built inside Expo, the visitor would download the whole app bundle (several MB) before seeing the first line.
 2. **The app on the web comes from this repo's Expo code**, as today, so data, services, sign-in and tests stay shared with the phone. What changes is its layout on a wide screen (below).
-3. **Firebase Hosting serves both at `ghostaff.ai`**: `/`, `/en/`, `/privacidad`, `/terminos`, `/precios` go to the Astro build; `/entrar`, the tabs (`/decisiones`, `/empresa`…), `/chat`… go to the Expo web build. A signed-in visitor opening `/` is sent into the app.
+3. **Firebase Hosting serves both at `ghostaff.ai`**: the app under `/app` (decision 6), everything else the Astro build. A signed-in visitor opening `/` is sent into the app.
 
 Considered and set aside: **everything inside Expo** (the website as a public route of the app). One project, but a heavy first load, weaker search results and a harder film, and it undoes web.md's decision 1.
 
@@ -61,6 +61,10 @@ Shared on both: the ghosts, the palette (`lib/palette.ts`), Rubik for headings, 
 3. **The same screens on the phone and the desktop; only the layout changes** (Jaime, 2026-11-26). No screen exists only on the desktop: managing who reads or talks to each agent, or the record's files, are screens of the app on both, when they come.
 4. **The sidebar is the space, Equipo, Decisiones and Empresa, with Conexiones and Registro as direct entries under Empresa** (Jaime, 2026-11-26). It mirrors the three tabs; Conexiones and Registro are one click away because the desk is where things are set up. No «Hablar con Secretaría»: she is pinned first in Equipo.
 5. **Decisiones stays the deck on the desktop, centred; two columns only in Equipo (the agents and the chat) and Conexiones (the list and the connection)** (Jaime, 2026-11-26). It keeps three-tabs.md decision 7 (Álvaro) as it is.
+
+6. **The app lives under `/app`** (Jaime, 2026-11-26): `ghostaff.ai/app`, `/app/decisiones`, `/app/chat/…`. Expo builds it with that base URL, so nothing collides with the website's `/`, `/en/` or legal pages, and the phone's routes don't change. Set aside: the app at the root, which meant moving Equipo off `/` on the phone too and listing every route of the app in Hosting.
+7. **The web app runs on beta until production is up** (Jaime, 2026-11-26): production has no engine yet ([environments.md](environments.md)).
+8. **Jaime publishes** (2026-11-26): this side leaves both repos ready and checked locally; going live needs his Firebase sign-in and the domain's DNS (Handoff).
 
 ## File Structure
 
@@ -97,10 +101,27 @@ Step 2, against `develop` at `1cc4d4f` (2026-11-26). Already there from 2026-11-
 
 Found on the way, not in this PR: an AI account's row in Conexiones is a `<button>` holding its up and down `<button>`s, which React warns about on the web (it was so before); the list column doesn't follow new messages live, it reads them again when another chat opens.
 
-### Stage 2: one domain (step 3, its own PR, waits for Jaime's go)
+### Stage 2: one domain (step 3: app PR `feat/one-domain`, ghostaff-ai/web PR `feat/app-at-app`)
 
-- [ ] Ask Jaime before starting
-- [ ] The Expo web build (`pnpm --filter ghostaff-mobile export:web`) deployed to Firebase Hosting beside the Astro site, in `ghostaff-ai/web`'s `firebase.json` or a shared site config
-- [ ] Rewrites: the Astro pages (`/`, `/en/`, `/privacidad`, `/terminos`, `/precios`) to Astro, everything else to the Expo build's `index.html`
-- [ ] «Entrar» on the website to `/entrar`; «Pedir acceso» to the waiting list (decision 1)
-- [ ] A signed-in visitor opening `/` is sent into the app
+- [x] Jaime's go (2026-11-26) and decisions 6–8
+- [x] The app: `experiments.baseUrl` from `WEB_BASE_URL`, and `pnpm export:web:hosted` (beta, `/app`, Metro's cache cleared so no other environment's values leak in); the tab reads «Ghostaff», the page `lang="es"`
+- [x] The way back from a provider's sign-in keeps `/app` (`lib/url.ts`, `appLink`), and the beta engine accepts `https://ghostaff.ai` as a return origin (`APP_RETURN_ORIGINS` in `scripts/env.sh`, set by `deploy-engine.sh`)
+- [x] The web: `pnpm build:all` builds the site and, into `dist/app`, the app from the checkout beside it; refuses a build that talks to a local Supabase
+- [x] `firebase.json`: `/app/**` to the app's `index.html`; its Permissions-Policy allows the mic and camera (voice notes, guide photos); hashed files cached for a year, `index.html` revalidated; a predeploy check refuses a deploy without `/app`; `robots.txt` keeps `/app/` out
+- [x] «Entrar» in the website's header to `/app/entrar`; «Pedir acceso» stays the mail to hola@ghostaff.ai (decision 1); on a phone the language link shortens to its code so both fit
+- [x] Someone signed in who opens `/` or `/en/` goes to `/app` (the home pages read the app's Supabase session in this origin's storage; an expired one the app clears, so no loop)
+- [x] Checked in the Hosting emulator: the site, `/app` signed in against local Supabase (desktop shell, a deep link reloaded, the sidebar's links under `/app`), the redirect, the headers, the 404, a phone width
+- [ ] Jaime goes live (Handoff)
+- [ ] Later, its own task: deploy on every green `develop` instead of by hand (today the web app is as fresh as the last `pnpm build:all`)
+
+## Handoff
+
+Going live needs Jaime, in this order (the website's README, «Deploy», has the commands):
+
+1. **Firebase CLI as ghostaff.ai@gmail.com**: `firebase login:add`, then `firebase login:use ghostaff.ai@gmail.com`. This Mac's CLI and gcloud are signed in as ordagoapp@gmail.com, with no access to `ghostaff-prod`.
+2. **Google sign-in on the web**: in `ghostaff-prod`, APIs & Services, Clients, the web client: add `https://ghostaff.ai` to Authorized JavaScript origins. Without it «Continuar con Google» fails there; the code by email works.
+3. **The engine**: nothing to do. This PR's merge redeploys beta's engine with `APP_RETURN_ORIGINS=https://ghostaff.ai`, so connecting an account from the web comes back to the app.
+4. **A preview**: in `ghostaff-ai/web`, with `../app` on `develop` and pulled: `pnpm build:all && firebase hosting:channel:deploy preview --expires 30d`. The preview's address is not ghostaff.ai, so there only the code by email works.
+5. **The domain**: Firebase console, Hosting, «Add custom domain»: `ghostaff.ai` (and `www.ghostaff.ai` redirecting to it). At Porkbun, replace the parking records with the A and TXT records Firebase shows; the certificate follows once they resolve. Today ghostaff.ai points to Porkbun's parking (207.207.210.229 / .107).
+6. **Live**, with the founders' OK as the website's README asks: `pnpm build:all && firebase deploy --only hosting`.
+7. Clean-up: on 2026-11-26 a test of this work sent a sign-in code to beta for `desktop-shell@ghostaff.test` (an old build in the browser's cache). If beta's Auth now has that user, delete it.

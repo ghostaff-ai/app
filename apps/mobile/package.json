@@ -9,6 +9,7 @@
     "android": "port=$(bash ../../scripts/metro-port.sh 8083) && expo run:android --port $port",
     "ios": "port=$(bash ../../scripts/metro-port.sh 8083) && expo run:ios --port $port",
     "export:web": "expo export --platform web",
+    "export:web:hosted": "APP_ENV=${APP_ENV:-beta} WEB_BASE_URL=/app expo export --platform web --clear --output-dir ${OUT:-dist-hosted}",
     "test": "jest",
     "typecheck": "tsc --noEmit"
   },

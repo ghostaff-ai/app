@@ -8,6 +8,7 @@ node_modules/
 coverage/
 .expo/
 dist/
+dist-hosted/
 build/
 web-build/
 

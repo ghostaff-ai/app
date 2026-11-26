@@ -11,10 +11,13 @@ case "${1:-}" in
   beta)
     export P=ghostaff-beta PROJECT_NUMBER=1002624835789
     export SUPABASE_REF=rggvcvnstbitbdptiwtk DEPLOY_BRANCH=develop
+    # The web app at ghostaff.ai/app runs on beta until production is up (desktop-web.md, step 3).
+    export APP_RETURN_ORIGINS=https://ghostaff.ai
     ;;
   prod)
     export P=ghostaff-prod PROJECT_NUMBER=664656500315
     export SUPABASE_REF=krhhndjjqmmkzjmwwazv DEPLOY_BRANCH=main
+    export APP_RETURN_ORIGINS=
     ;;
   *)
     echo "usage: source scripts/env.sh beta|prod (got '${1:-}')" >&2
