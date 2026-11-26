@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { AvatarsProvider } from '@/lib/avatars';
 import { useRef } from 'react';
 import { View } from 'react-native';
 import { CloseButton } from '@/components/CloseButton';
@@ -112,12 +113,16 @@ export default function AppLayout() {
   // On a desktop, once inside an organisation, the sidebar stands beside every
   // screen, and Equipo's or Conexiones' list beside the item it opened
   // (docs/plans/ongoing/desktop-web.md); the way in keeps the whole window.
-  if (!desktop || !inOrg || needsAi) return stack;
+  // Every face drawn inside an organisation can find its photo (lib/avatars.tsx).
+  const orgId = org.active?.id ?? null;
+  if (!desktop || !inOrg || needsAi) return <AvatarsProvider orgId={orgId}>{stack}</AvatarsProvider>;
   return (
-    <View className="flex-1 flex-row bg-surface">
-      <Sidebar />
-      <DesktopListColumn />
-      <View className="flex-1">{stack}</View>
-    </View>
+    <AvatarsProvider orgId={orgId}>
+      <View className="flex-1 flex-row bg-surface">
+        <Sidebar />
+        <DesktopListColumn />
+        <View className="flex-1">{stack}</View>
+      </View>
+    </AvatarsProvider>
   );
 }

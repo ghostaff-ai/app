@@ -440,15 +440,41 @@ interface ProfileRow {
   full_name: string;
   occupation: string | null;
   heard_from: string | null;
+  avatar_path?: string | null;
 }
 
-const profileFromRow = (r: ProfileRow): Profile => ({ fullName: r.full_name, occupation: r.occupation, heardFrom: r.heard_from });
+const profileFromRow = (r: ProfileRow): Profile => ({ fullName: r.full_name, occupation: r.occupation, heardFrom: r.heard_from, avatarPath: r.avatar_path ?? null });
+
+/** Sets your profile photo (a small JPEG); returns its path. */
+export async function setMyAvatar(engine: EngineAccess, photo: Blob): Promise<string> {
+  const { avatarPath } = await sendToEngine<{ avatarPath: string }>(engine, 'POST', '/me/avatar', { type: photo.type || 'image/jpeg', data: photo });
+  return avatarPath;
+}
+
+/** Takes your profile photo away. */
+export async function removeMyAvatar(engine: EngineAccess): Promise<void> {
+  await callEngine(engine, 'DELETE', '/me/avatar');
+}
+
+/** The photos of an organisation's members who have one, by person. */
+export async function memberAvatars(client: SupabaseClient, orgId: string): Promise<Record<string, string>> {
+  const { data, error } = await client.rpc('member_avatars', { target_org: orgId });
+  if (error) throw error;
+  return Object.fromEntries(((data ?? []) as Array<{ user_id: string; avatar_path: string }>).map((r) => [r.user_id, r.avatar_path]));
+}
+
+/** A link to a profile photo for an hour; the bucket lets through whoever shares an organisation with its person. */
+export async function avatarUrl(client: SupabaseClient, path: string): Promise<string> {
+  const { data, error } = await client.storage.from('avatars').createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+}
 
 /** The signed-in person's profile, or null before they have said who they are. */
 export async function getMyProfile(client: SupabaseClient, userId: string): Promise<Profile | null> {
   const { data, error } = await client
     .from('profiles')
-    .select('full_name, occupation, heard_from')
+    .select('full_name, occupation, heard_from, avatar_path')
     .eq('user_id', userId)
     .maybeSingle<ProfileRow>();
   if (error) throw error;

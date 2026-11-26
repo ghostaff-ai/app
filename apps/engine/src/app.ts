@@ -24,6 +24,7 @@ import { connectAi, type Deps, disconnectAi, Refusal, requireOwner } from './con
 import { bearer, type CallerFromToken } from './googleCaller';
 import type { PushDrain } from './notify';
 import { NoteLimiter, type Transcriber } from './transcribe';
+import { type AvatarStore, removeAvatar, setAvatar } from './avatars';
 import { type FileStore, sendFile } from './files';
 import { linkPreview } from './linkPreview';
 import { deleteMessage, type IncomingNote, sendVoiceNote, sendVoiceNoteToThread, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
@@ -64,6 +65,8 @@ export interface AppDeps extends Deps {
   voice?: VoiceNoteStore;
   /** Files sent in the chat: the bucket and the person's messages (files.ts). */
   files?: FileStore;
+  /** Profile photos (avatars.ts). */
+  avatars?: AvatarStore;
   filesLimiter?: NoteLimiter;
   /** A voice note into text (transcribe.ts); off when not configured, and voice notes with it. */
   transcriber?: Transcriber;
@@ -414,6 +417,12 @@ export function createApp(deps: AppDeps) {
   app.post('/threads/:id/voice-notes', async (c) =>
     c.json({ message: await sendVoiceNoteToThread(voice, c.get('userId'), c.req.param('id'), incoming(c)) }, 201),
   );
+
+  // Your profile photo (avatars.ts): the bytes in, its path out; or none again.
+  app.post('/me/avatar', async (c) =>
+    c.json(await setAvatar(deps.avatars, c.get('userId'), { contentType: c.req.header('Content-Type'), contentLength: c.req.header('Content-Length'), body: c.req.raw.body }), 201),
+  );
+  app.delete('/me/avatar', async (c) => c.json(await removeAvatar(deps.avatars, c.get('userId'))));
 
   // A link's preview (chat-like-whatsapp.md, phase 4): any signed-in person; only public pages.
   app.get('/link-preview', async (c) => c.json(await linkPreview(c.req.query('url'))));

@@ -1,12 +1,16 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Brain, Buildings, CaretDown, FolderSimple, Handshake, Icon, LinkSimple, SignOut, Tray, User, UserPlus } from '@/components/icons';
+import { Avatar } from '@/components/chat/Message';
+import { Brain, Buildings, Camera, CaretDown, FolderSimple, Handshake, Icon, LinkSimple, SignOut, Trash, Tray, UserPlus } from '@/components/icons';
 import { SpaceAvatar } from '@/components/SpaceAvatar';
 import { ListRow, ListSection, RowIcon } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { useAvatars } from '@/lib/avatars';
+import { changeMyPhoto, removeMyPhoto } from '@/lib/myPhoto';
+import { useProfile } from '@/lib/profile/ProfileContext';
 import { useMembers } from '@/lib/hooks/useChat';
-import { useConnections } from '@/lib/hooks/useConnections';
+import { useConnections, useEngine } from '@/lib/hooks/useConnections';
 import { useExternalParties } from '@/lib/hooks/useExternalParties';
 import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -27,6 +31,38 @@ export default function Empresa() {
   const desktop = useIsDesktop();
   const { active, organizations } = useActiveOrg();
   const { session, signOut } = useAuth();
+  const { profile, reload: reloadProfile } = useProfile();
+  const avatars = useAvatars();
+  const engine = useEngine();
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const changePhoto = async (source: 'library' | 'camera') => {
+    if (!engine || photoBusy) return;
+    setPhotoError(null);
+    setPhotoBusy(true);
+    try {
+      const done = await changeMyPhoto(engine, source);
+      if (done === 'denied') setPhotoError('Ghostaff no tiene permiso para usar la cámara.');
+      else if (done) {
+        reloadProfile();
+        avatars.reload();
+      }
+    } catch {
+      setPhotoError('No se ha podido subir la foto. Inténtalo otra vez.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+  const removePhoto = async () => {
+    if (!engine) return;
+    try {
+      await removeMyPhoto(engine);
+      reloadProfile();
+      avatars.reload();
+    } catch {
+      setPhotoError('No se ha podido quitar la foto.');
+    }
+  };
   const orgId = active?.id ?? null;
   const connections = useConnections(orgId);
   const { members, reload: reloadMembers } = useMembers(orgId);
@@ -90,11 +126,24 @@ export default function Empresa() {
         />
       </ListSection>
 
+      <ListSection header="Tu foto">
+        <ListRow
+          testID="my-photo"
+          leading={<Avatar name={profile?.fullName ?? active.displayName} id={session?.user.id ?? ''} size={40} path={profile?.avatarPath ?? null} />}
+          title={profile?.avatarPath ? 'Cambiar tu foto de perfil' : 'Poner una foto de perfil'}
+          subtitle={photoBusy ? 'Subiendo…' : photoError ?? 'La ven quienes trabajan contigo'}
+          chevron
+          onPress={() => void changePhoto('library')}
+        />
+        <ListRow leading={<RowIcon icon={Camera} />} title="Hacer una foto" onPress={() => void changePhoto('camera')} />
+        {profile?.avatarPath ? <ListRow leading={<RowIcon icon={Trash} tone="danger" />} title="Quitar la foto" tone="danger" onPress={() => void removePhoto()} /> : null}
+      </ListSection>
+
       <ListSection header="Personas">
         {members.map((m) => (
           <ListRow
             key={m.userId}
-            leading={<RowIcon icon={User} />}
+            leading={<Avatar name={m.displayName} id={m.userId} size={32} />}
             title={m.userId === session?.user.id ? `${m.displayName} (tú)` : m.displayName}
             value={m.role === 'owner' ? 'Propietario' : undefined}
           />
