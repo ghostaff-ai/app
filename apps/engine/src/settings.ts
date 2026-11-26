@@ -7,7 +7,7 @@
 // app; a change only once an owner approves it (actions.ts), as that owner, so
 // the database checks it exactly as if they had made it on the screen.
 
-import { ROUTINE_TOOL_NAMES, SETTING_TOOLS, SettingError, type SettingsContext } from '@ghostaff/shared/services';
+import { EVERY_AGENT_TOOL_NAMES, SETTING_TOOLS, SettingError, type SettingsContext } from '@ghostaff/shared/services';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { AgentTools } from './tools';
 
@@ -69,10 +69,11 @@ export async function runSetting(ctx: SettingsContext, name: string, input: unkn
 /**
  * The settings tools in one reply, reading as the person who asked: every one
  * for the main agent; for any other, only those for its own routines
- * (`ctx.onlySelf`, agent-routines.md).
+ * (`ctx.onlySelf`, agent-routines.md) and those for who the organisation works
+ * with outside (external-parties.md).
  */
 export function settingsTools(ctx: SettingsContext): AgentTools {
-  const tools = ctx.onlySelf ? SETTING_TOOLS.filter((t) => (ROUTINE_TOOL_NAMES as readonly string[]).includes(t.name)) : SETTING_TOOLS;
+  const tools = ctx.onlySelf ? SETTING_TOOLS.filter((t) => (EVERY_AGENT_TOOL_NAMES as readonly string[]).includes(t.name)) : SETTING_TOOLS;
   const byName = new Map(tools.map((t) => [t.name, t]));
   return {
     specs: tools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),

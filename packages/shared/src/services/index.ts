@@ -1543,3 +1543,4 @@ export async function forgetDevice(client: SupabaseClient, token: string): Promi
 }
 
 export * from './settings';
+export * from './externalParties';

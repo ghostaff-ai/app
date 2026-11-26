@@ -11,8 +11,26 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ACCOUNT_PROVIDERS, type AccountProvider, connectorFor } from '../connectors';
-import { AGENT_GHOSTS, AGENT_JOBS, AGENT_LEVELS, type AgentGhost, type AgentLevel, CONVERSATION_VISIBILITIES, type ConversationVisibility, type Department, DEPARTMENTS, MAIN_AGENT_JOB } from '../models';
+import {
+  AGENT_GHOSTS,
+  AGENT_JOBS,
+  AGENT_LEVELS,
+  type AgentGhost,
+  type AgentLevel,
+  CONVERSATION_VISIBILITIES,
+  type ConversationVisibility,
+  type Department,
+  DEPARTMENT_NAMES,
+  DEPARTMENTS,
+  EXTERNAL_KIND_NAMES,
+  EXTERNAL_KINDS,
+  type ExternalKind,
+  type ExternalParty,
+  type ExternalPartyInput,
+  MAIN_AGENT_JOB,
+} from '../models';
 import { ALL_WEEKDAYS, describeWhen, invalidWhen, MAX_ROUTINES_PER_PERSON, type Routine, type RoutineAudience, type Weekday } from '../routines';
+import { cleanExternalParty, getExternalParty, invalidExternalParty, listExternalParties, removeExternalParty, saveExternalParty } from './externalParties';
 import {
   createAgent,
   createRoutine,
@@ -43,7 +61,8 @@ export interface SettingsContext {
   agentId: string;
   /**
    * Set for every agent but the main one: it may only read and propose its
-   * own routines (agent-routines.md, «By asking»), and has no other setting.
+   * own routines (agent-routines.md, «By asking») and who the organisation
+   * works with outside (external-parties.md), and has no other setting.
    */
   onlySelf?: boolean;
 }
@@ -485,10 +504,135 @@ export const SETTING_TOOLS: SettingTool[] = [
       return paused ? `Rutina «${r.title}» en pausa.` : `Rutina «${r.title}» reanudada: ${describeWhen(r).toLowerCase()}.`;
     },
   },
+  {
+    name: 'settings_read_external_parties',
+    description:
+      "Read who the organisation works with outside: the people, companies and services, what each one does for it, the departments it works with and how to reach it. Read it before suggesting who should do a piece of work («send it to Ana, who does the illustrations»), and when a mail or an invoice names someone, to see whether they are already on the list. Use the ids it returns.",
+    input_schema: {
+      type: 'object',
+      properties: { department: { type: 'string', enum: [...DEPARTMENTS], description: "Only those who work with this department." } },
+    },
+    writes: false,
+    step: 'Mirando con quién trabajáis',
+    async run(ctx, input) {
+      const department = typeof input.department === 'string' ? input.department : null;
+      const all = await listExternalParties(ctx.client, ctx.orgId);
+      const list = department ? all.filter((p) => p.departments.includes(department as Department)) : all;
+      return JSON.stringify(list.map(externalForModel));
+    },
+  },
+  {
+    name: 'settings_save_external_party',
+    description:
+      "Propose adding someone the organisation works with outside (a person such as a freelancer or an advisor, a company such as the gestoría or a supplier, or a service such as a bank or an app), or changing one already on the list (its external_party_id from settings_read_external_parties). Propose it when a person tells you about one, or when a mail or an invoice shows the organisation works with someone who is not on the list yet. Keep only what they do for the organisation and how to reach them, never anything personal; an owner approves it before it is saved.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        external_party_id: { type: 'string', description: 'Only to change one already on the list.' },
+        kind: { type: 'string', enum: [...EXTERNAL_KINDS] },
+        name: { type: 'string', description: 'Their name or the company\'s, up to 120 characters.' },
+        does: { type: 'string', description: 'What they do for the organisation, in Spanish, up to 300 characters: «Presenta el IVA cada trimestre».' },
+        departments: { type: 'array', items: { type: 'string', enum: [...DEPARTMENTS] }, description: 'The departments they work with.' },
+        email: { type: 'string' },
+        phone: { type: 'string' },
+        website: { type: 'string' },
+      },
+      required: ['kind', 'name', 'does'],
+    },
+    writes: true,
+    step: 'Preparando el cambio en con quién trabajáis',
+    async describe(ctx, input) {
+      const next = externalInput(input);
+      const id = typeof input.external_party_id === 'string' && input.external_party_id ? uuid(input, 'external_party_id') : null;
+      if (!id) return { label: `Añadir a ${next.name} a con quién trabajáis`, preview: externalPreview(next), decider: 'owner' };
+      const now = await externalOf(ctx, id);
+      return { label: `Cambiar a ${now.name} en con quién trabajáis`, preview: `Ahora: ${externalPreview(now)}\n\nDespués: ${externalPreview(next)}`, decider: 'owner' };
+    },
+    async run(ctx, input) {
+      const next = externalInput(input);
+      const id = typeof input.external_party_id === 'string' && input.external_party_id ? (await externalOf(ctx, uuid(input, 'external_party_id'))).id : null;
+      await saveExternalParty(ctx.client, ctx.orgId, id, next, ctx.agentId);
+      return id ? `Cambiado: ${next.name}.` : `Añadido a con quién trabajáis: ${next.name}.`;
+    },
+  },
+  {
+    name: 'settings_remove_external_party',
+    description:
+      "Propose removing someone from the list of who the organisation works with outside, when it no longer works with them; its id from settings_read_external_parties. An owner approves it.",
+    input_schema: { type: 'object', properties: { external_party_id: { type: 'string' } }, required: ['external_party_id'] },
+    writes: true,
+    step: 'Preparando el cambio en con quién trabajáis',
+    async describe(ctx, input) {
+      const p = await externalOf(ctx, uuid(input, 'external_party_id'));
+      return { label: `Quitar a ${p.name} de con quién trabajáis`, preview: externalPreview(p), decider: 'owner' };
+    },
+    async run(ctx, input) {
+      const p = await externalOf(ctx, uuid(input, 'external_party_id'));
+      await removeExternalParty(ctx.client, p.id);
+      return `Quitado de con quién trabajáis: ${p.name}.`;
+    },
+  },
 ];
 
 /** The tools every agent has, for its own routines only (SettingsContext.onlySelf). */
 export const ROUTINE_TOOL_NAMES = ['settings_read_routines', 'settings_create_routine', 'settings_update_routine', 'settings_pause_routine'] as const;
+
+/** Who the organisation works with outside: every agent reads the list and proposes changes to it (external-parties.md). */
+export const EXTERNAL_TOOL_NAMES = ['settings_read_external_parties', 'settings_save_external_party', 'settings_remove_external_party'] as const;
+
+/** The settings tools every agent has, not only the main one. */
+export const EVERY_AGENT_TOOL_NAMES = [...ROUTINE_TOOL_NAMES, ...EXTERNAL_TOOL_NAMES] as const;
+
+function externalForModel(p: ExternalParty) {
+  return {
+    id: p.id,
+    kind: p.kind,
+    name: p.name,
+    does: p.role,
+    departments: p.departments,
+    email: p.email,
+    phone: p.phone,
+    website: p.website,
+    added_by: p.addedByName,
+    proposed_by: p.proposedByName,
+  };
+}
+
+function externalInput(input: Record<string, unknown>): ExternalPartyInput {
+  const kind = oneOf(input, 'kind', EXTERNAL_KINDS) as ExternalKind;
+  const raw = input.departments ?? [];
+  if (!Array.isArray(raw) || raw.some((d) => typeof d !== 'string')) throw new SettingError(`departments tiene que ser una lista de: ${DEPARTMENTS.join(', ')}.`);
+  const opt = (key: string) => {
+    const v = input[key];
+    if (v === undefined || v === null) return null;
+    if (typeof v !== 'string') throw new SettingError(`${key} tiene que ser un texto.`);
+    return v;
+  };
+  const p = cleanExternalParty({
+    kind,
+    name: typeof input.name === 'string' ? input.name : '',
+    role: typeof input.does === 'string' ? input.does : '',
+    departments: raw as Department[],
+    email: opt('email'),
+    phone: opt('phone'),
+    website: opt('website'),
+  });
+  const wrong = invalidExternalParty(p);
+  if (wrong) throw new SettingError(wrong);
+  return p;
+}
+
+/** What the card shows of one: its kind and departments, what it does, how to reach it. */
+function externalPreview(p: ExternalPartyInput | ExternalParty): string {
+  const head = [EXTERNAL_KIND_NAMES[p.kind], ...p.departments.map((d) => DEPARTMENT_NAMES[d])].join(' · ');
+  return [`${p.name} (${head})`, p.role, ...[p.email, p.phone, p.website].filter(Boolean)].join('\n');
+}
+
+async function externalOf(ctx: SettingsContext, id: string) {
+  const p = await getExternalParty(ctx.client, id);
+  if (!p || p.orgId !== ctx.orgId) throw new SettingError('No hay nadie con ese id en con quién trabajáis.');
+  return p;
+}
 
 function routineForModel(r: Routine, agentName: string | undefined) {
   return {
@@ -631,6 +775,8 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   create_routine: { reach: 'agent', tool: 'settings_create_routine' },
   update_routine: { reach: 'agent', tool: 'settings_update_routine' },
   set_routine_paused: { reach: 'agent', tool: 'settings_pause_routine' },
+  save_external_party: { reach: 'agent', tool: 'settings_save_external_party' },
+  remove_external_party: { reach: 'agent', tool: 'settings_remove_external_party' },
 
   delete_agent: { reach: 'never', why: "it deletes the agent's conversations: the organisation's data" },
   delete_routine: { reach: 'never', why: 'an agent pauses a routine; deleting it is the person\'s, in the app' },

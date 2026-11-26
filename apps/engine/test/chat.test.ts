@@ -487,14 +487,17 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     expect(other.asked[0]?.system).not.toContain(MAIN_AGENT_JOB);
   });
 
-  it('gives any other agent only the tools for its own routines (agent-routines.md)', async () => {
+  it('gives any other agent only the tools for its own routines and who the organisation works with (agent-routines.md, external-parties.md)', async () => {
     const { call, asked } = setup({ tools: google, asPerson: () => fakeSupabase({}).client });
     await call('ana', `/threads/${THREAD}/reply`);
     const names = (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
     expect(names.filter((n) => n.startsWith('settings_')).sort()).toEqual([
       'settings_create_routine',
       'settings_pause_routine',
+      'settings_read_external_parties',
       'settings_read_routines',
+      'settings_remove_external_party',
+      'settings_save_external_party',
       'settings_update_routine',
     ]);
     expect(asked[0]?.system).not.toContain('agente principal');
@@ -509,7 +512,10 @@ describe("the main agent changing the organisation's settings (agent-settings.md
     expect(names.filter((n) => n.startsWith('settings_')).sort()).toEqual([
       'settings_create_routine',
       'settings_pause_routine',
+      'settings_read_external_parties',
       'settings_read_routines',
+      'settings_remove_external_party',
+      'settings_save_external_party',
       'settings_update_routine',
     ]);
     expect(asked[0]?.system).not.toContain('agente principal');
