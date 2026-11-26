@@ -13,7 +13,10 @@ export const MAX_INSTRUCTIONS = 40000;
  */
 export interface AgentRepo {
   repo: string;
+  /** May push: to any branch but production's (`main`, `beta`), unless `main`. */
   write: boolean;
+  /** May push to `main` and `beta` too (Órdago's `push_a_main`). Only with `write`. */
+  main?: boolean;
 }
 
 /** Where a run clones a repo besides the record, under the agent's `~/repos/`: its name, or owner-name when two share one. */

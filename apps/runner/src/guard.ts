@@ -4,12 +4,16 @@
 // image, so no agent can change them. Claude Code passes the call on stdin as
 // JSON; exiting 2 blocks it, and what goes to stderr is shown to the agent.
 //
-// It is a net, not the wall: the record token reaches only the record repo,
-// and GitHub's branch rules are what really stop a write. This keeps the agent
-// from trying, and tells it the right way.
+// It is a net, not the wall: each repo's token reaches only that repo (and a
+// repo the agent may only read gets a read-only token), and GitHub's branch
+// rules are what really stop a write. This keeps the agent from trying, and
+// tells it the right way. A push goes from the record to its default branch,
+// or from a repo the agent may write (agents.repos) to any branch but `main`
+// and `beta`, unless that repo lets it push to main too. Which repos those are
+// the runner writes, as root, to PUSH_RULES before the agent starts.
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,13 +45,29 @@ export function onlyWhatRuns(command: string): string {
 }
 
 export interface PushContext {
-  /** The record's clone: the only place a push may come from. */
+  /** The record's clone: a push from it goes to its default branch only. */
   record: string;
-  /** The record's default branch: the only branch a push may go to. */
+  /** The record's default branch. */
   defaultBranch: string;
   /** The branch checked out in a directory, or null. */
   currentBranch(dir: string): string | null;
+  /** The other repos the agent may push to: their clone, and whether `main` and `beta` too. */
+  writable?: WritableClone[];
 }
+
+export interface WritableClone {
+  repo: string;
+  dir: string;
+  main: boolean;
+}
+
+/** Branches of another repo an agent pushes to only when that repo says so: production's. */
+export const PROTECTED_BRANCHES = ['main', 'beta'];
+
+/** Where the runner writes, as root, which other repos the agent may push to (a JSON list of WritableClone). */
+export const PUSH_RULES = '/run/ghostaff/push.json';
+
+const same = (a: string, b: string) => a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
 
 /** Why `command` is blocked, or null when it may run. */
 export function blockReason(command: string, cwd: string, ctx: PushContext): string | null {
@@ -55,20 +75,28 @@ export function blockReason(command: string, cwd: string, ctx: PushContext): str
   for (const [re, why] of RULES) if (re.test(c)) return why;
   for (const m of c.matchAll(PUSH)) {
     const args = m.groups?.args ?? '';
-    if (FORCE.test(args)) return 'Nada de push forzado ni de borrar ramas: el registro solo avanza.';
+    if (FORCE.test(args)) return 'Nada de push forzado ni de borrar ramas: lo publicado solo avanza.';
     const positional = args.split(/\s+/).filter((p) => p && !p.startsWith('-') && !/[<>]/.test(p));
     const [remote, ...refspecs] = positional;
     if (remote !== undefined && remote !== 'origin') return 'Solo se hace push a `origin`, el registro.';
     if (refspecs.some((r) => r.startsWith('+'))) return 'Nada de push forzado: el registro solo avanza.';
     const dirArg = m.groups?.dir;
     const dir = dirArg ? (isAbsolute(dirArg) ? dirArg : join(cwd, dirArg)) : cwd;
-    if (CD.test(c) || dir.replace(/\/+$/, '') !== ctx.record.replace(/\/+$/, '')) {
-      return `Solo se hace push desde el registro (${ctx.record}), sin \`cd\`: usa \`git -C ${ctx.record} push\`.`;
+    const other = ctx.writable?.find((w) => same(w.dir, dir));
+    if (CD.test(c) || (!same(dir, ctx.record) && !other)) {
+      const others = ctx.writable?.length ? ` o desde ${ctx.writable.map((w) => w.dir).join(', ')}` : '';
+      return `Solo se hace push desde el registro (${ctx.record})${others}, sin \`cd\`: usa \`git -C <clon> push\`.`;
     }
     const targets = refspecs.length ? refspecs.map((r) => r.split(':').pop()!.replace(/^refs\/heads\//, '')) : [ctx.currentBranch(dir)];
     for (const t of targets) {
       const branch = t === 'HEAD' ? ctx.currentBranch(dir) : t;
-      if (branch !== ctx.defaultBranch) return `Solo se hace push a \`${ctx.defaultBranch}\`, la rama principal del registro.`;
+      if (!other) {
+        if (branch !== ctx.defaultBranch) return `Solo se hace push a \`${ctx.defaultBranch}\`, la rama principal del registro.`;
+      } else if (!branch) {
+        return 'No sé a qué rama va este push: nómbrala (`git -C <clon> push origin <rama>`).';
+      } else if (!other.main && PROTECTED_BRANCHES.includes(branch)) {
+        return `A \`${branch}\` de \`${other.repo}\` no haces push: es de producción. Usa otra rama (\`develop\` o una tuya).`;
+      }
     }
   }
   return null;
@@ -85,6 +113,20 @@ function git(dir: string, args: string[]): string | null {
 /** Where the runner clones the record (main.ts); the hook runs with Claude's environment, which says only HOME. */
 export const recordDir = (home: string) => join(home, 'registro');
 
+/** The other repos the agent may push to, as the runner wrote them; none when the file is missing or unreadable. */
+export function readPushRules(path = PUSH_RULES): WritableClone[] {
+  try {
+    if (!existsSync(path)) return [];
+    const rules = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    if (!Array.isArray(rules)) return [];
+    return rules.filter(
+      (r): r is WritableClone => !!r && typeof r.repo === 'string' && typeof r.dir === 'string' && isAbsolute(r.dir) && typeof r.main === 'boolean',
+    );
+  } catch {
+    return [];
+  }
+}
+
 function main(): number {
   const call = JSON.parse(readFileSync(0, 'utf8')) as { tool_input?: { command?: string }; cwd?: string };
   const record = recordDir(process.env.HOME ?? '/home/agente');
@@ -93,6 +135,7 @@ function main(): number {
     record,
     defaultBranch: head?.replace(/^origin\//, '') ?? 'main',
     currentBranch: (d) => git(d, ['symbolic-ref', '--short', 'HEAD']),
+    writable: readPushRules(),
   });
   if (!why) return 0;
   process.stderr.write(`Bloqueado por la constitución de los agentes: ${why}\n`);

@@ -76,14 +76,14 @@ describe('readProjectAgents', () => {
     ]);
   });
 
-  it('takes its other repos from its yaml, without the record, once each, writable only where its job pushed to main', () => {
+  it('takes its other repos from its yaml, without the record, once each, read-only unless its job pushed to main there', () => {
     const [organico] = readProjectAgents(project(), { runner: 'ghostaff', only: ['organico'] });
     expect(organico).toMatchObject({
       runner: 'ghostaff',
       max_turns: 100,
       repos: [
         { repo: 'ordago-app/ordago-apps', write: false },
-        { repo: 'ordago-app/ordago-reels', write: true },
+        { repo: 'ordago-app/ordago-reels', write: true, main: true },
       ],
     });
   });
@@ -94,6 +94,17 @@ describe('readProjectAgents', () => {
       ['direccion', true],
       ['organico', false],
     ]);
+  });
+
+  it('may write a repo whoever moves it names, never its main unless its yaml says push_a_main', () => {
+    const [organico] = readProjectAgents(project(), { runner: 'ghostaff', only: ['organico'], writes: ['Ordago-App/ordago-apps'] });
+    expect(organico).toMatchObject({
+      repos: [
+        { repo: 'ordago-app/ordago-apps', write: true },
+        { repo: 'ordago-app/ordago-reels', write: true, main: true },
+      ],
+    });
+    expect((organico as { repos: { main?: boolean }[] }).repos[0]!.main).toBeUndefined();
   });
 
   it('refuses to move an agent whose yaml lacks what our runner needs', () => {

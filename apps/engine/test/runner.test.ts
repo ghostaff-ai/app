@@ -424,6 +424,7 @@ describe('other repos in a run', () => {
     const s = await (await t.fetchSpec(run!, nonce!)).json();
     expect(s.repos).toEqual([]);
     expect(s.prompt).not.toContain('~/repos/');
+    expect(s.prompt).toContain('Es el único sitio donde puedes hacer push.');
   });
 
   it('gives each repo its own fresh token, read-only unless the agent may write it, and tells the agent where', async () => {
@@ -440,8 +441,26 @@ describe('other repos in a run', () => {
     expect(s.repos[0].token).not.toBe(s.record.token);
     expect(t.tokenAccess).toEqual(['ordago-app/business:write', 'ordago-app/ordago-apps:read', 'ordago-app/ordago-reels:write']);
     expect(s.prompt).toContain('- `ordago-app/ordago-apps` en `~/repos/ordago-apps`, solo para leer');
-    expect(s.prompt).toContain('- `ordago-app/ordago-reels` en `~/repos/ordago-reels`\n');
+    expect(s.prompt).toContain('- `ordago-app/ordago-reels` en `~/repos/ordago-reels`, con push a cualquier rama menos `main` y `beta`');
+    expect(s.prompt).toContain('Fuera del registro solo haces push en los repos de abajo que lo permiten');
+    expect(s.repos.map((r: { main: boolean }) => r.main)).toEqual([false, false]);
     expect(s.prompt).not.toContain('ghs_');
+  });
+
+  it('a repo that lets it push to main says so, and one it only reads never gets main', async () => {
+    const t = setup();
+    t.agents.get(LEGAL)!.repos = [
+      { repo: 'ordago-app/ordago-reels', write: true, main: true },
+      { repo: 'ordago-app/ordago-apps', write: false, main: true },
+    ];
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    const s = await (await t.fetchSpec(run!, nonce!)).json();
+    expect(s.repos.map((r: { repo: string; main: boolean }) => [r.repo, r.main])).toEqual([
+      ['ordago-app/ordago-reels', true],
+      ['ordago-app/ordago-apps', false],
+    ]);
+    expect(s.prompt).toContain('`ordago-app/ordago-reels` en `~/repos/ordago-reels`, con push a cualquier rama, `main` incluida');
   });
 
   it('a repo GitHub refuses (not in the installation) is left out, and the agent is told, not stopped', async () => {

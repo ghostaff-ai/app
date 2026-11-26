@@ -31,6 +31,8 @@ import { projectUrlFromKey } from './projectUrl';
 //     (Órdago's agents in Equipo, each running as its job; again to refresh them)
 //   pnpm --filter @ghostaff/sync org add-agents --org ordago --from … --runner ghostaff --only legal
 //     (those agents move to Ghostaff's own runner: task, model, tools, turns and timetable from their yaml)
+//   … --runner ghostaff --only seo,producto --writes ordago-app/ordago-apps
+//     (they may push to those repos, never to main or beta; push_a_main in a yaml lets main through)
 //   … --runner ghostaff --only legal --on-demand
 //     (the same, without the timetable: it runs only when written to, and its old job keeps the timetable)
 //   pnpm --filter @ghostaff/sync org import-health --org <personal slug> --provider whoop --dir ~/Desktop/whoop-export/data/<date>
@@ -140,10 +142,10 @@ async function setRecord(opts: { org: string; repo: string; installation: string
   console.log(`${opts.org}'s record is ${opts.repo} (installation ${installation}); the engine syncs it on its next tick`);
 }
 
-async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff'; only?: string[]; onDemand?: boolean }) {
+async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff'; only?: string[]; writes?: string[]; onDemand?: boolean }) {
   const db = admin();
   const orgId = await orgBySlug(db, opts.org);
-  const agents = readProjectAgents(opts.from, { runner: opts.runner, only: opts.only, onDemand: opts.onDemand });
+  const agents = readProjectAgents(opts.from, { runner: opts.runner, only: opts.only, writes: opts.writes, onDemand: opts.onDemand });
   if (agents.length === 0) throw new Error('No agent to import: check --from and --only');
   // Other repos are reached through the record's GitHub App installation: a record on GitHub, first.
   const withRepos = agents.filter((a) => a.runner === 'ghostaff' && a.repos.length > 0);
@@ -177,7 +179,10 @@ async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff';
       ? await db.from('agents').update(row).eq('id', found.id)
       : await db.from('agents').insert({ ...row, org_id: orgId, member_default: 'read' });
     if (error) throw error;
-    const repos = a.runner === 'ghostaff' && a.repos.length ? `, with ${a.repos.map((r) => `${r.repo}${r.write ? ' (writes)' : ''}`).join(', ')}` : '';
+    const repos =
+      a.runner === 'ghostaff' && a.repos.length
+        ? `, with ${a.repos.map((r) => `${r.repo}${r.main ? ' (writes, main too)' : r.write ? ' (writes)' : ''}`).join(', ')}`
+        : '';
     const where = a.runner === 'ghostaff' ? `our runner, ${a.model}${a.schedule ? '' : ', when written to'}${repos}` : a.job_name;
     console.log(`${found ? 'updated' : 'added  '} ${a.name.padEnd(11)} ${a.department.padEnd(10)} ${where}`);
   }
@@ -228,6 +233,7 @@ async function main() {
       from: { type: 'string' },
       runner: { type: 'string' },
       only: { type: 'string' },
+      writes: { type: 'string' },
       'on-demand': { type: 'boolean', default: false },
       provider: { type: 'string' },
       dir: { type: 'string' },
@@ -247,7 +253,9 @@ async function main() {
       const runner = values.runner;
       if (runner !== undefined && runner !== 'ghostaff') throw new Error('--runner is ghostaff (or left out: each agent runs as its job)');
       const only = values.only?.split(',').map((s) => s.trim()).filter(Boolean);
-      return addAgents({ org: need('org'), from: need('from'), runner, only, onDemand: !!values['on-demand'] });
+      const writes = values.writes?.split(',').map((s) => s.trim()).filter(Boolean);
+      if (writes?.length && (runner !== 'ghostaff' || !only?.length)) throw new Error('--writes goes with --runner ghostaff and --only');
+      return addAgents({ org: need('org'), from: need('from'), runner, only, writes, onDemand: !!values['on-demand'] });
     }
     case 'set-record':
       return setRecord({ org: need('org'), repo: need('repo'), installation: need('installation') });

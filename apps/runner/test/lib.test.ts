@@ -2,8 +2,8 @@ import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { blockReason, onlyWhatRuns, type PushContext } from '../src/guard';
-import { agentEnv, claudeArgs, cloneArgs, crashText, credentialKey, credentialKeyOf, decisionFiles, engineClosedRun, newDecisions, tokenNearExpiry, noteworthy, passwdIds, readSpec, redact, resultOf, usageOf } from '../src/lib';
+import { blockReason, onlyWhatRuns, type PushContext, readPushRules } from '../src/guard';
+import { agentEnv, claudeArgs, cloneArgs, crashText, credentialKey, credentialKeyOf, pushRules, decisionFiles, engineClosedRun, newDecisions, tokenNearExpiry, noteworthy, passwdIds, readSpec, redact, resultOf, usageOf } from '../src/lib';
 
 const SPEC = {
   run: '40000000-0000-0000-0000-000000000001',
@@ -67,6 +67,18 @@ describe('the spec', () => {
     expect(() => readSpec({ ...SPEC, repos: [{ ...apps, write: 'yes' }] })).toThrow();
     expect(() => readSpec({ ...SPEC, repos: [{ ...apps, token: '' }] })).toThrow();
     expect(() => readSpec({ ...SPEC, repos: apps })).toThrow();
+    expect(readSpec({ ...SPEC, repos: [{ ...apps, write: true, main: true }] }).repos![0]!.main).toBe(true);
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, write: false, main: true }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, write: true, main: 'yes' }] })).toThrow();
+  });
+
+  it('tells the guard which cloned repos the agent may push to, and whether main too', () => {
+    const r = (repo: string, write: boolean, main?: boolean) => ({ repo, dir: repo.split('/')[1]!, write, ...(main === undefined ? {} : { main }) });
+    const repos = [r('o/apps', true), r('o/reels', true, true), r('o/web', false), r('o/roto', true)];
+    expect(pushRules(repos, '/home/agente', new Set(['o/apps', 'o/reels', 'o/web']))).toEqual([
+      { repo: 'o/apps', dir: '/home/agente/repos/apps', main: false },
+      { repo: 'o/reels', dir: '/home/agente/repos/reels', main: true },
+    ]);
   });
 
   it('clones a read-only repo shallow, and one the agent writes with its history', () => {
@@ -220,6 +232,44 @@ describe('the guard', () => {
     expect(blocked('git config core.hooksPath /dev/null')).toMatch(/hooks/);
     expect(blocked('git remote set-url origin https://github.com/otro/repo')).toMatch(/remoto/);
     expect(blocked('git -c credential.helper= push origin main')).toMatch(/credenciales/);
+  });
+
+  it('lets the agent push from a repo it writes to any branch but production’s, unless that repo allows main', () => {
+    const apps = '/home/agente/repos/ordago-apps';
+    const reels = '/home/agente/repos/ordago-reels';
+    const c: PushContext = {
+      ...ctx,
+      currentBranch: (d) => (d === apps ? 'develop' : 'main'),
+      writable: [
+        { repo: 'ordago-app/ordago-apps', dir: apps, main: false },
+        { repo: 'ordago-app/ordago-reels', dir: reels, main: true },
+      ],
+    };
+    expect(blocked(`git -C ${apps} push origin HEAD:develop`, ctx.record, c)).toBeNull();
+    expect(blocked(`git -C ${apps} push`, ctx.record, c)).toBeNull();
+    expect(blocked(`git -C ${apps} push origin seo/titulo-portada`, ctx.record, c)).toBeNull();
+    expect(blocked(`git -C ${apps} push origin HEAD:main`, ctx.record, c)).toMatch(/producción/);
+    expect(blocked(`git -C ${apps} push origin beta`, ctx.record, c)).toMatch(/producción/);
+    expect(blocked(`git -C ${apps} push origin refs/heads/main`, ctx.record, c)).toMatch(/producción/);
+    expect(blocked(`git -C ${apps} push --force origin develop`, ctx.record, c)).toMatch(/forzado/);
+    expect(blocked(`git -C ${apps} push origin +develop`, ctx.record, c)).toMatch(/forzado/);
+    expect(blocked(`git -C ${apps} push https://github.com/otro/repo develop`, ctx.record, c)).toMatch(/origin/);
+    expect(blocked(`cd ${apps} && git push origin develop`, ctx.record, c)).toMatch(/sin `cd`/);
+    expect(blocked(`git -C ${reels} push origin main`, ctx.record, c)).toBeNull();
+    // A repo it only reads, or any other folder: no push at all.
+    expect(blocked('git -C /home/agente/repos/ordago-web push origin develop', ctx.record, c)).toMatch(/ordago-apps/);
+    // The record keeps its own rule.
+    expect(blocked('git push origin develop', ctx.record, c)).toMatch(/rama principal del registro/);
+  });
+
+  it('reads the push rules the runner wrote, and nothing it cannot trust', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'push-'));
+    const file = join(dir, 'push.json');
+    expect(readPushRules(file)).toEqual([]);
+    writeFileSync(file, JSON.stringify([{ repo: 'o/apps', dir: '/home/agente/repos/apps', main: false }, { repo: 'o/x', dir: 'relativo', main: false }, { dir: '/a' }]));
+    expect(readPushRules(file)).toEqual([{ repo: 'o/apps', dir: '/home/agente/repos/apps', main: false }]);
+    writeFileSync(file, 'no es json');
+    expect(readPushRules(file)).toEqual([]);
   });
 
   it('reads what runs, not what is only written', () => {

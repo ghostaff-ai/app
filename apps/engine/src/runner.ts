@@ -178,6 +178,8 @@ export interface RunRepoAccess {
   dir: string;
   cloneUrl: string;
   write: boolean;
+  /** May push to `main` and `beta` too; the runner's guard holds it to that. */
+  main: boolean;
   token: string;
   /** When to ask the engine for another (POST /runs/:id/repo-token). */
   expiresAt: string;
@@ -200,7 +202,7 @@ async function reposAccess(runner: RunnerDeps, org: RecordOrg, repos: AgentRepo[
   for (const r of repos) {
     try {
       const t = await repoToken(runner, org, r);
-      reached.push({ repo: r.repo, dir: dirs.get(r.repo)!, cloneUrl: `https://github.com/${r.repo}.git`, write: r.write, ...t });
+      reached.push({ repo: r.repo, dir: dirs.get(r.repo)!, cloneUrl: `https://github.com/${r.repo}.git`, write: r.write, main: r.write && r.main === true, ...t });
     } catch (e) {
       console.error('no token for a repo of the run', r.repo, e instanceof Error ? e.message : typeof e);
       missed.push(r.repo);
@@ -426,7 +428,7 @@ export function composePrompt(p: {
   /** The organisation's Google Cloud account, when the run has a token for it. */
   google?: { account: string; project: string | null } | null;
   /** The other repos it has, and the ones it should have and could not get. */
-  repos?: { reached: { repo: string; dir: string; write: boolean }[]; missed: string[] };
+  repos?: { reached: { repo: string; dir: string; write: boolean; main: boolean }[]; missed: string[] };
 }): string {
   const { agent, orgName } = p;
   const instructions = agentInstructionsPath(agent.slug);
@@ -436,8 +438,11 @@ export function composePrompt(p: {
     'Corres solo, en un container y sin nadie delante: nadie va a contestar preguntas. Decide, y deja escrito por qué.',
     `El registro de ${orgName}, el repo \`${p.repo}\`, está clonado en tu directorio de trabajo, y es tu directorio de trabajo. ` +
       `Antes de nada lee su AGENTS.md y, si existe, la carpeta agentes/${agent.slug}/.`,
-    'Lo que cambies en el registro, guárdalo con commit y push a su rama principal: es el registro, y es el único sitio donde puedes hacer push. ' +
-      'Nunca fuerces un push ni te saltes sus hooks.',
+    'Lo que cambies en el registro, guárdalo con commit y push a su rama principal. ' +
+      (p.repos?.reached.some((r) => r.write)
+        ? 'Fuera del registro solo haces push en los repos de abajo que lo permiten, con `git -C <clon> push origin <rama>`. '
+        : 'Es el único sitio donde puedes hacer push. ') +
+      'Nunca fuerces un push ni te saltes los hooks.',
     `Si necesitas a una persona (un OK, una decisión), abre una en \`${DECISIONS_DIR}/\` (formato en su README) con \`propone: ${agent.slug}\`, ` +
       'haz commit y push, y sigue con lo que no dependa de ella: le llega sola a Hoy, en Ghostaff.',
     `Ahora es ${madridNow(p.now)}, hora de Madrid.`,
@@ -446,7 +451,15 @@ export function composePrompt(p: {
     parts.push(
       'Tienes también estos repos, clonados en tu casa:\n' +
         p.repos.reached
-          .map((r) => `- \`${r.repo}\` en \`~/repos/${r.dir}\`${r.write ? '' : ', solo para leer (clon superficial: sin historial; `git fetch --deepen` si lo necesitas)'}`)
+          .map(
+            (r) =>
+              `- \`${r.repo}\` en \`~/repos/${r.dir}\`, ` +
+              (!r.write
+                ? 'solo para leer (clon superficial: sin historial; `git fetch --deepen` si lo necesitas)'
+                : r.main
+                  ? 'con push a cualquier rama, `main` incluida'
+                  : 'con push a cualquier rama menos `main` y `beta`, que son de producción'),
+          )
           .join('\n'),
     );
   }
