@@ -89,7 +89,7 @@ The long tail gets solved once per app, not once per customer. That is hard to c
 
 ### Someone else does it
 
-Common in small businesses: «la web la lleva mi sobrino», «eso lo tiene la gestoría». **«Que lo haga otra persona»** sends that person a link to the same guide, with no Ghostaff account ([external-parties.md](../ideas/external-parties.md)). The owner sees the progress, and the access arrives when the check passes.
+Common in small businesses: «la web la lleva mi sobrino», «eso lo tiene la gestoría». **«Que lo haga otra persona»** sends that person a link to the same guide, with no Ghostaff account ([external-parties.md](external-parties.md)). The owner sees the progress, and the access arrives when the check passes.
 
 ### Phone and computer
 
@@ -136,7 +136,7 @@ If the photo in step 1 shows a site on WordPress.com (or Wix), the guide hands o
 - [connector-in-chat.md](../ongoing/connector-in-chat.md): the card, `account_asks`, resume.
 - [agent-access-requests.md](../ideas/agent-access-requests.md): the same idea for Google Cloud IAM. Its request could be shown as a guide too.
 - [connectors.md](../ongoing/connectors.md): kind C, the forwarding address, the vault.
-- [external-parties.md](../ideas/external-parties.md), [desktop-web.md](desktop-web.md), [voice.md](../ongoing/voice.md).
+- [external-parties.md](external-parties.md), [desktop-web.md](desktop-web.md), [voice.md](../ongoing/voice.md).
 
 ## Build: the first slice, a self-hosted WordPress
 
