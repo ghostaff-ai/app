@@ -2,7 +2,7 @@
 
 **Priority:** high — Jaime decided (2026-11-26) to build it and to tell the product this way: it is the clearest way to explain Ghostaff to a small business
 **Gate:** none
-**Next:** land PR 1 with `pnpm pr:land`, check on beta that Secretaría files a text and answers with its link, then start PR 2 (photos and PDFs)
+**Next:** on beta, drop a text in Secretaría's chat, see where she filed it and ask about it; then PR 2 (photos and PDFs) on a new branch
 
 **Goal:** The owner of a small business sees Ghostaff as the business's memory and assistant. They drop in whatever they have, without sorting it (a PDF, a photo of an invoice, a link, a voice note, loose text); Secretaría files it in the record and says where it went. They ask anything about the business («¿cuánto facturamos en octubre?», «¿con qué gestoría trabajamos?», «¿qué acordamos con el proveedor X?») and the answer comes from the record, with a link to its source.
 
@@ -74,13 +74,12 @@ What is missing:
 - **The recuerdo screen** (`/memoria/[...path]`): the note's text, who changed it last and when, and «Ver documento» when it has an original (a signed link, an hour). Read-only in this PR; correcting and «Olvidar» are agent-memory.md's screens.
 - **«Memoria de la empresa»**, a row in Empresa beside Registro (agent-memory.md, The screens): the store's folders and files, newest first. Empty state: «Aún no hay nada guardado. Cuéntale a Secretaría lo que quieras que recuerde, o pásale un documento.»
 
-## Open questions (for Jaime)
+## Decisions on the first way in (Jaime, 2026-11-26)
 
-Asked on 2026-11-26. Until he answers, Secretaría's prompt does the first option of each (`MEMORY_KEEPER_LINES` in `chat.ts`).
+Asked the same day; he took the first option of each, which is what Secretaría's prompt does (`MEMORY_KEEPER_LINES` in `apps/engine/src/chat.ts`).
 
-
-1. **How Secretaría passes something to a department** (decision 3) in this first version. (a) She files it in Empresa, which every agent reads, in that area's folder, and says so («Lo he guardado en Facturas; Finanzas lo verá»): my pick, nothing else to build. (b) She also writes in that agent's chat asking it to act, once group-chat-per-agent.md lands. (c) She files nothing herself and only hands it over.
-2. **Something only one person's, while «Sobre ti» isn't built** (decision 4). (a) Secretaría doesn't file it and says she can't keep private things yet; «Sobre ti» is the next task after this way in: my pick. (b) Build «Sobre ti» first, before the first way in lands.
+6. **Passing something to a department** (decision 3): Secretaría files it in the Empresa store, which every agent reads, in that area's folder, and says so («Lo he guardado en Facturas; Finanzas lo verá»). Nothing else to build. Rejected: also writing in that agent's chat asking it to act; handing it over without filing it.
+7. **Something only one person's, while «Sobre ti» isn't built** (decision 4): Secretaría doesn't file it and says she can't keep private things yet. «Sobre ti» is the next task after this way in. Rejected: building «Sobre ti» before the first way in.
 
 ## File Structure (the first way in)
 
@@ -118,7 +117,8 @@ PR 2, photos and PDFs:
 5. [x] Shared services, the two screens, the Markdown link, Empresa's row and the sidebar; Jest.
 6. [x] Checked on the web (2026-11-26) against a local Supabase and a local Forgejo: Secretaría's tools, run by the engine's own code, filed two notes as commits signed «Secretaría (por Ana)»; the search found the invoice; Empresa → Memoria listed both; a reply's link opened the note, light and dark, desktop and phone width. The model's side (filing unasked, citing) is in the prompt and covered only by the unit tests: CI and this machine run no model.
 7. [x] `docs/architecture.md`; agent-memory.md's gate now points here.
-8. [ ] `pnpm pr:land`; then on beta, a real turn: drop a text in Secretaría's chat, see where she filed it, ask about it.
+8. [x] Landed as ghostaff-ai/app#91 (2026-11-26); the migration is `20261127900000_memories.sql`.
+9. [ ] On beta, a real turn: drop a text in Secretaría's chat, see where she filed it, ask about it.
 
 ### PR 2: photos and PDFs
 
@@ -130,7 +130,7 @@ PR 2, photos and PDFs:
 
 ### Next (each its own PR, written against that day's code when started)
 
-- [ ] What Secretaría does with something only one person's (Open question 2), and «Sobre ti» from agent-memory.md.
+- [ ] «Sobre ti» from agent-memory.md, so Secretaría can keep what is only one person's (decision 7).
 - [ ] Way in 2: «Añadir» in Empresa → Registro, dropping into the chat with Secretaría.
 - [ ] Way in 3: the share sheet (`expo-share-intent` or a native share extension: a new build, not an over-the-air update).
 - [ ] Way in 4: an email address per organisation, read into Secretaría's chat.
