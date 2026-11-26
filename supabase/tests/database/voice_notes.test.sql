@@ -1,8 +1,9 @@
--- Voice notes (20261124500000_voice_notes.sql): a person hears the notes of
--- the threads they may read; never someone else's personal chat, an owner
--- included; nothing across organisations; nobody writes but the service role.
+-- Voice notes (20261124500000_voice_notes.sql, 20261128700000_group_chat_per_agent.sql):
+-- a person hears the notes of the agents' chats they may read, whatever thread
+-- the note's folder names (the fold removed some); nothing across organisations;
+-- nobody writes but the service role.
 begin;
-select plan(11);
+select plan(12);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-00000000000a', 'ana@example.com'),
@@ -22,17 +23,26 @@ insert into public.agents (id, org_id, name, ghost, department, member_default) 
   ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Secretaría', 'secretaria', 'direccion', 'talk'),
   ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'Finanzas', 'finanzas', 'finanzas', 'none');
 
--- Bea's own chat with Secretaría, and a shared thread with Finanzas, which Bea may not see.
-insert into public.threads (id, org_id, agent_id, title, created_by, personal_of) values
+-- Secretaría's chat, and Finanzas', which Bea may not see.
+insert into public.threads (id, org_id, agent_id, title, created_by) values
   ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Secretaría',
-   '00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-00000000000b'),
-  ('30000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', 'Cuentas',
-   '00000000-0000-0000-0000-00000000000a', null);
+   '00000000-0000-0000-0000-00000000000b'),
+  ('30000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', 'Finanzas',
+   '00000000-0000-0000-0000-00000000000a');
+insert into public.messages (id, thread_id, org_id, author_kind, author_user, author_name, parts) values
+  ('40000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'person',
+   '00000000-0000-0000-0000-00000000000b', 'Bea', '[]'),
+  ('40000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'person',
+   '00000000-0000-0000-0000-00000000000a', 'Ana', '[]'),
+  ('40000000-0000-0000-0000-000000000004', '30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'person',
+   '00000000-0000-0000-0000-00000000000a', 'Ana', '[]');
 
--- What the engine stores with the service role.
+-- What the engine stores with the service role. The third was recorded in a
+-- chat the fold removed: its folder names a thread that is gone.
 insert into storage.objects (bucket_id, name) values
   ('voice-notes', '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/40000000-0000-0000-0000-000000000001.m4a'),
-  ('voice-notes', '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000002/40000000-0000-0000-0000-000000000002.m4a');
+  ('voice-notes', '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000002/40000000-0000-0000-0000-000000000002.m4a'),
+  ('voice-notes', '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000009/40000000-0000-0000-0000-000000000004.m4a');
 
 select is((select public from storage.buckets where id = 'voice-notes'), false, 'the bucket is private');
 -- Storage refuses a delete in SQL whoever asks; through its API, policies decide: none but reading.
@@ -43,12 +53,12 @@ select is(
 
 set local role authenticated;
 
--- Bea hears her own note, not the Finanzas one.
+-- Bea hears Secretaría's notes, hers and Ana's, not the Finanzas one.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
 select results_eq(
-  $$ select split_part(name, '/', 2)::uuid from storage.objects where bucket_id = 'voice-notes' $$,
-  $$ values ('30000000-0000-0000-0000-000000000001'::uuid) $$,
-  'a person hears the notes of her own chat, and only threads she may read');
+  $$ select split_part(name, '/', 3) from storage.objects where bucket_id = 'voice-notes' order by 1 $$,
+  $$ values ('40000000-0000-0000-0000-000000000001.m4a'), ('40000000-0000-0000-0000-000000000004.m4a') $$,
+  'a person hears the notes of the chats she may read, whoever recorded them');
 select throws_ok(
   $$ insert into storage.objects (bucket_id, name) values
      ('voice-notes', '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/40000000-0000-0000-0000-000000000003.m4a') $$,
@@ -58,13 +68,12 @@ select is_empty(
   '... nor change one');
 select is(public.can_hear_voice_note('../30000000-0000-0000-0000-000000000001/x.m4a'), false, 'a path that is not <org>/<thread>/<file> is heard by nobody');
 select is(public.can_hear_voice_note('10000000-0000-0000-0000-000000000001/not-a-uuid/x.m4a'), false, '... nor one with a malformed thread');
+select is(public.can_hear_voice_note('10000000-0000-0000-0000-000000000002/30000000-0000-0000-0000-000000000001/40000000-0000-0000-0000-000000000001.m4a'),
+  false, '... nor a note filed under another organisation than its message''s');
 
--- Ana, an owner: the Finanzas note, not Bea's personal chat.
+-- Ana, an owner: every note.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';
-select results_eq(
-  $$ select split_part(name, '/', 2)::uuid from storage.objects where bucket_id = 'voice-notes' $$,
-  $$ values ('30000000-0000-0000-0000-000000000002'::uuid) $$,
-  'an owner hears a shared thread''s note but not someone else''s personal chat');
+select is((select count(*) from storage.objects where bucket_id = 'voice-notes'), 3::bigint, 'an owner hears every chat''s notes');
 
 -- Carla, another organisation: nothing.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000c", "role": "authenticated"}';

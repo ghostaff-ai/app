@@ -24,8 +24,8 @@ insert into public.agents (id, org_id, name, ghost, department) values
   ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Redes', 'redes', 'marketing');
 insert into public.agent_access (agent_id, user_id, org_id, level) values
   ('20000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000b', '10000000-0000-0000-0000-000000000001', 'none');
-insert into public.threads (id, org_id, agent_id, title, visibility) values
-  ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Reel', 'write');
+insert into public.threads (id, org_id, agent_id, title) values
+  ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Reel');
 insert into public.messages (id, thread_id, org_id, author_kind, author_agent, author_name, parts) values
   ('40000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'agent',
    '20000000-0000-0000-0000-000000000001', 'Redes', '[]');
