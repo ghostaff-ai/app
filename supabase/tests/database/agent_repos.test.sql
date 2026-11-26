@@ -1,6 +1,6 @@
 -- The repos an agent may use besides its record (20261126700000_agent_repos.sql):
 -- a short list of {repo, write, main?}, each repo once, and no one but the service role sets it
--- (main: 20261126800000_agent_repos_main.sql).
+-- (main: 20261126850000_agent_repos_main.sql).
 begin;
 select plan(11);
 
