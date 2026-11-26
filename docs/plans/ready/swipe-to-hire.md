@@ -18,6 +18,6 @@ A deck of cards, one per agent you could have. Each card is the ghost (live 3D, 
 ## Decisions (Álvaro, 2026-11-21, in the decision deck)
 
 1. **Where the deck lives.** Decided: on the first Hoy of a new organisation, in place of the list of vacancies, and behind «Contratar» on Equipo. The tap on a vacancy stays, for anyone who doesn't swipe.
-2. **What a card is.** One card per job, or several candidates for the same job (a careful Finanzas and a fast one, a cheaper model and a stronger one). Decided: one per job now; candidates once model routing (model-routing.md) makes them really differ.
+2. **What a card is.** One card per job, or several candidates for the same job (a careful Finanzas and a fast one, a cheaper model and a stronger one). Decided: one per job now; candidates once [model routing](../ongoing/model-routing.md) makes them really differ.
 3. **What a left swipe means.** Decided: the job stays a vacancy on Equipo, and the deck doesn't offer it again for a while; it is never «rejected» for good.
 4. **Who may swipe.** Decided: owners only, as with hiring today; a member's right swipe could become a request to an owner later.
