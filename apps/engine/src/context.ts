@@ -12,7 +12,7 @@
 // counted: the subscription has no token-counting call, and a turn needs no
 // more than a bound.
 
-import { type ChatMessage, type Limits, messageText, type TokenUsage } from '@ghostaff/shared';
+import { audioLines, type ChatMessage, type Limits, messageText, type TokenUsage } from '@ghostaff/shared';
 import { isDecisionPart, isDecisionQuotePart } from '@ghostaff/shared';
 import { askLines } from './accountAsks';
 import { AiFailure, type AiAccount, type AiUse, type ChatAgent, type ChatDeps, type ChatThreadHead, failureKind, recordUse } from './chat';
@@ -97,7 +97,7 @@ export function stampOf(iso: string): string {
 export function bodyOf(m: ChatMessage, briefs: ReadonlyMap<string, DecisionBrief> = new Map()): string {
   const quoted = m.parts.filter(isDecisionQuotePart).map((p) => decisionLine(briefs.get(p.decisionId), 'quoted', p.question));
   const asked = m.parts.filter(isDecisionPart).map((p) => decisionLine(briefs.get(p.decisionId), 'mine', p.question));
-  return [...quoted, messageText(m.parts).trim(), ...askLines(m.parts), ...guideLines(m.parts), ...asked].filter(Boolean).join('\n\n');
+  return [...quoted, messageText(m.parts).trim(), ...audioLines(m.parts), ...askLines(m.parts), ...guideLines(m.parts), ...asked].filter(Boolean).join('\n\n');
 }
 
 /** How a message is signed for the agent: its own as «Tú», anyone else's with their name and when. */

@@ -12,7 +12,8 @@
 // 12). Every report syncs the
 // organisation's record, so a decision the agent opened is in the inbox at once.
 
-import { atLimit, type ChatMessage, type Limits, limitsFromEvent, messageText, type TokenUsage, tokensFromUsage } from '@ghostaff/shared';
+import { atLimit, audioLines, type ChatMessage, type Limits, limitsFromEvent, messageText, type TokenUsage, tokensFromUsage } from '@ghostaff/shared';
+import { dropRunAudio, postRunAudio, type RunAudioStore } from './agentAudio';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { Refusal } from './connections';
 import { endRecordAccess, type RunnerDeps, runnerReporter } from './runner';
@@ -99,6 +100,8 @@ export interface JobDeps {
   syncOrg(orgId: string): Promise<void>;
   /** Ghostaff's own runner (runner.ts); off when not configured. */
   runner?: RunnerDeps;
+  /** The audio a run on our runner uploads before it reports (agentAudio.ts); off when not configured. */
+  audio?: RunAudioStore;
 }
 
 /** What a job's runner reads as `AGENTE_CANAL`: the answer goes back through the engine, not Telegram. */
@@ -117,7 +120,7 @@ export function indication(thread: ChatThreadHead, messages: ChatMessage[]): str
   const lines = messages
     .filter((m) => m.authorKind === 'person' || m.state === 'done')
     .flatMap((m) => {
-      const body = messageText(m.parts).trim();
+      const body = [messageText(m.parts).trim(), ...audioLines(m.parts)].filter(Boolean).join('\n\n');
       const who = m.authorKind === 'agent' ? 'agente' : 'persona';
       return body ? [`<mensaje de="${esc(m.authorName)}" tipo="${who}">${esc(body)}</mensaje>`] : [];
     });
@@ -270,7 +273,10 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
 
   const said = report.ok ? (report.text ?? 'He acabado sin nada que contar.') : `No he podido acabar.${report.text ? `\n\n${report.text}` : ''}`;
   const text = [said, ...decisionLines(report.decisions)].join('\n');
-  const noteworthy = !report.ok || report.noteworthy || report.decisions.length > 0;
+  // Whether its words are news; the audio it made always is (agent-audio.md), posted after them.
+  const told = !report.ok || report.noteworthy || report.decisions.length > 0;
+  const audio = reporter && deps.audio ? await deps.audio.list(run.id).catch(() => []) : [];
+  const noteworthy = told || audio.length > 0;
 
   const took = await deps.jobs.finishRun(run.id, {
     state: report.ok ? 'done' : 'failed',
@@ -305,17 +311,21 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
   // The decisions it opened, in the inbox now rather than at the next tick.
   await deps.syncOrg(agent.orgId).catch((e) => console.error('sync after report failed', e instanceof Error ? e.message : typeof e));
 
+  const postAudio = () => (audio.length ? postRunAudio(deps, agent, run.id, audio) : Promise.resolve(0));
   if (run.messageId && run.threadId) {
-    // A routine with nothing to tell leaves nothing in the chat (agent-routines.md).
-    if (run.routineId && report.ok && !noteworthy) {
+    // A routine with nothing to tell leaves nothing in the chat (agent-routines.md), but its audio.
+    if (run.routineId && report.ok && !told) {
       await chat.chat.deleteMessage(run.messageId).catch((e) => console.error('quiet routine answer not removed', e instanceof Error ? e.message : typeof e));
+      await postAudio();
       return { run: run.id, threadId: null };
     }
     await chat.chat.updateReply(run.messageId, { text, state: report.ok ? 'done' : 'failed', steps: ['Trabajando en ello', 'Hecho'] });
+    await postAudio();
     await chat.chat.touchThread(run.threadId).catch(() => {});
     return { run: run.id, threadId: run.threadId };
   }
-  if (noteworthy) await deps.jobs.postToAgentChat(agent, text);
+  if (told) await deps.jobs.postToAgentChat(agent, text);
+  await postAudio();
   return { run: run.id, threadId: null };
 }
 
@@ -334,6 +344,7 @@ export async function expireRuns(chat: ChatDeps, deps: JobDeps, now: Date = new 
   const stale = await deps.jobs.staleRuns(new Date(now.getTime() - RUN_DEADLINE_MS), now);
   for (const r of stale) {
     if (!(await deps.jobs.finishRun(r.id, { state: 'failed', summary: null, noteworthy: true, decisionsOpened: 0 }))) continue;
+    await dropRunAudio(deps, r.id).catch((e) => console.error('audio of a closed run not removed', r.id, e instanceof Error ? e.message : typeof e));
     if (r.messageId) {
       await chat.chat
         .updateReply(r.messageId, { text: 'No he podido acabar: el trabajo se cortó sin terminar. Vuelve a pedírmelo.', state: 'failed' })

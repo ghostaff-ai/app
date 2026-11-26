@@ -25,6 +25,7 @@ import { bearer, type CallerFromToken } from './googleCaller';
 import type { PushDrain } from './notify';
 import { NoteLimiter, type Transcriber } from './transcribe';
 import { sendVoiceNote, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
+import { receiveRunAudio } from './agentAudio';
 
 /** Calls from Google service accounts, not people: the scheduler's tick (ordago-agents-in-ghostaff.md). */
 export interface CronDeps {
@@ -160,6 +161,22 @@ export function createApp(deps: AppDeps) {
     const body = await c.req.json().catch(() => null);
     c.header('Cache-Control', 'no-store');
     return c.json(await runRepoToken(deps.chat.jobs, caller, c.req.param('id'), body));
+  });
+
+  // One audio the run made (agentAudio.ts), before it reports: the raw file, its title in the query, the nonce in a header.
+  app.post('/runs/:id/audio', async (c) => {
+    const reports = deps.reports;
+    const token = bearer(c.req.header('Authorization'));
+    const caller = reports && token ? await reports.callerFromToken(token, reports.audience) : null;
+    if (!reports || !caller || !deps.chat.jobs?.runner) return c.json({ error: 'unauthorized' }, 401);
+    const stored = await receiveRunAudio(deps.chat, deps.chat.jobs, caller, c.req.param('id'), {
+      nonce: c.req.header('X-Run-Nonce'),
+      title: c.req.query('title'),
+      contentType: c.req.header('Content-Type'),
+      contentLength: c.req.header('Content-Length'),
+      body: c.req.raw.body,
+    });
+    return c.json(stored, 201);
   });
 
   app.post('/runs/:id/google-token', async (c) => {

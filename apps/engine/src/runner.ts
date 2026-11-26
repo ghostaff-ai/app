@@ -25,6 +25,7 @@ import { agentInstructionsPath, type AgentRepo, type AgentSecrets, isSecretEnv, 
 import { Cron } from 'croner';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { madridNow } from './chat';
+import { MAX_RUN_AUDIO_BYTES, MAX_RUN_AUDIO_FILES } from './agentAudio';
 import { Refusal } from './connections';
 import { agentUsername, type ForgejoAdmin } from './forgejo';
 import type { FreshRepoToken } from './githubApp';
@@ -592,6 +593,9 @@ export function composePrompt(p: {
     `Si necesitas a una persona (un OK, una decisión), abre una en \`${DECISIONS_DIR}/\` (formato en su README) con \`propone: ${agent.slug}\`, ` +
       'haz commit y push, y sigue con lo que no dependa de ella: le llega sola a Hoy, en Ghostaff.',
     `Ahora es ${madridNow(p.now)}, hora de Madrid.`,
+    `Si haces un audio para quien trabaja contigo (mp3 o m4a, hasta ${MAX_RUN_AUDIO_BYTES / 1024 / 1024} MB, como mucho ${MAX_RUN_AUDIO_FILES}), ` +
+      'déjalo en `~/outbox/` con su título como nombre del archivo: al acabar sale en tu chat en Ghostaff, después de tu último mensaje, ' +
+      'para que lo escuchen. No lo subas a otro sitio ni pongas enlaces a él.',
   ];
   if (p.repos?.reached.length) {
     parts.push(
@@ -685,7 +689,7 @@ function requestOf(messages: ChatMessage[], thread: ChatThreadHead, run: RunReco
 }
 
 /** The caller is our runner's service account, with its run's nonce. */
-function checkRunner(deps: JobDeps, caller: string | null): RunnerDeps {
+export function checkRunner(deps: JobDeps, caller: string | null): RunnerDeps {
   const runner = deps.runner;
   if (!runner || !caller || caller !== runner.job.identity.toLowerCase()) throw new Refusal(403, 'not_allowed', 'not our runner');
   return runner;

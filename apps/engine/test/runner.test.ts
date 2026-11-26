@@ -4,8 +4,10 @@ import type { ChatMessage } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import type { AiUse, ChatAgent, ChatStore, ChatThreadHead } from '../src/chat';
+import { audioTitle, looksLikeAudio, type RunAudio, type RunAudioStore } from '../src/agentAudio';
+import { toTurns } from '../src/chat';
 import { sweepTranscripts, type TranscriptStore } from '../src/transcripts';
-import { type AgentJob, type JobDeps, type JobStore, RunBusy, type RunRecord } from '../src/jobs';
+import { type AgentJob, expireRuns, type JobDeps, type JobStore, RunBusy, type RunRecord } from '../src/jobs';
 import {
   askRunner,
   busyText,
@@ -240,7 +242,30 @@ function setup(
       skipped.push({ agentId: x.agentId, reason: x.reason });
     },
   };
+  // The bucket, the runs' lists and the posted messages, in memory (agentAudio.ts).
+  const bucket = new Map<string, { bytes: number; mediaType: string }>();
+  const runAudio = new Map<string, RunAudio[]>();
+  const posted: Array<{ agent: string; audio: RunAudio }> = [];
+  const audio: RunAudioStore = {
+    put: async (path, bytes, mediaType) => {
+      bucket.set(path, { bytes: bytes.byteLength, mediaType });
+    },
+    remove: async (paths) => {
+      for (const p of paths) bucket.delete(p);
+    },
+    list: async (id) => [...(runAudio.get(id) ?? [])],
+    add: async (id, a) => {
+      runAudio.set(id, [...(runAudio.get(id) ?? []), a]);
+    },
+    clear: async (id) => {
+      runAudio.delete(id);
+    },
+    post: async (agent, a) => {
+      posted.push({ agent: agent.name, audio: a });
+    },
+  };
   const jobDeps: JobDeps = {
+    audio,
     jobs,
     launch: async (job, env, o) => {
       if (opts.launchFails) throw new Error('403');
@@ -316,6 +341,7 @@ function setup(
   return {
     ask, fetchSpec, report, post, stored, app, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf, deleted, thread, tokenAccess,
     skipped, ciAsked,
+    bucket, runAudio, posted,
     setNow: (d: Date) => {
       now = d;
     },
@@ -1121,5 +1147,132 @@ describe('limits on our runner (the legacy arranque’s recursos and ritmo)', ()
     const e = t2.launched[0]!.env;
     await t2.report({ run: e.GHOSTAFF_RUN, nonce: e.GHOSTAFF_NONCE, ok: true, text: 'Hecho.', turns: -1, ending: 'Not A Subtype' });
     expect(t2.runs.get(e.GHOSTAFF_RUN!)).toMatchObject({ state: 'done', turns: null, ending: null });
+  });
+});
+
+describe('audio from an agent (agent-audio.md)', () => {
+  const MP3 = new Uint8Array([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0, 1, 2, 3]);
+  const M4A = new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20]);
+  const upload = (t: ReturnType<typeof setup>, run: string, nonce: string | null, o: { title?: string; type?: string; body?: Uint8Array; as?: string } = {}) =>
+    t.app.request(`/runs/${run}/audio?${new URLSearchParams({ title: o.title ?? 'La Mesa 2026-11-30 (ES)' })}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer id-${o.as ?? RUNNER}`,
+        'Content-Type': o.type ?? 'audio/mpeg',
+        ...(nonce ? { 'X-Run-Nonce': nonce } : {}),
+      },
+      body: (o.body ?? MP3) as BodyInit,
+    });
+  async function started(t: ReturnType<typeof setup>) {
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    return { run: run!, nonce: nonce! };
+  }
+
+  it('takes an mp3 only from the run’s own runner, with its nonce, once it has its spec', async () => {
+    const t = setup();
+    const { run, nonce } = await started(t);
+    expect((await upload(t, run, nonce)).status).toBe(403); // no spec yet
+    await t.fetchSpec(run, nonce);
+    expect((await upload(t, run, null)).status).toBe(403);
+    expect((await upload(t, run, 'y'.repeat(43))).status).toBe(403);
+    expect((await upload(t, run, nonce, { as: 'someone@else.iam.gserviceaccount.com' })).status).toBe(403);
+    const other = await otherOrgRun(t);
+    await t.fetchSpec(other.run, other.nonce);
+    expect((await upload(t, run, other.nonce)).status).toBe(403);
+    expect(t.bucket.size).toBe(0);
+
+    const res = await upload(t, run, nonce);
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+    // In the voice notes' bucket, in the folder of the chat it will be posted in, named for its message.
+    const path = `${ORG}/${THREAD}/${id}.mp3`;
+    expect(t.bucket.get(path)).toEqual({ bytes: MP3.byteLength, mediaType: 'audio/mpeg' });
+    expect(t.runAudio.get(run)).toEqual([{ id, threadId: THREAD, path, mediaType: 'audio/mpeg', title: 'La Mesa 2026-11-30 (ES)' }]);
+  });
+
+  it('refuses what isn’t an mp3 or m4a, a bad title, and a fifth file', async () => {
+    const t = setup();
+    const { run, nonce } = await started(t);
+    await t.fetchSpec(run, nonce);
+    expect((await upload(t, run, nonce, { type: 'audio/ogg' })).status).toBe(415);
+    expect((await upload(t, run, nonce, { body: new TextEncoder().encode('<html>no</html>') })).status).toBe(415);
+    expect((await upload(t, run, nonce, { type: 'audio/mp4', body: MP3 })).status).toBe(415);
+    expect((await upload(t, run, nonce, { title: '../secreto' })).status).toBe(400);
+    expect((await upload(t, run, nonce, { title: ' ' })).status).toBe(400);
+    expect((await upload(t, run, nonce, { body: new Uint8Array() })).status).toBe(400);
+    expect(t.bucket.size).toBe(0);
+    expect((await upload(t, run, nonce, { type: 'audio/x-m4a', body: M4A, title: 'Borrador' })).status).toBe(201);
+    for (let i = 0; i < 3; i++) expect((await upload(t, run, nonce)).status).toBe(201);
+    expect((await upload(t, run, nonce)).status).toBe(429);
+    expect(t.runAudio.get(run)!.map((a) => a.path.split('.').pop())).toEqual(['m4a', 'mp3', 'mp3', 'mp3']);
+  });
+
+  it('the report posts the audio after its answer, in order, and nothing waits on the run', async () => {
+    const t = setup();
+    const { run, nonce } = await started(t);
+    await t.fetchSpec(run, nonce);
+    await upload(t, run, nonce, { title: 'La Mesa (EN)' });
+    await upload(t, run, nonce, { title: 'La Mesa (ES)' });
+    expect((await upload(t, run, nonce)).status).toBe(201);
+    t.runAudio.set(run, t.runAudio.get(run)!.slice(0, 2));
+    const res = await t.report({ run, nonce, ok: true, text: 'Aquí tienes el episodio.', noteworthy: true, decisions: [] });
+    expect(res.status).toBe(200);
+    expect(t.updates.at(-1)).toMatchObject({ id: 'reply-1', state: 'done', text: 'Aquí tienes el episodio.' });
+    expect(t.posted.map((p) => `${p.agent}: ${p.audio.title}`)).toEqual(['Legal: La Mesa (EN)', 'Legal: La Mesa (ES)']);
+    expect(t.runAudio.has(run)).toBe(false);
+    // A run closed takes no more.
+    expect((await upload(t, run, nonce)).status).toBe(403);
+  });
+
+  it('a scheduled run with nothing to say but its audio posts the audio, and the run is noteworthy', async () => {
+    const t = setup();
+    const other = await otherOrgRun(t);
+    await t.fetchSpec(other.run, other.nonce);
+    expect((await upload(t, other.run, other.nonce)).status).toBe(201);
+    // No thread of its own: the agent's chat.
+    expect([...t.bucket.keys()][0]).toMatch(new RegExp(`^${OTHER_ORG}/x/[0-9a-f-]{36}\\.mp3$`));
+    await t.report({ run: other.run, nonce: other.nonce, ok: true, text: 'SIN NOVEDAD', noteworthy: false, decisions: [] });
+    expect(t.notices).toEqual([]);
+    expect(t.posted.map((p) => p.audio.title)).toEqual(['La Mesa 2026-11-30 (ES)']);
+    expect(t.runs.get(other.run)).toMatchObject({ state: 'done', noteworthy: true });
+  });
+
+  it('a run closed without its report has its audio removed', async () => {
+    const t = setup();
+    const { run, nonce } = await started(t);
+    await t.fetchSpec(run, nonce);
+    await upload(t, run, nonce);
+    t.jobDeps.jobs.staleRuns = async () => [t.runs.get(run)!];
+    expect(await expireRuns(t.chatDeps, t.jobDeps)).toBe(1);
+    expect(t.bucket.size).toBe(0);
+    expect(t.runAudio.has(run)).toBe(false);
+    expect(t.posted).toEqual([]);
+  });
+
+  it('every run is told about ~/outbox/', () => {
+    const prompt = composePrompt({ agent: spec(legal), orgName: 'Órdago', repo: 'ordago-app/business', now: new Date('2026-11-30T08:00:00Z'), request: null });
+    expect(prompt).toContain('`~/outbox/`');
+    expect(prompt).toContain('mp3 o m4a, hasta 25 MB, como mucho 4');
+  });
+
+  it('an agent reads its audio as a line, since it can’t hear it', () => {
+    const turns = toTurns(
+      [
+        msg({ text: '¿Ha salido La Mesa?' }),
+        { ...msg({ text: '' }), authorKind: 'agent', authorAgentId: LEGAL, authorUserId: null, authorName: 'Legal', parts: [{ type: 'audio', path: 'o/t/m.mp3', mediaType: 'audio/mpeg', durationMs: null, title: 'La Mesa (ES)' }] },
+      ],
+      LEGAL,
+    );
+    expect(turns.at(-1)).toEqual({ role: 'assistant', content: '(Audio: La Mesa (ES))' });
+  });
+
+  it('titles and audio bytes', () => {
+    expect(audioTitle('  La Mesa ·  2026-11-30 (ES) ')).toBe('La Mesa · 2026-11-30 (ES)');
+    expect(audioTitle('a/b')).toBeNull();
+    expect(audioTitle('x'.repeat(121))).toBeNull();
+    expect(audioTitle('línea\nnueva')).toBe('línea nueva');
+    expect(looksLikeAudio(new Uint8Array([0xff, 0xfb, 0x90, 0]), 'audio/mpeg')).toBe(true);
+    expect(looksLikeAudio(new Uint8Array([0x3c, 0x68]), 'audio/mpeg')).toBe(false);
   });
 });
