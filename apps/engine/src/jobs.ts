@@ -44,6 +44,8 @@ export interface RunRecord {
   specFetched?: boolean;
   /** The AI account (a Claude subscription) the run works on: runs on our runner only. */
   connectionId?: string | null;
+  /** Where its transcript is kept, when it has one: runs on our runner only (transcripts.ts). */
+  transcriptPath?: string | null;
 }
 
 /** The database as jobs need it (service role). */

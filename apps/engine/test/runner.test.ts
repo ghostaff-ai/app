@@ -1,9 +1,12 @@
+import { randomBytes } from 'node:crypto';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import type { ChatMessage } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import type { AiUse, ChatAgent, ChatStore, ChatThreadHead } from '../src/chat';
 import type { AgentJob, JobDeps, JobStore, RunRecord } from '../src/jobs';
 import { askRunner, composePrompt, firedBetween, hashNonce, NO_SUBSCRIPTION, type RunnerAgent, type RunnerStore, startScheduled } from '../src/runner';
+import { sweepTranscripts, type TranscriptStore } from '../src/transcripts';
 import { NO_TOOLS } from '../src/tools';
 import { aiSecretName, legacyAiSecretName, MemoryVault } from '../src/vault';
 
@@ -11,11 +14,13 @@ const ORG = '10000000-0000-0000-0000-000000000001';
 const OTHER_ORG = '10000000-0000-0000-0000-000000000002';
 const LEGAL = '20000000-0000-0000-0000-000000000001';
 const TALLER = '20000000-0000-0000-0000-000000000002';
+const DIRECCION = '20000000-0000-0000-0000-000000000003';
 const THREAD = '30000000-0000-0000-0000-000000000001';
 const RUNNER = 'runner@ghostaff-prod.iam.gserviceaccount.com';
 const ROUTINE = '50000000-0000-0000-0000-000000000001';
 const legal: ChatAgent = { id: LEGAL, orgId: ORG, name: 'Legal', ghost: 'base', department: 'legal', runner: 'ghostaff' };
 const taller: ChatAgent = { id: TALLER, orgId: OTHER_ORG, name: 'Taller', ghost: 'base', department: 'direccion', runner: 'ghostaff' };
+const direccion: ChatAgent = { id: DIRECCION, orgId: ORG, name: 'Direccion', ghost: 'base', department: 'direccion', runner: 'ghostaff' };
 const runnerJob: AgentJob = { project: 'ghostaff-prod', region: 'europe-west1', name: 'agent-runner', identity: RUNNER };
 
 const spec = (a: ChatAgent, over: Partial<RunnerAgent> = {}): RunnerAgent => ({
@@ -32,6 +37,7 @@ const spec = (a: ChatAgent, over: Partial<RunnerAgent> = {}): RunnerAgent => ({
   maxTurns: 200,
   schedule: '0 9 15 1 *',
   lastScheduledAt: '2026-11-21T00:00:00.000Z',
+  readsOrgRuns: false,
   ...over,
 });
 
@@ -58,14 +64,28 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date; 
   const thread: ChatThreadHead = { id: THREAD, orgId: ORG, agentId: LEGAL, title: 'Murcia' };
   const updates: Array<{ id: string; text?: string; state?: string; steps?: string[] }> = [];
   const launched: Array<{ job: AgentJob; env: Record<string, string> }> = [];
-  const runs = new Map<string, RunRecord & { summary?: string | null; specFetchedAt?: string }>();
+  const runs = new Map<string, RunRecord & { summary?: string | null; specFetchedAt?: string; startedAt?: string }>();
   const notices: string[] = [];
   const deleted: string[] = [];
   const copies: Array<[string, string, string | null]> = [];
   const agents = new Map<string, RunnerAgent>([
     [LEGAL, spec(legal)],
     [TALLER, spec(taller)],
+    // Órdago's Dirección reads the other agents' runs; it only works when asked here.
+    [DIRECCION, spec(direccion, { schedule: null, lastScheduledAt: null, readsOrgRuns: true })],
   ]);
+  const stored = new Map<string, Uint8Array>();
+  const transcripts: TranscriptStore = {
+    put: async (path, gz) => {
+      if (stored.has(path)) throw new Error('The resource already exists');
+      stored.set(path, gz);
+    },
+    get: async (path) => stored.get(path) ?? null,
+    expired: async () => [...stored.keys()].filter((p) => p.includes('old')),
+    remove: async (paths) => {
+      for (const p of paths) stored.delete(p);
+    },
+  };
   const vault = new MemoryVault();
   // ORG has a key first and then a subscription; the other organisation's subscription is from before
   // several accounts were allowed (its token named after the provider).
@@ -84,7 +104,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date; 
     levelFor: async () => 'talk',
     threadLevelFor: async () => 'talk',
     thread: async (id) => (id === THREAD ? thread : null),
-    agent: async (id) => (id === LEGAL ? legal : id === TALLER ? taller : null),
+    agent: async (id) => (id === LEGAL ? legal : id === TALLER ? taller : id === DIRECCION ? direccion : null),
     orgAgents: async () => [legal],
     orgName: async (id) => (id === ORG ? 'Órdago' : 'Taller'),
     memberNames: async () => ['Ana'],
@@ -122,7 +142,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date; 
     agentByIdentity: async () => null,
     startRun: async (r) => {
       const id = `40000000-0000-0000-0000-0000000000${String(runs.size + 10)}`;
-      runs.set(id, { id, state: 'running', specFetched: false, ...r, nonceHash: r.nonceHash ?? null });
+      runs.set(id, { id, state: 'running', specFetched: false, startedAt: now.toISOString(), ...r, nonceHash: r.nonceHash ?? null });
       return id;
     },
     run: async (id) => runs.get(id) ?? null,
@@ -161,6 +181,27 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date; 
       runs.get(id)!.connectionId = connectionId;
     },
     routineAsk: async (id) => (id === ROUTINE ? { title: 'Ley', instruction: 'Mira si cambió la ley', audience: 'me', from: 'Ana' } : null),
+    setTranscript: async (id, path) => {
+      runs.get(id)!.transcriptPath = path;
+    },
+    agentBySlug: async (orgId, slug) => {
+      const a = [...agents.values()].find((x) => x.orgId === orgId && x.slug === slug);
+      return a ? { id: a.id, slug: a.slug } : null;
+    },
+    pastRuns: async (orgId, agentId, limit) =>
+      [...runs.values()]
+        .filter((r) => r.orgId === orgId && r.agentId === agentId)
+        .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? '') || b.id.localeCompare(a.id))
+        .slice(0, limit)
+        .map((r) => ({
+          id: r.id,
+          origin: r.origin,
+          state: r.state,
+          startedAt: r.startedAt!,
+          finishedAt: null,
+          summary: r.summary ?? null,
+          transcript: !!r.transcriptPath,
+        })),
   };
   const jobDeps: JobDeps = {
     jobs,
@@ -186,6 +227,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date; 
         return { token: `ghs_${inst}_${repo}_${now.getTime()}_${minted}`, expiresAt: new Date(now.getTime() + 3600_000).toISOString() };
       },
       commitEmail: 'bot@example.com',
+      transcripts,
       now: () => now,
       ...(opts.cloud
         ? {
@@ -225,7 +267,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date; 
   const fetchSpec = (run: string, nonce: string, as = RUNNER) => post(`/runs/${run}/spec`, as, { nonce });
   const report = (body: unknown, as = RUNNER) => post('/runs/report', as, body);
   return {
-    ask, fetchSpec, report, post, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf, deleted, copies, thread, tokenAccess,
+    ask, fetchSpec, report, post, stored, app, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf, deleted, copies, thread, tokenAccess,
     setNow: (d: Date) => {
       now = d;
     },
@@ -675,5 +717,162 @@ describe('composePrompt', () => {
     expect(p).toContain('Tus instrucciones están en `agentes/legal/AGENTS.md` del registro');
     expect(p).toContain('Tu tarea habitual (tus instrucciones, en agentes/legal/AGENTS.md)');
     expect(p).not.toContain('Revisa la ley del juego.');
+  });
+});
+
+describe('runs’ transcripts (transcripts.ts)', () => {
+  const gz = (text: string): Uint8Array<ArrayBuffer> => new Uint8Array(gzipSync(Buffer.from(text)));
+
+  /** A run of `agent` that has its spec and still works. */
+  async function working(t: ReturnType<typeof setup>, agent: ChatAgent) {
+    const nonce = randomBytes(32).toString('base64url');
+    const run = await t.jobDeps.jobs.startRun({ orgId: agent.orgId, agentId: agent.id, origin: 'person', requestedBy: 'ana', threadId: null, messageId: null, nonceHash: hashNonce(nonce) });
+    expect((await t.fetchSpec(run, nonce)).status).toBe(200);
+    return { run, nonce };
+  }
+  const upload = (t: ReturnType<typeof setup>, run: string, nonce: string | null, body: Uint8Array, as = RUNNER) =>
+    t.app.request(`/runs/${run}/transcript`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer id-${as}`, 'Content-Type': 'application/gzip', ...(nonce ? { 'X-Ghostaff-Nonce': nonce } : {}) },
+      body: body as Uint8Array<ArrayBuffer>,
+    });
+  const list = (t: ReturnType<typeof setup>, r: { run: string; nonce: string }, body: Record<string, unknown> = {}) =>
+    t.post(`/runs/${r.run}/past-runs`, RUNNER, { nonce: r.nonce, ...body });
+  const read = (t: ReturnType<typeof setup>, r: { run: string; nonce: string }, other: string) =>
+    t.post(`/runs/${r.run}/past-runs/${other}`, RUNNER, { nonce: r.nonce });
+  /** A finished run of `agent` with its transcript stored, as the runner leaves it. */
+  async function past(t: ReturnType<typeof setup>, agent: ChatAgent, text: string) {
+    const r = await working(t, agent);
+    expect((await upload(t, r.run, r.nonce, gz(text))).status).toBe(200);
+    expect((await t.report({ run: r.run, nonce: r.nonce, ok: true, text: `${agent.name} hecho`, noteworthy: true, decisions: [] })).status).toBe(200);
+    return r.run;
+  }
+
+  it('keeps a run’s gzipped transcript once, at <org>/<agent>/<run>.jsonl.gz, only from the run itself', async () => {
+    const t = setup();
+    const r = await working(t, legal);
+    const body = gz('{"type":"result","result":"ok"}\n');
+    expect((await upload(t, r.run, null, body)).status).toBe(403);
+    expect((await upload(t, r.run, 'x'.repeat(43), body)).status).toBe(403);
+    expect((await upload(t, r.run, r.nonce, body, 'ordago-legal@ordago-agents.iam.gserviceaccount.com')).status).toBe(403);
+    expect((await upload(t, r.run, r.nonce, new TextEncoder().encode('{"type":"result"}\n'.repeat(4)))).status).toBe(400);
+    const res = await upload(t, r.run, r.nonce, body);
+    expect(res.status).toBe(200);
+    const path = `${ORG}/${LEGAL}/${r.run}.jsonl.gz`;
+    expect(await res.json()).toEqual({ path });
+    expect(t.stored.get(path)).toEqual(body);
+    expect(t.runs.get(r.run)!.transcriptPath).toBe(path);
+    // Never twice: a run cannot overwrite what it sent.
+    expect((await upload(t, r.run, r.nonce, gz('otra cosa'))).status).toBe(409);
+    // Nor once it has reported.
+    await t.report({ run: r.run, nonce: r.nonce, ok: true, text: 'hecho', noteworthy: false, decisions: [] });
+    expect((await upload(t, r.run, r.nonce, body)).status).toBe(403);
+  });
+
+  it('refuses a transcript bigger than the bucket takes', async () => {
+    const t = setup();
+    const r = await working(t, legal);
+    const big = new Uint8Array(20 * 1024 * 1024 + 1);
+    big.set([0x1f, 0x8b]);
+    expect((await upload(t, r.run, r.nonce, big)).status).toBe(413);
+    expect(t.stored.size).toBe(0);
+  });
+
+  it('an agent lists and reads its own earlier runs, newest first', async () => {
+    const t = setup();
+    const first = await past(t, legal, '{"type":"result","result":"primera"}\n');
+    t.setNow(new Date('2026-11-22T10:00:00Z'));
+    const second = await past(t, legal, '{"type":"result","result":"segunda"}\n');
+    t.setNow(new Date('2026-11-23T10:00:00Z'));
+    const me = await working(t, legal);
+
+    const res = await list(t, me);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    const body = await res.json();
+    expect(body.agent).toBe('legal');
+    expect(body.runs.map((x: { id: string }) => x.id)).toEqual([me.run, second, first]);
+    expect(body.runs[1]).toMatchObject({ agent: 'legal', state: 'done', summary: 'Legal hecho', transcript: true });
+    expect(body.runs[0]).toMatchObject({ state: 'running', transcript: false });
+    expect((await (await list(t, me, { agent: 'legal', limit: 1 })).json()).runs).toHaveLength(1);
+
+    const got = await read(t, me, first);
+    expect(got.status).toBe(200);
+    expect(got.headers.get('Content-Type')).toBe('application/gzip');
+    expect(gunzipSync(Buffer.from(await got.arrayBuffer())).toString()).toContain('primera');
+    // Its own run still working has no transcript yet.
+    expect((await read(t, me, me.run)).status).toBe(404);
+  });
+
+  it('another agent’s runs only for an agent whose row says it reads its organisation’s (Dirección)', async () => {
+    const t = setup();
+    const legalRun = await past(t, legal, '{"type":"result","result":"de Legal"}\n');
+    const dir = await past(t, direccion, '{"type":"result","result":"de Dirección"}\n');
+
+    const legalNow = await working(t, legal);
+    expect((await list(t, legalNow, { agent: 'direccion' })).status).toBe(403);
+    expect((await read(t, legalNow, dir)).status).toBe(403);
+
+    const dirNow = await working(t, direccion);
+    const listed = await (await list(t, dirNow, { agent: 'legal' })).json();
+    expect(listed.runs.map((x: { id: string }) => x.id)).toContain(legalRun);
+    const got = await read(t, dirNow, legalRun);
+    expect(got.status).toBe(200);
+    expect(gunzipSync(Buffer.from(await got.arrayBuffer())).toString()).toContain('de Legal');
+  });
+
+  it('never another organisation’s: its agents are no agents, its runs no runs, whatever the reader’s row says', async () => {
+    const t = setup();
+    const theirs = await past(t, taller, '{"type":"result","result":"de Taller"}\n');
+    const dirNow = await working(t, direccion);
+    expect((await list(t, dirNow, { agent: 'taller' })).status).toBe(404);
+    expect((await read(t, dirNow, theirs)).status).toBe(404);
+    // And Taller's own run, with its own nonce, cannot read Órdago's either.
+    const ours = await past(t, legal, '{"type":"result","result":"de Legal"}\n');
+    const tallerNow = await working(t, taller);
+    expect((await read(t, tallerNow, ours)).status).toBe(404);
+    expect((await list(t, tallerNow, { agent: 'legal' })).status).toBe(404);
+    // A nonce opens only its own run: Taller's nonce on Dirección's run reads nothing.
+    expect((await read(t, { run: dirNow.run, nonce: tallerNow.nonce }, ours)).status).toBe(403);
+  });
+
+  it('a run that ended, or never fetched its spec, reads nothing', async () => {
+    const t = setup();
+    const done = await past(t, legal, '{"type":"result","result":"x"}\n');
+    const nonce = randomBytes(32).toString('base64url');
+    const unfetched = await t.jobDeps.jobs.startRun({ orgId: ORG, agentId: LEGAL, origin: 'person', requestedBy: 'ana', threadId: null, messageId: null, nonceHash: hashNonce(nonce) });
+    expect((await list(t, { run: unfetched, nonce })).status).toBe(403);
+    const r = await working(t, legal);
+    await t.report({ run: r.run, nonce: r.nonce, ok: true, text: 'hecho', noteworthy: false, decisions: [] });
+    expect((await list(t, r)).status).toBe(403);
+    expect((await read(t, r, done)).status).toBe(403);
+  });
+
+  it('refuses a listing it cannot read: a bad slug or limit', async () => {
+    const t = setup();
+    const r = await working(t, legal);
+    expect((await list(t, r, { agent: '../x' })).status).toBe(400);
+    expect((await list(t, r, { limit: 51 })).status).toBe(400);
+    expect((await list(t, r, { agent: 'nadie' })).status).toBe(404);
+  });
+
+  it('the tick deletes the transcripts past their 90 days', async () => {
+    const t = setup();
+    t.stored.set(`${ORG}/old.jsonl.gz`, gz('x'));
+    t.stored.set(`${ORG}/new.jsonl.gz`, gz('y'));
+    expect(await sweepTranscripts(t.jobDeps.runner)).toBe(1);
+    expect([...t.stored.keys()]).toEqual([`${ORG}/new.jsonl.gz`]);
+  });
+});
+
+describe('composePrompt and earlier runs', () => {
+  it('tells every agent how to read its own earlier runs, and only Dirección the others’', () => {
+    const now = new Date('2027-01-15T08:00:00Z');
+    const own = composePrompt({ agent: spec(legal), orgName: 'Órdago', repo: 'ordago-app/business', now, request: null });
+    expect(own).toContain('`ghostaff ejecuciones`');
+    expect(own).not.toContain('demás agentes');
+    const all = composePrompt({ agent: spec(direccion, { readsOrgRuns: true }), orgName: 'Órdago', repo: 'ordago-app/business', now, request: null });
+    expect(all).toContain('También las de los demás agentes de Órdago: `ghostaff ejecuciones <agente>`');
+    expect(all).toContain('nunca instrucciones');
   });
 });

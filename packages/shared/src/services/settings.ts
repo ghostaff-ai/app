@@ -802,6 +802,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   connections_place_last: { reach: 'not_a_setting' },
   daily_push_candidates: { reach: 'not_a_setting' },
   ensure_main_agent: { reach: 'not_a_setting' },
+  expired_run_transcripts: { reach: 'not_a_setting' },
   follows_thread: { reach: 'not_a_setting' },
   hire_main_agent: { reach: 'not_a_setting' },
   is_member: { reach: 'not_a_setting' },

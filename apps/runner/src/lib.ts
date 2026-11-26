@@ -168,12 +168,15 @@ export function agentEnv(
   home: string,
   /** The organisation's Google Cloud: `gcloud` and `bq` read the token from this file, which root renews. */
   google?: { tokenFile: string; project: string | null } | null,
+  /** Where `ghostaff ejecuciones` and `ghostaff leer` ask for earlier runs: the runner on 127.0.0.1 (pastRuns.ts). */
+  pastRuns?: string | null,
 ): Record<string, string> {
   return {
     CLAUDE_CODE_OAUTH_TOKEN: claudeToken,
     HOME: home,
     PATH: '/usr/local/bin:/usr/bin:/bin',
     LANG: 'C.UTF-8',
+    ...(pastRuns ? { GHOSTAFF_RUNS: pastRuns } : {}),
     ...(google
       ? {
           CLOUDSDK_AUTH_ACCESS_TOKEN_FILE: google.tokenFile,
@@ -335,4 +338,81 @@ export const tokenNearExpiry = (expiresAt: string, now: number) => Date.parse(ex
 export function engineClosedRun(status: number, body: unknown): boolean {
   const code = (body as { error?: unknown } | null)?.error;
   return status === 409 && (code === 'no_subscription' || code === 'no_record');
+}
+
+/**
+ * The most of a run's transcript kept, before gzip: Órdago's longest so far was under 1 MB. The engine
+ * takes at most this gzipped, so a transcript within it always fits.
+ */
+export const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024;
+
+/** The line a transcript cut at its size ends with, before the run's final `result` event. */
+export const CUT_EVENT = 'ghostaff_cut';
+
+/**
+ * Where a run's stream-json goes, line by line, already redacted: up to `max` bytes. Past it, one
+ * `ghostaff_cut` line and nothing more, but the final event (`end`), so a cut transcript still says how
+ * the run ended.
+ */
+export function transcriptSink(write: (text: string) => void, max = MAX_TRANSCRIPT_BYTES) {
+  let bytes = 0;
+  let cut = false;
+  let lastWritten = '';
+  return {
+    line(redacted: string) {
+      if (cut || !redacted.trim()) return;
+      const text = `${redacted}\n`;
+      const size = Buffer.byteLength(text);
+      if (bytes + size > max) {
+        cut = true;
+        write(`${JSON.stringify({ type: CUT_EVENT, bytes, max })}\n`);
+        return;
+      }
+      write(text);
+      bytes += size;
+      lastWritten = redacted;
+    },
+    end(lastRedacted: string) {
+      if (cut && lastRedacted.trim() && lastRedacted !== lastWritten) write(`${lastRedacted}\n`);
+    },
+  };
+}
+
+const TOOL_DETAIL = 160;
+
+function toolLine(block: { name?: unknown; input?: unknown }): string {
+  const input = (block.input ?? {}) as Record<string, unknown>;
+  const raw = input.command ?? input.file_path ?? input.pattern ?? input.url ?? input.query ?? input.description ?? '';
+  let detail = typeof raw === 'string' ? (raw.split('\n')[0] ?? '') : '';
+  if (detail.length > TOOL_DETAIL) detail = `${detail.slice(0, TOOL_DETAIL)}…`;
+  return detail ? `  → ${String(block.name)}: ${detail}` : `  → ${String(block.name)}`;
+}
+
+/**
+ * A stream-json transcript as a person (or Dirección) reads it: what the agent said, which tool it used
+ * and on what, and how it ended. Ported from ghostaff-ai/agents' herramientas/agente.py `resumir`.
+ */
+export function readableTranscript(lines: Iterable<string>): string {
+  const out: string[] = [];
+  for (const line of lines) {
+    let e: { type?: string; message?: { content?: unknown }; is_error?: boolean; num_turns?: unknown; result?: unknown; max?: unknown };
+    try {
+      e = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (e.type === 'assistant' && Array.isArray(e.message?.content)) {
+      for (const b of e.message.content as { type?: string; text?: unknown; name?: unknown; input?: unknown }[]) {
+        if (b.type === 'text' && typeof b.text === 'string' && b.text.trim()) out.push(b.text.trim());
+        else if (b.type === 'tool_use') out.push(toolLine(b));
+      }
+    } else if (e.type === CUT_EVENT) {
+      out.push(`\n[… transcripción cortada: pasaba de ${Number(e.max) / 1024 / 1024} MB …]`);
+    } else if (e.type === 'result') {
+      const how = e.is_error ? 'con error' : 'bien';
+      const turns = typeof e.num_turns === 'number' ? `, en ${e.num_turns} turnos` : '';
+      out.push(`\n=== Acabó ${how}${turns} ===\n${typeof e.result === 'string' ? e.result.trim() : ''}`.trimEnd());
+    }
+  }
+  return out.join('\n');
 }

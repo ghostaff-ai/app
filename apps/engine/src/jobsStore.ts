@@ -24,7 +24,7 @@ const toAgent = (r: Record<string, string>): ChatAgent => ({
   runner: r.runner as ChatAgent['runner'],
 });
 
-const RUN = 'id, org_id, agent_id, origin, state, thread_id, message_id, requested_by, nonce_hash, spec_fetched_at, connection_id, routine_id';
+const RUN = 'id, org_id, agent_id, origin, state, thread_id, message_id, requested_by, nonce_hash, spec_fetched_at, connection_id, routine_id, transcript_path';
 const toRun = (r: Record<string, string | null>): RunRecord => ({
   id: r.id!,
   orgId: r.org_id!,
@@ -38,6 +38,7 @@ const toRun = (r: Record<string, string | null>): RunRecord => ({
   specFetched: !!r.spec_fetched_at,
   connectionId: r.connection_id ?? null,
   routineId: r.routine_id ?? null,
+  transcriptPath: r.transcript_path ?? null,
 });
 
 /** `afterAgentWrite` runs after each post of agent messages, as in `supabaseChatStore`. */
@@ -113,7 +114,7 @@ export function supabaseJobStore(admin: SupabaseClient, opts: { afterAgentWrite?
   };
 }
 
-const RUNNER_AGENT = 'id, org_id, slug, name, description, task, task_in_record, repos, model, tools, max_turns, schedule, last_scheduled_at';
+const RUNNER_AGENT = 'id, org_id, slug, name, description, task, task_in_record, repos, model, tools, max_turns, schedule, last_scheduled_at, reads_org_runs';
 type RunnerAgentRow = {
   id: string;
   org_id: string;
@@ -128,6 +129,7 @@ type RunnerAgentRow = {
   max_turns: number;
   schedule: string | null;
   last_scheduled_at: string | null;
+  reads_org_runs: boolean | null;
 };
 const toRunnerAgent = (r: RunnerAgentRow): RunnerAgent => ({
   id: r.id,
@@ -143,6 +145,7 @@ const toRunnerAgent = (r: RunnerAgentRow): RunnerAgent => ({
   maxTurns: r.max_turns,
   schedule: r.schedule,
   lastScheduledAt: r.last_scheduled_at,
+  readsOrgRuns: r.reads_org_runs ?? false,
 });
 
 /** Our runner's database side (runner.ts), with the service role. */
@@ -192,6 +195,41 @@ export function supabaseRunnerStore(admin: SupabaseClient): RunnerStore {
           } | null)
         : null;
       return { title: r.title, instruction: r.instruction, audience: r.audience, from: m?.display_name ?? 'una persona del equipo' };
+    },
+    async setTranscript(runId, path) {
+      check(await admin.from('agent_runs').update({ transcript_path: path }).eq('id', runId));
+    },
+    async agentBySlug(orgId, slug) {
+      const r = check(await admin.from('agents').select('id, slug').eq('org_id', orgId).eq('slug', slug).maybeSingle()) as { id: string; slug: string } | null;
+      return r ? { id: r.id, slug: r.slug } : null;
+    },
+    async pastRuns(orgId, agentId, limit) {
+      const rows = (check(
+        await admin
+          .from('agent_runs')
+          .select('id, origin, state, started_at, finished_at, summary, transcript_path')
+          .eq('org_id', orgId)
+          .eq('agent_id', agentId)
+          .order('started_at', { ascending: false })
+          .limit(limit),
+      ) ?? []) as {
+        id: string;
+        origin: RunRecord['origin'];
+        state: RunRecord['state'];
+        started_at: string;
+        finished_at: string | null;
+        summary: string | null;
+        transcript_path: string | null;
+      }[];
+      return rows.map((r) => ({
+        id: r.id,
+        origin: r.origin,
+        state: r.state,
+        startedAt: r.started_at,
+        finishedAt: r.finished_at,
+        summary: r.summary,
+        transcript: !!r.transcript_path,
+      }));
     },
   };
 }
