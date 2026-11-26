@@ -1,4 +1,4 @@
--- Read ticks (20261127620000_read_ticks.sql): up to when everyone else who
+-- Read ticks (20261128120000_read_ticks.sql): up to when everyone else who
 -- reads a chat has read it, never who; nothing for someone outside it.
 begin;
 select plan(6);
