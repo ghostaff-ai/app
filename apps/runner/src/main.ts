@@ -28,6 +28,7 @@ import { createInterface } from 'node:readline';
 import { gzipSync } from 'node:zlib';
 import { run as runCommand } from './exec';
 import { PUSH_RULES, recordDir } from './guard';
+import { outboxDir, outboxNote, readOutbox } from './outbox';
 import { servePastRuns } from './pastRuns';
 import { type RepoCredential, serveTokens } from './tokens';
 import {
@@ -41,6 +42,7 @@ import {
   failureText,
   gitEnv,
   newDecisions,
+  NOTHING_NEW,
   noteworthy,
   passwdIds,
   pushRules,
@@ -124,6 +126,37 @@ async function report(r: Omit<Report, 'run' | 'nonce'>): Promise<void> {
     }
     if (attempt < 2) await new Promise((ok) => setTimeout(ok, 5_000 * (attempt + 1)));
   }
+}
+
+/**
+ * One audio the agent left in ~/outbox/, to the engine with the run's nonce (apps/engine/src/agentAudio.ts), which
+ * posts it in the agent's chat after the report. False when it didn't go: the report then says so.
+ */
+async function sendAudio(file: { name: string; title: string; mediaType: string; bytes: Buffer }): Promise<boolean> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(`${engine}/runs/${run}/audio?${new URLSearchParams({ title: file.title })}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${await idToken()}`, 'Content-Type': file.mediaType, 'X-Run-Nonce': nonce },
+        body: new Uint8Array(file.bytes),
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (res.ok) return true;
+      console.error(`the engine refused ${file.name}: ${res.status}`);
+      if (res.status < 500) return false;
+    } catch (e) {
+      console.error('audio not sent', file.name, crashText(e, secrets));
+    }
+  }
+  return false;
+}
+
+/** Uploads what the agent left in ~/outbox/; what didn't go out, as a line for the report. */
+async function sendOutbox(home: string, uid: number): Promise<string | null> {
+  const { files, skipped } = readOutbox(outboxDir(home), uid);
+  const failed: string[] = [];
+  for (const f of files) if (!(await sendAudio(f))) failed.push(f.name);
+  return outboxNote(skipped, failed);
 }
 
 /**
@@ -285,6 +318,11 @@ async function main(): Promise<number> {
     mkdirSync(dirname(PUSH_RULES), { recursive: true, mode: 0o755 });
     writeFileSync(PUSH_RULES, JSON.stringify(pushRules(others, ids.home, cloned)), { mode: 0o644 });
 
+    // Where the agent leaves an audio for the people who work with it (outbox.ts): its own folder.
+    const outbox = outboxDir(ids.home);
+    mkdirSync(outbox, { recursive: true, mode: 0o755 });
+    chownSync(outbox, ids.uid, ids.gid);
+
     const decisions = join(record, spec.decisionsDir);
     const before = new Set(yamlNames(decisions));
     transcript = join(transcriptDir, 'run.jsonl');
@@ -299,10 +337,13 @@ async function main(): Promise<number> {
     const result = resultOf(last);
     const ok = code === 0 && result.ok;
     const opened = newDecisions(decisionFiles(decisions), before, spec.slug, secrets);
+    const said = ok ? result.text : failureText(code, result.text);
+    const missed = await sendOutbox(ids.home, ids.uid).catch((e) => `No he podido leer ~/outbox/ (${crashText(e, secrets)}).`);
     await report({
       ok,
-      text: ok ? result.text : failureText(code, result.text),
-      noteworthy: !ok || noteworthy(result.text) || opened.length > 0,
+      // Said only when an audio didn't go out; a «SIN NOVEDAD» with it stops being one.
+      text: missed ? [said && said.trim() !== NOTHING_NEW ? said : null, missed].filter(Boolean).join('\n\n') : said,
+      noteworthy: !ok || noteworthy(result.text) || opened.length > 0 || !!missed,
       decisions: opened,
       usage,
       rateLimit,

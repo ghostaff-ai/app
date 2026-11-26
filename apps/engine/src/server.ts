@@ -44,6 +44,7 @@ import { startRoutines, supabaseRoutineStore } from './routines';
 import { RECORD_STORE_TOKEN_HOURS, type RunnerDeps, startScheduled } from './runner';
 import { DEFAULT_TRANSCRIBE_MODEL, type GoogleRequest, vertexTranscriber } from './transcribe';
 import { supabaseVoiceNoteStore } from './voiceNotes';
+import { supabaseRunAudioStore } from './agentAudio';
 
 function required(name: string): string {
   const v = process.env[name];
@@ -214,6 +215,7 @@ const runner: RunnerDeps | undefined = runnerIdentity
 const jobs = {
   runner,
   jobs: supabaseJobStore(admin, { afterAgentWrite }),
+  audio: supabaseRunAudioStore(admin, { afterAgentWrite }),
   launch: cloudRunLauncher(auth),
   async syncOrg(orgId: string) {
     const org = await recordSync.store.orgWithRecord(orgId);

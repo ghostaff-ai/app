@@ -1,4 +1,4 @@
-import { type ActionPart, type ChatMessage, type EditableField, isAccountAskPart, isActionPart, isDecisionPart, isDecisionQuotePart, isGuidePart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
+import { type ActionPart, type ChatMessage, type EditableField, isAccountAskPart, isActionPart, isAudioPart, isDecisionPart, isDecisionQuotePart, isGuidePart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
@@ -6,6 +6,7 @@ import { DecisionInChat, DecisionQuote } from '@/components/chat/DecisionInChat'
 import { GuideCard } from '@/components/chat/GuideCard';
 import { Markdown } from '@/components/chat/Markdown';
 import { VoiceNote } from '@/components/chat/VoiceNote';
+import { AgentAudio } from '@/components/chat/AgentAudio';
 import { Clock, Icon } from '@/components/icons';
 import { Field } from '@/components/ui';
 import type { AskControls } from '@/lib/hooks/useAccountAsks';
@@ -322,10 +323,12 @@ export function MessageView({
   const guideParts = message.parts.filter(isGuidePart);
   const decisions = message.parts.filter(isDecisionPart);
   const quote = message.parts.find(isDecisionQuotePart);
+  const audio = message.parts.filter(isAudioPart);
 
   if (message.authorKind === 'agent') {
+    const said = text || audio.map((a) => `audio «${a.title}»`).join(', ');
     return (
-      <View className={`px-4 ${showAuthor ? 'pt-4' : 'pt-1.5'}`} accessibilityLabel={`${message.authorName}: ${text}`}>
+      <View className={`px-4 ${showAuthor ? 'pt-4' : 'pt-1.5'}`} accessibilityLabel={`${message.authorName}: ${said}`}>
         {showAuthor ? (
           <View className="mb-1 flex-row items-center">
             <Image source={GHOSTS[ghost ?? 'base'].picture} style={{ width: 22, height: 22 }} resizeMode="contain" />
@@ -335,6 +338,9 @@ export function MessageView({
         {message.routineId ? <RoutineLine title={routineTitle ?? null} /> : null}
         <StatusLine message={message} />
         {text ? <Markdown text={text} names={names} /> : null}
+        {audio.map((a) => (
+          <AgentAudio key={a.path} part={a} />
+        ))}
         {actions.map((a) => (
           // An action is decided once the agent has finished writing its message.
           <ActionCard

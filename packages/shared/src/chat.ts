@@ -130,6 +130,33 @@ export function isVoicePart(p: MessagePart): p is VoicePart & MessagePart {
 }
 
 /**
+ * An audio an agent made in its run on our runner (docs/plans/ongoing/agent-audio.md):
+ * La Mesa's episode, a Productor draft. Kept in the «voice-notes» bucket beside
+ * the voice notes and played with the same player; unlike a voice note it has
+ * a title and no transcript.
+ */
+export type AudioPart = {
+  type: 'audio';
+  /** In the bucket: <org_id>/<thread_id>/<message_id>.<ext>. */
+  path: string;
+  /** «audio/mpeg» or «audio/mp4». */
+  mediaType: string;
+  /** Null when unknown: the player learns it once the audio has loaded. */
+  durationMs: number | null;
+  /** The file's name without its extension, as the agent named it. */
+  title: string;
+};
+
+export function isAudioPart(p: MessagePart): p is AudioPart & MessagePart {
+  return p.type === 'audio' && typeof (p as { path?: unknown }).path === 'string' && typeof (p as { title?: unknown }).title === 'string';
+}
+
+/** How an agent's audio reads to an agent: it can't hear it, only know it was there. */
+export function audioLines(parts: MessagePart[]): string[] {
+  return parts.filter(isAudioPart).map((p) => `(Audio: ${p.title})`);
+}
+
+/**
  * A decision an agent asked for in its message (docs/plans/ready/decision-model.md,
  * decision 5): the card shows the decision row, answered from there or from the deck.
  * The question is kept so the message reads even before the row loads.

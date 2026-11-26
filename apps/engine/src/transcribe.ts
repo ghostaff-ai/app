@@ -111,15 +111,18 @@ export function audioType(contentType: string | undefined): string {
   return mimeType;
 }
 
-/** A request's audio, at most MAX_AUDIO_BYTES (413 beyond, 400 when empty). */
-export async function readAudio(note: { contentLength: string | undefined; body: ReadableStream<Uint8Array> | null }): Promise<Uint8Array> {
-  if (Number(note.contentLength) > MAX_AUDIO_BYTES) throw tooLarge();
-  const audio = await readAtMost(note.body, MAX_AUDIO_BYTES);
+/** A request's audio, at most `max` bytes, a voice note's by default (413 beyond, 400 when empty). */
+export async function readAudio(
+  note: { contentLength: string | undefined; body: ReadableStream<Uint8Array> | null },
+  max: number = MAX_AUDIO_BYTES,
+): Promise<Uint8Array> {
+  if (Number(note.contentLength) > max) throw tooLarge(max);
+  const audio = await readAtMost(note.body, max);
   if (audio.byteLength === 0) throw new Refusal(400, 'bad_request', 'no audio');
   return audio;
 }
 
-const tooLarge = () => new Refusal(413, 'too_large', `audio over ${MAX_AUDIO_BYTES} bytes`);
+const tooLarge = (max: number) => new Refusal(413, 'too_large', `audio over ${max} bytes`);
 
 /** The body's bytes, refused as soon as they pass `max`: a missing or false Content-Length doesn't get past it. */
 async function readAtMost(body: ReadableStream<Uint8Array> | null, max: number): Promise<Uint8Array> {
@@ -133,7 +136,7 @@ async function readAtMost(body: ReadableStream<Uint8Array> | null, max: number):
     size += value.byteLength;
     if (size > max) {
       await reader.cancel().catch(() => {});
-      throw tooLarge();
+      throw tooLarge(max);
     }
     chunks.push(value);
   }

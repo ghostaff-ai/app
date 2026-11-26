@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { completeMention, mentionQuery, mentionSuggestions, messageText, splitMentions } from '../src/chat';
+import { audioLines, completeMention, isAudioPart, mentionQuery, mentionSuggestions, messageText, splitMentions } from '../src/chat';
 
 describe('messageText', () => {
   it('joins the text parts and skips the rest', () => {
     expect(messageText([{ type: 'text', text: 'Hola' }, { type: 'tool-gmail', state: 'done' }, { type: 'text', text: 'Hecho' }])).toBe('Hola\n\nHecho');
+  });
+});
+
+describe('agent audio', () => {
+  const audio = { type: 'audio', path: 'o/t/m.mp3', mediaType: 'audio/mpeg', durationMs: null, title: 'La Mesa 2026-11-30 (ES)' };
+  it('knows an audio part, and not a voice note', () => {
+    expect(isAudioPart(audio)).toBe(true);
+    expect(isAudioPart({ type: 'voice', path: 'o/t/m.m4a', mediaType: 'audio/mp4', durationMs: 1000, transcription: 'done' })).toBe(false);
+    expect(isAudioPart({ type: 'audio', path: 'o/t/m.mp3' })).toBe(false);
+  });
+  it('reads as a line for an agent, and is not text', () => {
+    expect(audioLines([{ type: 'text', text: 'Hola' }, audio])).toEqual(['(Audio: La Mesa 2026-11-30 (ES))']);
+    expect(messageText([audio])).toBe('');
   });
 });
 
