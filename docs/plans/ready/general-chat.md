@@ -30,6 +30,12 @@ Jaime, 2026-11-26 (all my picks):
 3. **One General per organisation**, with every person who is a member. Not one per department.
 4. **Audio and text**, as in WhatsApp: the mic is the main button and you can also type (a quick @agent, a link).
 
+Jaime, 2026-11-26, after the plan's review (all my picks):
+
+5. **Asking an agent in General is sharing its answer.** Everyone in General reads an @mentioned agent's reply, also a member who can't see that agent. Asking there is choosing to share, like forwarding a message. The agent is told that it answers in front of the whole team.
+6. **A voice note reaches an agent when it is tagged before recording.** Type `@Secretaría` in the box and then tap the mic: the note goes out with the mention, as a text part before the voice part, and Secretaría answers it. A note without a tag reaches nobody. A name said aloud never calls an agent: it would answer whenever you only talk *about* it.
+7. **An agent's reply in General notifies only whoever asked** (the author of the message it answers, `reply_to`). Everyone else sees it when they open General.
+
 ## Design
 
 ### The chat
@@ -44,6 +50,9 @@ Jaime, 2026-11-26 (all my picks):
 ### Agents in General
 
 - **Nobody answers unless @mentioned.** `answerWaiting` takes a thread with no home agent. With no mention, `whoAnswers` returns nobody, so a General message or voice note never starts a reply. With a mention, the mentioned agents answer, in General, as the author. The author must be able to talk to each one, or it stays out, as today.
+- **Mentions across a burst.** `waitingRuns` groups one author's consecutive messages and `whoAnswers` reads only the last. In General it reads every mention in the run, so «@Secretaría escucha esto» followed by a voice note still calls Secretaría (decision 6).
+- **A tagged voice note** (decision 6): with only mentions in the box, the composer shows the mic, not send. The engine's voice-note route takes an optional `text` (the mentions), written as a text part before the voice part. The transcript is appended after them, so `messageText` reads «@Secretaría <transcript>».
+- **The reply's push** (decision 7): `messages_notify` in General queues the `reply` push only for the author of `reply_to`, routed to `/general`.
 - **What an @mentioned agent reads**: General as a conversation, with the agent-context window (its own summary of General in `conversation_summaries`, keyed `(thread, agent)`, the latest messages, `conversation_search`). Voice notes read as their transcript (`messageText`).
 - **Runner agents mentioned in General** (`ordago_job`, `ghostaff`) answer as they do in their own chat: `askJob` / `askRunner` with the thread, and their report lands in General through `reply_to`.
 
