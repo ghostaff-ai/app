@@ -5,7 +5,6 @@
 // decisions beside the text.
 
 import type { GuideStatus } from './guides';
-import type { ConversationVisibility } from './models';
 
 export type MessagePart = { type: 'text'; text: string } | { type: string; [key: string]: unknown };
 
@@ -171,6 +170,8 @@ export interface ChatMessage {
   steps: string[];
   /** The routine that started this answer (agent-routines.md): the chat says so above it. */
   routineId?: string | null;
+  /** An agent's reply: the person's message it answers (group-chat-per-agent.md, decision 5). */
+  replyTo?: string | null;
   createdAt: string;
 }
 
@@ -184,13 +185,7 @@ export interface ChatThread {
   lastAuthor: string | null;
   lastText: string | null;
   unread: boolean;
-  /** The person's own chat with the agent (one per agent). */
-  personal: boolean;
-  /** Who besides its opener reads or writes it; a personal chat is always private. */
-  visibility: ConversationVisibility;
-  /** The person opened it (or it is their chat with the agent). */
-  mine: boolean;
-  /** The person opened it, wrote, read or was @mentioned in it: Equipo shows it. */
+  /** The person wrote, read or was @mentioned in it: a reply reaches their phone. */
   following: boolean;
 }
 

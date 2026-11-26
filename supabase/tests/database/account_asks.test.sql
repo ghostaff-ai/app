@@ -19,8 +19,8 @@ insert into public.memberships (org_id, user_id, role, display_name) values
 -- What the engine writes, as the service role: Redes asks for Notion in its reply.
 insert into public.agents (id, org_id, name, ghost, department) values
   ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Redes', 'redes', 'marketing');
-insert into public.threads (id, org_id, agent_id, title, visibility) values
-  ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Notas', 'write');
+insert into public.threads (id, org_id, agent_id, title) values
+  ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'Notas');
 insert into public.messages (id, thread_id, org_id, author_kind, author_agent, author_name, parts) values
   ('40000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'agent',
    '20000000-0000-0000-0000-000000000001', 'Redes', '[]');

@@ -368,7 +368,7 @@ async function failRun(chat: ChatDeps, deps: JobDeps, run: Pick<RunRecord, 'id' 
     return;
   }
   try {
-    await deps.jobs.postToPersonalChats(agent, said);
+    await deps.jobs.postToAgentChat(agent, said);
   } catch (e) {
     console.error('notice not posted', e instanceof Error ? e.message : typeof e);
   }

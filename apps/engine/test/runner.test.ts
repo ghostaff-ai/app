@@ -98,7 +98,6 @@ function setup(
   const ciAsked: Array<[number, string]> = [];
   const notices: string[] = [];
   const deleted: string[] = [];
-  const copies: Array<[string, string, string | null]> = [];
   const agents = new Map<string, RunnerAgent>([
     [LEGAL, spec(legal)],
     [TALLER, spec(taller)],
@@ -143,10 +142,13 @@ function setup(
     conversation: async () => ({ summary: null, messages }),
     saveSummary: async () => true,
     searchMessages: async () => [],
-    startReply: async (_t, agent) => {
+    startReply: async (_t, agent, _s, o) => {
       if (working) return null;
       working = `reply-${messages.filter((m) => m.authorKind === 'agent').length + 1}`;
-      messages.push(msg({ id: working, authorKind: 'agent', authorAgentId: agent.id, authorUserId: null, authorName: agent.name, text: '', state: 'working' }));
+      messages.push({
+        ...msg({ id: working, authorKind: 'agent', authorAgentId: agent.id, authorUserId: null, authorName: agent.name, text: '', state: 'working' }),
+        replyTo: o?.replyTo ?? null,
+      });
       return working;
     },
     updateReply: async (id, patch) => {
@@ -157,7 +159,7 @@ function setup(
       deleted.push(id);
     },
     touchThread: async () => {},
-    personalChat: async () => 'x',
+    agentChat: async () => 'x',
     aiAccounts: async (orgId) => [
       ...(orgId === ORG ? [{ id: 'key-1', provider: 'anthropic' as const }] : []),
       ...(orgId === ORG && opts.vertexProject ? [{ id: 'vx-1', provider: 'vertex' as const, project: opts.vertexProject, region: 'europe-west1' }] : []),
@@ -186,13 +188,8 @@ function setup(
       return true;
     },
     staleRuns: async () => [],
-    postRoutineCopies: async (id, text, except) => {
-      copies.push([id, text, except]);
-      return 1;
-    },
-    postToPersonalChats: async (a, text) => {
+    postToAgentChat: async (a, text) => {
       notices.push(`${a.name}: ${text}`);
-      return 2;
     },
   };
   const store: RunnerStore = {
@@ -317,7 +314,7 @@ function setup(
   const fetchSpec = (run: string, nonce: string, as = RUNNER) => post(`/runs/${run}/spec`, as, { nonce });
   const report = (body: unknown, as = RUNNER) => post('/runs/report', as, body);
   return {
-    ask, fetchSpec, report, post, stored, app, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf, deleted, copies, thread, tokenAccess,
+    ask, fetchSpec, report, post, stored, app, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf, deleted, thread, tokenAccess,
     skipped, ciAsked,
     setNow: (d: Date) => {
       now = d;
@@ -771,7 +768,7 @@ describe('our runner’s report', () => {
     expect(t.notices).toEqual([]);
   });
 
-  it("a routine's run is told its routine, answers in its creator's chat and copies it to whoever else gets it (agent-routines.md)", async () => {
+  it("a routine's run is told its routine and answers in the agent's chat, once for everyone (agent-routines.md)", async () => {
     const t = setup();
     await askRunner(t.chatDeps, t.jobDeps, t.thread, legal, 'reply-r', 'ana', ROUTINE);
     const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
@@ -780,7 +777,6 @@ describe('our runner’s report', () => {
     expect(spec.prompt).toContain('la rutina «Ley» de Ana');
     await t.report({ run, nonce, ok: true, text: 'La ley no ha cambiado, pero hay consulta pública.', noteworthy: true, decisions: [] });
     expect(t.updates).toContainEqual(expect.objectContaining({ id: 'reply-r', state: 'done', text: 'La ley no ha cambiado, pero hay consulta pública.' }));
-    expect(t.copies).toEqual([[ROUTINE, 'La ley no ha cambiado, pero hay consulta pública.', 'ana']]);
   });
 
   it("a routine's run with nothing to say leaves nothing in the chat", async () => {
@@ -789,7 +785,6 @@ describe('our runner’s report', () => {
     const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
     await t.report({ run, nonce, ok: true, text: 'SIN NOVEDAD', noteworthy: false });
     expect(t.deleted).toEqual(['reply-r']);
-    expect(t.copies).toEqual([]);
     expect(t.runs.get(run!)!.state).toBe('done');
   });
 

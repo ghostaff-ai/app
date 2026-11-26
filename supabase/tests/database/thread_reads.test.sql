@@ -26,23 +26,23 @@ set local role authenticated;
 create temporary table ids (name text primary key, id uuid) on commit drop;
 grant all on ids to authenticated;
 
--- Ana starts a thread with each agent.
+-- Ana writes to each agent, in its chat.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';
-insert into ids select 'correo', id from public.start_thread('20000000-0000-0000-0000-000000000001', '¿Algo urgente?', visibility => 'write');
-insert into ids select 'cierre', id from public.start_thread('20000000-0000-0000-0000-000000000002', '¿Cerramos octubre?', visibility => 'write');
+insert into ids select 'correo', thread_id from public.chat_with('20000000-0000-0000-0000-000000000001', '¿Algo urgente?');
+insert into ids select 'cierre', thread_id from public.chat_with('20000000-0000-0000-0000-000000000002', '¿Cerramos octubre?');
 select is(
   (select count(*) from public.my_threads('10000000-0000-0000-0000-000000000001') where unread),
   0::bigint, 'what you wrote yourself is not unread');
 select results_eq(
   $$ select title from public.my_threads('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002') $$,
-  $$ values ('¿Cerramos octubre?') $$,
+  $$ values ('Finanzas') $$,
   'narrowed to one agent');
 
 -- Bea sees both, unread, with the last message.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
 select is(
   (select count(*) from public.my_threads('10000000-0000-0000-0000-000000000001') where unread),
-  2::bigint, 'someone else''s new threads are unread');
+  2::bigint, 'what someone else wrote is unread');
 select is(
   (select last_author || ': ' || last_text from public.my_threads('10000000-0000-0000-0000-000000000001') where id = (select id from ids where name = 'cierre')),
   'Ana: ¿Cerramos octubre?', '... with who wrote last and what');
@@ -50,7 +50,7 @@ select lives_ok($$ select public.mark_thread_read((select id from ids where name
 select is(
   (select unread from public.my_threads('10000000-0000-0000-0000-000000000001') where id = (select id from ids where name = 'cierre')),
   false, '... so it is no longer unread');
-select lives_ok($$ select public.post_message((select id from ids where name = 'correo'), 'Sí, Hacienda') $$, 'Bea answers in Secretaría''s thread');
+select lives_ok($$ select public.post_message((select id from ids where name = 'correo'), 'Sí, Hacienda') $$, 'Bea answers in Secretaría''s chat');
 
 -- Ana sees Bea's answer as unread, and hides Finanzas from Bea.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';
@@ -60,7 +60,7 @@ select is(
 select public.set_agent_access('20000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000b', 'none');
 
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
-select is((select count(*) from public.my_threads('10000000-0000-0000-0000-000000000001')), 1::bigint, 'with none, Finanzas'' threads leave the list');
+select is((select count(*) from public.my_threads('10000000-0000-0000-0000-000000000001')), 1::bigint, 'with none, Finanzas'' chat leaves the list');
 select throws_ok($$ select public.mark_thread_read((select id from ids where name = 'cierre')) $$, 'P0002', null, '... and cannot be marked');
 
 -- Carla: nothing of the bakery.

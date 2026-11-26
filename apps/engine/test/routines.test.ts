@@ -66,7 +66,6 @@ function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: st
   const replies: Array<{ id: string; routineId?: string; thread: string }> = [];
   const updates: Array<{ id: string; text?: string; state?: string }> = [];
   const deleted: string[] = [];
-  const copies: Array<[string, string, string | null]> = [];
   const notices: string[] = [];
   const paused: string[] = [];
   const asked: Array<{ system: string; messages: ModelTurn[]; tools: string[] }> = [];
@@ -85,10 +84,10 @@ function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: st
     conversation: async () => ({ summary: null, messages: [] }),
     saveSummary: async () => true,
     searchMessages: async () => [],
-    startReply: async (thread: ChatThreadHead, _a, _s, routineId) => {
+    startReply: async (thread: ChatThreadHead, _a, _s, o) => {
       if (opts.busy) return null;
       const id = `reply-${replies.length + 1}`;
-      replies.push({ id, routineId, thread: thread.id });
+      replies.push({ id, routineId: o?.routineId, thread: thread.id });
       return id;
     },
     updateReply: async (id, patch) => {
@@ -98,7 +97,7 @@ function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: st
       deleted.push(id);
     },
     touchThread: async () => {},
-    personalChat: async (_o, agentId, _t, userId) => `chat-${agentId}-${userId}`,
+    agentChat: async (agentId) => `chat-${agentId}`,
     // A Claude subscription: our runner needs one, and the chat turns use it too.
     aiAccounts: async () => [{ id: 'sub-1', provider: 'claude' }],
     recordAiUse: async () => {},
@@ -132,11 +131,7 @@ function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: st
       return true;
     },
     staleRuns: async () => [],
-    postToPersonalChats: async () => 0,
-    postRoutineCopies: async (id, text, except) => {
-      copies.push([id, text, except]);
-      return 2;
-    },
+    postToAgentChat: async () => {},
   };
   const vault = new MemoryVault();
   void vault.put(aiSecretName(ORG, 'sub-1'), 'sk-ant-oat-1', {});
@@ -179,7 +174,7 @@ function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: st
       return 1;
     },
   };
-  return { chatDeps, jobDeps, store, routines, replies, updates, deleted, copies, notices, paused, asked, runs, launched };
+  return { chatDeps, jobDeps, store, routines, replies, updates, deleted, notices, paused, asked, runs, launched };
 }
 
 describe('a routine on the tick (agent-routines.md)', () => {
@@ -199,10 +194,10 @@ describe('a routine on the tick (agent-routines.md)', () => {
     expect(t.replies).toEqual([]);
   });
 
-  it('answers in its creator’s chat as if she wrote the instruction then, with no settings', async () => {
+  it('answers in the agent’s chat as if its creator wrote the instruction then, with no settings', async () => {
     const t = setup();
     expect(await startRoutines(t.chatDeps, t.jobDeps, t.store, friday9)).toBe(1);
-    expect(t.replies).toEqual([{ id: 'reply-1', routineId: '50000000-0000-0000-0000-000000000001', thread: `chat-${FINANZAS}-${BEA}` }]);
+    expect(t.replies).toEqual([{ id: 'reply-1', routineId: '50000000-0000-0000-0000-000000000001', thread: `chat-${FINANZAS}` }]);
     const turn = t.asked[0]!.messages.at(-1)!;
     expect(turn).toMatchObject({ role: 'user' });
     expect(turn.content).toMatch(/Bea \([^)]+\): Mándame el resumen de ventas de la semana/);
@@ -210,7 +205,6 @@ describe('a routine on the tick (agent-routines.md)', () => {
     expect(t.asked[0]!.tools.filter((n) => n.startsWith('settings_'))).toEqual([]);
     expect(t.updates.at(-1)).toMatchObject({ id: 'reply-1', text: 'Esta semana: 1.200 € en ventas.', state: 'done' });
     expect([...t.runs.values()]).toMatchObject([{ origin: 'routine', routineId: '50000000-0000-0000-0000-000000000001', state: 'done', noteworthy: true }]);
-    expect(t.copies).toEqual([['50000000-0000-0000-0000-000000000001', 'Esta semana: 1.200 € en ventas.', BEA]]);
   });
 
   it('fires once for its hour, however many ticks see it', async () => {
@@ -225,7 +219,6 @@ describe('a routine on the tick (agent-routines.md)', () => {
     await startRoutines(t.chatDeps, t.jobDeps, t.store, friday9);
     expect(t.deleted).toEqual(['reply-1']);
     expect([...t.runs.values()]).toMatchObject([{ state: 'done', noteworthy: false }]);
-    expect(t.copies).toEqual([]);
     expect(isNothingNew('**SIN NOVEDAD**')).toBe(true);
     expect(isNothingNew('Sin novedad en ventas, pero…')).toBe(false);
   });
@@ -256,7 +249,7 @@ describe('a routine on the tick (agent-routines.md)', () => {
     expect(await startRoutines(t.chatDeps, t.jobDeps, t.store, friday9)).toBe(1);
     expect(t.launched).toHaveLength(1);
     expect([...t.runs.values()]).toMatchObject([
-      { origin: 'routine', routineId: '50000000-0000-0000-0000-000000000001', requestedBy: BEA, threadId: `chat-${LEGAL}-${BEA}`, messageId: 'reply-1' },
+      { origin: 'routine', routineId: '50000000-0000-0000-0000-000000000001', requestedBy: BEA, threadId: `chat-${LEGAL}`, messageId: 'reply-1' },
     ]);
     expect(t.asked).toEqual([]);
   });

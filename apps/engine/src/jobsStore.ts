@@ -112,15 +112,9 @@ export function supabaseJobStore(admin: SupabaseClient, opts: { afterAgentWrite?
       ) ?? [];
       return rows.map((r) => ({ id: r.id, orgId: r.org_id, agentId: r.agent_id, origin: r.origin, state: r.state, threadId: r.thread_id, messageId: r.message_id }));
     },
-    async postToPersonalChats(agent, text) {
-      const reached = check(await admin.rpc('post_to_personal_chats', { target_agent: agent.id, body: text })) as number;
+    async postToAgentChat(agent, text) {
+      check(await admin.rpc('post_to_agent_chat', { target_agent: agent.id, body: text }));
       opts.afterAgentWrite?.();
-      return reached;
-    },
-    async postRoutineCopies(routineId, text, except) {
-      const reached = check(await admin.rpc('post_routine_copies', { target_routine: routineId, body: text, except_user: except })) as number;
-      opts.afterAgentWrite?.();
-      return reached;
     },
   };
 }

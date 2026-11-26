@@ -111,16 +111,15 @@ reset role;
 insert into public.agent_runs (org_id, agent_id, origin, state, summary, routine_id) values
   ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', 'routine', 'done', 'Ventas: 1.200 €', (select id from ids where name = 'bea')),
   ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', 'routine', 'done', 'Falta una factura', (select id from ids where name = 'team'));
-select is(public.post_routine_copies((select id from ids where name = 'team'), 'Falta una factura', '00000000-0000-0000-0000-00000000000a'), 2,
-  'a team routine''s answer reaches everyone else who sees the agent');
-select is(public.notify_owners('10000000-0000-0000-0000-000000000001', 'He pausado una rutina.'), 1, 'Secretaría tells each owner');
+select is(public.notify_owners('10000000-0000-0000-0000-000000000001', 'He pausado una rutina.'), 1, 'the main agent says it once, in its chat');
+select is((select count(*)::int from public.messages m join public.agents a on a.id = m.author_agent where a.is_main), 1, '... one message');
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000d", "role": "authenticated"}';
 select results_eq($$ select summary from public.agent_runs $$, $$ values ('Falta una factura') $$,
   'a member sees the team routine''s run, not someone else''s «Solo para mí»');
-select throws_ok($$ select public.post_routine_copies((select id from ids where name = 'team'), 'x', null) $$, '42501', null,
-  'only the engine posts a routine''s answer');
+select throws_ok($$ select public.notify_owners('10000000-0000-0000-0000-000000000001', 'x') $$, '42501', null,
+  'only the engine writes as the main agent');
 
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
 select results_eq($$ select summary from public.agent_runs order by summary $$, $$ values ('Falta una factura'), ('Ventas: 1.200 €') $$,

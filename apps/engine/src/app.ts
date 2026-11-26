@@ -13,7 +13,7 @@ import { type ClaudeSession, type ClaudeSessionDeps, claudeSession, MAX_MESSAGE 
 import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromProvider, startAccountConnect } from './accounts';
 import { type ActionDeps, approveAction, rejectAction } from './actions';
 import { CONNECTORS } from '@ghostaff/shared';
-import { agentHello, type ChatDeps, replyInThread, resumeInThread } from './chat';
+import { agentHello, answerWaiting, type ChatDeps, replyInThread, resumeInThread } from './chat';
 import { approveGuide, checkGuide, type GuideDeps, getGuide, guidedAccessUndo, guideStep, MAX_STEP_BODY, pendingGuides, rejectGuide, removeGuidedAccess } from './guides';
 import { PHOTO_TOO_BIG } from './guideModel';
 import { reportRun } from './jobs';
@@ -122,12 +122,10 @@ export function createApp(deps: AppDeps) {
     if (!reports || !caller || !deps.chat.jobs) return c.json({ error: 'unauthorized' }, 401);
     const body = await c.req.json().catch(() => null);
     const done = await reportRun(deps.chat, deps.chat.jobs, caller, body);
-    // Someone wrote while the job worked: their message gets its answer now, with their rights.
+    // Someone wrote while the job worked: what waits gets its answer now, each with its author's rights.
     if (done.threadId) {
-      const [last] = (await deps.chat.chat.recentMessages(done.threadId, 1)).slice(-1);
-      if (last?.authorKind === 'person' && last.authorUserId) {
-        await replyInThread(deps.chat, last.authorUserId, done.threadId).catch(() => {});
-      }
+      const thread = await deps.chat.chat.thread(done.threadId);
+      if (thread) await answerWaiting(deps.chat, thread).catch(() => {});
     }
     return c.json({ ok: true, run: done.run });
   });

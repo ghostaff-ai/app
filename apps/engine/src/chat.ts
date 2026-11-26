@@ -119,7 +119,7 @@ export function failureKind(e: unknown): FailureKind {
 /** The database as the chat needs it (service role); the conversation's summary and search as context.ts does. */
 export interface ChatStore extends ContextStore {
   levelFor(agentId: string, userId: string): Promise<Level>;
-  /** A member's level on one conversation: their level on its agent, lowered by who the conversation is for (chat-permissions.md). */
+  /** A member's level on an agent's chat: their level on the agent (group-chat-per-agent.md). */
   threadLevelFor(threadId: string, userId: string): Promise<Level>;
   thread(id: string): Promise<ChatThreadHead | null>;
   agent(id: string): Promise<ChatAgent | null>;
@@ -132,9 +132,10 @@ export interface ChatStore extends ContextStore {
   recentMessages(threadId: string, limit: number): Promise<ChatMessage[]>;
   /**
    * Inserts the agent's «working» message; null when a reply is already being
-   * written. `routineId` marks it as a routine's answer (agent-routines.md).
+   * written. `routineId` marks it as a routine's answer (agent-routines.md);
+   * `replyTo`, the person's message it answers (the queue: waitingRuns).
    */
-  startReply(thread: ChatThreadHead, agent: ChatAgent, steps: string[], routineId?: string): Promise<string | null>;
+  startReply(thread: ChatThreadHead, agent: ChatAgent, steps: string[], opts?: { routineId?: string; replyTo?: string }): Promise<string | null>;
   /** Removes a message: a routine's answer that had nothing to tell. */
   deleteMessage(id: string): Promise<void>;
   /** With `text`, the message's parts become that text followed by `cards` (approvals, asks for an account). */
@@ -153,8 +154,8 @@ export interface ChatStore extends ContextStore {
     decider: 'owner' | 'requester';
   }): Promise<string>;
   touchThread(threadId: string): Promise<void>;
-  /** The person's own chat with the agent, opened if it isn't yet (supabase/migrations/20261123200000_personal_chats.sql). */
-  personalChat(orgId: string, agentId: string, title: string, userId: string): Promise<string>;
+  /** The agent's chat, everyone's with it, opened if nobody has written in it yet (group-chat-per-agent.md). */
+  agentChat(agentId: string): Promise<string>;
   /** The organisation's AI accounts in the order to try them: the owner's, with any at a limit that has not reset moved last. */
   aiAccounts(orgId: string): Promise<AiAccount[]>;
   /** Records how an account did, and marks it working or failing. */
@@ -419,13 +420,24 @@ export function toTurns(
 }
 
 /**
+ * The conversation as it stood when a waiting message was written (the queue,
+ * waitingRuns): up to it, and the agents' replies to it, so a second agent
+ * reads the first one's answer but nobody reads what came after.
+ */
+export function cutAt(messages: ChatMessage[], askedId: string): ChatMessage[] {
+  const at = messages.findIndex((m) => m.id === askedId);
+  if (at < 0) return messages;
+  return messages.filter((m, i) => i <= at || (m.authorKind === 'agent' && m.replyTo === askedId));
+}
+
+/**
  * What a chat agent reads of the thread (agent-context.md): the summary of
  * what came before and the latest messages, never the whole conversation, with
  * what became of the decisions in them.
  */
-async function turnsOf(deps: ChatDeps, threadId: string, agentId: string): Promise<ModelTurn[]> {
+async function turnsOf(deps: ChatDeps, threadId: string, agentId: string, askedId?: string): Promise<ModelTurn[]> {
   const { summary, messages } = await deps.chat.conversation(threadId, agentId);
-  const latest = windowOf(messages);
+  const latest = windowOf(askedId ? cutAt(messages, askedId) : messages);
   const ids = decisionIds(latest.map((m) => m.parts));
   const briefs = ids.length && deps.decisions ? await deps.decisions.briefs(ids).catch(() => new Map<string, DecisionBrief>()) : new Map<string, DecisionBrief>();
   return toTurns(latest, agentId, briefs, summary);
@@ -676,7 +688,7 @@ export async function recordUse(
  * settings, read as whoever asked; every agent the tool to ask for an account
  * it lacks.
  */
-async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | undefined, userId: string | null = null) {
+async function orgReach(deps: ChatDeps, orgId: string) {
   const [names, orgName, agents, tools, record] = await Promise.all([
     deps.chat.memberNames(orgId),
     deps.chat.orgName(orgId),
@@ -690,7 +702,13 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
         })
       : null,
   ]);
-  const reachOf = async (who: ChatAgent, broughtInto?: string): Promise<{ tools: AgentTools; system: string }> => {
+  /**
+   * `asker` is whoever the reply answers: their session, when it is there
+   * (without it, no settings tools), and who they are, for the memory.
+   */
+  const reachOf = async (who: ChatAgent, broughtInto?: string, asker?: { userId: string; accessToken?: string }): Promise<{ tools: AgentTools; system: string }> => {
+    const accessToken = asker?.accessToken;
+    const userId = asker?.userId ?? null;
     let mine = restrictTo(tools, who.accounts);
     // A guided access is this agent's own identity in the app: only it gets the tool, whatever agents.accounts says.
     // Reading them failing must not cost the reply, which has already started.
@@ -743,67 +761,135 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
   return { names, orgName, agents, reachOf };
 }
 
+/** A run of one person's messages waiting for an answer: answered as them, with the history up to its last one. */
+export interface WaitingRun {
+  authorId: string;
+  /** Index of the run's last message in the list it came from. */
+  upTo: number;
+}
+
 /**
- * Lets the thread's agent (or the agents @mentioned) answer its last message,
- * if they should, each with the rights of the person who asked. Resolves when
- * the replies are written (Cloud Run keeps the CPU only while a request is open).
+ * What waits for an answer in an agent's chat (group-chat-per-agent.md,
+ * decision 5): the people's messages after the last one an agent's reply
+ * answered, as runs of one author each, oldest first. One written while the
+ * agent answered someone else waits its turn; folding two people into one
+ * reply would blur whose rights the agent acts with. Before any reply named
+ * what it answers (chats from before the queue), the agent's last message is
+ * where waiting starts. What the agent writes on its own answers nothing.
+ */
+export function waitingRuns(messages: ChatMessage[]): WaitingRun[] {
+  const index = new Map(messages.map((m, i) => [m.id, i]));
+  let from = -1;
+  let named = false;
+  for (const m of messages) {
+    if (m.authorKind !== 'agent' || !m.replyTo) continue;
+    named = true;
+    // A reply to a message older than the window: everything in it came after.
+    from = Math.max(from, index.get(m.replyTo) ?? -1);
+  }
+  if (!named) for (const [i, m] of messages.entries()) if (m.authorKind === 'agent') from = i;
+  const runs: WaitingRun[] = [];
+  for (let i = from + 1; i < messages.length; i++) {
+    const m = messages[i]!;
+    if (m.authorKind !== 'person' || !m.authorUserId) continue;
+    const last = runs[runs.length - 1];
+    if (last && last.authorId === m.authorUserId && messages.slice(last.upTo + 1, i).every((x) => x.authorKind === 'agent')) last.upTo = i;
+    else runs.push({ authorId: m.authorUserId, upTo: i });
+  }
+  return runs;
+}
+
+/**
+ * Lets the agent (or the agents @mentioned) answer what waits in its chat, if
+ * they should: the caller must be able to talk in it. Resolves when the replies
+ * are written (Cloud Run keeps the CPU only while a request is open).
  */
 export async function replyInThread(deps: ChatDeps, userId: string, threadId: unknown, accessToken?: string): Promise<{ replied: boolean }> {
   if (!isUuid(threadId)) throw new Refusal(400, 'bad_request', 'thread must be a uuid');
   const thread = await deps.chat.thread(threadId);
   if (!thread) throw new Refusal(404, 'not_found', 'thread not found');
   await requireTalkIn(deps, thread.id, userId);
+  return answerWaiting(deps, thread, { userId, accessToken });
+}
+
+/** How many answers one request writes at most: the rest wait for the next. */
+const ROUNDS = 5;
+
+/**
+ * Answers what waits in an agent's chat (waitingRuns), one run at a time, in
+ * order, each with the rights of its author (team-chat.md, decision 7). Only
+ * the caller's own runs get their session (`caller.accessToken`): someone
+ * else's is answered without the settings tools, which need theirs. A run whose
+ * author can no longer talk to the agent, or that calls on nobody (it
+ * mentions only people), is passed over. When the chat is busy, the reply being
+ * written answers what waits once it ends (its request goes round again, or a
+ * job's report does: app.ts). `caller` is absent when nobody asked (a report).
+ */
+export async function answerWaiting(
+  deps: ChatDeps,
+  thread: ChatThreadHead,
+  caller?: { userId: string; accessToken?: string },
+): Promise<{ replied: boolean }> {
   const agent = await deps.chat.agent(thread.agentId);
   if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
 
-  const { names, orgName, agents, reachOf } = await orgReach(deps, thread.orgId, accessToken, userId);
+  const { names, orgName, agents, reachOf } = await orgReach(deps, thread.orgId);
+  const canTalk = new Map<string, boolean>();
+  const talks = async (userId: string) => {
+    if (!canTalk.has(userId)) canTalk.set(userId, (await deps.chat.threadLevelFor(thread.id, userId)) === 'talk');
+    return canTalk.get(userId)!;
+  };
   let replied = false;
-  let handled: string | null = null;
-  // A message written while an agent was answering gets its own answer next
-  // (its request found the thread busy); a few rounds at most.
-  for (let round = 0; round < 3; round++) {
+  rounds: for (let round = 0; round < ROUNDS; round++) {
     const messages = await deps.chat.recentMessages(thread.id, 40);
-    const last = messages[messages.length - 1];
-    // An empty thread is a new agent's first one: it introduces itself.
+    // An empty chat is a new agent's first one: it introduces itself to whoever opened it.
     if (messages.length === 0) {
+      if (!caller) break;
       const replyId = await deps.chat.startReply(thread, agent, ['Presentándome']);
       if (!replyId) break;
-      const mine = await reachOf(agent);
-      await writeReply(deps, replyId, agent, mine.system, [introTurn(orgName)], mine.tools, { threadId: thread.id, userId }, 'Presentándome');
+      const mine = await reachOf(agent, undefined, caller);
+      await writeReply(deps, replyId, agent, mine.system, [introTurn(orgName)], mine.tools, { threadId: thread.id, userId: caller.userId }, 'Presentándome');
       replied = true;
       continue;
     }
-    if (!last || last.id === handled) break;
-    handled = last.id;
-    const responders = whoAnswers(messages, agent, agents, names);
-    if (responders.length === 0) break;
-    for (const [i, who] of responders.entries()) {
-      // An agent the asker may not talk to stays out of it.
-      if (who.id !== agent.id && (await deps.chat.levelFor(who.id, userId)) !== 'talk') continue;
-      const replyId = await deps.chat.startReply(thread, who, ['Leyendo la conversación']);
-      if (!replyId) return { replied }; // a reply is already being written; it will pick this up
-      if (who.runner === 'ordago_job' && deps.jobs) {
-        // Its job answers when it ends (POST /runs/report); the message stays «working» until then.
-        await askJob(deps, deps.jobs, thread, who, replyId, i === 0 ? messages : await deps.chat.recentMessages(thread.id, 40), userId);
+    for (const run of waitingRuns(messages)) {
+      const history = messages.slice(0, run.upTo + 1);
+      const responders = whoAnswers(history, agent, agents, names);
+      if (responders.length === 0 || !(await talks(run.authorId))) continue;
+      const asked = history[history.length - 1]!;
+      const token = caller && caller.userId === run.authorId ? caller.accessToken : undefined;
+      for (const who of responders) {
+        // An agent the asker may not talk to stays out of it.
+        if (who.id !== agent.id && (await deps.chat.levelFor(who.id, run.authorId)) !== 'talk') continue;
+        const replyId = await deps.chat.startReply(thread, who, ['Leyendo la conversación'], { replyTo: asked.id });
+        if (!replyId) break rounds; // a reply is being written; what waits is answered once it ends
+        if (who.runner === 'ordago_job' && deps.jobs) {
+          // Its job answers when it ends (POST /runs/report); the message stays «working» until then.
+          await askJob(deps, deps.jobs, thread, who, replyId, history, run.authorId);
+          replied = true;
+          break rounds;
+        }
+        if (who.runner === 'ghostaff' && deps.jobs) {
+          // Our own runner (runner.ts): the same, with the run in Ghostaff's project.
+          await askRunner(deps, deps.jobs, thread, who, replyId, run.authorId);
+          replied = true;
+          break rounds;
+        }
+        // Read now, so a second agent reads the first one's answer too; never what was written after the message it answers.
+        const mine = await reachOf(who, who.id === agent.id ? undefined : agent.name, { userId: run.authorId, accessToken: token });
+        await writeReply(deps, replyId, who, mine.system, await turnsOf(deps, thread.id, who.id, asked.id), mine.tools, { threadId: thread.id, userId: run.authorId });
+        await summarizeIfLong(deps, thread, who);
         replied = true;
-        continue;
       }
-      if (who.runner === 'ghostaff' && deps.jobs) {
-        // Our own runner (runner.ts): the same, with the run in Ghostaff's project.
-        await askRunner(deps, deps.jobs, thread, who, replyId, userId);
-        replied = true;
-        continue;
-      }
-      // Read now, so a second agent reads the first one's answer too.
-      const mine = await reachOf(who, who.id === agent.id ? undefined : agent.name);
-      await writeReply(deps, replyId, who, mine.system, await turnsOf(deps, thread.id, who.id), mine.tools, { threadId: thread.id, userId });
-      await summarizeIfLong(deps, thread, who);
-      replied = true;
+      // Answered: read the chat again, with this reply in it.
+      continue rounds;
     }
+    break;
   }
   if (replied) await deps.chat.touchThread(thread.id).catch(() => {});
   return { replied };
 }
+
 
 /** What an agent waited for and now has: an account it asked for (accountAsks.ts) or a guide finished (guides.ts). */
 export interface Resumable {
@@ -866,9 +952,8 @@ export async function resumeInThread(
 
 /**
  * Lets an agent go on in `threadId` as `actorId`, without checking the caller
- * against the thread: for an owner's approval of a member's guide, which the
- * owner may approve from a conversation they cannot see (the member's personal
- * chat). The agent answers as if the member who did the guide had asked (no
+ * against the thread: for an owner's approval of a member's guide, from
+ * Decisiones rather than the agent's chat. The agent answers as if the member who did the guide had asked (no
  * settings tools: there is no session of theirs to read them as). Resolves when
  * the reply is written; refuses as `resumeInThread` does (`already_done`, `busy`).
  */
@@ -894,8 +979,8 @@ async function goOn(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, wa
   const who = (await waited.memberName(actorId)) ?? 'Alguien';
   await waited.settle(who);
   const threadAgent = agent.id === thread.agentId ? null : await deps.chat.agent(thread.agentId);
-  const { reachOf } = await orgReach(deps, thread.orgId, accessToken, actorId);
-  const mine = await reachOf(agent, threadAgent?.name);
+  const { reachOf } = await orgReach(deps, thread.orgId);
+  const mine = await reachOf(agent, threadAgent?.name, { userId: actorId, accessToken });
   const turns = await turnsOf(deps, thread.id, agent.id);
   const line = `${who}: Ya tienes acceso a ${waited.name}. Sigue con lo que se te pidió.`;
   const lastTurn = turns[turns.length - 1];
@@ -924,8 +1009,8 @@ export interface RoutineAsk {
  * Returns what the agent said; `SIN NOVEDAD` when it had nothing to tell.
  */
 export async function answerRoutine(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, replyId: string, ask: RoutineAsk): Promise<{ text: string; ok: boolean }> {
-  const { reachOf } = await orgReach(deps, agent.orgId, undefined, ask.userId);
-  const mine = await reachOf(agent);
+  const { reachOf } = await orgReach(deps, agent.orgId);
+  const mine = await reachOf(agent, undefined, { userId: ask.userId });
   const turns = await turnsOf(deps, thread.id, agent.id);
   const now = new Date(deps.now ? deps.now() : Date.now());
   const line =
@@ -950,15 +1035,16 @@ function introTurn(orgName: string): ModelTurn {
 }
 
 /**
- * A new agent's first words (team-chat.md, decision 8), in the chat of the
- * person who added it (three-tabs.md, decision 3). It opens empty and returns at once; the app then asks for a reply, and in an empty thread the
- * agent introduces itself. Owners only (they are the ones who add agents).
+ * A new agent's first words (team-chat.md, decision 8), in its chat
+ * (group-chat-per-agent.md). It opens empty and returns at once; the app then
+ * asks for a reply, and in an empty chat the agent introduces itself to whoever
+ * opened it. Owners only (they are the ones who add agents).
  */
 export async function agentHello(deps: ChatDeps, userId: string, agentId: unknown): Promise<{ threadId: string }> {
   if (!isUuid(agentId)) throw new Refusal(400, 'bad_request', 'agent must be a uuid');
   const agent = await deps.chat.agent(agentId);
   if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
   await requireTalk(deps, agent.id, userId);
-  const threadId = await deps.chat.personalChat(agent.orgId, agent.id, agent.name, userId);
+  const threadId = await deps.chat.agentChat(agent.id);
   return { threadId };
 }

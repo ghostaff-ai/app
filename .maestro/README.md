@@ -27,8 +27,10 @@ never touches another app's emulator or your phone.
   an owner giving Secretaría a routine from the clock on her chat; an owner adding someone
   the company works with outside in Empresa («Con quién trabajáis») and adding a department to them;
   an owner answering the decisions her agent left in the record and changing one
-  (`answer-decision.yaml`); and an owner writing to Secretaría and seeing her answer arrive live
-  (`team-chat.yaml`). The last two run in the seeded company (below).
+  (`answer-decision.yaml`) and an owner writing to Secretaría and seeing her answer arrive live
+  (`team-chat.yaml`), both in the seeded company (below); and an owner and a teammate writing in
+  Secretaría's one chat (`group-chat.yaml`; the teammate's message is written straight into the
+  local database by `scripts/teammate-writes.js`).
 
   CI runs them on every pull request and push (`.github/workflows/ci.yml`, job
   `End-to-end (Android)`), and the beta app only gets a push once they pass

@@ -25,11 +25,11 @@ select is(
   (select parts->0->>'type' from public.ask_about_decision('20000000-0000-0000-0000-000000000001', '¿Por qué el lunes?')),
   'decision_quote', 'the message quotes the decision first');
 select is(
-  (select count(*)::int from public.threads where agent_id = '30000000-0000-0000-0000-000000000001' and personal_of = '00000000-0000-0000-0000-00000000000a'),
-  1, '... in Ana''s own chat with the agent');
+  (select count(*)::int from public.threads where agent_id = '30000000-0000-0000-0000-000000000001'),
+  1, '... in the agent''s chat');
 select is(
   (select thread_id from public.ask_about_decision('20000000-0000-0000-0000-000000000001', 'Otra cosa')),
-  (select id from public.threads where agent_id = '30000000-0000-0000-0000-000000000001' and personal_of = '00000000-0000-0000-0000-00000000000a'),
+  (select id from public.threads where agent_id = '30000000-0000-0000-0000-000000000001'),
   'asking again writes in the same chat');
 select throws_ok(
   $$ select public.ask_about_decision('20000000-0000-0000-0000-000000000002', 'Hola') $$,

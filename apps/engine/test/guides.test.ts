@@ -219,7 +219,7 @@ function setup(
       }
     },
     touchThread: async () => {},
-    personalChat: async () => THREAD,
+    agentChat: async () => THREAD,
     aiAccounts: async () => (opts.noAccount ? [] : [{ id: 'key-1', provider: 'anthropic' }]),
     recordAiUse: async () => {},
     proposeAction: async () => 'action-1',
@@ -313,6 +313,8 @@ describe('starting a guide from the chat', () => {
   it('one guide per message: the card in the message, the row recorded, the second refused', async () => {
     const told: unknown[] = [];
     const s = setup({
+      // Luis asked: the guide is his, whoever's request answers it (group-chat-per-agent.md, decision 5).
+      messages: [msg({ text: 'Publica un borrador en mi web', authorUserId: 'luis', authorName: 'Luis' })],
       write: async ({ tools, onText }) => {
         told.push(await tools.run(GUIDE_TOOL, START));
         told.push(await tools.run(GUIDE_TOOL, { ...START, app: 'Shopify' }));

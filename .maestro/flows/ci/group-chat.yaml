@@ -1,0 +1,80 @@
+appId: ${APP_ID}
+name: An owner and a teammate write in the same chat with an agent
+---
+# One chat per agent, shared like a WhatsApp group (docs/plans/ongoing/group-chat-per-agent.md).
+# A new owner writes to Secretaría; a teammate writes in the same chat
+# (scripts/teammate-writes.js, as a second phone would); the owner sees the
+# teammate's message signed with her name, in Equipo and in the chat. No engine
+# runs in e2e, so the agent stays quiet.
+- evalScript: ${output.email = 'e2e-group-' + Date.now() + '@ghostaff.test'}
+- evalScript: ${output.company = 'Obrador E2E ' + Date.now().toString().slice(-6)}
+- runFlow:
+    file: ../subflows/sign-in-email.yaml
+    env:
+      EMAIL: ${output.email}
+- extendedWaitUntil:
+    visible: "¿Cómo te llamas?"
+    timeout: 30000
+- tapOn: "Nombre y apellido"
+- inputText: "Olga E2E"
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "¿Para qué vas a usar Ghostaff?"
+    timeout: 30000
+- tapOn: "Para mi empresa.*"
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "Por ejemplo, Panadería Ana"
+    timeout: 15000
+- tapOn: "Por ejemplo, Panadería Ana"
+- inputText: ${output.company}
+- tapOn: "Crear"
+- extendedWaitUntil:
+    visible: "Conecta tu IA"
+    timeout: 30000
+- runScript:
+    file: ../../scripts/connect-ai.js
+    env:
+      COMPANY: ${output.company}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "agent-secretaria"
+    timeout: 60000
+# Olga writes to Secretaría, in the chat everyone with access to her reads.
+- tapOn:
+    id: "agent-secretaria"
+- extendedWaitUntil:
+    visible: "Escribe a Secretaría"
+    timeout: 20000
+- tapOn: "Escribe a Secretaría"
+- inputText: "¿Quién cierra hoy la caja?"
+- tapOn: "Enviar"
+- extendedWaitUntil:
+    visible: "¿Quién cierra hoy la caja?"
+    timeout: 20000
+# Bea, a teammate, answers in the same chat; Olga sees it arrive, signed.
+- runScript:
+    file: ../../scripts/teammate-writes.js
+    env:
+      COMPANY: ${output.company}
+      MEMBER_EMAIL: ${'e2e-bea-' + Date.now() + '@ghostaff.test'}
+      MEMBER_NAME: "Bea E2E"
+      TEXT: "Hoy la cierro yo"
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+- extendedWaitUntil:
+    visible: "Hoy la cierro yo"
+    timeout: 30000
+- assertVisible: "Bea E2E"
+- assertVisible: "¿Quién cierra hoy la caja?"
+# Equipo, after a cold start (no back: on Android it may close the keyboard or leave the app),
+# shows Secretaría's chat with Bea's word.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "Bea E2E: Hoy la cierro yo"
+    timeout: 60000

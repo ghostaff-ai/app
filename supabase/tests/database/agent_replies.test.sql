@@ -12,8 +12,8 @@ insert into public.memberships (org_id, user_id, role, display_name) values
   ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000b', 'member', 'Bea');
 insert into public.agents (id, org_id, name, ghost, department, member_default) values
   ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'Finanzas', 'finanzas', 'finanzas', 'read');
-insert into public.threads (id, org_id, agent_id, title, visibility) values
-  ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', 'Cierre', 'write');
+insert into public.threads (id, org_id, agent_id, title) values
+  ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', 'Cierre');
 
 -- The engine.
 set local role service_role;

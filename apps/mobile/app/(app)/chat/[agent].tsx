@@ -24,11 +24,11 @@ import { loadAskState, saveDecline, shouldAsk, type AskState } from '@/lib/push/
 import { GHOSTS } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
 
-// The person's one chat with an agent (three-tabs.md, decision 3), opened
-// straight from its row in Equipo: one long conversation, as in WhatsApp, with
-// what the agent did on its own in it too (decision 12). Only the person and
-// the agent see it. The agent's name on top opens its page and settings
-// (decision 6). The mic sends voice notes (voice.md), here only: no engine, no mic.
+// An agent's one chat (group-chat-per-agent.md), opened straight from its row
+// in Equipo: one long conversation, as in a WhatsApp group, with what the agent
+// did on its own in it too. Everyone who may see the agent reads it, and
+// whoever may talk to it writes, each message signed. The agent's name on top
+// opens its page and settings (three-tabs.md, decision 6). The mic sends voice notes (voice.md), here only: no engine, no mic.
 // The clock on the right is the agent's routines (agent-routines.md): an
 // outline when the person has none with it, the next one's day and hour
 // when they do; it opens them.
@@ -203,7 +203,7 @@ export default function Chat() {
             <Image source={g.picture} style={{ width: 120, height: 120 }} resizeMode="contain" />
             <Text className="mt-3 font-display text-title2 text-ink">{agent.name}</Text>
             <Text className="mt-1 text-center text-base text-muted">{agentJob(agent)}</Text>
-            <Text className="mt-6 text-center text-footnote text-muted">Esta conversación es solo entre tú y {agent.name}.</Text>
+            <Text className="mt-6 text-center text-footnote text-muted">La ve todo el que tiene acceso a {agent.name}.</Text>
           </View>
         ) : (
           <LegendList

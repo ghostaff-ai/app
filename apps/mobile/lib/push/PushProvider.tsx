@@ -18,7 +18,7 @@ interface PushValue {
   permission: Permission;
   /** The phone's own dialog. Registers the device when the answer is yes. */
   ask: () => Promise<Permission>;
-  /** The route of the chat on screen (`/chat/<agentId>`, `/conversacion/<threadId>`), or null on leaving it. */
+  /** The route of the chat on screen (`/chat/<agentId>`), or null on leaving it. */
   setOnScreen: (route: string | null) => void;
 }
 
