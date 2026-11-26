@@ -1,4 +1,4 @@
--- General, the people's chat (20261128800000_general_chat.sql): one per
+-- General, the people's chat (20261128900000_general_chat.sql): one per
 -- organisation, made with it; every member reads and writes it, whatever
 -- their level on the agents; nobody else sees anything, a voice note's audio
 -- included; a person's message notifies the other members, an agent's reply
