@@ -18,6 +18,9 @@ IMAGE="$REGISTRY/$P/engine/engine:$(git rev-parse --short HEAD)"
 
 ENV_VARS="SUPABASE_URL=$SUPABASE_URL,GCP_PROJECT=$P,SECRETS_LOCATION=$R,ENGINE_SERVICE_ACCOUNT=$SA,ENGINE_PUBLIC_URL=$ENGINE_URL,CRON_CALLERS=$SCHEDULER_SA,RUNNER_IDENTITY=$RUNNER_SA,TENANTS_PROJECT=$TENANTS_P"
 SECRETS="SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest"
+# The web addresses of the app a provider's sign-in may send the person back to (one origin:
+# --set-env-vars splits on commas). The phones' own scheme needs none.
+if [ -n "$APP_RETURN_ORIGINS" ]; then ENV_VARS="$ENV_VARS,APP_RETURN_ORIGINS=$APP_RETURN_ORIGINS"; fi
 
 # A connector turns on when its app's id is in scripts/env.sh and its secret is in this project.
 connector() { # name id-variable id secret-variable secret-name

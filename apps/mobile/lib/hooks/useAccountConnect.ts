@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useState } from 'react';
 import { accountErrorMessage, accountResultMessage } from '../connections';
+import { appLink } from '../url';
 import { success } from '../haptics';
 import { useConnections, useEngine } from './useConnections';
 
@@ -26,7 +27,7 @@ export function useAccountConnect(orgId: string | null) {
       if (!engine || !orgId) return null;
       setBusy(provider);
       try {
-        const returnTo = Linking.createURL(returnPath);
+        const returnTo = appLink(returnPath);
         const { url } = await startAccountConnect(engine, { orgId, provider, returnTo });
         const res = await WebBrowser.openAuthSessionAsync(url, returnTo);
         let note: ConnectNote = null;

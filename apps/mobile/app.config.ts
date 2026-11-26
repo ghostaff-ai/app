@@ -51,6 +51,9 @@ const engineUrlPerEnv: Record<Env, string> = {
 };
 const engineUrl = process.env[`ENGINE_URL_${suffix}`] || engineUrlPerEnv[env];
 
+// Where the web build is served from, when not at the root of its domain.
+const webBaseUrl = process.env.WEB_BASE_URL || '';
+
 // Google sign-in's OAuth clients, all in Google Cloud project ghostaff-prod
 // (ghostaff.ai@gmail.com), APIs & Services, Clients. Public by design: they ship
 // inside every app and say only which app is asking. One web client serves every
@@ -132,6 +135,9 @@ const config: ExpoConfig = {
   web: {
     bundler: 'metro',
     output: 'single',
+    lang: 'es',
+    // At ghostaff.ai the tab reads the product's name, not the environment's.
+    ...(webBaseUrl ? { name: 'Ghostaff' } : {}),
     favicon: './assets/icon/favicon.png',
   },
   plugins: [
@@ -185,6 +191,10 @@ const config: ExpoConfig = {
   ],
   experiments: {
     typedRoutes: true,
+    // The web build served at ghostaff.ai lives under /app, beside the website at /
+    // (docs/plans/ongoing/desktop-web.md, step 3): `pnpm export:web:hosted` sets it.
+    // Metro in development and the phones keep the root.
+    ...(webBaseUrl ? { baseUrl: webBaseUrl } : {}),
   },
   extra: {
     APP_ENV: env,
