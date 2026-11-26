@@ -4,6 +4,7 @@ import { ActivityIndicator, Animated, Image, PanResponder, Platform, Pressable, 
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
 import { Bubble, Stamp, type Ticks } from '@/components/chat/Bubble';
 import { FileBubble } from '@/components/chat/FileBubble';
+import { LinkCard } from '@/components/chat/LinkCard';
 import { DecisionInChat, DecisionQuote } from '@/components/chat/DecisionInChat';
 import { GuideCard } from '@/components/chat/GuideCard';
 import { Markdown } from '@/components/chat/Markdown';
@@ -13,7 +14,7 @@ import { ArrowUUpLeft, Clock, Icon, Microphone, Prohibit, ShareFat } from '@/com
 import { tap } from '@/lib/haptics';
 import { Field } from '@/components/ui';
 import type { AskControls } from '@/lib/hooks/useAccountAsks';
-import { personColour, timeOf } from '@/lib/chat';
+import { firstLink, personColour, timeOf } from '@/lib/chat';
 import type { GuideControls } from '@/lib/hooks/useGuideCards';
 import { GHOSTS, type GhostId } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
@@ -569,6 +570,7 @@ export function MessageView({
       {files.map((f) => (
         <FileBubble key={f.path} part={f} mine={mine} />
       ))}
+      {!voice && firstLink(text) ? <LinkCard url={firstLink(text)!} mine={mine} /> : null}
       {content}
     </Bubble>
   );

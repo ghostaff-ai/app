@@ -159,6 +159,21 @@ export function agentIdsNamed(agents: Agent[], names: string[]): string[] {
   return agents.filter((a) => wanted.has(key(a.name))).map((a) => a.id);
 }
 
+/** «Álvaro está escribiendo…», «Álvaro y Bea están grabando un audio…»: the header's line while others type. */
+export function typingLine(others: Array<{ name: string; kind: 'typing' | 'recording' }>): string | null {
+  if (others.length === 0) return null;
+  const names = others.map((o) => o.name || 'Alguien');
+  const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}`;
+  const recording = others.every((o) => o.kind === 'recording');
+  const verb = others.length === 1 ? (recording ? 'está grabando un audio' : 'está escribiendo') : recording ? 'están grabando un audio' : 'están escribiendo';
+  return `${who} ${verb}…`;
+}
+
+/** The first web link in a text, for its preview. */
+export function firstLink(text: string): string | null {
+  return text.match(/https?:\/\/[^\s<>"')]+/)?.[0]?.replace(/[.,;:!?]+$/, '') ?? null;
+}
+
 /** The team's jobs nobody does yet, in the order the team is drawn (team-chat.md, decision 8). */
 export function vacancies(agents: Agent[]): GhostId[] {
   const taken = new Set(agents.map((a) => a.ghost));

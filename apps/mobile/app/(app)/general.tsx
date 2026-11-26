@@ -6,14 +6,15 @@ import { decideAction } from '@ghostaff/shared/services';
 import { ChatList } from '@/components/chat/ChatList';
 import { Composer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
-import { FolderSimple, Icon, UsersThree } from '@/components/icons';
+import { FolderSimple, Icon, MagnifyingGlass, UsersThree } from '@/components/icons';
 import { Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { agentIdsNamed } from '@/lib/chat';
+import { ChatSearch } from '@/components/chat/ChatSearch';
+import { agentIdsNamed, typingLine } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useEngine } from '@/lib/hooks/useConnections';
-import { useGeneralChat, useMembers, useMyLevels } from '@/lib/hooks/useChat';
+import { useGeneralChat, useMembers, useMyLevels, useTyping } from '@/lib/hooks/useChat';
 import { useGuideCards } from '@/lib/hooks/useGuideCards';
 import { useMessageActions } from '@/lib/hooks/useMessageActions';
 import { KeyboardColumn } from '@/lib/keyboard';
@@ -41,6 +42,10 @@ export default function General() {
   const { levels } = useMyLevels(orgId);
   const { chatId, messages, openedAt, readByAll, reactions, actions, pinned, sendFile, loading, missing, error, send, sendVoice, retryTranscript } = useGeneralChat(orgId);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const myName = members.find((m) => m.userId === me)?.displayName ?? '';
+  const typing = useTyping(chatId, me ? { userId: me, name: myName } : null);
+  const typingNow = typingLine(typing.others);
   const jump = useRef<((id: string) => void) | null>(null);
 
   // While General is on screen, its pushes aren't shown.
@@ -99,15 +104,20 @@ export default function General() {
         options={{
           title: 'General',
           headerRight: () => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Archivos del chat"
-              onPress={() => router.push(`/archivos?thread=${chatId}`)}
-              hitSlop={10}
-              className="min-h-11 min-w-11 items-center justify-center active:opacity-60"
-            >
-              <Icon icon={FolderSimple} size={22} color={c.ink} />
-            </Pressable>
+            <View className="flex-row">
+              <Pressable accessibilityRole="button" accessibilityLabel="Buscar en el chat" onPress={() => setSearching(true)} hitSlop={6} className="min-h-11 min-w-11 items-center justify-center active:opacity-60">
+                <Icon icon={MagnifyingGlass} size={22} color={c.ink} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Archivos del chat"
+                onPress={() => router.push(`/archivos?thread=${chatId}`)}
+                hitSlop={6}
+                className="min-h-11 min-w-11 items-center justify-center active:opacity-60"
+              >
+                <Icon icon={FolderSimple} size={22} color={c.ink} />
+              </Pressable>
+            </View>
           ),
           headerTitle: () => (
             <View testID="general-header" className="flex-row items-center" style={{ maxWidth: 260 }}>
@@ -118,8 +128,8 @@ export default function General() {
                 <Text className="font-display text-base text-ink" numberOfLines={1}>
                   General
                 </Text>
-                <Text className="text-caption text-muted" numberOfLines={1}>
-                  {people}
+                <Text className={`text-caption ${typingNow ? 'text-ok' : 'text-muted'}`} numberOfLines={1} accessibilityLiveRegion="polite">
+                  {typingNow ?? people}
                 </Text>
               </View>
             </View>
@@ -128,7 +138,16 @@ export default function General() {
       />
       {ma.pinnedBar}
       <KeyboardColumn offset={headerHeight}>
-        {messages.length === 0 ? (
+        {searching ? (
+          <ChatSearch
+            messages={messages}
+            onClose={() => setSearching(false)}
+            onPick={(id) => {
+              setSearching(false);
+              setTimeout(() => jump.current?.(id), 300);
+            }}
+          />
+        ) : messages.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
             <Text className="font-display text-title2 text-ink">Habla con tu equipo</Text>
             <Text className="mt-2 text-center text-base text-muted">
@@ -174,6 +193,7 @@ export default function General() {
           prefill={ma.prefill}
           onAttach={ma.attach ? (k) => void ma.attach!(k) : undefined}
           attaching={ma.sendingFiles}
+          onTyping={typing.say}
         />
       </KeyboardColumn>
       {ma.overlays}
