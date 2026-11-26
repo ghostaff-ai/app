@@ -14,7 +14,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RULES: [RegExp, string][] = [
@@ -53,6 +53,14 @@ export interface PushContext {
   currentBranch(dir: string): string | null;
   /** The other repos the agent may push to: their clone, and whether `main` and `beta` too. */
   writable?: WritableClone[];
+  /** The agent's home, for `~` and `$HOME` in a path; the record's parent when not given. */
+  home?: string;
+}
+
+/** A `git -C` path as the shell would read it: `~` and `$HOME` are the agent's home, a relative one is from `cwd`. */
+function pathOf(arg: string, cwd: string, home: string): string {
+  const expanded = arg.replace(/^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/, home);
+  return isAbsolute(expanded) ? expanded : join(cwd, expanded);
 }
 
 export interface WritableClone {
@@ -81,7 +89,7 @@ export function blockReason(command: string, cwd: string, ctx: PushContext): str
     if (remote !== undefined && remote !== 'origin') return 'Solo se hace push a `origin`, el registro.';
     if (refspecs.some((r) => r.startsWith('+'))) return 'Nada de push forzado: el registro solo avanza.';
     const dirArg = m.groups?.dir;
-    const dir = dirArg ? (isAbsolute(dirArg) ? dirArg : join(cwd, dirArg)) : cwd;
+    const dir = dirArg ? pathOf(dirArg, cwd, ctx.home ?? dirname(ctx.record)) : cwd;
     const other = ctx.writable?.find((w) => same(w.dir, dir));
     if (CD.test(c) || (!same(dir, ctx.record) && !other)) {
       const others = ctx.writable?.length ? ` o desde ${ctx.writable.map((w) => w.dir).join(', ')}` : '';
@@ -136,6 +144,7 @@ function main(): number {
     defaultBranch: head?.replace(/^origin\//, '') ?? 'main',
     currentBranch: (d) => git(d, ['symbolic-ref', '--short', 'HEAD']),
     writable: readPushRules(),
+    home: process.env.HOME,
   });
   if (!why) return 0;
   process.stderr.write(`Bloqueado por la constitución de los agentes: ${why}\n`);

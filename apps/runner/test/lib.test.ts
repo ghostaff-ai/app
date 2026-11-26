@@ -297,6 +297,13 @@ describe('the guard', () => {
     expect(blocked(`git -C ${apps} push https://github.com/otro/repo develop`, ctx.record, c)).toMatch(/origin/);
     expect(blocked(`cd ${apps} && git push origin develop`, ctx.record, c)).toMatch(/sin `cd`/);
     expect(blocked(`git -C ${reels} push origin main`, ctx.record, c)).toBeNull();
+    // As the agent's instructions write them: from its home.
+    expect(blocked('git -C ~/repos/ordago-apps push origin HEAD:develop', ctx.record, c)).toBeNull();
+    expect(blocked('git -C $HOME/repos/ordago-apps push origin seo/x', ctx.record, c)).toBeNull();
+    expect(blocked('git -C ~/repos/ordago-apps fetch && git -C ~/repos/ordago-apps push origin develop', ctx.record, c)).toBeNull();
+    expect(blocked('git -C ~/repos/ordago-apps push origin main', ctx.record, c)).toMatch(/producción/);
+    expect(blocked('git -C ~/registro push origin main', ctx.record, c)).toBeNull();
+    expect(blocked('git -C ~otro/repos/ordago-apps push origin develop', ctx.record, c)).toMatch(/Solo se hace push/);
     // A repo it only reads, or any other folder: no push at all.
     expect(blocked('git -C /home/agente/repos/ordago-web push origin develop', ctx.record, c)).toMatch(/ordago-apps/);
     // The record keeps its own rule.
