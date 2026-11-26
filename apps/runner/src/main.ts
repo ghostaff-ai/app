@@ -20,12 +20,12 @@
 // on any crash before it, it sends the transcript and reports to the engine (best effort).
 
 import { spawn } from 'node:child_process';
-import { chmodSync, chownSync, closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, chownSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { gzipSync } from 'node:zlib';
 import { run as runCommand } from './exec';
-import { recordDir } from './guard';
+import { PUSH_RULES, recordDir } from './guard';
 import { servePastRuns } from './pastRuns';
 import { type RepoCredential, serveTokens } from './tokens';
 import {
@@ -41,6 +41,7 @@ import {
   newDecisions,
   noteworthy,
   passwdIds,
+  pushRules,
   type GoogleAccess,
   readSpec,
   redact,
@@ -265,13 +266,20 @@ async function main(): Promise<number> {
     await git(['clone', '--quiet', spec.record.cloneUrl, record]);
     if (existsSync(join(record, '.githooks'))) await asAgent(ids, env, record)(['config', 'core.hooksPath', '.githooks']);
     // The other repos: one that does not clone leaves the run going without it.
+    const cloned = new Set<string>();
     for (const r of others) {
+      const dir = join(reposDir(ids.home), r.dir);
       try {
-        await git(cloneArgs(r, join(reposDir(ids.home), r.dir)));
+        await git(cloneArgs(r, dir));
+        if (r.write && existsSync(join(dir, '.githooks'))) await asAgent(ids, env, dir)(['config', 'core.hooksPath', '.githooks']);
+        cloned.add(r.repo);
       } catch (e) {
         console.error('repo not cloned', r.repo, crashText(e, secrets));
       }
     }
+    // Which of them the agent may push to, for the guard: root's, readable, never the agent's to change.
+    mkdirSync(dirname(PUSH_RULES), { recursive: true, mode: 0o755 });
+    writeFileSync(PUSH_RULES, JSON.stringify(pushRules(others, ids.home, cloned)), { mode: 0o644 });
 
     const decisions = join(record, spec.decisionsDir);
     const before = new Set(yamlNames(decisions));

@@ -53,7 +53,10 @@ export interface ImportedRunnerAgent extends ImportedBase {
   model: string;
   tools: string[];
   max_turns: number;
-  /** Its yaml's `repos` besides the record (the project's `cerebro`), read-only unless in `push_a_main`. */
+  /**
+   * Its yaml's `repos` besides the record (the project's `cerebro`): read-only, unless named in `--writes`
+   * (pushes to any branch but `main` and `beta`) or in its `push_a_main` (`main` too).
+   */
   repos: AgentRepo[];
   /**
    * Whether its runs read the other agents' runs (Ghostaff's transcripts): when its yaml's `gcp` granted it the
@@ -73,6 +76,11 @@ export interface ImportOptions {
   runner?: 'ghostaff';
   /** Only these slugs. */
   only?: string[];
+  /**
+   * Repos these agents may push to (not `main` or `beta`): the yamls don't say, since the old jobs could
+   * write every repo they cloned, so whoever moves them names it (SEO and Producto push to `ordago-apps`).
+   */
+  writes?: string[];
   /** No timetable: they run only when someone writes to them (while their old job keeps the timetable). */
   onDemand?: boolean;
 }
@@ -93,10 +101,16 @@ type ProjectYaml = { cerebro?: string; gcp?: { proyecto?: string; region?: strin
 
 const strings = (x: unknown): string[] => (Array.isArray(x) ? x.filter((t): t is string => typeof t === 'string') : []);
 
-/** The repos it clones besides the record; only those its old job could push to main may be written. */
-function otherRepos(a: AgentYaml, record: string): AgentRepo[] {
-  const writes = new Set(strings(a.push_a_main).map((r) => r.toLowerCase()));
-  return [...new Set(strings(a.repos))].filter((r) => r.toLowerCase() !== record.toLowerCase()).map((repo) => ({ repo, write: writes.has(repo.toLowerCase()) }));
+/** The repos it clones besides the record: read-only unless named in `writes`, or in its `push_a_main` (main too). */
+function otherRepos(a: AgentYaml, record: string, writes: string[]): AgentRepo[] {
+  const toMain = new Set(strings(a.push_a_main).map((r) => r.toLowerCase()));
+  const write = new Set(writes.map((r) => r.toLowerCase()));
+  return [...new Set(strings(a.repos))]
+    .filter((r) => r.toLowerCase() !== record.toLowerCase())
+    .map((repo) => {
+      const main = toMain.has(repo.toLowerCase());
+      return main ? { repo, write: true, main: true } : { repo, write: write.has(repo.toLowerCase()) };
+    });
 }
 
 /** Whether the agent's yaml grants it the project's transcripts bucket: in the old system, reading the other agents' runs. */
@@ -105,7 +119,12 @@ function readsTranscripts(a: AgentYaml, bucket: string | undefined): boolean {
   return a.gcp.some((g: { recursos?: unknown }) => strings(g?.recursos).includes(`bucket:${bucket}`));
 }
 
-function onOurRunner(slug: string, a: AgentYaml, conf: ProjectYaml): Pick<ImportedRunnerAgent, 'task' | 'model' | 'tools' | 'max_turns' | 'repos' | 'reads_org_runs'> {
+function onOurRunner(
+  slug: string,
+  a: AgentYaml,
+  conf: ProjectYaml,
+  writes: string[],
+): Pick<ImportedRunnerAgent, 'task' | 'model' | 'tools' | 'max_turns' | 'repos' | 'reads_org_runs'> {
   const record = conf.cerebro ?? '';
   const tools = Array.isArray(a.herramientas) ? a.herramientas.filter((t): t is string => typeof t === 'string') : [];
   if (typeof a.prompt !== 'string' || !a.prompt.trim()) throw new Error(`${slug}.yaml has no prompt`);
@@ -116,7 +135,7 @@ function onOurRunner(slug: string, a: AgentYaml, conf: ProjectYaml): Pick<Import
     model: a.modelo,
     tools,
     max_turns: Number.isInteger(a.max_turnos) && a.max_turnos! > 0 ? a.max_turnos! : 100,
-    repos: otherRepos(a, record),
+    repos: otherRepos(a, record, writes),
     reads_org_runs: readsTranscripts(a, conf.gcp?.bucket_transcripciones),
   };
 }
@@ -147,7 +166,7 @@ export function readProjectAgents(projectDir: string, opts: ImportOptions = {}):
       const place = PLACES[slug] ?? { name: slug.charAt(0).toUpperCase() + slug.slice(1), ghost: 'base', department: 'direccion' };
       const base = { slug, ...place, description: sentence(a.descripcion), schedule: !opts.onDemand && typeof a.horario === 'string' ? a.horario : null };
       if (opts.runner === 'ghostaff') {
-        return { ...base, runner: 'ghostaff', ...onOurRunner(slug, a, conf), job_project: null, job_region: null, job_name: null, job_identity: null };
+        return { ...base, runner: 'ghostaff', ...onOurRunner(slug, a, conf, opts.writes ?? []), job_project: null, job_region: null, job_name: null, job_identity: null };
       }
       const job = `${project}-${slug}`;
       return {

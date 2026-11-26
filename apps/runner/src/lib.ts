@@ -40,6 +40,8 @@ export interface RepoAccess {
   dir: string;
   cloneUrl: string;
   write: boolean;
+  /** May push to `main` and `beta` too (guard.ts). Absent from an engine older than it: no. */
+  main?: boolean;
   token: string;
   /** When to ask the engine for another (POST /runs/:id/repo-token). */
   expiresAt: string;
@@ -98,6 +100,7 @@ function isRepos(r: unknown): boolean {
       isRepo(x.repo) && x.cloneUrl === `https://github.com/${x.repo}.git` &&
       isDir(x.dir) && !dirs.has(x.dir.toLowerCase()) &&
       typeof x.write === 'boolean' &&
+      (x.main === undefined || (typeof x.main === 'boolean' && (x.write || !x.main))) &&
       typeof x.token === 'string' && x.token.length > 0 &&
       typeof x.expiresAt === 'string' && !Number.isNaN(Date.parse(x.expiresAt));
     if (ok) dirs.add((x.dir as string).toLowerCase());
@@ -314,6 +317,11 @@ export const reposDir = (home: string) => join(home, 'repos');
  */
 export function cloneArgs(r: Pick<RepoAccess, 'cloneUrl' | 'write'>, dest: string): string[] {
   return ['clone', '--quiet', ...(r.write ? ['--filter=blob:none'] : ['--depth', '1', '--single-branch']), r.cloneUrl, dest];
+}
+
+/** What the guard is told about the other repos the agent may push to (guard.ts PUSH_RULES): the ones it writes and cloned. */
+export function pushRules(repos: Pick<RepoAccess, 'repo' | 'dir' | 'write' | 'main'>[], home: string, cloned: Set<string>): { repo: string; dir: string; main: boolean }[] {
+  return repos.filter((r) => r.write && cloned.has(r.repo)).map((r) => ({ repo: r.repo, dir: join(reposDir(home), r.dir), main: r.main === true }));
 }
 
 /** A repo as git's credential helper asks for it (`credential.useHttpPath`): its scheme, host and path, normalised. */
