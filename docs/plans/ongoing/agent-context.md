@@ -2,7 +2,7 @@
 
 **Priority:** high — with one group chat per agent the conversation grows without end, and what a turn carries decides how good and how dear every reply is
 **Gate:** none
-**Next:** PR 2 on `feat/agent-memory-chat`: each chat agent's own store in the record, read at the start of a turn and written by the agent in it, shown read-only under the agent in Equipo (Tasks, below)
+**Next:** on beta, check PR 1 and PR 2 in real turns: cache reads in the «chat usage» log, a `conversation_summaries` row for a long chat, and an agent that keeps something in `memoria/agentes/<slug>/` and reads it the next turn; then retire this plan
 
 Jaime (2026-11-24), on the line «the engine reads the last 40 messages» in [group-chat-per-agent.md](group-chat-per-agent.md): sending the last 40 messages «no tiene sentido». He decided how it works instead on 2026-11-26 (Decisions, below).
 
@@ -68,7 +68,7 @@ Merged 2026-11-26 as ghostaff-ai/app#81. Still to check on beta: the «chat usag
 5. `streamWith`: automatic caching and the usage log; a test that two turns of the same conversation send the same prefix.
 6. `docs/architecture.md` and [agent-memory.md](../ready/agent-memory.md)'s «Today» say what a turn reads now.
 
-### PR 2: each agent's own memory (decisions 4, 6 and 7)
+### PR 2: each agent's own memory (decisions 4, 6 and 7) — landed
 
 Against `develop` at `9baa85b` (2026-11-26), after #91. What #91 built: the `memories` projection (Empresa only: `store = 'empresa'`, key `(org_id, store, path)`), `projectMemory` on the tick, `memory.ts`'s four tools (`memory_view`, `memory_search` for every chat agent; `memory_create`, `memory_str_replace` for Secretaría), the recuerdo screen `/memoria/[...path]` and «Memoria de la empresa». Agents hired in Equipo have no `slug`, which the store's folder needs.
 
@@ -93,7 +93,7 @@ Tasks:
 4. [x] `chat.ts`: the own store and its lines in the system prompt; a test that two turns with the same store send the same system prompt.
 5. [x] Shared services, the screens (on `components/memory/`, which Empresa's now use too), the row, the link; Jest.
 6. [x] Checked on the web (2026-11-26) against a local Supabase: a member who may see the agent opens Equipo → agent → «Memoria», its list and a file, desktop and phone width; with level `none` the list is empty. The tool's commit into `memoria/agentes/<slug>/` and the next turn's prompt are covered by the unit tests only (no local Forgejo or model run); the record's hook lets the engine, its admin, write there.
-7. [ ] `docs/architecture.md`; [agent-memory.md](../ready/agent-memory.md) says what is left (correcting, forgetting, history, «Sobre ti», runner agents' stores). `pnpm pr:land`.
+7. [x] `docs/architecture.md`; [agent-memory.md](../ready/agent-memory.md) says what is left (correcting, forgetting, history, «Sobre ti», runner agents' stores). Merged 2026-11-26 as ghostaff-ai/app#101; the migration is `20261128600000_agent_memories.sql`.
 
 ### Later
 
