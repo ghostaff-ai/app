@@ -18,8 +18,10 @@ import { usePalette } from '@/lib/theme';
 // on the right in ink, colleagues on the left with their initials), agents
 // flat and full width in ink with their small ghost (app-design.md #18, changed
 // 2026-11-22), their replies' markdown rendered. Consecutive messages from the same
-// author drop the name. A voice note of yours is drawn as its audio with the
-// transcript under it (voice.md).
+// author drop the name. A voice note is drawn as its audio with the transcript
+// under it (voice.md), yours and your colleagues' alike; in General the
+// transcript is folded (general-chat.md), and the agents it was tagged for
+// show above it («@Secretaría»).
 // An agent's reply carries one status line (decision 4): what it is doing
 // while it writes, then «Hecho · 3 s», which unfolds into its steps. One a
 // routine started says so above it, «Rutina · Resumen de ventas» (agent-routines.md).
@@ -63,6 +65,17 @@ function RoutineLine({ title }: { title: string | null }) {
       </Text>
     </View>
   );
+}
+
+/** A voice note's message: the tags written before the audio, the audio, and its transcript after it. */
+function voiceOf(message: ChatMessage) {
+  const at = message.parts.findIndex(isVoicePart);
+  if (at < 0) return null;
+  return {
+    part: message.parts.find(isVoicePart)!,
+    tags: messageText(message.parts.slice(0, at)),
+    transcript: messageText(message.parts.slice(at + 1)),
+  };
 }
 
 /** The text with @mentions in bold. */
@@ -294,6 +307,7 @@ export function MessageView({
   routineTitle,
   me,
   guides,
+  foldTranscripts,
 }: {
   message: ChatMessage;
   mine: boolean;
@@ -316,6 +330,8 @@ export function MessageView({
   me?: string;
   /** What an agent's guide cards can do here (guided-access.md). */
   guides?: GuideControls;
+  /** Voice notes' transcripts behind «Ver transcripción»: in General (general-chat.md). */
+  foldTranscripts?: boolean;
 }) {
   const text = messageText(message.parts);
   const actions = message.parts.filter(isActionPart);
@@ -363,19 +379,24 @@ export function MessageView({
     );
   }
 
+  const voice = voiceOf(message);
+
   if (mine) {
-    const voice = message.parts.find(isVoicePart);
     return (
       <View className={`flex-row justify-end px-4 ${showAuthor ? 'pt-4' : 'pt-1'}`}>
         <View className="max-w-[80%] rounded-2xl rounded-br-md bg-accent px-3.5 py-2">
           {quote ? <DecisionQuote part={quote} onAccent /> : null}
           {voice ? (
-            <VoiceNote
-              part={voice}
-              transcript={text}
-              createdAt={message.createdAt}
-              onRetry={onRetryTranscript ? () => onRetryTranscript(message.id) : undefined}
-            />
+            <>
+              {voice.tags ? <Body text={voice.tags} names={names} className="mb-1 text-footnote text-on-accent" /> : null}
+              <VoiceNote
+                part={voice.part}
+                transcript={voice.transcript}
+                createdAt={message.createdAt}
+                onRetry={onRetryTranscript ? () => onRetryTranscript(message.id) : undefined}
+                folded={foldTranscripts}
+              />
+            </>
           ) : (
             <Body text={text} names={names} className="text-base leading-6 text-on-accent" />
           )}
@@ -391,7 +412,14 @@ export function MessageView({
         {showAuthor ? <Text className="mb-0.5 ml-1 text-caption font-semibold text-muted">{message.authorName}</Text> : null}
         <View className="rounded-2xl rounded-bl-md border border-line bg-card px-3.5 py-2">
           {quote ? <DecisionQuote part={quote} /> : null}
-          <Body text={text} names={names} className="text-base leading-6 text-ink" />
+          {voice ? (
+            <>
+              {voice.tags ? <Body text={voice.tags} names={names} className="mb-1 text-footnote text-ink" /> : null}
+              <VoiceNote part={voice.part} transcript={voice.transcript} createdAt={message.createdAt} tone="theirs" folded={foldTranscripts} />
+            </>
+          ) : (
+            <Body text={text} names={names} className="text-base leading-6 text-ink" />
+          )}
         </View>
       </View>
     </View>

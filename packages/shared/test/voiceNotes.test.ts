@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isVoicePart, messageText } from '../src/chat';
-import { EngineError, sendVoiceNote, transcribeVoiceNote, voiceNoteUrl } from '../src/services';
+import { EngineError, sendVoiceNote, sendVoiceNoteToThread, transcribeVoiceNote, voiceNoteUrl } from '../src/services';
 
 const engine = { url: 'https://engine.test/', token: 'tok' };
 const voice = { type: 'voice', path: 'o/t/m.m4a', mediaType: 'audio/mp4', durationMs: 1200, transcription: 'done' };
@@ -46,6 +46,17 @@ describe('sendVoiceNote', () => {
     const err = await sendVoiceNote(engine, 'a', { audio: new Blob([]), mimeType: 'audio/mp4', durationMs: 1 }).catch((e) => e);
     expect(err).toBeInstanceOf(EngineError);
     expect(err).toMatchObject({ code: 'too_large', status: 413 });
+  });
+});
+
+describe('sendVoiceNoteToThread (general-chat.md)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('posts the note to the chat, with the agents tagged before recording', async () => {
+    const fetch = vi.fn(async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ message: {} }), { status: 201 }));
+    vi.stubGlobal('fetch', fetch);
+    await sendVoiceNoteToThread(engine, 'g 1', { audio: new Blob([]), mimeType: 'audio/mp4', durationMs: 38000, mentions: ['a1', 'a2'] });
+    expect(fetch.mock.calls[0]![0]).toBe('https://engine.test/threads/g%201/voice-notes?durationMs=38000&mention=a1&mention=a2');
   });
 });
 

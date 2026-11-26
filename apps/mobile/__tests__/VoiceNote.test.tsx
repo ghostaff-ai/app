@@ -129,10 +129,24 @@ describe('a voice note in the chat', () => {
     expect(onRetry).toHaveBeenCalledWith('m1');
   });
 
-  it('shows the transcript as the text of a message that is not yours', async () => {
+  it('draws a colleague’s note as audio too, with its transcript under it', async () => {
     await render(<MessageView message={message} mine={false} showAuthor names={[]} />);
     expect(screen.getByText('Llama mañana al proveedor.')).toBeTruthy();
-    expect(screen.queryByLabelText('Escuchar nota de voz')).toBeNull();
+    expect(screen.getByLabelText('Escuchar nota de voz')).toBeTruthy();
+  });
+
+  it('in General, folds the transcript behind «Ver transcripción» (general-chat.md)', async () => {
+    await render(<MessageView message={message} mine={false} showAuthor names={[]} foldTranscripts />);
+    expect(screen.queryByText('Llama mañana al proveedor.')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Ver transcripción'));
+    expect(screen.getByText('Llama mañana al proveedor.')).toBeTruthy();
+  });
+
+  it('shows the agents a note was tagged for above it, apart from its transcript', async () => {
+    const tagged = { ...message, parts: [{ type: 'text', text: '@Secretaría' }, ...message.parts] } as typeof message;
+    await render(<MessageView message={tagged} mine showAuthor names={['Secretaría']} />);
+    expect(screen.getByText('@Secretaría')).toBeTruthy();
+    expect(screen.getByText('Llama mañana al proveedor.')).toBeTruthy();
   });
 });
 

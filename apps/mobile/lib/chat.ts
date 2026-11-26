@@ -56,6 +56,36 @@ export function teamRows(agents: Agent[], threads: ChatThread[]): TeamRow[] {
   });
 }
 
+/**
+ * General's chat for Equipo (general-chat.md): the people's chat, pinned
+ * first, once the organisation has someone to talk to (two people or more).
+ * Alone there is nobody, so no row; the same in a company and a personal space.
+ */
+export function generalChat(threads: ChatThread[], people: number): ChatThread | null {
+  if (people < 2) return null;
+  return threads.find((t) => t.kind === 'general') ?? null;
+}
+
+/** A voice note's length as WhatsApp shows it: `0:38`, `12:05`. */
+export function noteLength(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** General's last line: «Ana: Nota de voz · 0:38» for a voice note (its transcript stays folded), else «Ana: hola». */
+export function generalLastLine(t: ChatThread): string | null {
+  const said = t.lastVoiceMs !== null ? `Nota de voz · ${noteLength(t.lastVoiceMs)}` : t.lastText;
+  if (!said) return null;
+  return t.lastAuthor ? `${t.lastAuthor}: ${said}` : said;
+}
+
+/** The ids of the agents among `names` (a voice note's tags; people's names are left out). */
+export function agentIdsNamed(agents: Agent[], names: string[]): string[] {
+  const key = (n: string) => n.toLocaleLowerCase('es');
+  const wanted = new Set(names.map(key));
+  return agents.filter((a) => wanted.has(key(a.name))).map((a) => a.id);
+}
+
 /** The team's jobs nobody does yet, in the order the team is drawn (team-chat.md, decision 8). */
 export function vacancies(agents: Agent[]): GhostId[] {
   const taken = new Set(agents.map((a) => a.ghost));

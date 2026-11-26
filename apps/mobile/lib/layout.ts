@@ -35,7 +35,8 @@ export const LIST_HOME: Record<DesktopList, string> = { team: '/', connections: 
 
 // An agent's chat and every page about the agent: they open from Equipo's
 // list and keep it beside them. `conversacion` is an old link to a chat by its
-// thread, which opens the agent's (group-chat-per-agent.md).
+// thread, which opens the agent's (group-chat-per-agent.md). General, the
+// people's chat, opens beside the list too, marked as `general`.
 const TEAM_DETAILS = new Set(['chat', 'conversacion', 'agente', 'acceso', 'herramientas', 'rutinas', 'rutina']);
 // Equipo's, but wide pages of their own: the jobs to hire for.
 const TEAM_PAGES = new Set(['anadir-agente', 'nuevo-agente', 'contratar']);
@@ -48,6 +49,7 @@ const TEAM_PAGES = new Set(['anadir-agente', 'nuevo-agente', 'contratar']);
 export function desktopSection(path: string): { nav: DesktopNav | null; list: DesktopList | null; open: string | null } {
   const [first, second, third] = path.split('/').filter(Boolean);
   if (!first) return { nav: 'equipo', list: 'team', open: null };
+  if (first === 'general') return { nav: 'equipo', list: 'team', open: 'general' };
   if (TEAM_DETAILS.has(first)) return { nav: 'equipo', list: 'team', open: second ?? null };
   if (TEAM_PAGES.has(first)) return { nav: 'equipo', list: null, open: null };
   if (first === 'decisiones' || first === 'decision') return { nav: 'decisiones', list: null, open: null };

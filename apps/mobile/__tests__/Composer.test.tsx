@@ -36,11 +36,11 @@ jest.mock('expo-file-system', () => ({
 
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 
-const names = ['Ana'];
+const names = ['Ana', 'Secretaría'];
 const onSend = jest.fn(() => Promise.resolve());
 
 type Note = { audio: Blob; mimeType: string; durationMs: number };
-const setup = async (onVoiceNote?: (note: Note) => Promise<void>) => {
+const setup = async (onVoiceNote?: (note: Note, tagged: string[]) => Promise<void>) => {
   await render(<Composer placeholder="Escribe aquí" names={names} onSend={onSend} onVoiceNote={onVoiceNote} />);
 };
 
@@ -116,6 +116,19 @@ describe('Composer voice notes', () => {
     expect(onSend).not.toHaveBeenCalled();
     expect(mockDelete).toHaveBeenCalled();
     expect(screen.getByLabelText('Escribe aquí').props.value).toBe('a medias');
+  });
+
+  it('with only @mentions in the box, the note goes tagged to them and the box empties (general-chat.md)', async () => {
+    const onVoiceNote = jest.fn(async (_: Note, _tagged: string[]) => {});
+    await setup(onVoiceNote);
+    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), '@Secretaría ');
+    expect(screen.getByLabelText('Grabar nota de voz para Secretaría')).toBeTruthy();
+    await press('Grabar nota de voz para Secretaría');
+    await settle();
+    await press('Enviar nota de voz');
+    await settle();
+    expect(onVoiceNote.mock.calls[0]![1]).toEqual(['Secretaría']);
+    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('');
   });
 
   it('sends audio/mp4 for a phone recording whatever type the file read gives', async () => {

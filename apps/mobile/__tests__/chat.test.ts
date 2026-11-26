@@ -1,5 +1,5 @@
 import type { Agent, ChatMessage, ChatThread } from '@ghostaff/shared';
-import { shortTime, showAuthors, teamRows, vacancies } from '@/lib/chat';
+import { generalChat, generalLastLine, noteLength, shortTime, showAuthors, teamRows, vacancies } from '@/lib/chat';
 import { addMessage } from '@/lib/hooks/useChat';
 
 const agent = (id: string, ghost: Agent['ghost'], isMain = ghost === 'secretaria'): Agent => ({
@@ -75,7 +75,7 @@ describe('the chat rules', () => {
   it('lists one row per agent, its chat: the main one first, then who spoke last', () => {
     const team = [agent('fin', 'finanzas'), agent('red', 'redes'), agent('sec', 'secretaria'), agent('inc', 'incorporacion')];
     const t = (id: string, agentId: string, at: string, more: Partial<ChatThread> = {}): ChatThread => ({
-      id, agentId, title: id, createdAt: at, lastMessageAt: at, lastAuthor: 'Ana', lastText: 'hola', unread: false, following: true, ...more,
+      id, kind: 'agent', agentId, title: id, createdAt: at, lastMessageAt: at, lastAuthor: 'Ana', lastText: 'hola', lastVoiceMs: null, unread: false, following: true, ...more,
     });
     const rows = teamRows(team, [
       t('fin-chat', 'fin', '2026-11-20T10:00:00Z'),
@@ -91,6 +91,21 @@ describe('the chat rules', () => {
   it('puts the main agent first by its role, even when it is not drawn as secretaria', () => {
     const team = [agent('fin', 'finanzas'), agent('main', 'base', true), agent('sec', 'secretaria', false)];
     expect(teamRows(team, []).map((r) => r.agent.id)).toEqual(['main', 'sec', 'fin']);
+  });
+
+  it('shows General once there are two people, with a voice note as its length, not its transcript', () => {
+    const general: ChatThread = {
+      id: 'g', kind: 'general', agentId: null, title: 'General', createdAt: '2026-11-26T10:00:00Z', lastMessageAt: '2026-11-26T10:42:00Z',
+      lastAuthor: 'Álvaro', lastText: 'Lo de la feria lo vemos mañana', lastVoiceMs: 84_400, unread: true, following: true,
+    };
+    const threads = [general];
+    expect(generalChat(threads, 1)).toBeNull();
+    expect(generalChat(threads, 2)?.id).toBe('g');
+    expect(generalChat([], 3)).toBeNull();
+    expect(generalLastLine(general)).toBe('Álvaro: Nota de voz · 1:24');
+    expect(generalLastLine({ ...general, lastVoiceMs: null })).toBe('Álvaro: Lo de la feria lo vemos mañana');
+    expect(generalLastLine({ ...general, lastVoiceMs: null, lastText: null })).toBeNull();
+    expect(noteLength(725_000)).toBe('12:05');
   });
 
   it('lists the jobs nobody does yet', () => {

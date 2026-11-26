@@ -1,4 +1,4 @@
-import { completeMention, mentionQuery, mentionSuggestions } from '@ghostaff/shared';
+import { completeMention, mentionQuery, mentionSuggestions, onlyMentions } from '@ghostaff/shared';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,7 +11,9 @@ import { usePalette } from '@/lib/theme';
 // Where a person writes in a thread (team-chat.md): a growing text box and a
 // round send button; typing @ offers the agents and people that can be
 // mentioned. With «onVoiceNote», a plain round mic sits beside send: tap it,
-// speak, and send the voice note (voice.md). With «Ver», or in a conversation
+// speak, and send the voice note (voice.md). When the box holds only @mentions,
+// the note goes out tagged to them, who answer it, and the box empties
+// (general-chat.md, decision 6); any other text stays. With «Ver», or in a conversation
 // its opener keeps to reading, it turns into a quiet line saying why.
 
 /** What the database takes in one message (post_message). */
@@ -30,8 +32,11 @@ export function Composer({
   /** Resolves once sent; a rejection keeps the text so nothing is lost. */
   onSend: (text: string) => Promise<void>;
   autoFocus?: boolean;
-  /** Sends a recorded voice note; without it there is no mic. A rejection keeps the note to send again. */
-  onVoiceNote?: (note: RecordedNote) => Promise<void>;
+  /**
+   * Sends a recorded voice note, with the names the box tagged when it was
+   * started; without it there is no mic. A rejection keeps the note to send again.
+   */
+  onVoiceNote?: (note: RecordedNote, tagged: string[]) => Promise<void>;
 }) {
   const c = usePalette();
   const insets = useSafeAreaInsets();
@@ -40,7 +45,17 @@ export function Composer({
   const [error, setError] = useState<string | null>(null);
   const input = useRef<TextInputInstance>(null);
 
-  const voice = useVoiceNote({ send: onVoiceNote ?? (() => Promise.reject(new Error('voice notes are off'))) });
+  // The names the box tags while it holds nothing else: they go with the note, and leave the box once it is sent.
+  const tags = onlyMentions(text, names);
+  const tagged = useRef<string[]>([]);
+  const voice = useVoiceNote({
+    send: async (note) => {
+      if (!onVoiceNote) throw new Error('voice notes are off');
+      await onVoiceNote(note, tagged.current);
+      if (tagged.current.length > 0) setText('');
+      tagged.current = [];
+    },
+  });
   const recording = voice.state !== 'idle';
   const mic = onVoiceNote !== undefined && !busy;
 
@@ -147,8 +162,11 @@ export function Composer({
             {mic ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Grabar nota de voz"
-                onPress={() => void voice.start()}
+                accessibilityLabel={tags && tags.length > 0 ? `Grabar nota de voz para ${tags.join(' y ')}` : 'Grabar nota de voz'}
+                onPress={() => {
+                  tagged.current = tags ?? [];
+                  void voice.start();
+                }}
                 className="h-11 w-11 items-center justify-center rounded-full border border-line bg-card active:opacity-70"
               >
                 <Icon icon={Microphone} size={20} color={c.ink} weight="bold" />

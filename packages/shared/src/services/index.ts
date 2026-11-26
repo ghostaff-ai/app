@@ -987,17 +987,35 @@ export async function resumeAfterGuide(engine: EngineAccess, threadId: string, g
  * audio, writes it in the person's own chat with the agent (opening the chat if
  * needed) and returns the message, still to be transcribed.
  */
-export async function sendVoiceNote(
-  engine: EngineAccess,
-  agentId: string,
-  note: { audio: Blob; mimeType: string; durationMs: number | null },
-): Promise<ChatMessage> {
-  const duration = note.durationMs === null ? '' : `?durationMs=${Math.round(note.durationMs)}`;
-  const { message } = await sendToEngine<{ message: ChatMessage }>(engine, 'POST', `/agents/${encodeURIComponent(agentId)}/voice-notes${duration}`, {
-    type: note.mimeType,
-    data: note.audio,
-  });
+/** A recorded voice note, and the agents tagged before recording it (general-chat.md, decision 6). */
+export interface OutgoingNote {
+  audio: Blob;
+  mimeType: string;
+  durationMs: number | null;
+  /** Agent ids: the note goes out with «@Name» before it, and they answer it. */
+  mentions?: string[];
+}
+
+function noteQuery(note: OutgoingNote): string {
+  const q = new URLSearchParams();
+  if (note.durationMs !== null) q.set('durationMs', String(Math.round(note.durationMs)));
+  for (const id of note.mentions ?? []) q.append('mention', id);
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+async function postNote(engine: EngineAccess, path: string, note: OutgoingNote): Promise<ChatMessage> {
+  const { message } = await sendToEngine<{ message: ChatMessage }>(engine, 'POST', `${path}${noteQuery(note)}`, { type: note.mimeType, data: note.audio });
   return message;
+}
+
+export async function sendVoiceNote(engine: EngineAccess, agentId: string, note: OutgoingNote): Promise<ChatMessage> {
+  return postNote(engine, `/agents/${encodeURIComponent(agentId)}/voice-notes`, note);
+}
+
+/** A voice note in a chat by its id: General, the people's chat (general-chat.md). */
+export async function sendVoiceNoteToThread(engine: EngineAccess, threadId: string, note: OutgoingNote): Promise<ChatMessage> {
+  return postNote(engine, `/threads/${encodeURIComponent(threadId)}/voice-notes`, note);
 }
 
 /**
@@ -1163,28 +1181,32 @@ export async function listMembers(client: SupabaseClient, orgId: string): Promis
 
 interface ThreadListRow {
   id: string;
-  agent_id: string;
+  kind: 'agent' | 'general';
+  agent_id: string | null;
   title: string;
   created_at: string;
   last_message_at: string;
   last_author: string | null;
   last_text: string | null;
+  last_voice_ms: number | null;
   unread: boolean;
   following: boolean;
 }
 
-/** The agents' chats the person may see, newest first; with `agentId`, only that agent's. */
+/** The chats the person may see, newest first, General among them; with `agentId`, only that agent's. */
 export async function listThreads(client: SupabaseClient, orgId: string, agentId?: string): Promise<ChatThread[]> {
   const { data, error } = await client.rpc('my_threads', { target_org: orgId, target_agent: agentId ?? null });
   if (error) throw error;
   return ((data ?? []) as ThreadListRow[]).map((r) => ({
     id: r.id,
+    kind: r.kind,
     agentId: r.agent_id,
     title: r.title,
     createdAt: r.created_at,
     lastMessageAt: r.last_message_at,
     lastAuthor: r.last_author,
     lastText: r.last_text,
+    lastVoiceMs: r.last_voice_ms ?? null,
     unread: r.unread,
     following: r.following,
   }));
@@ -1193,25 +1215,29 @@ export async function listThreads(client: SupabaseClient, orgId: string, agentId
 export interface ThreadHead {
   id: string;
   orgId: string;
-  agentId: string;
+  kind: 'agent' | 'general';
+  /** Null in General, the people's chat (general-chat.md). */
+  agentId: string | null;
   title: string;
 }
 
 interface ThreadHeadRow {
   id: string;
   org_id: string;
-  agent_id: string;
+  kind: 'agent' | 'general';
+  agent_id: string | null;
   title: string;
 }
 
 const threadHead = (r: ThreadHeadRow): ThreadHead => ({
   id: r.id,
   orgId: r.org_id,
+  kind: r.kind,
   agentId: r.agent_id,
   title: r.title,
 });
 
-const THREAD_HEAD_COLUMNS = 'id, org_id, agent_id, title';
+const THREAD_HEAD_COLUMNS = 'id, org_id, kind, agent_id, title';
 
 export async function getThread(client: SupabaseClient, id: string): Promise<ThreadHead | null> {
   const { data, error } = await client.from('threads').select(THREAD_HEAD_COLUMNS).eq('id', id).maybeSingle<ThreadHeadRow>();

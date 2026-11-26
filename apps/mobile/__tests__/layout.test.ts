@@ -21,6 +21,7 @@ describe('desktopSection', () => {
     expect(desktopSection('/agente/a1')).toEqual({ nav: 'equipo', list: 'team', open: 'a1' });
     expect(desktopSection('/herramientas/a1').nav).toBe('equipo');
     expect(desktopSection('/rutinas/a1').list).toBe('team');
+    expect(desktopSection('/general')).toEqual({ nav: 'equipo', list: 'team', open: 'general' });
   });
 
   it('gives hiring a page of its own, under Equipo', () => {
