@@ -257,6 +257,31 @@ export function isQuotePart(p: MessagePart): p is QuotePart & MessagePart {
   return p.type === 'quote' && typeof (p as { messageId?: unknown }).messageId === 'string';
 }
 
+/**
+ * A file sent in a chat (chat-like-whatsapp.md, phase 3; the shape business-brain.md
+ * planned): a photo or a document in the private bucket `documents`, at
+ * <org>/<thread>/<message>/<name>. Photos carry their size in pixels.
+ */
+export type DocumentPart = {
+  type: 'document';
+  path: string;
+  mediaType: string;
+  name: string;
+  size: number;
+  width?: number;
+  height?: number;
+};
+
+export function isDocumentPart(p: MessagePart): p is DocumentPart & MessagePart {
+  return p.type === 'document' && typeof (p as { path?: unknown }).path === 'string';
+}
+
+/** How a file reads where it can't be shown (an agent's turn, a list): its name, kind and size. */
+export function fileLine(p: { name: string; mediaType: string; size: number }): string {
+  const kb = p.size < 1024 * 1024 ? `${Math.max(1, Math.round(p.size / 1024))} kB` : `${(p.size / 1024 / 1024).toFixed(1)} MB`;
+  return `[Archivo: ${p.name} (${p.mediaType}, ${kb})]`;
+}
+
 /** A message forwarded to an agent from another chat: what it said, who said it, where and when. */
 export type ForwardPart = Omit<QuotePart, 'type'> & { type: 'forward'; from: string; at: string };
 

@@ -13,7 +13,7 @@
 // more than a bound.
 
 import { audioLines, type ChatMessage, type Limits, messageText, type TokenUsage } from '@ghostaff/shared';
-import { isDecisionPart, isDecisionQuotePart, isForwardPart, isQuotePart } from '@ghostaff/shared';
+import { fileLine, isDecisionPart, isDecisionQuotePart, isDocumentPart, isForwardPart, isQuotePart } from '@ghostaff/shared';
 import { askLines } from './accountAsks';
 import { AiFailure, type AiAccount, type AiUse, type ChatAgent, type ChatDeps, type ChatThreadHead, failureKind, recordUse } from './chat';
 import { type DecisionBrief, decisionLine } from './decisionAsks';
@@ -100,7 +100,8 @@ export function bodyOf(m: ChatMessage, briefs: ReadonlyMap<string, DecisionBrief
   const forwarded = m.parts
     .filter(isForwardPart)
     .map((p) => `[Reenviado desde ${p.from}, de ${p.authorName}${stampOf(p.at) ? ` (${stampOf(p.at)})` : ''}${p.kind === 'voice' ? ', nota de voz' : ''}: «${p.text}»]`);
-  const quoted = [...replying, ...forwarded, ...m.parts.filter(isDecisionQuotePart).map((p) => decisionLine(briefs.get(p.decisionId), 'quoted', p.question))];
+  const files = m.parts.filter(isDocumentPart).map(fileLine);
+  const quoted = [...replying, ...forwarded, ...files, ...m.parts.filter(isDecisionQuotePart).map((p) => decisionLine(briefs.get(p.decisionId), 'quoted', p.question))];
   const asked = m.parts.filter(isDecisionPart).map((p) => decisionLine(briefs.get(p.decisionId), 'mine', p.question));
   return [...quoted, messageText(m.parts).trim(), ...audioLines(m.parts), ...askLines(m.parts), ...guideLines(m.parts), ...asked].filter(Boolean).join('\n\n');
 }

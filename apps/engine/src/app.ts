@@ -24,6 +24,7 @@ import { connectAi, type Deps, disconnectAi, Refusal, requireOwner } from './con
 import { bearer, type CallerFromToken } from './googleCaller';
 import type { PushDrain } from './notify';
 import { NoteLimiter, type Transcriber } from './transcribe';
+import { type FileStore, sendFile } from './files';
 import { deleteMessage, type IncomingNote, sendVoiceNote, sendVoiceNoteToThread, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
 import { receiveRunAudio } from './agentAudio';
 
@@ -60,6 +61,9 @@ export interface AppDeps extends Deps {
   claudeSignIn?: Omit<ClaudeSessionDeps, 'store' | 'vault' | 'userFromToken' | 'now'>;
   /** Voice notes: the bucket and the person's messages (voiceNotes.ts). */
   voice?: VoiceNoteStore;
+  /** Files sent in the chat: the bucket and the person's messages (files.ts). */
+  files?: FileStore;
+  filesLimiter?: NoteLimiter;
   /** A voice note into text (transcribe.ts); off when not configured, and voice notes with it. */
   transcriber?: Transcriber;
   /** Voice notes' per-person limit (30 an hour by default); injectable for tests. */
@@ -81,7 +85,7 @@ export function createApp(deps: AppDeps) {
   (wss.options as { maxPayload?: number }).maxPayload = MAX_MESSAGE;
 
   // Bearer tokens, no cookies: any origin may call, the token is the guard.
-  app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'DELETE'], allowHeaders: ['Authorization', 'Content-Type'] }));
+  app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'DELETE'], allowHeaders: ['Authorization', 'Content-Type', 'X-File-Name', 'X-Caption'] }));
 
   // A request that wrote an agent's message answers once its pushes are out: after the answer, Cloud Run
   // gives the instance no CPU, and they would wait for the tick. Requests that wrote none do not wait.
@@ -362,7 +366,36 @@ export function createApp(deps: AppDeps) {
   app.delete('/connections/guided/:id', async (c) => c.json(await removeGuidedAccess(guides(), c.get('userId'), c.req.param('id'))));
 
   // Voice notes (voiceNotes.ts): the note in, the message out at once; then its transcript and the agent's answer.
-  const voice = { chat: deps.chat, voice: deps.voice, transcriber: deps.transcriber, limiter: deps.transcribeLimiter ?? new NoteLimiter() };
+  const voice = { chat: deps.chat, voice: deps.voice, transcriber: deps.transcriber, limiter: deps.transcribeLimiter ?? new NoteLimiter(), files: deps.files };
+  // Files in the chat (files.ts): the name and caption come in headers, URI-encoded; the bytes are the body.
+  const fileDeps = { chat: deps.chat, files: deps.files, limiter: deps.filesLimiter ?? new NoteLimiter({ max: 60 }) };
+  const header = (c: Context<Env>, name: string) => {
+    const raw = c.req.header(name);
+    try {
+      return raw ? decodeURIComponent(raw) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  app.post('/threads/:id/files', async (c) => {
+    const sent = await sendFile(
+      fileDeps,
+      c.get('userId'),
+      c.req.param('id'),
+      {
+        contentType: c.req.header('Content-Type'),
+        contentLength: c.req.header('Content-Length'),
+        body: c.req.raw.body,
+        name: header(c, 'X-File-Name'),
+        caption: header(c, 'X-Caption'),
+        quote: c.req.query('quote'),
+        width: c.req.query('width'),
+        height: c.req.query('height'),
+      },
+      c.get('accessToken'),
+    );
+    return c.json(sent, 201);
+  });
   // `?mention=<agent id>`, repeated: agents tagged before recording (general-chat.md, decision 6).
   const incoming = (c: Context<Env>): IncomingNote => ({
     contentType: c.req.header('Content-Type'),

@@ -1,8 +1,9 @@
-import { type ActionPart, type ChatMessage, type EditableField, type ForwardPart, isAccountAskPart, isActionPart, isAudioPart, isDecisionPart, isDecisionQuotePart, isForwardPart, isGuidePart, isQuotePart, isVoicePart, messageText, type QuotePart, type Reaction, reactionChips, splitMentions } from '@ghostaff/shared';
+import { type ActionPart, type ChatMessage, type EditableField, type ForwardPart, isAccountAskPart, isActionPart, isAudioPart, isDecisionPart, isDecisionQuotePart, isDocumentPart, isForwardPart, isGuidePart, isQuotePart, isVoicePart, messageText, type QuotePart, type Reaction, reactionChips, splitMentions } from '@ghostaff/shared';
 import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, PanResponder, Platform, Pressable, Text, View } from 'react-native';
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
 import { Bubble, Stamp, type Ticks } from '@/components/chat/Bubble';
+import { FileBubble } from '@/components/chat/FileBubble';
 import { DecisionInChat, DecisionQuote } from '@/components/chat/DecisionInChat';
 import { GuideCard } from '@/components/chat/GuideCard';
 import { Markdown } from '@/components/chat/Markdown';
@@ -532,6 +533,7 @@ export function MessageView({
   }
 
   const voice = voiceOf(message);
+  const files = message.parts.filter(isDocumentPart);
   const textTone = mine ? 'text-on-accent' : 'text-ink';
   const content = voice ? (
     <>
@@ -558,12 +560,15 @@ export function MessageView({
       avatar={<Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} />}
       stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}
       stampInline={!voice && !!text}
-      accessibilityLabel={`${mine ? 'Tú' : message.authorName}: ${voice ? 'nota de voz' : text}`}
+      accessibilityLabel={`${mine ? 'Tú' : message.authorName}: ${voice ? 'nota de voz' : files.length ? `${files.map((f) => f.name).join(', ')}${text ? `. ${text}` : ''}` : text}`}
       below={below}
       onLongPress={onMenu}
     >
       {quote ? <DecisionQuote part={quote} onAccent={mine} /> : null}
       {quoteBlocks(mine)}
+      {files.map((f) => (
+        <FileBubble key={f.path} part={f} mine={mine} />
+      ))}
       {content}
     </Bubble>
   );

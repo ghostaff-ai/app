@@ -5,6 +5,8 @@ import { router } from 'expo-router';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { AgentPicker, PinnedBar, ReplyBar } from '@/components/chat/ChatBars';
 import { actionsFor, type MenuAction, MessageMenu } from '@/components/chat/MessageMenu';
+import type { OutgoingFile } from '@ghostaff/shared/services';
+import { type AttachKind, MAX_FILE_BYTES, pickToAttach } from '@/lib/attach';
 import type { RecordedNote } from './useVoiceNote';
 
 // What you do with the messages of a chat, as in WhatsApp (docs/plans/ready/
@@ -33,6 +35,8 @@ export function useMessageActions(opts: {
   agents: Agent[];
   send: (body: string, quoted?: string | null) => Promise<void>;
   sendVoice?: (note: RecordedNote, tagged: string[], quoted?: string | null) => Promise<void>;
+  /** Sends a photo or a document (phase 3); without it there is no clip. */
+  sendFile?: (file: OutgoingFile) => Promise<void>;
   /** Scrolls the list to a message (ChatList's jumpTo). */
   jumpTo: (messageId: string) => void;
   onError: (e: string) => void;
@@ -113,6 +117,38 @@ export function useMessageActions(opts: {
     [opts.sendVoice, replyTo],
   );
 
+  /** The clip and the camera: picks, then sends each file, the first replying to what is quoted. */
+  const [sending, setSending] = useState(false);
+  const attach = useMemo(
+    () =>
+      opts.sendFile
+        ? async (kind: AttachKind) => {
+            const picked = await pickToAttach(kind).catch(() => null);
+            if (!picked) return;
+            if ('denied' in picked) {
+              onError('Ghostaff no tiene permiso para usar la cámara. Actívalo en los ajustes.');
+              return;
+            }
+            const big = picked.files.find((f) => f.data.size > MAX_FILE_BYTES);
+            if (big) {
+              onError(`«${big.name}» pasa de 25 MB.`);
+              return;
+            }
+            setSending(true);
+            try {
+              for (const [i, f] of picked.files.entries()) await opts.sendFile!({ ...f, quote: i === 0 ? replyTo?.id ?? null : null });
+              setReplyTo(null);
+            } catch (e) {
+              fail(e);
+            } finally {
+              setSending(false);
+            }
+          }
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [opts.sendFile, replyTo, fail, onError],
+  );
+
   const pinnedMessage = pinned ? messages.find((m) => m.id === pinned && !m.deletedAt) ?? null : null;
   const pinnedBar: ReactNode = pinnedMessage ? (
     <PinnedBar message={pinnedMessage} onPress={() => jumpTo(pinnedMessage.id)} onUnpin={canWrite ? () => void actions.pin(null).catch(fail) : undefined} />
@@ -160,5 +196,7 @@ export function useMessageActions(opts: {
     send,
     sendVoice,
     prefill: editing ? { key: editing.id, text: messageText(editing.parts) } : null,
+    attach,
+    sendingFiles: sending,
   };
 }

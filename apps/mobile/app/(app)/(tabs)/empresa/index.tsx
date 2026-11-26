@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Brain, Buildings, CaretDown, Handshake, Icon, LinkSimple, SignOut, Tray, User, UserPlus } from '@/components/icons';
+import { Brain, Buildings, CaretDown, FolderSimple, Handshake, Icon, LinkSimple, SignOut, Tray, User, UserPlus } from '@/components/icons';
 import { SpaceAvatar } from '@/components/SpaceAvatar';
 import { ListRow, ListSection, RowIcon } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -125,6 +125,7 @@ export default function Empresa() {
           onPress={() => router.push('/empresa/memoria')}
         />
         <ListRow leading={<RowIcon icon={Tray} />} title="Registro" subtitle="Lo decidido, lo último primero" chevron onPress={() => router.push('/empresa/registro')} />
+        <ListRow testID="files" leading={<RowIcon icon={FolderSimple} />} title="Archivos" subtitle="Fotos y documentos de los chats" chevron onPress={() => router.push('/archivos')} />
       </ListSection>
 
       <ListSection footer={session?.user.email ? `Has entrado como ${session.user.email}` : undefined}>
