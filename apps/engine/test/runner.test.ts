@@ -591,6 +591,8 @@ describe('our runner’s report', () => {
       expect.objectContaining({
         connectionId: t.subscriptionOf(ORG),
         agentId: LEGAL,
+        runId: run,
+        messageId: t.runs.get(run!)!.messageId,
         source: 'run',
         outcome: 'ok',
         costUsd: null,

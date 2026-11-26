@@ -24,7 +24,7 @@ import {
   parseGuideStep,
   type TokenUsage,
 } from '@ghostaff/shared';
-import { type AiAccount, AiFailure, type ChatDeps, type ChatStore, failureKind, type ModelTurn, recordUse } from './chat';
+import { type AiAccount, AiFailure, type ChatDeps, type ChatStore, failureKind, type ModelTurn, type ReplyUsage, recordUse } from './chat';
 import type { AgentTools, ToolSpec } from './tools';
 
 /** One thing that happened in a guide, oldest first. JSON, kept in `guides.history`; never a secret, never a photo. */
@@ -332,7 +332,7 @@ async function ask(deps: GuideModelDeps, landing: GuideLanding, system: string, 
   for (const [i, account] of accounts.entries()) {
     const last = i === accounts.length - 1;
     const attempt: Attempt = { got: false, text: '' };
-    let usage: { model: string; tokens: TokenUsage; limits: Limits | null } | null = null;
+    let usage: ReplyUsage | null = null;
     try {
       const write = await deps.writerFor(deps.orgId, account, { busyFails: !last });
       await write({

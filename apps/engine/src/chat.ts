@@ -61,11 +61,24 @@ export type AiAccount =
   /** A Claude subscription, through Claude Code. */
   | { id: string; provider: 'claude' };
 
-/** How an AI account did on one reply or run, for its card in Conexiones. */
+/** An API effort level (docs/plans/ongoing/model-routing.md). */
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/** The effort every chat reply runs at, on any account, until the model policy chooses one (model-routing.md, phase 1). */
+export const CHAT_EFFORT: Effort = 'low';
+
+/**
+ * How an AI account did on one reply or run: for its card in Conexiones, and
+ * for routing, what it cost against what came of it (model-routing.md, phase 0).
+ */
 export interface AiUse {
   orgId: string;
   connectionId: string;
   agentId: string | null;
+  /** The agent's message it paid for: a chat reply, or the message a run answers in. */
+  messageId?: string | null;
+  runId?: string | null;
+  effort?: Effort | null;
   source: 'chat' | 'run';
   outcome: 'ok' | 'limited' | 'refused' | 'failed';
   model: string | null;
@@ -154,6 +167,14 @@ export interface ModelTurn {
   images?: { mediaType: 'image/jpeg'; data: string }[];
 }
 
+/** What a writer reports at the end of a reply. */
+export interface ReplyUsage {
+  model: string;
+  effort?: Effort;
+  tokens: TokenUsage;
+  limits: Limits | null;
+}
+
 /**
  * Streams a model reply; calls `onText` with each piece. When the model asks
  * for a tool, the writer runs it through `tools` (calling `onTool` first, so
@@ -165,8 +186,8 @@ export type Writer = (req: {
   tools: AgentTools;
   onText: (t: string) => void;
   onTool: (name: string) => void;
-  /** Once, at the end of a reply: the model, the tokens it used and, on a subscription, its limits. */
-  onUsage?: (u: { model: string; tokens: TokenUsage; limits: Limits | null }) => void;
+  /** Once, at the end of a reply: the model and effort, the tokens it used and, on a subscription, its limits. */
+  onUsage?: (u: ReplyUsage) => void;
 }) => Promise<void>;
 
 export interface ChatDeps {
@@ -499,7 +520,7 @@ async function writeReply(
     for (const [i, account] of accounts.entries()) {
       const last = i === accounts.length - 1;
       let started = false;
-      const got: { usage: { model: string; tokens: TokenUsage; limits: Limits | null } | null } = { usage: null };
+      const got: { usage: ReplyUsage | null } = { usage: null };
       try {
         const write = await deps.writerFor(agent.orgId, account, { busyFails: !last });
         await write({
@@ -526,12 +547,12 @@ async function writeReply(
             }
           },
         });
-        void recordUse(deps.chat, deps.costOf, { orgId: agent.orgId, agentId: agent.id }, account, 'ok', got.usage);
+        void recordUse(deps.chat, deps.costOf, { orgId: agent.orgId, agentId: agent.id, messageId: replyId }, account, 'ok', got.usage);
         break;
       } catch (e) {
         const kind = failureKind(e);
         console.warn('ai account failed', account.provider, kind, e instanceof Error ? e.message.slice(0, 200) : typeof e);
-        if (kind !== 'busy') void recordUse(deps.chat, deps.costOf, { orgId: agent.orgId, agentId: agent.id }, account, kind, got.usage, e instanceof AiFailure ? e.limits : null);
+        if (kind !== 'busy') void recordUse(deps.chat, deps.costOf, { orgId: agent.orgId, agentId: agent.id, messageId: replyId }, account, kind, got.usage, e instanceof AiFailure ? e.limits : null);
         if (started || last) throw e;
       }
     }
@@ -548,14 +569,17 @@ async function writeReply(
   }
 }
 
-/** Records how one account did on a reply (or a guide's step); never fails it. */
+/**
+ * Records how one account did on a reply (or a guide's step); never fails it.
+ * `messageId` is the reply it paid for, so its outcome can be joined to it (model-routing.md).
+ */
 export async function recordUse(
   store: Pick<ChatStore, 'recordAiUse'>,
   costOf: ChatDeps['costOf'],
-  who: { orgId: string; agentId: string | null },
+  who: { orgId: string; agentId: string | null; messageId?: string },
   account: AiAccount,
   outcome: AiUse['outcome'],
-  usage: { model: string; tokens: TokenUsage; limits: Limits | null } | null,
+  usage: ReplyUsage | null,
   failureLimits: Limits | null = null,
 ): Promise<void> {
   const tokens = usage?.tokens ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
@@ -564,9 +588,11 @@ export async function recordUse(
       orgId: who.orgId,
       connectionId: account.id,
       agentId: who.agentId,
+      messageId: who.messageId ?? null,
       source: 'chat',
       outcome,
       model: usage?.model ?? null,
+      effort: usage?.effort ?? null,
       tokens,
       costUsd: usage && costOf ? costOf(account, usage.model, tokens) : null,
       limits: usage?.limits ?? failureLimits,

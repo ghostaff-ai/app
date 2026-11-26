@@ -220,8 +220,8 @@ describe('a step of a guide, from the model', () => {
     expect(await nextStep(d, guide())).toEqual(openUsers);
     await new Promise((r) => setTimeout(r, 0));
     expect(d.used).toEqual([
-      { orgId: ORG, connectionId: 'sub', agentId: REDES, source: 'chat', outcome: 'limited', model: null, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: null, limits: null },
-      { orgId: ORG, connectionId: 'key-1', agentId: REDES, source: 'chat', outcome: 'ok', model: 'claude-opus-5-5', tokens, costUsd: 0.12, limits: null },
+      { orgId: ORG, connectionId: 'sub', agentId: REDES, messageId: null, effort: null, source: 'chat', outcome: 'limited', model: null, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: null, limits: null },
+      { orgId: ORG, connectionId: 'key-1', agentId: REDES, messageId: null, effort: null, source: 'chat', outcome: 'ok', model: 'claude-opus-5-5', tokens, costUsd: 0.12, limits: null },
     ]);
   });
 

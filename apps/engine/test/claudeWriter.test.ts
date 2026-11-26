@@ -302,6 +302,7 @@ describe('what the subscription used and how close it is to its limits', () => {
     expect(seen).toEqual([
       {
         model: 'claude-opus-5-5',
+        effort: 'low',
         tokens: { input: 3, output: 40, cacheRead: 900, cacheWrite: 100 },
         limits: expect.objectContaining({
           fiveHour: { utilization: 0.2, resetsAt: '2026-11-22T16:00:00.000Z', status: 'allowed' },
