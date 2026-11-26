@@ -1,0 +1,80 @@
+appId: ${APP_ID}
+name: Two people talk in General, the people's chat
+---
+# General (docs/plans/ready/general-chat.md): every organisation has one chat
+# where its people talk to each other. It shows first in Equipo once there are
+# two people. A teammate writes there (scripts/teammate-writes.js, as a second
+# phone would); the owner sees it in Equipo and in General and answers. Nobody
+# mentions an agent, so no agent speaks. Voice notes are covered by unit tests:
+# the emulator has no microphone.
+- evalScript: ${output.email = 'e2e-general-' + Date.now() + '@ghostaff.test'}
+- evalScript: ${output.company = 'Taller E2E ' + Date.now().toString().slice(-6)}
+- runFlow:
+    file: ../subflows/sign-in-email.yaml
+    env:
+      EMAIL: ${output.email}
+- extendedWaitUntil:
+    visible: "¿Cómo te llamas?"
+    timeout: 30000
+- tapOn: "Nombre y apellido"
+- inputText: "Olga E2E"
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "¿Para qué vas a usar Ghostaff?"
+    timeout: 30000
+- tapOn: "Para mi empresa.*"
+- tapOn: "Seguir"
+- extendedWaitUntil:
+    visible: "Por ejemplo, Panadería Ana"
+    timeout: 15000
+- tapOn: "Por ejemplo, Panadería Ana"
+- inputText: ${output.company}
+- tapOn: "Crear"
+- extendedWaitUntil:
+    visible: "Conecta tu IA"
+    timeout: 30000
+- runScript:
+    file: ../../scripts/connect-ai.js
+    env:
+      COMPANY: ${output.company}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+# Alone, there is nobody to talk to: no General yet.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "agent-secretaria"
+    timeout: 60000
+- assertNotVisible:
+    id: "general"
+# Bea joins and writes in General.
+- runScript:
+    file: ../../scripts/teammate-writes.js
+    env:
+      COMPANY: ${output.company}
+      CHAT: "general"
+      MEMBER_EMAIL: ${'e2e-bea-' + Date.now() + '@ghostaff.test'}
+      MEMBER_NAME: "Bea E2E"
+      TEXT: "Mañana abro yo a las 7"
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+- stopApp
+- launchApp
+# General is first in Equipo, with Bea's word.
+- extendedWaitUntil:
+    visible: "Bea E2E: Mañana abro yo a las 7"
+    timeout: 60000
+- tapOn:
+    id: "general"
+- extendedWaitUntil:
+    visible: "Mañana abro yo a las 7"
+    timeout: 20000
+- assertVisible: "Bea E2E"
+# Olga answers.
+- tapOn: "Mensaje"
+- inputText: "Perfecto, gracias"
+- tapOn: "Enviar"
+- extendedWaitUntil:
+    visible: "Perfecto, gracias"
+    timeout: 20000

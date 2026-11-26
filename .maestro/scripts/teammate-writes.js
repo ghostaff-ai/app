@@ -1,7 +1,8 @@
-// A teammate writes in the main agent's chat of the company named COMPANY:
-// makes a member (MEMBER_NAME, a confirmed user of MEMBER_EMAIL) and writes
-// TEXT as them in that chat, straight into the local Supabase with its
-// service-role key. Two people in one chat without a second phone
+// A teammate writes in the main agent's chat of the company named COMPANY, or
+// in its General with CHAT=general (docs/plans/ready/general-chat.md): makes
+// a member (MEMBER_NAME, a confirmed user of MEMBER_EMAIL) and writes TEXT as
+// them in that chat, straight into the local Supabase with its service-role
+// key. Two people in one chat without a second phone
 // (docs/plans/ongoing/group-chat-per-agent.md). Runs on the host, in Maestro's
 // JavaScript.
 const base = SUPABASE_URL || 'http://127.0.0.1:54321';
@@ -18,10 +19,12 @@ const post = (path, body) => {
 };
 
 const org = one('/rest/v1/organizations?select=id&name=eq.' + encodeURIComponent(COMPANY), 'company');
-const agent = one('/rest/v1/agents?select=id&is_main=eq.true&org_id=eq.' + org.id, 'main agent');
 const user = post('/auth/v1/admin/users', { email: MEMBER_EMAIL, email_confirm: true });
 post('/rest/v1/memberships', { org_id: org.id, user_id: user.id, role: 'member', display_name: MEMBER_NAME });
-const chat = one('/rest/v1/threads?select=id&agent_id=eq.' + agent.id, "agent's chat");
+const general = typeof CHAT !== 'undefined' && CHAT === 'general';
+const chat = general
+  ? one('/rest/v1/threads?select=id&kind=eq.general&org_id=eq.' + org.id, 'General')
+  : one('/rest/v1/threads?select=id&agent_id=eq.' + one('/rest/v1/agents?select=id&is_main=eq.true&org_id=eq.' + org.id, 'main agent').id, "agent's chat");
 post('/rest/v1/messages', {
   thread_id: chat.id,
   org_id: org.id,
