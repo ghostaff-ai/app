@@ -234,7 +234,53 @@ export interface ChatMessage {
   routineId?: string | null;
   /** An agent's reply: the person's message it answers (group-chat-per-agent.md, decision 5). */
   replyTo?: string | null;
+  /** Its author changed its words (within 15 minutes, chat-like-whatsapp.md phase 2). */
+  editedAt?: string | null;
+  /** Deleted for everyone: «Se eliminó este mensaje» stays in its place. */
+  deletedAt?: string | null;
   createdAt: string;
+}
+
+/**
+ * The message a reply quotes, as a snapshot of when it was written
+ * (chat-like-whatsapp.md, phase 2): before the reply's own words.
+ */
+export type QuotePart = {
+  type: 'quote';
+  messageId: string;
+  authorName: string;
+  kind: 'text' | 'voice';
+  text: string;
+};
+
+export function isQuotePart(p: MessagePart): p is QuotePart & MessagePart {
+  return p.type === 'quote' && typeof (p as { messageId?: unknown }).messageId === 'string';
+}
+
+/** A message forwarded to an agent from another chat: what it said, who said it, where and when. */
+export type ForwardPart = Omit<QuotePart, 'type'> & { type: 'forward'; from: string; at: string };
+
+export function isForwardPart(p: MessagePart): p is ForwardPart & MessagePart {
+  return p.type === 'forward' && typeof (p as { messageId?: unknown }).messageId === 'string';
+}
+
+/** A person's reaction to a message: one each, as in WhatsApp. */
+export interface Reaction {
+  messageId: string;
+  userId: string;
+  emoji: string;
+}
+
+/** A message's reactions as the chips under it show them: each emoji with how many, and whether one is yours; most first. */
+export function reactionChips(reactions: Reaction[], me?: string): Array<{ emoji: string; count: number; mine: boolean }> {
+  const by = new Map<string, { emoji: string; count: number; mine: boolean }>();
+  for (const r of reactions) {
+    const chip = by.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
+    chip.count += 1;
+    chip.mine ||= r.userId === me;
+    by.set(r.emoji, chip);
+  }
+  return [...by.values()].sort((a, b) => b.count - a.count);
 }
 
 /** A thread as the lists show it: its last message and whether it waits for you. */

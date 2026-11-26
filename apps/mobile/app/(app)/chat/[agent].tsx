@@ -1,6 +1,6 @@
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { shortNext, soonest } from '@ghostaff/shared';
 import { agentJob, decideAction } from '@ghostaff/shared/services';
@@ -14,6 +14,7 @@ import { agentIdsNamed } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useGuideCards } from '@/lib/hooks/useGuideCards';
+import { useMessageActions } from '@/lib/hooks/useMessageActions';
 import { useEngine } from '@/lib/hooks/useConnections';
 import { useAgentChat, useMembers, useMyLevels } from '@/lib/hooks/useChat';
 import { useRoutines } from '@/lib/hooks/useRoutines';
@@ -80,10 +81,12 @@ export default function Chat() {
   const { items: agents, loading: agentsLoading, reload: reloadAgents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels, loading: levelsLoading } = useMyLevels(orgId);
-  const { messages, openedAt, readByAll, loading, error, send: sendPlain, askAbout, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
+  const { messages, openedAt, readByAll, reactions, actions, pinned, loading, error, send: sendPlain, askAbout, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const jump = useRef<((id: string) => void) | null>(null);
   const send = useCallback(
-    async (body: string) => {
-      if (!aboutId) return sendPlain(body);
+    async (body: string, quoted?: string | null) => {
+      if (!aboutId) return sendPlain(body, quoted);
       await askAbout(aboutId, body);
       setAboutId(null);
     },
@@ -110,8 +113,8 @@ export default function Chat() {
     void loadAskState().then(setAskState);
   }, []);
   const sendAndNote = useCallback(
-    async (text: string) => {
-      await send(text);
+    async (text: string, quoted?: string | null) => {
+      await send(text, quoted);
       setSentOne(true);
     },
     [send],
@@ -141,6 +144,21 @@ export default function Chat() {
     [engine, reloadRoutines],
   );
   const routineTitles = useMemo(() => Object.fromEntries(routines.map((r) => [r.id, r.title])), [routines]);
+  // Forwarding goes to the other agents the person may talk to.
+  const forwardTo = useMemo(() => agents.filter((a) => a.id !== agentId && levels[a.id] === 'talk'), [agents, agentId, levels]);
+  const ma = useMessageActions({
+    messages,
+    reactions,
+    actions,
+    me,
+    canWrite: canTalk,
+    pinned,
+    agents: forwardTo,
+    send: sendAndNote,
+    sendVoice: engine ? (note, tagged, quoted) => sendVoice(note, agentIdsNamed(agents, tagged), quoted) : undefined,
+    jumpTo: (id) => jump.current?.(id),
+    onError: setActionError,
+  });
   const next = soonest(routines, new Date());
 
   if (!agent && (agentsLoading || levelsLoading)) return <Loading />;
@@ -194,6 +212,7 @@ export default function Chat() {
             : undefined,
         }}
       />
+      {ma.pinnedBar}
       <KeyboardColumn offset={headerHeight}>
         {loading ? (
           <Loading />
@@ -210,7 +229,8 @@ export default function Chat() {
             me={me}
             openedAt={openedAt}
             readByAll={readByAll}
-            extraData={cardState}
+            extraData={[cardState, reactions]}
+            jumpRef={jump}
             renderMessage={(row, ticks) => (
               <MessageView
                 message={row.message}
@@ -227,11 +247,12 @@ export default function Chat() {
                 onRetryTranscript={retryTranscript}
                 routineTitle={row.message.routineId ? routineTitles[row.message.routineId] : null}
                 me={me}
+                {...ma.itemProps(row.message)}
               />
             )}
           />
         )}
-        {error ? <Text className="px-4 pb-1 text-footnote text-no">{error}</Text> : null}
+        {error || actionError ? <Text className="px-4 pb-1 text-footnote text-no">{error ?? actionError}</Text> : null}
         {showPushAsk ? <PushAsk onAnswered={() => setAsked(true)} /> : null}
         {canTalk && aboutId ? (
           <View testID="asking-about" className="mx-4 mb-1 flex-row items-center rounded-2xl bg-card py-1 pl-3 pr-1">
@@ -253,11 +274,12 @@ export default function Chat() {
           </View>
         ) : null}
         {canTalk ? (
-          <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={sendAndNote} onVoiceNote={engine ? (note, tagged) => sendVoice(note, agentIdsNamed(agents, tagged)) : undefined} />
+          <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={ma.send} onVoiceNote={ma.sendVoice} above={ma.above} prefill={ma.prefill} />
         ) : (
           <ReadOnlyComposer note={owner ? `Pide acceso a ${owner}` : null} />
         )}
       </KeyboardColumn>
+      {ma.overlays}
     </View>
   );
 }

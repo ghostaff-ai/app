@@ -13,7 +13,7 @@
 // more than a bound.
 
 import { audioLines, type ChatMessage, type Limits, messageText, type TokenUsage } from '@ghostaff/shared';
-import { isDecisionPart, isDecisionQuotePart } from '@ghostaff/shared';
+import { isDecisionPart, isDecisionQuotePart, isForwardPart, isQuotePart } from '@ghostaff/shared';
 import { askLines } from './accountAsks';
 import { AiFailure, type AiAccount, type AiUse, type ChatAgent, type ChatDeps, type ChatThreadHead, failureKind, recordUse } from './chat';
 import { type DecisionBrief, decisionLine } from './decisionAsks';
@@ -95,7 +95,12 @@ export function stampOf(iso: string): string {
  * guide it asked for, a decision it asked for) as lines.
  */
 export function bodyOf(m: ChatMessage, briefs: ReadonlyMap<string, DecisionBrief> = new Map()): string {
-  const quoted = m.parts.filter(isDecisionQuotePart).map((p) => decisionLine(briefs.get(p.decisionId), 'quoted', p.question));
+  if (m.deletedAt) return '';
+  const replying = m.parts.filter(isQuotePart).map((p) => `[En respuesta a ${p.authorName}: «${p.kind === 'voice' && !p.text ? 'una nota de voz' : p.text}»]`);
+  const forwarded = m.parts
+    .filter(isForwardPart)
+    .map((p) => `[Reenviado desde ${p.from}, de ${p.authorName}${stampOf(p.at) ? ` (${stampOf(p.at)})` : ''}${p.kind === 'voice' ? ', nota de voz' : ''}: «${p.text}»]`);
+  const quoted = [...replying, ...forwarded, ...m.parts.filter(isDecisionQuotePart).map((p) => decisionLine(briefs.get(p.decisionId), 'quoted', p.question))];
   const asked = m.parts.filter(isDecisionPart).map((p) => decisionLine(briefs.get(p.decisionId), 'mine', p.question));
   return [...quoted, messageText(m.parts).trim(), ...audioLines(m.parts), ...askLines(m.parts), ...guideLines(m.parts), ...asked].filter(Boolean).join('\n\n');
 }

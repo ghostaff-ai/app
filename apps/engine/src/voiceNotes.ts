@@ -14,7 +14,7 @@
 // Neither the audio nor the transcript is ever logged.
 
 import { randomUUID } from 'node:crypto';
-import { type ChatMessage, isVoicePart, type VoicePart, waveformFromDigits } from '@ghostaff/shared';
+import { type ChatMessage, isVoicePart, type MessagePart, type VoicePart, waveformFromDigits } from '@ghostaff/shared';
 import { messageFromRow } from '@ghostaff/shared/services';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type ChatDeps, replyInThread } from './chat';
@@ -33,7 +33,11 @@ export interface VoiceNoteStore {
    * the organisation; `mentions` («@Finanzas»), when it was tagged, as a text
    * part before it.
    */
-  addVoiceNote(note: { id: string; threadId: string; orgId: string; userId: string; part: VoicePart; mentions?: string }): Promise<ChatMessage>;
+  addVoiceNote(note: { id: string; threadId: string; orgId: string; userId: string; part: VoicePart; mentions?: string; quote?: MessagePart }): Promise<ChatMessage>;
+  /** The quote of a message of that chat, as post_message writes it; null when it isn't one. */
+  quotePart(messageId: string, threadId: string): Promise<MessagePart | null>;
+  /** Deletes the member's own message for everyone; its voice note's path, if it had one. */
+  deleteMessageOf(messageId: string, userId: string): Promise<string | null>;
   message(id: string): Promise<ChatMessage | null>;
   setParts(id: string, parts: ChatMessage['parts']): Promise<void>;
 }
@@ -82,6 +86,8 @@ export interface IncomingNote {
   mentions?: unknown[];
   /** How loud it was, one digit per level (`?waveform=0379…`): the bubble draws it. */
   waveform?: unknown;
+  /** The message of the same chat it replies to (`?quote=<id>`), quoted before it. */
+  quote?: unknown;
 }
 
 /**
@@ -131,6 +137,7 @@ async function storeNote(deps: VoiceNoteDeps, userId: string, orgId: string, thr
   const tagged = await mentionText(deps, orgId, note.mentions);
 
   const threadId = await threadOf();
+  const quote = isUuid(note.quote) ? await voice.quotePart(note.quote, threadId) : null;
   const id = randomUUID();
   const path = `${orgId}/${threadId}/${id}.${EXTENSIONS[mimeType] ?? 'audio'}`;
   await voice.putAudio(path, audio, mimeType);
@@ -150,6 +157,7 @@ async function storeNote(deps: VoiceNoteDeps, userId: string, orgId: string, thr
         ...(waveformFromDigits(note.waveform) ? { waveform: waveformFromDigits(note.waveform) } : {}),
       },
       ...(tagged ? { mentions: tagged } : {}),
+      ...(quote ? { quote } : {}),
     });
   } catch (e) {
     // No message points to it: don't keep the audio.
@@ -237,7 +245,7 @@ export function supabaseVoiceNoteStore(admin: SupabaseClient): VoiceNoteStore {
           author_kind: 'person',
           author_user: note.userId,
           author_name: (member?.display_name as string | undefined) ?? '',
-          parts: [...(note.mentions ? [{ type: 'text', text: note.mentions }] : []), note.part],
+          parts: [...(note.quote ? [note.quote] : []), ...(note.mentions ? [{ type: 'text', text: note.mentions }] : []), note.part],
         })
         .select(MESSAGE_COLUMNS)
         .single();
@@ -249,9 +257,35 @@ export function supabaseVoiceNoteStore(admin: SupabaseClient): VoiceNoteStore {
       if (error) throw error;
       return data ? messageFromRow(data) : null;
     },
+    async quotePart(messageId, threadId) {
+      const { data, error } = await admin.rpc('quote_part', { target_message: messageId, target_thread: threadId });
+      if (error) throw error;
+      return (data as MessagePart | null) ?? null;
+    },
+    async deleteMessageOf(messageId, userId) {
+      const { data, error } = await admin.rpc('delete_message_of', { target_message: messageId, member: userId });
+      if (error) {
+        if (error.code === 'P0002') throw new Refusal(404, 'not_found', 'message not found');
+        throw error;
+      }
+      return (data as string | null) ?? null;
+    },
     async setParts(id, parts) {
       const { error } = await admin.from('messages').update({ parts }).eq('id', id);
       if (error) throw error;
     },
   };
+}
+
+/**
+ * Deletes the person's own message for everyone (chat-like-whatsapp.md, phase
+ * 2): its words go, «Se eliminó este mensaje» stays, and its audio, if it was a
+ * voice note, leaves the bucket.
+ */
+export async function deleteMessage(deps: VoiceNoteDeps, userId: string, messageId: unknown): Promise<{ deleted: true }> {
+  if (!isUuid(messageId)) throw new Refusal(400, 'bad_request', 'message must be a uuid');
+  if (!deps.voice) throw off();
+  const path = await deps.voice.deleteMessageOf(messageId, userId);
+  if (path) await deps.voice.removeAudio(path).catch(() => {});
+  return { deleted: true };
 }

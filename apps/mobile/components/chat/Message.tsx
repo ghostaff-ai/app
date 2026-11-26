@@ -1,6 +1,6 @@
-import { type ActionPart, type ChatMessage, type EditableField, isAccountAskPart, isActionPart, isAudioPart, isDecisionPart, isDecisionQuotePart, isGuidePart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
-import { useState } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { type ActionPart, type ChatMessage, type EditableField, type ForwardPart, isAccountAskPart, isActionPart, isAudioPart, isDecisionPart, isDecisionQuotePart, isForwardPart, isGuidePart, isQuotePart, isVoicePart, messageText, type QuotePart, type Reaction, reactionChips, splitMentions } from '@ghostaff/shared';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Image, PanResponder, Platform, Pressable, Text, View } from 'react-native';
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
 import { Bubble, Stamp, type Ticks } from '@/components/chat/Bubble';
 import { DecisionInChat, DecisionQuote } from '@/components/chat/DecisionInChat';
@@ -8,7 +8,8 @@ import { GuideCard } from '@/components/chat/GuideCard';
 import { Markdown } from '@/components/chat/Markdown';
 import { VoiceNote } from '@/components/chat/VoiceNote';
 import { AgentAudio } from '@/components/chat/AgentAudio';
-import { Clock, Icon } from '@/components/icons';
+import { ArrowUUpLeft, Clock, Icon, Microphone, Prohibit, ShareFat } from '@/components/icons';
+import { tap } from '@/lib/haptics';
 import { Field } from '@/components/ui';
 import type { AskControls } from '@/lib/hooks/useAccountAsks';
 import { personColour, timeOf } from '@/lib/chat';
@@ -74,7 +75,7 @@ function voiceOf(message: ChatMessage) {
 /** The text with @mentions in bold. */
 function Body({ text, names, className }: { text: string; names: string[]; className: string }) {
   return (
-    <Text className={className} selectable>
+    <Text className={className}>
       {splitMentions(text, names).map((s, i) =>
         s.mention ? (
           <Text key={i} className="font-semibold">
@@ -287,6 +288,87 @@ export function changedTexts(fields: readonly EditableField[], draft: Record<str
   return changed;
 }
 
+/** What a reply quotes, or a forward carries: who said it and its words, with a bar in their colour. */
+function QuoteBlock({ part, onAccent, onPress }: { part: QuotePart | ForwardPart; onAccent: boolean; onPress?: () => void }) {
+  const c = usePalette();
+  const colour = personColour(part.authorName);
+  const words = part.text || (part.kind === 'voice' ? 'Nota de voz' : '');
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={`Responde a ${part.authorName}: ${words}`}
+      className="mb-1 flex-row overflow-hidden rounded-lg"
+    >
+      <View style={{ width: 3, backgroundColor: colour }} />
+      <View className="flex-1 px-2 py-1" style={{ backgroundColor: onAccent ? 'rgba(255,255,255,0.14)' : c.sunk }}>
+        <Text className="text-caption font-semibold" style={{ color: onAccent ? c.onAccent : colour }} numberOfLines={1}>
+          {part.authorName}
+        </Text>
+        <View className="flex-row items-center">
+          {part.kind === 'voice' ? <Icon icon={Microphone} size={13} color={onAccent ? c.onAccent : c.muted} /> : null}
+          <Text className={`text-footnote ${onAccent ? 'text-on-accent' : 'text-muted'} ${part.kind === 'voice' ? 'ml-1' : ''}`} numberOfLines={2}>
+            {words}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+/** A message's reactions under it: each emoji with how many; yours outlined. Tapping one toggles it as yours. */
+function ReactionChips({ chips, onPress }: { chips: Array<{ emoji: string; count: number; mine: boolean }>; onPress?: (emoji: string | null) => void }) {
+  return (
+    <View testID="reactions" className="-mt-1 mb-0.5 flex-row flex-wrap gap-1 px-1">
+      {chips.map((ch) => (
+        <Pressable
+          key={ch.emoji}
+          accessibilityRole="button"
+          accessibilityLabel={`${ch.emoji} ${ch.count}${ch.mine ? ', tuya' : ''}`}
+          onPress={onPress ? () => onPress(ch.mine ? null : ch.emoji) : undefined}
+          className={`flex-row items-center rounded-full border bg-card px-1.5 py-0.5 ${ch.mine ? 'border-ink' : 'border-line'}`}
+        >
+          <Text style={{ fontSize: 14 }}>{ch.emoji}</Text>
+          {ch.count > 1 ? <Text className="ml-0.5 text-caption text-muted">{ch.count}</Text> : null}
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** Swipe a message right to reply to it, as in WhatsApp: it follows the finger, an arrow shows, and past a point it replies. */
+function SwipeToReply({ children, onReply }: { children: ReactNode; onReply: () => void }) {
+  const c = usePalette();
+  const x = useRef(new Animated.Value(0)).current;
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => g.dx > 12 && Math.abs(g.dy) < 10,
+        onPanResponderMove: (_, g) => x.setValue(Math.max(0, Math.min(80, g.dx))),
+        onPanResponderRelease: (_, g) => {
+          if (g.dx > 60) {
+            tap();
+            onReply();
+          }
+          Animated.spring(x, { toValue: 0, useNativeDriver: Platform.OS !== 'web' }).start();
+        },
+        onPanResponderTerminate: () => Animated.spring(x, { toValue: 0, useNativeDriver: Platform.OS !== 'web' }).start(),
+      }),
+    [x, onReply],
+  );
+  return (
+    <View {...pan.panHandlers}>
+      <Animated.View className="absolute left-3 top-0 bottom-0 justify-center" style={{ opacity: x.interpolate({ inputRange: [0, 60], outputRange: [0, 1] }) }}>
+        <View className="h-8 w-8 items-center justify-center rounded-full bg-sunk">
+          <Icon icon={ArrowUUpLeft} size={16} color={c.ink} />
+        </View>
+      </Animated.View>
+      <Animated.View style={{ transform: [{ translateX: x }] }}>{children}</Animated.View>
+    </View>
+  );
+}
+
 export function MessageView({
   message,
   mine,
@@ -304,6 +386,11 @@ export function MessageView({
   guides,
   transcript = 'tap',
   unplayed,
+  reactions = [],
+  onReact,
+  onMenu,
+  onReply,
+  onQuotePress,
 }: {
   message: ChatMessage;
   mine: boolean;
@@ -334,7 +421,18 @@ export function MessageView({
   transcript?: 'tap' | 'none';
   /** Someone else's voice note that arrived since the person last read the chat. */
   unplayed?: boolean;
+  /** Its reactions (chat-like-whatsapp.md, phase 2). */
+  reactions?: Reaction[];
+  /** Tapping a reaction chip: yours goes, someone else's emoji becomes yours too. */
+  onReact?: (emoji: string | null) => void;
+  /** Holding the message: its menu. */
+  onMenu?: () => void;
+  /** Swiping it right: reply to it. */
+  onReply?: () => void;
+  /** Tapping what it quotes: go to that message. */
+  onQuotePress?: (messageId: string) => void;
 }) {
+  const c = usePalette();
   const text = messageText(message.parts);
   const actions = message.parts.filter(isActionPart);
   const accountAsks = message.parts.filter(isAccountAskPart);
@@ -344,6 +442,48 @@ export function MessageView({
   const time = timeOf(message.createdAt);
   const tail = showAuthor;
   const colour = personColour(message.authorUserId ?? message.authorAgentId ?? message.authorName);
+  const chips = reactionChips(reactions, me);
+  const below = chips.length ? <ReactionChips chips={chips} onPress={onReact} /> : null;
+  const quoteParts = message.parts.filter(isQuotePart);
+  const forwards = message.parts.filter(isForwardPart);
+  const quoteBlocks = (onAccent: boolean) => (
+    <>
+      {forwards.map((f) => (
+        <View key={`f-${f.messageId}`}>
+          <View className="mb-1 flex-row items-center">
+            <Icon icon={ShareFat} size={13} color={onAccent ? c.onAccent : c.muted} />
+            <Text className={`ml-1 text-caption italic ${onAccent ? 'text-on-accent' : 'text-muted'} opacity-80`}>Reenviado desde {f.from}</Text>
+          </View>
+          <QuoteBlock part={f} onAccent={onAccent} />
+        </View>
+      ))}
+      {quoteParts.map((q) => (
+        <QuoteBlock key={`q-${q.messageId}`} part={q} onAccent={onAccent} onPress={onQuotePress ? () => onQuotePress(q.messageId) : undefined} />
+      ))}
+    </>
+  );
+
+  if (message.deletedAt) {
+    const mineDeleted = message.authorKind === 'person' && message.authorUserId === me;
+    return (
+      <Bubble
+        mine={mineDeleted}
+        tail={tail}
+        name={group && !mineDeleted ? message.authorName : null}
+        nameColour={colour}
+        avatar={<Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} />}
+        stamp={<Stamp time={time} mine={mineDeleted} />}
+        stampInline
+      >
+        <View className="flex-row items-center" accessibilityLabel="Se eliminó este mensaje">
+          <Icon icon={Prohibit} size={15} color={mineDeleted ? c.onAccent : c.muted} />
+          <Text className={`ml-1.5 text-[15px] italic ${mineDeleted ? 'text-on-accent' : 'text-muted'} opacity-80`}>
+            {mineDeleted ? 'Eliminaste este mensaje' : 'Se eliminó este mensaje'}
+          </Text>
+        </View>
+      </Bubble>
+    );
+  }
 
   const audio = message.parts.filter(isAudioPart);
 
@@ -360,6 +500,8 @@ export function MessageView({
         wide
         stamp={<Stamp time={time} mine={false} />}
         accessibilityLabel={`${message.authorName}: ${said}`}
+        below={below}
+        onLongPress={message.state === 'working' ? undefined : onMenu}
       >
         {message.routineId ? <RoutineLine title={routineTitle ?? null} /> : null}
         <StatusLine message={message} />
@@ -405,21 +547,25 @@ export function MessageView({
       />
     </>
   ) : (
-    <Body text={text} names={names} className={`text-base leading-[22px] ${textTone}`} />
+    text ? <Body text={text} names={names} className={`text-base leading-[22px] ${textTone}`} /> : null
   );
-  return (
+  const bubble = (
     <Bubble
       mine={mine}
       tail={tail}
       name={group && !mine ? message.authorName : null}
       nameColour={colour}
       avatar={<Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} />}
-      stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} />}
-      stampInline={!voice}
+      stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}
+      stampInline={!voice && !!text}
       accessibilityLabel={`${mine ? 'Tú' : message.authorName}: ${voice ? 'nota de voz' : text}`}
+      below={below}
+      onLongPress={onMenu}
     >
       {quote ? <DecisionQuote part={quote} onAccent={mine} /> : null}
+      {quoteBlocks(mine)}
       {content}
     </Bubble>
   );
+  return onReply ? <SwipeToReply onReply={onReply}>{bubble}</SwipeToReply> : bubble;
 }

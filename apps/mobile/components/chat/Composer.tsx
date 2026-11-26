@@ -1,9 +1,10 @@
 import { completeMention, mentionQuery, mentionSuggestions, onlyMentions } from '@ghostaff/shared';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, PanResponder, Platform, Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { clock } from '@/components/chat/RecordingBar';
-import { ArrowUp, CaretLeft, CaretUp, Eye, Icon, LockSimple, Microphone, Pause, PaperPlaneRight, Trash } from '@/components/icons';
+import { ArrowUp, CaretLeft, CaretUp, Eye, Icon, LockSimple, Microphone, Pause, PaperPlaneRight, Smiley, Trash } from '@/components/icons';
 import { tap } from '@/lib/haptics';
 import { holdMove, holdRelease } from '@/lib/hold';
 import { type RecordedNote, useVoiceNote } from '@/lib/hooks/useVoiceNote';
@@ -30,6 +31,8 @@ export function Composer({
   onSend,
   autoFocus,
   onVoiceNote,
+  above,
+  prefill,
 }: {
   placeholder: string;
   /** What @ can complete to. */
@@ -42,6 +45,10 @@ export function Composer({
    * started; without it there is no mic. A rejection keeps the note to send again.
    */
   onVoiceNote?: (note: RecordedNote, tagged: string[]) => Promise<void>;
+  /** A bar above the box: the message being replied to, or the one being edited (chat-like-whatsapp.md, phase 2). */
+  above?: ReactNode;
+  /** Words to put in the box (editing a message); a new `key` puts them again. */
+  prefill?: { key: string; text: string } | null;
 }) {
   const c = usePalette();
   const insets = useSafeAreaInsets();
@@ -50,6 +57,14 @@ export function Composer({
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState(false);
   const [mode, setMode] = useState<Mode>('idle');
+  const [emoji, setEmoji] = useState(false);
+  useEffect(() => {
+    if (prefill) {
+      setText(prefill.text);
+      input.current?.focus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.key]);
   const modeRef = useRef<Mode>('idle');
   const slide = useRef(new Animated.Value(0)).current;
   const input = useRef<TextInputInstance>(null);
@@ -185,6 +200,7 @@ export function Composer({
           ))}
         </View>
       ) : null}
+      {above}
       {error ? <Text className="mb-1 ml-3 text-footnote text-no">No se ha enviado. {error}</Text> : null}
       {hint ? (
         <Text testID="hold-hint" className="mb-1 ml-3 text-footnote text-muted">
@@ -269,6 +285,16 @@ export function Composer({
               <Text className="text-footnote text-muted">Enviando la nota…</Text>
             </View>
           ) : (
+            <View className="min-h-11 flex-1 flex-row items-end rounded-3xl border border-line bg-card">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={emoji ? 'Cerrar emojis' : 'Emojis'}
+              onPress={() => setEmoji((e) => !e)}
+              hitSlop={6}
+              className="h-11 w-10 items-center justify-center active:opacity-60"
+            >
+              <Icon icon={Smiley} size={22} color={c.muted} />
+            </Pressable>
             <TextInput
               ref={input}
               accessibilityLabel={placeholder}
@@ -291,9 +317,11 @@ export function Composer({
                   void send();
                 }
               }}
-              className="max-h-36 min-h-11 flex-1 rounded-3xl border border-line bg-card px-4 py-2.5 text-base text-ink"
+              onFocus={() => setEmoji(false)}
+              className="max-h-36 min-h-11 flex-1 py-2.5 pr-4 text-base text-ink"
               textAlignVertical="center"
             />
+            </View>
           )}
 
           {micMode ? (
@@ -333,6 +361,11 @@ export function Composer({
           )}
         </View>
       )}
+      {emoji && mode === 'idle' ? (
+        <View className="-mx-2 mt-2">
+          <EmojiPicker onPick={(e) => setText((t) => t + e)} />
+        </View>
+      ) : null}
     </View>
   );
 }

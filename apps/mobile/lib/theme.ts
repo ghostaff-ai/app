@@ -20,3 +20,8 @@ export function usePalette(): Palette {
 /** The CSS variables Tailwind's colour names read, set once on the root view. */
 export const colorVars = (p: Palette) =>
   vars(Object.fromEntries(Object.entries(p).map(([k, v]) => [`--c-${kebab(k)}`, v])));
+
+/** The colour variables again, for what renders outside the root view (a Modal on the web is a portal). */
+export function useColorVars() {
+  return colorVars(usePalette());
+}

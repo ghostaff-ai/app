@@ -136,7 +136,7 @@ function Paragraph({
   role?: 'header';
 }) {
   return (
-    <Text className={`${className} ${toneClass(tone)}`} accessibilityRole={role} selectable>
+    <Text className={`${className} ${toneClass(tone)}`} accessibilityRole={role}>
       <Inline tokens={tokens} names={names} />
     </Text>
   );
