@@ -2,7 +2,7 @@
 
 **Priority:** high — it changes how every conversation with an agent works, and the longer the private chats live, the more there is to fold in
 **Gate:** none
-**Next:** write the File Structure and Tasks against that day's code (database, engine, the chat screen), settling the rule for two people at once (Still open, 1) as the first task, then move this to ongoing/
+**Next:** write the File Structure and Tasks against that day's code (database, engine, the chat screen), then move this to ongoing/
 
 Jaime's idea (2026-11-24): each agent has **one chat**, and **everyone with access to the agent talks in that same chat**, as in a WhatsApp group. «Yo creo que solo tiene que haber un chat con los agentes y que todas las personas con acceso hablen al mismo chat con ese agente». He answered the open questions on 2026-11-26 (Decisions, below): only the group, and everything that exists today folds into it.
 
@@ -31,6 +31,7 @@ Jaime, 2026-11-26.
 2. **Today's private chats fold into the group**, by date. Ghostaff is at a very experimental stage: the only conversations so far are Álvaro's and Jaime's, so there is nothing private to protect.
 3. **Today's shared conversations fold into the group too**, `read` and `write` alike. Every message shows who wrote it (Álvaro, Jaime…): it is everyone's chat with the agent.
 4. **`read` («Ver») sees the group and doesn't write; `talk` writes.** The levels keep the meaning they have today.
+5. **Two people at once: queue.** A message that arrives while the agent is answering someone else waits, and the agent answers it after, one message at a time, in order. Folding both into one reply was the alternative; it would blur whose rights the agent acts with (team-chat.md decision 7), since each reply acts as the person it answers.
 
 Consequence of 2 and 3, to handle in the fold: what the agent did on its own was copied into each person's private chat (three-tabs.md, decision 12), so the merged group would hold the same report once per person. The fold keeps one of each.
 
@@ -49,7 +50,6 @@ Consequence of 2 and 3, to handle in the fold: what the agent did on its own was
 
 ## Still open
 
-Not decided on 2026-11-26; neither holds up writing the tasks.
+Not decided on 2026-11-26; it doesn't hold up the build.
 
-1. **Two people at once.** Only one reply is written per thread at a time (`messages_one_working_per_thread`); in a group, a second person's message can arrive while the agent is working on the first. Queue it and answer after, or fold it into the same reply. To settle when the tasks are written.
-2. **What a turn reads.** Which messages and how much memory an agent's turn carries is [agent-context.md](../ideas/agent-context.md), still waiting on Jaime. This plan works with today's last 40 messages; that plan changes them.
+1. **What a turn reads.** Which messages and how much memory an agent's turn carries is [agent-context.md](../ideas/agent-context.md), still waiting on Jaime. This plan works with today's last 40 messages; that plan changes them.
