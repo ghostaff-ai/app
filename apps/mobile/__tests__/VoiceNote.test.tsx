@@ -135,3 +135,42 @@ describe('a voice note in the chat', () => {
     expect(screen.queryByLabelText('Escuchar nota de voz')).toBeNull();
   });
 });
+
+describe('an agent’s audio in the chat (agent-audio.md)', () => {
+  const audio = { type: 'audio', path: 'org/chat/m2.mp3', mediaType: 'audio/mpeg', durationMs: null, title: 'La Mesa 2026-11-30 (ES)' };
+  const message: ChatMessage = {
+    id: 'm2',
+    threadId: 't1',
+    authorKind: 'agent',
+    authorUserId: null,
+    authorAgentId: 'lamesa',
+    authorName: 'La Mesa',
+    parts: [audio],
+    state: 'done',
+    steps: [],
+    createdAt: now(),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    Object.assign(mockStatus, { playing: false, currentTime: 0, duration: 0, didJustFinish: false });
+  });
+
+  it('shows its title over the player, with no length until it loads, and no transcript', async () => {
+    await render(<MessageView message={message} mine={false} showAuthor names={[]} />);
+    expect(screen.getByText('La Mesa 2026-11-30 (ES)')).toBeTruthy();
+    expect(screen.getByText('–:––')).toBeTruthy();
+    expect(screen.queryByText('Transcribiendo…')).toBeNull();
+    expect(screen.getByLabelText('La Mesa: audio «La Mesa 2026-11-30 (ES)»')).toBeTruthy();
+  });
+
+  it('plays from its own link in the bucket, and then knows its length', async () => {
+    await render(<MessageView message={message} mine={false} showAuthor names={[]} />);
+    await fireEvent.press(screen.getByLabelText('Escuchar «La Mesa 2026-11-30 (ES)»'));
+    await waitFor(() => expect(mockPlayer.play).toHaveBeenCalledTimes(1));
+    expect(mockLink).toHaveBeenCalledWith('org/chat/m2.mp3');
+    Object.assign(mockStatus, { playing: false, duration: 1_260 });
+    await screen.rerender(<MessageView message={message} mine={false} showAuthor names={[]} />);
+    expect(screen.getByText('21:00')).toBeTruthy();
+  });
+});
