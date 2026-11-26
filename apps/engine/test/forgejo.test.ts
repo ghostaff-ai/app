@@ -94,6 +94,28 @@ describe('forgejoRepo', () => {
     expect(sent).toBeUndefined();
   });
 
+  it('lists every file under a folder, page after page, and nothing for a folder that is not there', async () => {
+    let pages = 0;
+    const { f } = fake({
+      ...base,
+      'GET /repos/records/org-1/contents/memoria': () => ({ body: [{ type: 'dir', name: 'empresa', sha: 't-emp' }] }),
+      'GET /repos/records/org-1/git/trees/t-emp': () => {
+        pages++;
+        return pages === 1
+          ? { body: { tree: [{ path: 'clientes', type: 'tree', sha: 't-c' }, { path: 'clientes/acme.md', type: 'blob', sha: 'b1' }], truncated: true } }
+          : { body: { tree: [{ path: 'gestoria.md', type: 'blob', sha: 'b2' }], truncated: false } };
+      },
+      'GET /repos/records/org-1/git/blobs/b2': () => ({ body: { encoding: 'base64', content: b64('Gestoría López\n') } }),
+    });
+    const r = forgejoRepo(CFG, repo, f);
+    expect(await r.tree('memoria/empresa', 'head1')).toEqual([
+      { path: 'clientes/acme.md', sha: 'b1' },
+      { path: 'gestoria.md', sha: 'b2' },
+    ]);
+    expect(await r.blob('b2')).toBe('Gestoría López\n');
+    expect(await r.tree('memoria/agentes', 'head1')).toEqual([]);
+  });
+
   it('answers false when the record moved under a file (409)', async () => {
     const { f } = fake({ ...base, 'POST /repos/records/org-1/contents': () => ({ status: 409, body: { message: 'sha does not match' } }) });
     expect(await forgejoRepo(CFG, repo, f).commit({ branch: 'main', sha: 'head1' }, [{ path: 'por-decidir/a.yaml', content: 'x' }], 'm')).toBe(false);

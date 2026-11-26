@@ -24,8 +24,8 @@ export const DESKTOP_PAGE = { maxWidth: 640, width: '100%', alignSelf: 'center' 
 /** The list column between the sidebar and the open item (Equipo, Conexiones). */
 export const DESKTOP_LIST_WIDTH = 340;
 
-/** The sidebar's entries: the three tabs, and Empresa's two pages a desk uses most. */
-export type DesktopNav = 'equipo' | 'decisiones' | 'empresa' | 'conexiones' | 'registro';
+/** The sidebar's entries: the three tabs, and Empresa's pages a desk uses most. */
+export type DesktopNav = 'equipo' | 'decisiones' | 'empresa' | 'conexiones' | 'memoria' | 'registro';
 
 /** A list that stays beside the item it opened. */
 export type DesktopList = 'team' | 'connections';
@@ -61,8 +61,11 @@ export function desktopSection(path: string): { nav: DesktopNav | null; list: De
   if (TEAM_DETAILS.has(first)) return { nav: 'equipo', list: 'team', open: second ?? null };
   if (TEAM_PAGES.has(first)) return { nav: 'equipo', list: null, open: null };
   if (first === 'decisiones' || first === 'decision') return { nav: 'decisiones', list: null, open: null };
+  // A file of the memory opens from the memory's list or from a reply's link (business-brain.md).
+  if (first === 'memoria') return { nav: 'memoria', list: null, open: null };
   if (first === 'empresa') {
     if (second === 'registro') return { nav: 'registro', list: null, open: null };
+    if (second === 'memoria') return { nav: 'memoria', list: null, open: null };
     if (second === 'conexiones') {
       // «Añadir conexión» is the whole catalogue, a page of its own.
       if (third === 'anadir') return { nav: 'conexiones', list: null, open: null };

@@ -41,6 +41,8 @@ describe('desktopSection', () => {
 
   it('marks Registro and Empresa apart', () => {
     expect(desktopSection('/empresa/registro').nav).toBe('registro');
+    expect(desktopSection('/empresa/memoria').nav).toBe('memoria');
+    expect(desktopSection('/memoria/proveedores/gestoria.md').nav).toBe('memoria');
     expect(desktopSection('/empresa').nav).toBe('empresa');
     expect(desktopSection('/invitar').nav).toBe('empresa');
   });

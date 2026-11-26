@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { agentUsername, forgejoAdmin, forgejoRepo, recordRepoName } from '../src/forgejo';
 import { preReceiveHook } from '../src/recordHook';
+import { gitBlobSha, memoryTools, projectMemory, type MemoryFile, type MemoryStore } from '../src/memory';
 
 const url = process.env.FORGEJO_TEST_URL;
 const token = process.env.FORGEJO_TEST_TOKEN;
@@ -75,4 +76,32 @@ describe.skipIf(!url || !token)('the record store, live', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
+  it('Secretaría files into the memory, and the sync reads it back with the same blobs', async () => {
+    const cfg = { url: url!, adminToken: token!, adminUser: 'ghostaff' };
+    const admin = forgejoAdmin(cfg);
+    const repoName = recordRepoName(randomUUID());
+    await admin.ensureOwner();
+    await admin.ensureRecord(repoName, [{ path: 'AGENTS.md', content: 'La empresa\n' }, { path: 'memoria/empresa/.gitkeep', content: '' }], preReceiveHook('ghostaff', []));
+    const repo = forgejoRepo(cfg, repoName);
+    const rows = new Map<string, MemoryFile>();
+    const store: MemoryStore = {
+      memoryIndex: async () => [...rows.values()].map((r) => ({ path: r.path, sha: r.sha, updatedAt: r.updatedAt })),
+      memory: async (_o, p) => rows.get(p) ?? null,
+      searchMemory: async () => [],
+      saveMemory: async (_o, files) => files.forEach((f) => rows.set(f.path, { ...f, updatedAt: new Date().toISOString() })),
+      forgetMemory: async (_o, paths) => paths.forEach((p) => rows.delete(p)),
+    };
+    const t = memoryTools({ store, repoFor: async () => repo, memberName: async () => 'Ana' }, repo, { orgId: 'o', agentName: 'Secretaría', canWrite: true, userId: 'u' });
+    expect((await t.run('memory_create', { path: 'proveedores/gestoria.md', content: 'Gestoría López, desde 2024.' })).isError).toBe(false);
+    expect((await t.run('memory_create', { path: 'facturas/2026/10-acme.md', content: 'Acme: 1.200 € (octubre).' })).isError).toBe(false);
+    expect((await t.run('memory_str_replace', { path: 'proveedores/gestoria.md', old_str: 'desde 2024.', new_str: 'desde 2024. Contacto: Marta.' })).isError).toBe(false);
+
+    const head = await repo.head();
+    const tree = await repo.tree('memoria/empresa', head.sha);
+    expect(tree.map((f) => f.path).sort()).toEqual(['.gitkeep', 'facturas/2026/10-acme.md', 'proveedores/gestoria.md']);
+    // The projection's sha is the record's own, so the sync leaves Secretaría's signature alone.
+    expect(tree.find((f) => f.path === 'proveedores/gestoria.md')?.sha).toBe(gitBlobSha('Gestoría López, desde 2024. Contacto: Marta.\n'));
+    expect(await projectMemory(store, repo, 'o', head.sha)).toEqual([]);
+    expect(rows.get('proveedores/gestoria.md')?.updatedBy).toBe('Secretaría (por Ana)');
+  });
 });

@@ -69,7 +69,7 @@ function client(cfg: ForgejoConfig, f: Fetch) {
   return { call, base };
 }
 
-/** The four calls the sync makes on one record, as githubRepo does for GitHub. */
+/** The calls the sync makes on one record, as githubRepo does for GitHub. */
 export function forgejoRepo(cfg: ForgejoConfig, repo: string, f: Fetch = fetch): RecordRepo {
   const { call } = client(cfg, f);
   const at = (p: string) => `/repos/${repo}${p}`;
@@ -81,7 +81,7 @@ export function forgejoRepo(cfg: ForgejoConfig, repo: string, f: Fetch = fetch):
   const entry = (path: string, ref: string) =>
     call<{ type: string; sha: string; name: string } | Array<{ type: string; sha: string; name: string }>>(
       'GET',
-      at(`/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`),
+      at(`/contents${path ? `/${path.split('/').map(encodeURIComponent).join('/')}` : ''}?ref=${encodeURIComponent(ref)}`),
     );
   return {
     async head() {
@@ -101,6 +101,27 @@ export function forgejoRepo(cfg: ForgejoConfig, repo: string, f: Fetch = fetch):
       const e = await entry(path, ref);
       return e && !Array.isArray(e) && e.type === 'file' ? blob(e.sha) : null;
     },
+    async tree(dir, ref) {
+      const parts = dir.split('/').filter(Boolean);
+      const name = parts.pop();
+      if (!name) return [];
+      const list = await entry(parts.join('/'), ref);
+      const sha = (Array.isArray(list) ? list : []).find((e) => e.name === name && e.type === 'dir')?.sha;
+      if (!sha) return [];
+      // Forgejo pages a recursive tree (DEFAULT_GIT_TREES_PER_PAGE, 1000 by default) and says when there is more.
+      const out: { path: string; sha: string }[] = [];
+      for (let page = 1; page <= 20; page++) {
+        const t = await call<{ tree: Array<{ path: string; type: string; sha: string }> | null; truncated: boolean }>(
+          'GET',
+          at(`/git/trees/${sha}?recursive=true&per_page=1000&page=${page}`),
+        );
+        if (!t) throw new ForgejoError(404, `tree ${dir}`);
+        for (const e of t.tree ?? []) if (e.type === 'blob') out.push({ path: e.path, sha: e.sha });
+        if (!t.truncated || !t.tree?.length) return out;
+      }
+      throw new ForgejoError(413, `tree ${dir} (too many files)`);
+    },
+    blob,
     // Each file carries the sha it had at `head`, so Forgejo refuses (409) the commit if any of them
     // changed since; files the commit does not touch may have moved, which a GitHub record would refuse.
     async commit(head, files, message) {

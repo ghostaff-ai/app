@@ -2,7 +2,7 @@
 
 **Priority:** high — Jaime decided (2026-11-26) to build it and to tell the product this way: it is the clearest way to explain Ghostaff to a small business
 **Gate:** none
-**Next:** PR 1 (Tasks, below) on `feat/business-brain`: the `memories` migration and its pgTAP test first, then the projection in the sync, the memory tools in the chat, the recuerdo screen; land it with `pnpm pr:land`
+**Next:** land PR 1 with `pnpm pr:land`, check on beta that Secretaría files a text and answers with its link, then start PR 2 (photos and PDFs)
 
 **Goal:** The owner of a small business sees Ghostaff as the business's memory and assistant. They drop in whatever they have, without sorting it (a PDF, a photo of an invoice, a link, a voice note, loose text); Secretaría files it in the record and says where it went. They ask anything about the business («¿cuánto facturamos en octubre?», «¿con qué gestoría trabajamos?», «¿qué acordamos con el proveedor X?») and the answer comes from the record, with a link to its source.
 
@@ -76,6 +76,9 @@ What is missing:
 
 ## Open questions (for Jaime)
 
+Asked on 2026-11-26. Until he answers, Secretaría's prompt does the first option of each (`MEMORY_KEEPER_LINES` in `chat.ts`).
+
+
 1. **How Secretaría passes something to a department** (decision 3) in this first version. (a) She files it in Empresa, which every agent reads, in that area's folder, and says so («Lo he guardado en Facturas; Finanzas lo verá»): my pick, nothing else to build. (b) She also writes in that agent's chat asking it to act, once group-chat-per-agent.md lands. (c) She files nothing herself and only hands it over.
 2. **Something only one person's, while «Sobre ti» isn't built** (decision 4). (a) Secretaría doesn't file it and says she can't keep private things yet; «Sobre ti» is the next task after this way in: my pick. (b) Build «Sobre ti» first, before the first way in lands.
 
@@ -90,8 +93,9 @@ PR 1, the Empresa store in the chat (text, voice notes and links work end to end
 - `apps/engine/src/memory.ts` (new): `memoryTools(org, agent, deps)`: the five tools above, the limits, Secretaría-only writes, commit then projection.
 - `apps/engine/src/chat.ts`: `orgReach` merges the memory tools for organisations on our record store; `reachLines` and `systemPrompt` say what the agent may read and, for Secretaría, how to file and cite. Coordinated with agent-context and group-chat-per-agent, which change `systemPrompt` and `replyInThread`.
 - `apps/engine/src/server.ts`: the memory deps wired (the record interface, the store).
-- `packages/shared/src/services/memory.ts` (new): `listMemories(supabase, orgId)`, `readMemory(supabase, orgId, path)`.
-- `apps/mobile/app/(app)/memoria/[...path].tsx`, `apps/mobile/app/(app)/memoria/index.tsx` (new): the recuerdo and the store's list; a row in `empresa/index.tsx`.
+- `packages/shared/src/memory.ts` (new): the store's folder, limits, `memoryPath` (the path rule the engine, the link and the screen share), `memoryTitle`. `packages/shared/src/services/index.ts`: `listMemories`, `readMemory`.
+- `apps/engine/src/links.ts` (new): `read_link`.
+- `apps/mobile/app/(app)/memoria/[...path].tsx`, `apps/mobile/app/(app)/(tabs)/empresa/memoria.tsx` (new): the recuerdo and the store's list; a row in `empresa/index.tsx` and in the desktop sidebar (`components/Sidebar.tsx`, `lib/layout.ts`).
 - `apps/mobile/components/chat/Markdown.tsx`: links under `/memoria/` open in the app.
 - Tests: `apps/engine/test/memory.test.ts` (new), `recordSync.test.ts`, `chat.test.ts`; Jest for the two screens and the link.
 
@@ -107,13 +111,14 @@ PR 2, photos and PDFs:
 
 ### PR 1: the Empresa store in the chat
 
-1. [ ] Migration and pgTAP test. `pnpm db:test`.
-2. [ ] `RecordRepo.tree` on GitHub and Forgejo, and `projectMemory` in the sync, test first (the record wins; a deleted file leaves the projection; over the limit, named and skipped).
-3. [ ] `memory.ts`, test first: view and search from the projection; create and replace commit then project; refused for any agent but Secretaría and on a GitHub record; the limits; `read_link` through `fetchPublic`.
-4. [ ] `chat.ts`: the tools in `orgReach`, the prompt lines (after messaging agent-context and group-chat-per-agent).
-5. [ ] Shared services and the two screens, the Markdown link, Empresa's row; Jest on the four states.
-6. [ ] Check on the web against local Supabase and a local Forgejo with a stand-in writer: a text filed, the reply's link opening the recuerdo, a question answered with its link. `pnpm check`, then `pnpm pr:land`.
-7. [ ] `docs/architecture.md` (chat turns reach Empresa) and agent-memory.md (the Empresa store is built here; agent stores and «Sobre ti» remain).
+1. [x] Migration and pgTAP test (`memories`, `search_memories`; 10 checks).
+2. [x] `RecordRepo.tree` and `blob` on GitHub and Forgejo, and `projectMemory` in the sync (records in our record store only).
+3. [x] `memory.ts` and `links.ts` with their tests; `forgejo.live.test.ts` files into a real Forgejo 15.0.12 and reads it back with the same blobs.
+4. [x] `chat.ts`: the tools in `orgReach`, the prompt lines (agent-context and group-chat-per-agent told first; neither touches these).
+5. [x] Shared services, the two screens, the Markdown link, Empresa's row and the sidebar; Jest.
+6. [x] Checked on the web (2026-11-26) against a local Supabase and a local Forgejo: Secretaría's tools, run by the engine's own code, filed two notes as commits signed «Secretaría (por Ana)»; the search found the invoice; Empresa → Memoria listed both; a reply's link opened the note, light and dark, desktop and phone width. The model's side (filing unasked, citing) is in the prompt and covered only by the unit tests: CI and this machine run no model.
+7. [x] `docs/architecture.md`; agent-memory.md's gate now points here.
+8. [ ] `pnpm pr:land`; then on beta, a real turn: drop a text in Secretaría's chat, see where she filed it, ask about it.
 
 ### PR 2: photos and PDFs
 

@@ -31,11 +31,12 @@ import { freshRepoToken, queuedRuns, repoTokens } from './githubApp';
 import { googleCaller } from './googleCaller';
 import { type ForgejoConfig, forgejoAdmin } from './forgejo';
 import { provisionRecords } from './recordProvision';
-import { recordAgentsOf, supabaseRecordStore } from './recordStore';
-import { canReach, openDecision, type RecordSyncDeps, syncAll, syncOrg } from './recordSync';
+import { recordAgentsOf, supabaseMemoryStore, supabaseRecordStore } from './recordStore';
+import { canReach, openDecision, ownRecordRepo, type RecordSyncDeps, syncAll, syncOrg } from './recordSync';
 import { decisionBriefs } from './decisionAsks';
 import { expireRuns } from './jobs';
 import type { ChatDeps } from './chat';
+import { linkTools } from './links';
 import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
 import { supabaseTranscriptStore, sweepTranscripts } from './transcripts';
 import { drainSoon, pushFromEnv, pushTick, supabaseOutboxStore } from './notify';
@@ -170,6 +171,7 @@ const recordSync: RecordSyncDeps = {
   store: supabaseRecordStore(admin),
   tokens: githubAppId && githubAppKey ? repoTokens(async () => ({ appId: githubAppId, privateKey: githubAppKey })) : null,
   forgejo,
+  memory: supabaseMemoryStore(admin),
 };
 const caller = googleCaller();
 // Push notifications (docs/plans/ongoing/decision-notifications.md): straight to APNs and FCM, off until
@@ -235,6 +237,16 @@ const chatDeps: ChatDeps = {
   guidedToolsFor: guidedTools,
   guides: guideStore,
   decisions: { open: (a) => openDecision(recordSync, a), briefs: (ids) => decisionBriefs(admin, ids) },
+  // The organisation's memory in the record (memory.ts, business-brain.md): read by every agent, written by Secretaría.
+  memory: {
+    store: supabaseMemoryStore(admin),
+    repoFor: (orgId) => ownRecordRepo(recordSync, orgId),
+    async memberName(orgId, userId) {
+      const { data } = await admin.from('memberships').select('display_name').eq('org_id', orgId).eq('user_id', userId).maybeSingle<{ display_name: string }>();
+      return data?.display_name ?? null;
+    },
+  },
+  links: linkTools(),
 };
 // Voice notes' transcripts: Gemini on Vertex AI in the EU, billed to Ghostaff's own project (transcribe.ts).
 const gcpProject = process.env.GCP_PROJECT;

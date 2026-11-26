@@ -6,7 +6,7 @@ import { useIsDesktop } from '@/lib/layout';
 import { usePalette } from '@/lib/theme';
 
 // Empresa (Perfil in a personal space) is a tab with its own stack (three-tabs.md, decision 11), so
-// Conexiones, Registro, «Con quién trabajáis», «Añadir conexión» and a connection's page slide in
+// Conexiones, Registro, Memoria, «Con quién trabajáis», «Añadir conexión» and a connection's page slide in
 // over it and the tab bar stays. Each page carries its own title; the header
 // above it holds only the way back.
 // On a desktop Conexiones' list stands beside its pages (components/
@@ -26,6 +26,7 @@ export default function EmpresaLayout() {
       <Stack.Screen name="registro" options={{ title: '' }} />
       <Stack.Screen name="externos/index" options={{ title: '' }} />
       <Stack.Screen name="externos/[id]" options={{ title: '' }} />
+      <Stack.Screen name="memoria" options={{ title: '' }} />
     </Stack>
   );
 }

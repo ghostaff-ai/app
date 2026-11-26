@@ -10,6 +10,7 @@ export { AppWindowIcon as AppWindow } from 'phosphor-react-native/src/icons/AppW
 export { ArrowDownIcon as ArrowDown } from 'phosphor-react-native/src/icons/ArrowDown';
 export { ArrowUpIcon as ArrowUp } from 'phosphor-react-native/src/icons/ArrowUp';
 export { ArrowsClockwiseIcon as ArrowsClockwise } from 'phosphor-react-native/src/icons/ArrowsClockwise';
+export { BrainIcon as Brain } from 'phosphor-react-native/src/icons/Brain';
 export { BuildingsIcon as Buildings } from 'phosphor-react-native/src/icons/Buildings';
 export { CameraIcon as Camera } from 'phosphor-react-native/src/icons/Camera';
 export { CaretDownIcon as CaretDown } from 'phosphor-react-native/src/icons/CaretDown';

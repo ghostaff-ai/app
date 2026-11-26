@@ -1,6 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react-native';
 import { Linking } from 'react-native';
+import { router } from 'expo-router';
 import { Markdown } from '@/components/chat/Markdown';
+
+jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 
 /** Every string rendered, joined, to assert on what a person would read. */
 function allText(): string {
@@ -75,6 +78,16 @@ describe('Markdown', () => {
     await render(<Markdown text="[web](https://ghostaff.ai)" names={[]} />);
     await fireEvent.press(screen.getByText('web'));
     expect(open).toHaveBeenCalledWith('https://ghostaff.ai');
+    open.mockRestore();
+  });
+
+  it('opens a file of the memory inside the app, and nothing else under that path', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue();
+    await render(<Markdown text="[la gestoría](/memoria/proveedores/gestoria.md) y [esto](/memoria/../ajustes.md)" names={[]} />);
+    await fireEvent.press(screen.getByText('la gestoría'));
+    expect(router.push).toHaveBeenCalledWith('/memoria/proveedores/gestoria.md');
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(open).not.toHaveBeenCalled();
     open.mockRestore();
   });
 

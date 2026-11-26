@@ -67,6 +67,7 @@ export default function AppLayout() {
       <Stack.Protected guard={inOrg && !needsAi} redirectTo={step}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false, title: org.active?.name ?? '' }} />
         <Stack.Screen name="decision/[id]" options={{ title: 'Decisión' }} />
+        <Stack.Screen name="memoria/[...path]" options={{ title: '' }} />
         <Stack.Screen name="agente/[id]" options={{ title: '' }} />
         <Stack.Screen name="acceso/[id]" options={{ title: 'Quién puede' }} />
         <Stack.Screen name="herramientas/[id]" options={{ title: 'Herramientas' }} />

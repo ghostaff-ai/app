@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Buildings, CaretDown, Handshake, Icon, LinkSimple, SignOut, Tray, User, UserPlus } from '@/components/icons';
+import { Brain, Buildings, CaretDown, Handshake, Icon, LinkSimple, SignOut, Tray, User, UserPlus } from '@/components/icons';
 import { SpaceAvatar } from '@/components/SpaceAvatar';
 import { ListRow, ListSection, RowIcon } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -17,7 +17,8 @@ import { usePalette } from '@/lib/theme';
 // personal space, which is otherwise the same page (spaces.ts): the organisation
 // itself. Its name on top opens the switcher; then Conexiones, first and one
 // tap away; the people in it and inviting more; who it works with outside
-// (external-parties.md, decision 5); Registro, what it decided;
+// (external-parties.md, decision 5); its memory, what Secretaría filed
+// (business-brain.md); Registro, what it decided;
 // and at the end, switching and signing out.
 
 export default function Empresa() {
@@ -115,6 +116,14 @@ export default function Empresa() {
       </ListSection>
 
       <ListSection>
+        <ListRow
+          testID="open-memory"
+          leading={<RowIcon icon={Brain} />}
+          title="Memoria de la empresa"
+          subtitle="Lo que Secretaría ha guardado"
+          chevron
+          onPress={() => router.push('/empresa/memoria')}
+        />
         <ListRow leading={<RowIcon icon={Tray} />} title="Registro" subtitle="Lo decidido, lo último primero" chevron onPress={() => router.push('/empresa/registro')} />
       </ListSection>
 

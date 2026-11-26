@@ -2,7 +2,7 @@ import { Link, router, usePathname, type Href } from 'expo-router';
 import { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { spaceLook } from '@ghostaff/shared';
-import { Buildings, CaretDown, Icon, LinkSimple, SealCheck, Tray, User, UsersThree, type IconComponent } from '@/components/icons';
+import { Brain, Buildings, CaretDown, Icon, LinkSimple, SealCheck, Tray, User, UsersThree, type IconComponent } from '@/components/icons';
 import { SpaceAvatar } from '@/components/SpaceAvatar';
 import { useInbox } from '@/lib/hooks/useDecisions';
 import { desktopSection, type DesktopNav } from '@/lib/layout';
@@ -44,6 +44,7 @@ export function Sidebar() {
     { nav: 'decisiones', href: '/decisiones', label: 'Decisiones', icon: SealCheck },
     { nav: 'empresa', href: '/empresa', label: look.tab, icon: look.icon === 'person' ? User : Buildings },
     { nav: 'conexiones', href: '/empresa/conexiones', label: 'Conexiones', icon: LinkSimple, under: true },
+    { nav: 'memoria', href: '/empresa/memoria', label: 'Memoria', icon: Brain, under: true },
     { nav: 'registro', href: '/empresa/registro', label: 'Registro', icon: Tray, under: true },
   ];
 

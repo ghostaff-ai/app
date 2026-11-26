@@ -3,6 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { applySync, type ExternalSyncRow, markWrittenBack, type SyncAgent } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
+import type { MemoryStore } from './memory';
 import type { RecordAgent } from './recordProvision';
 import type { RecordOrg, RecordSyncStore } from './recordSync';
 
@@ -142,4 +143,55 @@ export async function recordAgentsOf(db: SupabaseClient, orgId: string): Promise
     .returns<{ id: string; slug: string; is_main: boolean }[]>();
   if (error) throw error;
   return (data ?? []).map((a) => ({ id: a.id, slug: a.slug, isMain: a.is_main }));
+}
+
+type MemoryRow = { path: string; content: string; sha: string; updated_at: string; updated_by: string | null };
+
+/** The organisation's memory as the projection keeps it (`memories`, memory.ts), with the service role. Only the Empresa store today. */
+export function supabaseMemoryStore(db: SupabaseClient): MemoryStore {
+  const STORE = 'empresa';
+  return {
+    async memoryIndex(orgId) {
+      const { data, error } = await db
+        .from('memories')
+        .select('path, sha, updated_at')
+        .eq('org_id', orgId)
+        .eq('store', STORE)
+        .order('path')
+        .limit(5000)
+        .returns<Array<{ path: string; sha: string; updated_at: string }>>();
+      if (error) throw error;
+      return (data ?? []).map((r) => ({ path: r.path, sha: r.sha, updatedAt: r.updated_at }));
+    },
+    async memory(orgId, path) {
+      const { data, error } = await db
+        .from('memories')
+        .select('path, content, sha, updated_at, updated_by')
+        .eq('org_id', orgId)
+        .eq('store', STORE)
+        .eq('path', path)
+        .maybeSingle<MemoryRow>();
+      if (error) throw error;
+      return data ? { path: data.path, content: data.content, sha: data.sha, updatedAt: data.updated_at, updatedBy: data.updated_by } : null;
+    },
+    async searchMemory(orgId, words, max) {
+      const { data, error } = await db.rpc('search_memories', { target_org: orgId, target_store: STORE, words, max });
+      if (error) throw error;
+      return ((data ?? []) as Array<{ path: string; content: string; updated_at: string }>).map((r) => ({ path: r.path, content: r.content, updatedAt: r.updated_at }));
+    },
+    async saveMemory(orgId, files) {
+      if (!files.length) return;
+      const now = new Date().toISOString();
+      const { error } = await db.from('memories').upsert(
+        files.map((f) => ({ org_id: orgId, store: STORE, path: f.path, content: f.content, sha: f.sha, updated_by: f.updatedBy, updated_at: now })),
+        { onConflict: 'org_id,store,path' },
+      );
+      if (error) throw error;
+    },
+    async forgetMemory(orgId, paths) {
+      if (!paths.length) return;
+      const { error } = await db.from('memories').delete().eq('org_id', orgId).eq('store', STORE).in('path', paths);
+      if (error) throw error;
+    },
+  };
 }

