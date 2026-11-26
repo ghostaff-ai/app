@@ -2,7 +2,7 @@
 
 **Priority:** high — it changes how every conversation with an agent works, and the longer the private chats live, the more there is to fold in
 **Gate:** none
-**Next:** write the File Structure and Tasks against that day's code (database, engine, the chat screen), then move this to ongoing/
+**Next:** PR 1 (Tasks, below) on `feat/group-chat-per-agent`: the migration and its pgTAP tests first, then the engine, then the app; land it with `pnpm pr:land`
 
 Jaime's idea (2026-11-24): each agent has **one chat**, and **everyone with access to the agent talks in that same chat**, as in a WhatsApp group. «Yo creo que solo tiene que haber un chat con los agentes y que todas las personas con acceso hablen al mismo chat con ese agente». He answered the open questions on 2026-11-26 (Decisions, below): only the group, and everything that exists today folds into it.
 
@@ -33,6 +33,9 @@ Jaime, 2026-11-26.
 4. **`read` («Ver») sees the group and doesn't write; `talk` writes.** The levels keep the meaning they have today.
 5. **Two people at once: queue.** A message that arrives while the agent is answering someone else waits, and the agent answers it after, one message at a time, in order. Folding both into one reply was the alternative; it would blur whose rights the agent acts with (team-chat.md decision 7), since each reply acts as the person it answers.
 
+6. **Routines lose «Solo para mí».** Every routine is the team's: its answer lands in the group. Anyone who talks to the agent makes one; its creator or an owner changes, pauses or deletes it. (Jaime, 2026-11-26, when the tasks were written.)
+7. **Pushes in the group go to whoever follows it**: today's rule for shared conversations (`follows_thread`: wrote, read or was @mentioned in it). The person the agent answers always follows, having written. (Jaime, 2026-11-26.)
+
 Consequence of 2 and 3, to handle in the fold: what the agent did on its own was copied into each person's private chat (three-tabs.md, decision 12), so the merged group would hold the same report once per person. The fold keeps one of each.
 
 ## What it reverses
@@ -47,6 +50,34 @@ Consequence of 2 and 3, to handle in the fold: what the agent did on its own was
 - **The agent's context.** With several people writing, the last 40 messages fill faster and mix topics. Jaime doesn't think a turn should carry the last 40 messages at all, but its memory and a few recent ones: [agent-context.md](../ideas/agent-context.md).
 - **Acting with the asker's rights** (team-chat.md decision 7) still works message by message: the agent acts as the person whose message it is answering.
 - **Simpler.** One thread per agent, no copies of the agent's own reports, no visibility to choose.
+
+## Tasks
+
+Two pull requests. The first makes the group; until the second lands, a «Solo para mí» routine answers in the group too.
+
+### PR 1: one chat per agent
+
+**Database** — one migration, `supabase/migrations/<ts>_group_chat_per_agent.sql`:
+1. Fold: per agent, keep its oldest thread (or open one) titled with the agent's name; move every other thread's rows onto it (`messages`, `thread_reads` keeping each person's latest mark, `agent_actions`, `account_asks`, `guides`, `agent_runs`, `push_outbox`); delete the empty threads. Before moving, a stale «working» message beyond the newest per agent is marked failed, so `messages_one_working_per_thread` holds.
+2. Dedupe: the agent's own copies (same agent, routine and parts, within a few seconds of each other, no action, ask or guide pointing at them) keep the first.
+3. Shape: drop `threads.personal_of`, `threads.visibility`, `agents.chat_default`; `threads_one_per_agent` unique on `agent_id`. `thread_level_for` becomes the member's level on the agent.
+4. Functions: `chat_with`, `ask_about_decision` write in the agent's chat; `post_to_personal_chats` becomes `post_to_agent_chat` (once); `post_routine_copies` goes (the answer is already in the group); `notify_owners` writes once in Secretaría's chat; `my_threads` drops `personal`, `visibility`, `mine`; `follows_thread` and `messages_notify` lose the personal case (route `/chat/<agent>`); `start_thread`, `set_conversation_visibility`, `conversation_readers`, `set_agent_chat_default` are dropped; `can_hear_voice_note` checks the note's message, not the folder's thread (old notes keep their folder).
+5. pgTAP: rewrite `personal_chats`, `chat_permissions`, `no_notices` as one `group_chat` test (a member reads and writes by level, `read` can't write, another organisation sees nothing, the fold and the dedupe); adjust the tests that call the dropped functions.
+
+**Engine** (`apps/engine`):
+6. `personalChat` → `agentChat(agentId)`; routines, hello, guides and asks use it.
+7. The queue: `replyInThread` answers, one at a time and in order, every person message written after the agent's last reply, each as its author (team-chat.md decision 7); a request that finds the thread busy leaves its message to the one answering. A queued message from someone other than the caller is answered without their session, so without the settings tools that turn (they need it); the agent says so if asked for a setting. Bounded rounds per request, as today.
+8. Drop `postRoutineCopies`; tests follow.
+
+**Shared and app**:
+9. Services: drop `startThread`, `setConversationVisibility`, `conversationReaders`, `setAgentChatDefault`, the `chat_default` setting and its tool, the visibility models; classify the new and dropped functions in `settings.ts`.
+10. Screens: Equipo one row per agent; the chat says it is everyone's with access; `conversacion/[id]` redirects to its agent's chat (old pushes); remove `nueva-conversacion`, `conversaciones`, `visibilidad`, `Audience`, `VisibilityPicker`; the agent's page loses its conversations and its default.
+11. Maestro: replace `conversation-visibility.yaml` with a group flow (two people, one chat), run `pnpm e2e`.
+
+### PR 2: routines without «Solo para mí»
+
+12. Migration: every routine `team`, drop `audience`; `create_routine` for anyone who talks to the agent; `may_change_routine` its creator or an owner; runs' policy by agent level only.
+13. Shared, engine, settings tool and the routine screens lose the choice; tests follow.
 
 ## Still open
 
