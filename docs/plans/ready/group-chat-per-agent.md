@@ -1,10 +1,10 @@
 # One chat per agent, shared like a WhatsApp group
 
 **Priority:** high — it changes how every conversation with an agent works, and the longer the private chats live, the more there is to fold in
-**Gate:** decision:Jaime — whether a person can also open other conversations with an agent besides the group (open question 1)
-**Next:** Jaime answers the open questions; then a written plan for the change (database, engine, the chat screen)
+**Gate:** none
+**Next:** write the File Structure and Tasks against that day's code (database, engine, the chat screen), settling the rule for two people at once (Still open, 1) as the first task, then move this to ongoing/
 
-Jaime's idea (2026-11-24): each agent has **one chat**, and **everyone with access to the agent talks in that same chat**, as in a WhatsApp group. «Yo creo que solo tiene que haber un chat con los agentes y que todas las personas con acceso hablen al mismo chat con ese agente». Opening several conversations with one agent does not convince him yet: «hay que darle una vuelta». Written down as he said it; the group is his idea, everything under «Open questions» is still to decide.
+Jaime's idea (2026-11-24): each agent has **one chat**, and **everyone with access to the agent talks in that same chat**, as in a WhatsApp group. «Yo creo que solo tiene que haber un chat con los agentes y que todas las personas con acceso hablen al mismo chat con ese agente». He answered the open questions on 2026-11-26 (Decisions, below): only the group, and everything that exists today folds into it.
 
 ## Today (`develop`, 2026-11-24)
 
@@ -23,23 +23,33 @@ Jaime's idea (2026-11-24): each agent has **one chat**, and **everyone with acce
 - What the agent does on its own lands **once**, in the group, instead of a copy per person.
 - Each person keeps their own unread mark on the group.
 
+## Decisions
+
+Jaime, 2026-11-26.
+
+1. **Only the group.** An agent has one chat and nothing else: no private side chat with the agent, no titled topics inside it.
+2. **Today's private chats fold into the group**, by date. Ghostaff is at a very experimental stage: the only conversations so far are Álvaro's and Jaime's, so there is nothing private to protect.
+3. **Today's shared conversations fold into the group too**, `read` and `write` alike. Every message shows who wrote it (Álvaro, Jaime…): it is everyone's chat with the agent.
+4. **`read` («Ver») sees the group and doesn't write; `talk` writes.** The levels keep the meaning they have today.
+
+Consequence of 2 and 3, to handle in the fold: what the agent did on its own was copied into each person's private chat (three-tabs.md, decision 12), so the merged group would hold the same report once per person. The fold keeps one of each.
+
 ## What it reverses
 
 - three-tabs.md decision 3 (one private chat per person and agent) and decision 12 (a copy per person of what the agent does alone).
-- chat-permissions.md, in part: with one chat per agent, a conversation's own visibility has nothing left to choose, unless open question 1 brings back separate conversations.
+- chat-permissions.md: a conversation's own visibility (`threads.visibility`, `agents.chat_default`) goes away entirely. The access level per agent is the only thing that decides who reads and who writes.
 - Either founder decides alone (AGENTS.md), so this is Jaime's call; Álvaro took decision 3, so he should hear it from Jaime directly.
 
 ## Consequences to weigh
 
 - **Privacy.** Everything a person tells the agent is read by everyone with access to it. Today a member can ask Finanzas something without the owner reading it; in the group they can't. The access level per agent becomes the only privacy control.
-- **The agent's context.** With several people writing, the last 40 messages fill faster and mix topics. Jaime doesn't think a turn should carry the last 40 messages at all, but its memory and a few recent ones: [agent-context.md](agent-context.md).
-- **Two people at once.** Only one reply is written per thread at a time; with a group, a second person's message while the agent is working needs a rule (queue it and answer after, or fold it into the same reply).
+- **The agent's context.** With several people writing, the last 40 messages fill faster and mix topics. Jaime doesn't think a turn should carry the last 40 messages at all, but its memory and a few recent ones: [agent-context.md](../ideas/agent-context.md).
 - **Acting with the asker's rights** (team-chat.md decision 7) still works message by message: the agent acts as the person whose message it is answering.
 - **Simpler.** One thread per agent, no copies of the agent's own reports, no visibility to choose.
 
-## Open questions
+## Still open
 
-1. **Other conversations besides the group.** Jaime's doubt. Possibilities to draw before deciding: none, only the group; a private side chat with the agent for what shouldn't go to everyone; separate titled topics inside the agent (like threads in Slack).
-2. **The private chats that exist today.** Merge them into the group by date (everyone would read what was private: probably not), keep them readable on the agent's page as «Conversaciones anteriores» (as was done with the old shared threads), or something else.
-3. **The shared conversations of chat-permissions.md.** Keep them readable as old conversations, or fold the `write` ones into the group.
-4. **Members with `read`.** They see the group and can't write: is that the right meaning of «Ver», or should «Ver» mean something narrower now that the chat holds everything?
+Not decided on 2026-11-26; neither holds up writing the tasks.
+
+1. **Two people at once.** Only one reply is written per thread at a time (`messages_one_working_per_thread`); in a group, a second person's message can arrive while the agent is working on the first. Queue it and answer after, or fold it into the same reply. To settle when the tasks are written.
+2. **What a turn reads.** Which messages and how much memory an agent's turn carries is [agent-context.md](../ideas/agent-context.md), still waiting on Jaime. This plan works with today's last 40 messages; that plan changes them.

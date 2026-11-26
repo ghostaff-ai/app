@@ -4,7 +4,7 @@
 **Gate:** decision:Jaime — what a turn carries besides the memory (open questions 1–3)
 **Next:** Jaime answers the open questions; then fold the answer into [agent-memory.md](../ready/agent-memory.md) or a plan of its own
 
-Jaime (2026-11-24), on the line «the engine reads the last 40 messages» in [group-chat-per-agent.md](group-chat-per-agent.md): sending the last 40 messages «no tiene sentido». The agent keeps a memory, and that memory is the organisation's record (the repo per organisation, [record-store.md](../ongoing/record-store.md)). So a turn should carry **the memory, and maybe some of the previous messages**; how many, or which, he doesn't know yet. Written down as something to consider; nothing here is decided.
+Jaime (2026-11-24), on the line «the engine reads the last 40 messages» in [group-chat-per-agent.md](../ready/group-chat-per-agent.md): sending the last 40 messages «no tiene sentido». The agent keeps a memory, and that memory is the organisation's record (the repo per organisation, [record-store.md](../ongoing/record-store.md)). So a turn should carry **the memory, and maybe some of the previous messages**; how many, or which, he doesn't know yet. Written down as something to consider; nothing here is decided.
 
 ## Today (`develop`, 2026-11-24)
 
@@ -25,7 +25,7 @@ Everything older than that is what the memory is for: if something said weeks ag
 
 ## Why it matters
 
-- **A long chat stops costing more every turn.** With one chat per agent, and more so with a group chat ([group-chat-per-agent.md](group-chat-per-agent.md)), 40 messages are a few hours of talk from several people, mixed topics, paid for on every reply.
+- **A long chat stops costing more every turn.** With one chat per agent, and more so with a group chat ([group-chat-per-agent.md](../ready/group-chat-per-agent.md)), 40 messages are a few hours of talk from several people, mixed topics, paid for on every reply.
 - **What matters survives the window.** With 40 messages, whatever was said in message 41 is gone unless it happened to be written down; with memory as the source, writing it down is the agent's job.
 - **One model for both kinds of agent.** Runner agents already work this way (the record plus the request); chat agents would too.
 

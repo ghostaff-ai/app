@@ -33,7 +33,7 @@ Telegram tells Órdago's founders when an agent answered, reported, opened a dec
 
 How the engine learns that an agent message is finished and who to tell:
 
-- **A. A database trigger fills an outbox; the engine drains it** — **chosen (Jaime, 2026-11-24).** When an agent message becomes `done` or `failed`, Postgres writes one row per person to notify. The engine drains the outbox right after it writes a message, and the tick drains it every five minutes as the safety net. Every path that writes agent messages, today's and tomorrow's, is covered without remembering to call anything; who is told is one SQL rule, the one that changes if [group-chat-per-agent.md](../ideas/group-chat-per-agent.md) is decided.
+- **A. A database trigger fills an outbox; the engine drains it** — **chosen (Jaime, 2026-11-24).** When an agent message becomes `done` or `failed`, Postgres writes one row per person to notify. The engine drains the outbox right after it writes a message, and the tick drains it every five minutes as the safety net. Every path that writes agent messages, today's and tomorrow's, is covered without remembering to call anything; who is told is one SQL rule, the one that changes with [group-chat-per-agent.md](../ready/group-chat-per-agent.md) (decided 2026-11-26: one chat per agent, so everyone who can see the agent).
 - **B. Call `notify()` from each place that closes a message.** More direct, but ten places today and every new one must remember; a missed path is a reply nobody hears about.
 - **C. Only the tick**, scanning unread agent messages every five minutes. Least code, up to five minutes late: too slow for «te ha contestado».
 
