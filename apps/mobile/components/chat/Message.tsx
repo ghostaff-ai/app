@@ -1,8 +1,8 @@
 import { type ActionPart, type ChatMessage, type EditableField, isAccountAskPart, isActionPart, isAudioPart, isDecisionPart, isDecisionQuotePart, isGuidePart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
-import { Bubble, Stamp, StampRoom, type Ticks } from '@/components/chat/Bubble';
+import { Bubble, Stamp, type Ticks } from '@/components/chat/Bubble';
 import { DecisionInChat, DecisionQuote } from '@/components/chat/DecisionInChat';
 import { GuideCard } from '@/components/chat/GuideCard';
 import { Markdown } from '@/components/chat/Markdown';
@@ -72,7 +72,7 @@ function voiceOf(message: ChatMessage) {
 }
 
 /** The text with @mentions in bold. */
-function Body({ text, names, className, trailing }: { text: string; names: string[]; className: string; trailing?: ReactNode }) {
+function Body({ text, names, className }: { text: string; names: string[]; className: string }) {
   return (
     <Text className={className} selectable>
       {splitMentions(text, names).map((s, i) =>
@@ -84,7 +84,6 @@ function Body({ text, names, className, trailing }: { text: string; names: strin
           s.text
         ),
       )}
-      {trailing}
     </Text>
   );
 }
@@ -406,7 +405,7 @@ export function MessageView({
       />
     </>
   ) : (
-    <Body text={text} names={names} className={`text-base leading-[22px] ${textTone}`} trailing={<StampRoom time={time} ticks={mine ? ticks : null} />} />
+    <Body text={text} names={names} className={`text-base leading-[22px] ${textTone}`} />
   );
   return (
     <Bubble

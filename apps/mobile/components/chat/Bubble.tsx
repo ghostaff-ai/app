@@ -35,18 +35,6 @@ export function Stamp({ time, ticks, mine, edited }: { time: string; ticks?: Tic
   );
 }
 
-/**
- * Room at the end of a text's last line for the stamp, which floats over it:
- * the same characters, invisible, so the text wraps before reaching it.
- */
-export function StampRoom({ time, ticks, edited }: { time: string; ticks?: Ticks | null; edited?: boolean }) {
-  return (
-    <Text style={{ opacity: 0 }} accessibilityElementsHidden importantForAccessibility="no">
-      {` ${edited ? 'editado ' : ''}${time}${ticks ? '  ' : ''}`}
-    </Text>
-  );
-}
-
 export function Bubble({
   mine,
   tail,
@@ -72,7 +60,11 @@ export function Bubble({
   wide?: boolean;
   /** The time and ticks. */
   stamp: ReactNode;
-  /** The content already left room for the stamp on its last line (StampRoom): it floats there instead of on a line of its own. */
+  /**
+   * Short text: the stamp sits beside it on its last line when there is room,
+   * and under it at the right when there isn't, as in WhatsApp. The text and
+   * the stamp stay apart (a reader, or a test, reads the text as written).
+   */
   stampInline?: boolean;
   children: ReactNode;
   testID?: string;
@@ -88,8 +80,17 @@ export function Bubble({
             {name}
           </Text>
         ) : null}
-        {children}
-        {stampInline ? <View className="absolute bottom-1.5 right-2.5">{stamp}</View> : <View className="mt-0.5 self-end">{stamp}</View>}
+        {stampInline ? (
+          <View className="flex-row flex-wrap items-end justify-end">
+            <View className="shrink">{children}</View>
+            <View className="mb-[1px] ml-2">{stamp}</View>
+          </View>
+        ) : (
+          <>
+            {children}
+            <View className="mt-0.5 self-end">{stamp}</View>
+          </>
+        )}
       </View>
     </View>
   );
