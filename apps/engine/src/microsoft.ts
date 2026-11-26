@@ -244,6 +244,11 @@ export function microsoftTools(now: () => Date = () => new Date()): Tool[] {
       writes: true,
       step: 'Creando el evento en Outlook',
       action: 'Crear un evento en el calendario de Outlook',
+      editable: [
+        { field: 'title', label: 'Título', max: 300 },
+        { field: 'description', label: 'Notas', max: 4000, multiline: true },
+        { field: 'location', label: 'Lugar', max: 300 },
+      ],
       async run(ctx, input) {
         const title = str(input.title, 300);
         if (!title) throw new ToolError('Falta el título del evento.');
@@ -371,6 +376,11 @@ export function microsoftTools(now: () => Date = () => new Date()): Tool[] {
       writes: true,
       step: 'Dejando el borrador en Outlook',
       action: 'Dejar un borrador en Outlook, sin enviarlo',
+      // The tool takes up to 100,000 characters; a card edits a mail of a normal length.
+      editable: [
+        { field: 'subject', label: 'Asunto', max: 300 },
+        { field: 'text', label: 'Texto', max: 20_000, multiline: true },
+      ],
       async run(ctx, input) {
         const text = typeof input.text === 'string' ? input.text.trim() : '';
         if (!text) throw new ToolError('Falta el texto del correo.');

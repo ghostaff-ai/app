@@ -234,6 +234,7 @@ export function instagramTools(opts: InstagramToolOptions = {}): Tool[] {
       writes: true,
       step: 'Contestando el comentario',
       action: 'Contestar en público a un comentario de Instagram',
+      editable: [{ field: 'message', label: 'Respuesta', max: 2200, multiline: true }],
       async run(ctx, input) {
         const message = typeof input.message === 'string' ? input.message.trim().slice(0, 2200) : '';
         if (!message) throw new ToolError('Falta el texto de la respuesta.');
@@ -278,6 +279,7 @@ export function instagramTools(opts: InstagramToolOptions = {}): Tool[] {
       writes: true,
       step: 'Publicando en Instagram',
       action: 'Publicar en Instagram',
+      editable: [{ field: 'caption', label: 'Texto', max: 2200, multiline: true }],
       async run(ctx, input) {
         const urls = Array.isArray(input.media) ? input.media.map(httpsUrl) : [];
         const caption = typeof input.caption === 'string' ? input.caption.slice(0, 2200) : '';

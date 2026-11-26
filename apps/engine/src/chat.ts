@@ -15,12 +15,12 @@
 // that needs them.
 
 import { type AgentGhost, type ChatMessage, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
-import type { AccountAskPart, ActionPart, DecisionPart, GuidePart } from '@ghostaff/shared';
+import type { AccountAskPart, ActionPart, DecisionPart, EditableField, GuidePart } from '@ghostaff/shared';
 import { DECISION_TOOL, DECISION_TOOLS, type DecisionBrief, decisionIds, type DecisionOpener, proposeDecision } from './decisionAsks';
 import { ASK_TOOL, ASK_TOOLS, askResumable, type AskStore, proposeAsk } from './accountAsks';
 import { bodyOf, type ContextStore, CONVERSATION_TOOL, conversationTools, type ConversationSummary, personOf, stampOf, summarizeIfLong, summaryTurn, windowOf } from './context';
 import { GUIDE_TOOL, GUIDE_TOOLS, guideResumable, type GuideStore, proposeGuide } from './guides';
-import { previewOf } from './actions';
+import { editableOf, previewOf } from './actions';
 import { Refusal } from './connections';
 import { askJob, type JobDeps } from './jobs';
 import { askRunner } from './runner';
@@ -500,6 +500,7 @@ async function writeReply(
         preview: described ? described.preview : previewOf(input),
         status: 'pending',
         ...(decider === 'requester' ? { decider, requestedBy: who.userId } : {}),
+        ...editableCard(tools, name, input as Record<string, unknown>),
       });
       showCards();
       const approver = decider === 'requester' ? 'la persona que la ha pedido' : 'quien es propietario';
@@ -567,6 +568,12 @@ async function writeReply(
     await deps.chat.updateReply(replyId, { ...withCards(said), state: 'failed' }).catch(() => {});
     return { text: said, ok: false };
   }
+}
+
+/** The text fields a person may change on an action's card before approving it («Editar»), when it has any. */
+function editableCard(tools: AgentTools, name: string, input: Record<string, unknown>): { editable?: EditableField[] } {
+  const editable = editableOf(tools.editableFor?.(name) ?? [], input);
+  return editable.length ? { editable } : {};
 }
 
 /**

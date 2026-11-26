@@ -508,6 +508,20 @@ describe("an agent using its organisation's tools", () => {
     ]);
   });
 
+  it('a card carries the text its tool lets a person change before approving («Editar»)', async () => {
+    const { call, updates } = setup({
+      tools: { ...tools, editableFor: (name) => (name === 'instagram_publish' ? [{ field: 'caption', label: 'Texto', max: 2200, multiline: true }] : []) },
+      write: async ({ tools: t, onText }) => {
+        await t.run('instagram_publish', { kind: 'reel', caption: 'Pan del día' });
+        onText('Lista para aprobar.');
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(updates.at(-1)?.cards).toEqual([
+      expect.objectContaining({ type: 'action', editable: [{ field: 'caption', label: 'Texto', max: 2200, multiline: true, value: 'Pan del día' }] }),
+    ]);
+  });
+
   it('gets the tools and the accounts, and shows the tool\'s step while it runs', async () => {
     const ran: unknown[] = [];
     const { call, updates, asked } = setup({

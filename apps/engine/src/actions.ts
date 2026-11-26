@@ -8,12 +8,16 @@
 //
 // The action runs from the stored row, never from the message, and moves
 // pending → running exactly once, so two presses cannot run it twice.
+//
+// Whoever approves may first change the text fields its tool declares editable
+// («Editar», docs/plans/ongoing/model-routing.md): the row keeps what the agent
+// drafted beside what ran, which is how routing learns a draft was not right.
 
-import { type ActionPart, isActionPart, type MessagePart } from '@ghostaff/shared';
+import { type ActionPart, type EditableField, isActionPart, type MessagePart } from '@ghostaff/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type Membership, Refusal, requireOwner } from './connections';
 import { type AsPerson, isSettingTool, runSetting } from './settings';
-import { type AgentTools, mergeTools } from './tools';
+import { type AgentTools, type EditableSpec, mergeTools } from './tools';
 
 export interface ActionRecord {
   id: string;
@@ -36,8 +40,17 @@ export interface ActionRecord {
 export interface ActionStore {
   membership(orgId: string, userId: string): Promise<Membership | null>;
   action(id: string): Promise<ActionRecord | null>;
-  /** pending → running (or → rejected); false when it was no longer pending. */
-  claim(id: string, to: 'running' | 'rejected', userId: string, name: string): Promise<boolean>;
+  /**
+   * pending → running (or → rejected); false when it was no longer pending.
+   * `edited`: the input a person changed before approving, and the agent's draft, kept beside it.
+   */
+  claim(
+    id: string,
+    to: 'running' | 'rejected',
+    userId: string,
+    name: string,
+    edited?: { input: Record<string, unknown>; drafted: Record<string, unknown> },
+  ): Promise<boolean>;
   settle(id: string, status: 'done' | 'failed', result: string): Promise<void>;
   /** Rewrites the action's card in its message, so everyone in the thread sees it change. */
   updateCard(messageId: string, actionId: string, patch: Partial<ActionPart>): Promise<void>;
@@ -78,28 +91,38 @@ async function toolsOf(deps: ActionDeps, a: ActionRecord): Promise<AgentTools> {
   return a.agentId && deps.guidedToolsFor ? mergeTools(org, await deps.guidedToolsFor(a.orgId, a.agentId)) : org;
 }
 
-/** Runs the action as stored, with the organisation's connected account, and shows how it went. */
+/**
+ * Runs the action as stored, with the organisation's connected account, and shows how it went.
+ * `edits` are the person's changes to its editable text fields («Editar»), by field.
+ */
 export async function approveAction(
   deps: ActionDeps,
   userId: string,
   id: unknown,
   accessToken?: string,
+  edits?: unknown,
 ): Promise<{ status: 'done' | 'failed'; result: string }> {
   const { a, owner } = await decidable(deps, userId, id);
   const setting = isSettingTool(a.tool);
   if (setting && (!deps.asPerson || !accessToken || !a.agentId)) throw new Refusal(503, 'unavailable', 'settings changes are off here');
-  if (!(await deps.actions.claim(a.id, 'running', userId, owner.displayName))) {
+  const edited = await editedInput(deps, a, edits);
+  if (!(await deps.actions.claim(a.id, 'running', userId, owner.displayName, edited ? { input: edited.input, drafted: a.input } : undefined))) {
     throw new Refusal(409, 'already_decided', 'this action was already decided');
   }
-  await deps.actions.updateCard(a.messageId, a.id, { status: 'running', decidedBy: owner.displayName });
+  const input = edited?.input ?? a.input;
+  await deps.actions.updateCard(a.messageId, a.id, {
+    status: 'running',
+    decidedBy: owner.displayName,
+    ...(edited ? { edited: true, preview: previewOf(input), editable: editableOf(edited.specs, input) } : {}),
+  });
   let status: 'done' | 'failed' = 'failed';
   let result = 'No se ha podido hacer.';
   try {
     // A setting changes as the owner who approved, through the function the app's screen calls.
     const outcome =
       setting && deps.asPerson && accessToken && a.agentId
-        ? await runSetting({ client: deps.asPerson(accessToken), orgId: a.orgId, agentId: a.agentId }, a.tool, a.input)
-        : await (await toolsOf(deps, a)).run(a.tool, a.input);
+        ? await runSetting({ client: deps.asPerson(accessToken), orgId: a.orgId, agentId: a.agentId }, a.tool, input)
+        : await (await toolsOf(deps, a)).run(a.tool, input);
     status = outcome.isError ? 'failed' : 'done';
     result = outcome.content.slice(0, 4000);
   } finally {
@@ -116,6 +139,42 @@ export async function rejectAction(deps: ActionDeps, userId: string, id: unknown
   }
   await deps.actions.updateCard(a.messageId, a.id, { status: 'rejected', decidedBy: owner.displayName });
   return { status: 'rejected' };
+}
+
+/**
+ * The input a person's edits make, checked against what the tool lets them
+ * change; null when there are none or they change nothing (approved as drafted).
+ */
+async function editedInput(
+  deps: ActionDeps,
+  a: ActionRecord,
+  edits: unknown,
+): Promise<{ input: Record<string, unknown>; specs: EditableSpec[] } | null> {
+  if (edits === undefined || edits === null) return null;
+  if (typeof edits !== 'object' || Array.isArray(edits)) throw new Refusal(400, 'bad_request', 'edits must be an object of texts');
+  const entries = Object.entries(edits as Record<string, unknown>);
+  if (entries.length === 0) return null;
+  const specs = editableOf((await toolsOf(deps, a)).editableFor?.(a.tool) ?? [], a.input).map(({ value: _, ...spec }) => spec);
+  const input = { ...a.input };
+  for (const [field, value] of entries) {
+    const spec = specs.find((s) => s.field === field);
+    if (!spec) throw new Refusal(400, 'not_editable', `${field} cannot be edited`);
+    if (typeof value !== 'string' || !value.trim()) throw new Refusal(400, 'bad_request', `${field} must be a text`);
+    if (value.length > spec.max) throw new Refusal(400, 'too_long', `${field} takes at most ${spec.max} characters`);
+    input[field] = value;
+  }
+  return entries.some(([field]) => input[field] !== a.input[field]) ? { input, specs } : null;
+}
+
+/**
+ * The fields of a tool's input a person may change, with their values: only
+ * those the input has as text no longer than the field takes.
+ */
+export function editableOf(specs: readonly EditableSpec[], input: Record<string, unknown>): EditableField[] {
+  return specs.flatMap((s) => {
+    const value = input[s.field];
+    return typeof value === 'string' && value.length <= s.max ? [{ ...s, value }] : [];
+  });
 }
 
 /** A tool's input as the card shows it: one «field: value» per line, long values cut. */
@@ -166,12 +225,18 @@ export function supabaseActionStore(admin: SupabaseClient): ActionStore {
         requestedBy: r.requested_by ?? null,
       };
     },
-    async claim(id, to, userId, name) {
+    async claim(id, to, userId, name, edited) {
       const rows =
         check(
           await admin
             .from('agent_actions')
-            .update({ status: to, decided_by: userId, decided_by_name: name, decided_at: new Date().toISOString() })
+            .update({
+              status: to,
+              decided_by: userId,
+              decided_by_name: name,
+              decided_at: new Date().toISOString(),
+              ...(edited ? { input: edited.input, drafted_input: edited.drafted } : {}),
+            })
             .eq('id', id)
             .eq('status', 'pending')
             .select('id'),

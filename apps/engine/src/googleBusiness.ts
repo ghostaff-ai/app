@@ -102,6 +102,7 @@ export function googleBusinessTools(): Tool[] {
       writes: true,
       step: 'Contestando la reseña',
       action: 'Contestar en público a una reseña de Google',
+      editable: [{ field: 'reply', label: 'Respuesta', max: 4096, multiline: true }],
       async run(ctx, input) {
         const review = str(input.review, 300);
         if (!review || !REVIEW.test(review)) throw new ToolError('`review` debe ser el identificador completo de la reseña, de google_business_list_reviews.');
