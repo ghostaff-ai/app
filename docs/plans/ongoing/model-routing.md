@@ -2,7 +2,7 @@
 
 **Priority:** medium — AI is the biggest variable cost of the product, and today everything runs on the strongest model; nothing is at scale yet, so there is room to do it right
 **Gate:** none
-**Next:** land phase 0's PR (branch `feat/model-routing-phase0`) with `pnpm pr:land`, after agent-context's PR, then read a week of `ai_reply_outcomes` on beta
+**Next:** read a week of `ai_reply_outcomes` on beta (phase 0 landed in #95, 2026-11-26), then start phase 1 with the old engine's agents (decision 4)
 
 Jaime's concern (2026-11-18), researched the same day. A small company does not know what Sonnet or Opus are and should never choose one. Something in the engine has to choose for it: the cheapest model that does the task well, never the strongest for everything.
 
@@ -124,4 +124,4 @@ Stage 2, «Editar» on action cards:
 - [x] Shared and app: `ActionPart.editable` / `edited`, `decideAction(…, edits)`, the card's «Editar»; component tests.
 - [x] Architecture: usage rows and the edited approval.
 
-After phase 0: read a week of `ai_reply_outcomes` on beta and Órdago's runs before phase 1 starts.
+Phase 0 landed in ghostaff-ai/app#95 (2026-11-26). After it: read a week of `ai_reply_outcomes` on beta and Órdago's runs before phase 1 starts.
