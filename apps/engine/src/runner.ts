@@ -19,6 +19,7 @@
 // ties a call to its run: without it, one organisation's run could ask for
 // another's spec or report as it.
 
+import { DIGESTS_READ, heardBlock } from './generalDigest';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { type ChatMessage } from '@ghostaff/shared';
 import { agentInstructionsPath, type AgentRepo, type AgentSecrets, isSecretEnv, isSecretName, repoDirs } from '@ghostaff/shared/record';
@@ -576,6 +577,8 @@ export function composePrompt(p: {
   repos?: { reached: { repo: string; dir: string; write: boolean; main: boolean }[]; missed: string[] };
   /** The variables it has from the organisation's secrets, and the ones its row names that the vault lacks. Never a value. */
   secrets?: { given: { env: string }[]; missed: { env: string; name: string }[] };
+  /** What the people said in General lately (generalDigest.ts heardBlock), or empty. */
+  heard?: string;
 }): string {
   const { agent, orgName } = p;
   const instructions = agentInstructionsPath(agent.slug);
@@ -671,6 +674,7 @@ export function composePrompt(p: {
         `Si no hay nada que contarles, tu último mensaje es exactamente \`${NOTHING_NEW}\`, sin nada más, y no les llega nada.`,
     );
   }
+  if (p.heard) parts.push(p.heard);
   parts.push(
     agent.taskInRecord
       ? `Tus instrucciones están en \`${instructions}\` del registro: léelas enteras antes de empezar y síguelas.`
@@ -734,12 +738,15 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
   const cloud = await googleToken(runner, run.orgId);
   const google: RunGoogleAccess | null = cloud ? { ...cloud, project: await googleProject(chat, run.orgId) } : null;
   const secrets = await secretsAccess(runner, run.orgId, agent.secrets);
+  const orgName = await chat.chat.orgName(run.orgId);
+  // No search tool in a run (it has no engine tools): the summaries are what it gets of General.
+  const heard = chat.general ? heardBlock(orgName, await chat.general.digests(run.orgId, DIGESTS_READ).catch(() => []), false) : '';
   return {
     run: run.id,
     slug: agent.slug,
     prompt: composePrompt({
       agent,
-      orgName: await chat.chat.orgName(run.orgId),
+      orgName,
       repo: record.repo,
       now: runner.now ? runner.now() : new Date(),
       request,
@@ -747,6 +754,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
       google,
       repos,
       secrets,
+      heard,
     }),
     model: agent.model,
     tools: agent.tools,

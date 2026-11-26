@@ -2,6 +2,7 @@ import { AGENT_JOBS, type ChatMessage, MAIN_AGENT_JOB } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import type { DecisionOpener } from '../src/decisionAsks';
+import type { GeneralStore } from '../src/generalDigest';
 import { type AiAccount, AiFailure, type AiUse, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, waitingRuns, whoAnswers, type Writer } from '../src/chat';
 import { CONVERSATION_TOOL, type ConversationSummary, type MessageQuery, stampOf } from '../src/context';
 import type { AskRecord, AskStore } from '../src/accountAsks';
@@ -55,6 +56,8 @@ function setup(
     agent?: ChatAgent;
     /** The thread is General, the people's chat, with no agent of its own (general-chat.md). */
     general?: boolean;
+    /** General's daily summaries and search (generalDigest.ts). */
+    heard?: GeneralStore;
     asPerson?: AsPerson;
     asks?: AskStore;
     guidedToolsFor?: (orgId: string, agentId: string) => Promise<AgentTools>;
@@ -163,6 +166,7 @@ function setup(
       decisions: opts.decisions,
       memory: opts.memory,
       links: opts.links,
+      general: opts.heard,
     },
     accounts: {} as never,
     actions: {} as never,
@@ -349,6 +353,25 @@ describe('an agent answering in a thread', () => {
     expect(asked[0]?.system).toContain('Te han mencionado en General');
     expect(asked[0]?.system).not.toContain('conversación con');
     expect(updates[updates.length - 1]).toMatchObject({ text: 'Vamos bien.', state: 'done' });
+  });
+
+  it('tells an agent what the people said in General, and lets it search there; not when it answers in General itself', async () => {
+    const heard: GeneralStore = {
+      chatOf: async () => '30000000-0000-0000-0000-0000000000ff',
+      digests: async () => [{ day: '2026-11-25', summary: '- La feria de Valencia se cierra mañana.' }],
+      searchMessages: async () => [],
+      due: async () => [],
+      messagesBetween: async () => [],
+      saveDigest: async () => {},
+    };
+    const own = setup({ heard });
+    await own.call('ana', `/threads/${THREAD}/reply`);
+    expect(own.asked[0]?.system).toContain('La feria de Valencia se cierra mañana.');
+    expect(JSON.stringify((own.asked[0] as unknown as { tools: { specs: unknown } }).tools.specs)).toContain('general_search');
+    const there = setup({ heard, general: true, messages: [msg({ text: '@Finanzas ¿y la feria?' })] });
+    await there.call('ana', `/threads/${THREAD}/reply`);
+    expect(there.asked[0]?.system).not.toContain('La feria de Valencia se cierra mañana.');
+    expect(JSON.stringify((there.asked[0] as unknown as { tools: { specs: unknown } }).tools.specs)).not.toContain('general_search');
   });
 
   it('in General, an agent the asker may not talk to stays out', async () => {
