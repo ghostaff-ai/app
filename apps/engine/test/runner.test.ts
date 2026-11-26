@@ -20,7 +20,7 @@ import {
   startScheduled,
 } from '../src/runner';
 import { NO_TOOLS } from '../src/tools';
-import { aiSecretName, legacyAiSecretName, MemoryVault } from '../src/vault';
+import { agentSecretName, aiSecretName, legacyAiSecretName, MemoryVault } from '../src/vault';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 const OTHER_ORG = '10000000-0000-0000-0000-000000000002';
@@ -44,6 +44,7 @@ const spec = (a: ChatAgent, over: Partial<RunnerAgent> = {}): RunnerAgent => ({
   task: 'Revisa la ley del juego.',
   taskInRecord: false,
   repos: [],
+  secrets: {},
   model: 'claude-opus-5-5',
   tools: ['Read', 'Edit', 'WebSearch'],
   maxTurns: 200,
@@ -573,6 +574,76 @@ describe('other repos in a run', () => {
     // Taken away meanwhile: no more tokens for it.
     t.agents.get(LEGAL)!.repos = [];
     expect((await ask({ nonce, repo: 'ordago-app/ordago-apps' })).status).toBe(403);
+  });
+});
+
+describe('the organisation’s secrets in a run', () => {
+  const specOf = async (t: ReturnType<typeof setup>) => {
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    const res = await t.fetchSpec(run!, nonce!);
+    expect(res.status).toBe(200);
+    return res.json();
+  };
+  const store = (t: ReturnType<typeof setup>, org: string, name: string, value: string) => t.vault.put(agentSecretName(org, name), value, {});
+
+  it('an agent whose row names none gets none, even when its organisation keeps some', async () => {
+    const t = setup();
+    await store(t, ORG, 'elevenlabs', 'sk_eleven_ordago_1234');
+    const s = await specOf(t);
+    expect(s.secrets).toEqual([]);
+    expect(s.prompt).not.toContain('Tienes en tu entorno');
+    expect(JSON.stringify(s)).not.toContain('sk_eleven_ordago_1234');
+  });
+
+  it('gives the secrets its row names, from its own organisation only, and tells the agent the variables, never the values', async () => {
+    const t = setup();
+    t.agents.get(LEGAL)!.secrets = { META_TOKEN: 'meta-token', ELEVENLABS_API_KEY: 'elevenlabs' };
+    await store(t, ORG, 'elevenlabs', 'sk_eleven_ordago_1234');
+    await store(t, ORG, 'meta-token', 'EAAB_meta_ordago_5678');
+    await store(t, OTHER_ORG, 'elevenlabs', 'sk_eleven_taller_9999');
+    const s = await specOf(t);
+    expect(s.secrets).toEqual([
+      { env: 'ELEVENLABS_API_KEY', value: 'sk_eleven_ordago_1234' },
+      { env: 'META_TOKEN', value: 'EAAB_meta_ordago_5678' },
+    ]);
+    expect(s.prompt).toContain('Tienes en tu entorno `ELEVENLABS_API_KEY`, `META_TOKEN`, con secretos de Órdago.');
+    expect(s.prompt).not.toContain('sk_eleven');
+    expect(s.prompt).not.toContain('EAAB_');
+    expect(JSON.stringify(s)).not.toContain('sk_eleven_taller_9999');
+  });
+
+  it('a secret its organisation has not stored (another organisation’s does not count) is left out, and the agent is told, not stopped', async () => {
+    const t = setup();
+    t.agents.get(LEGAL)!.secrets = { CORREO_GMAIL_PASSWORD: 'correo-gmail', CORREO_INFO_PASSWORD: 'correo-info' };
+    await store(t, ORG, 'correo-gmail', 'abcd efgh ijkl mnop');
+    await store(t, OTHER_ORG, 'correo-info', 'taller-info-password');
+    const s = await specOf(t);
+    expect(s.secrets).toEqual([{ env: 'CORREO_GMAIL_PASSWORD', value: 'abcd efgh ijkl mnop' }]);
+    expect(s.prompt).toContain('No he podido darte `CORREO_INFO_PASSWORD` (el secreto «correo-info»), que tu ficha también nombra.');
+    expect(JSON.stringify(s)).not.toContain('taller-info-password');
+  });
+
+  it('a vault that fails to give one leaves that one out and the run going', async () => {
+    const t = setup();
+    t.agents.get(LEGAL)!.secrets = { ELEVENLABS_API_KEY: 'elevenlabs' };
+    const get = t.vault.get.bind(t.vault);
+    t.vault.get = async (name) => {
+      if (name === agentSecretName(ORG, 'elevenlabs')) throw Object.assign(new Error('unavailable'), { status: 503 });
+      return get(name);
+    };
+    const s = await specOf(t);
+    expect(s.secrets).toEqual([]);
+    expect(s.prompt).toContain('No he podido darte `ELEVENLABS_API_KEY` (el secreto «elevenlabs»)');
+  });
+
+  it('never reads a secret for a variable the runner would refuse, whatever the row holds', async () => {
+    const t = setup();
+    t.agents.get(LEGAL)!.secrets = { CLAUDE_CODE_OAUTH_TOKEN: 'elevenlabs', ELEVENLABS_API_KEY: '../ai-x' };
+    await store(t, ORG, 'elevenlabs', 'sk_eleven_ordago_1234');
+    const s = await specOf(t);
+    expect(s.secrets).toEqual([]);
+    expect(s.claudeToken).toBe('sk-ant-oat-org1');
   });
 });
 

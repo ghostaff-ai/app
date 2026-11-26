@@ -15,9 +15,11 @@
 // root renews), serves each repo's token to git on 127.0.0.1 through a credential
 // helper, for that repo only, clones the record and the other repos (shallow
 // when read-only) as the user `agente` and runs the unmodified Claude Code there as `agente`, with nothing
-// in its environment but its credential, HOME, PATH and LANG. It keeps Claude Code's stream-json, redacted,
-// in a file of its own, and serves the agent its earlier runs on 127.0.0.1 (pastRuns.ts). At the end, or
-// on any crash before it, it sends the transcript and reports to the engine (best effort).
+// in its environment but its credential, HOME, PATH and LANG, its Google Cloud and the organisation's
+// secrets its agent row names (every one of them hidden from what this process prints, keeps and reports).
+// It keeps Claude Code's stream-json, redacted, in a file of its own, and serves the agent its earlier runs
+// on 127.0.0.1 (pastRuns.ts). At the end, or on any crash before it, it sends the transcript and reports to
+// the engine (best effort).
 
 import { spawn } from 'node:child_process';
 import { chmodSync, chownSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
@@ -195,7 +197,7 @@ function runClaude(
       uid: ids.uid,
       gid: ids.gid,
       cwd,
-      env: agentEnv(spec.claudeToken, ids.home, google, pastRuns),
+      env: agentEnv(spec.claudeToken, ids.home, google, pastRuns, spec.secrets),
       stdio: ['pipe', 'pipe', 'inherit'],
     });
     let last = '';
@@ -234,7 +236,8 @@ async function main(): Promise<number> {
   }
   const spec = readSpec(await res.json());
   const others = spec.repos ?? [];
-  secrets.push(spec.claudeToken, spec.record.token, ...others.map((r) => r.token));
+  // Every secret of the run, before anything starts that could print one: none is ever printed or reported.
+  secrets.push(spec.claudeToken, spec.record.token, ...others.map((r) => r.token), ...(spec.secrets ?? []).map((s) => s.value));
   if (spec.google) secrets.push(spec.google.token);
 
   const ids = passwdIds(readFileSync('/etc/passwd', 'utf8'), AGENT_USER);

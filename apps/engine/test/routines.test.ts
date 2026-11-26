@@ -22,6 +22,7 @@ const legalOnRunner: RunnerAgent = {
   task: 'Revisa la ley.',
   taskInRecord: false,
   repos: [],
+  secrets: {},
   model: 'm',
   tools: [],
   maxTurns: 10,

@@ -16,7 +16,8 @@ function project() {
   writeFileSync(
     join(dir, 'agentes', 'organico.yaml'),
     'modelo: claude-opus-5-5\nherramientas: [Bash]\nprompt: Publica reels.\n' +
-      'repos:\n  - ordago-app/business\n  - ordago-app/ordago-apps\n  - ordago-app/ordago-reels\n  - ordago-app/ordago-apps\npush_a_main:\n  - ordago-app/ordago-reels\n',
+      'repos:\n  - ordago-app/business\n  - ordago-app/ordago-apps\n  - ordago-app/ordago-reels\n  - ordago-app/ordago-apps\npush_a_main:\n  - ordago-app/ordago-reels\n' +
+      'secretos:\n  META_TOKEN: ordago-meta-token\n  ELEVENLABS_API_KEY: ordago-elevenlabs\n',
   );
   writeFileSync(
     join(dir, 'agentes', 'direccion.yaml'),
@@ -80,6 +81,7 @@ describe('readProjectAgents', () => {
         max_runs_per_day: null,
         ci_repo: null,
         max_ci_queued: null,
+        secrets: {},
         job_project: null,
         job_region: null,
         job_name: null,
@@ -117,6 +119,23 @@ describe('readProjectAgents', () => {
       ],
     });
     expect((organico as { repos: { main?: boolean }[] }).repos[0]!.main).toBeUndefined();
+  });
+
+  it('takes its secrets from its yaml, each the organisation’s secret named without the project’s prefix', () => {
+    const [organico] = readProjectAgents(project(), { runner: 'ghostaff', only: ['organico'] });
+    expect(organico).toMatchObject({ secrets: { META_TOKEN: 'meta-token', ELEVENLABS_API_KEY: 'elevenlabs' } });
+  });
+
+  it('refuses a secret our runner would not give: a variable it relies on, or a name the vault cannot hold', () => {
+    const dir = project();
+    const yaml = (secretos: string) =>
+      writeFileSync(join(dir, 'agentes', 'correo.yaml'), `modelo: claude-opus-5-5\nherramientas: [Bash]\nprompt: Lee el correo.\nsecretos:\n${secretos}`);
+    yaml('  CORREO_INFO_PASSWORD: ordago-correo-info\n');
+    expect(readProjectAgents(dir, { runner: 'ghostaff', only: ['correo'] })[0]).toMatchObject({ secrets: { CORREO_INFO_PASSWORD: 'correo-info' } });
+    yaml('  CLAUDE_CODE_OAUTH_TOKEN: ordago-correo-info\n');
+    expect(() => readProjectAgents(dir, { runner: 'ghostaff', only: ['correo'] })).toThrow(/CLAUDE_CODE_OAUTH_TOKEN/);
+    yaml('  CORREO_INFO_PASSWORD: Ordago_Correo\n');
+    expect(() => readProjectAgents(dir, { runner: 'ghostaff', only: ['correo'] })).toThrow(/Ordago_Correo/);
   });
 
   it('refuses to move an agent whose yaml lacks what our runner needs', () => {

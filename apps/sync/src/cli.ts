@@ -15,10 +15,12 @@ import {
   writeAnswer,
 } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
+import { agentSecretName, type AgentSecrets, isSecretName } from '@ghostaff/shared/record';
 import { readProjectAgents } from './agents';
 import { importHealth } from './healthImport';
 import { planSync, type RecordFile } from './plan';
 import { projectUrlFromKey } from './projectUrl';
+import { gcloud, putSecret, readSecretValue, vaultProjectFor } from './secrets';
 
 // The record → database job, run by hand until it moves to Cloud Run Jobs.
 //
@@ -35,6 +37,10 @@ import { projectUrlFromKey } from './projectUrl';
 //     (they may push to those repos, never to main or beta; push_a_main in a yaml lets main through)
 //   … --runner ghostaff --only legal --on-demand
 //     (the same, without the timetable: it runs only when written to, and its old job keeps the timetable)
+//   pnpm --filter @ghostaff/sync org set-secret --org ordago --name elevenlabs
+//     (an organisation's secret into the vault of the environment the service-role key opens, for the agents
+//     whose `secrets` name it; the value at a hidden prompt, or piped on stdin, never as an argument; with
+//     gcloud signed in as someone who can write that project's Secret Manager)
 //   pnpm --filter @ghostaff/sync org import-health --org <personal slug> --provider whoop --dir ~/Desktop/whoop-export/data/<date>
 //     (a Whoop export into a personal space's kept health history; again with the same folder changes nothing)
 //
@@ -42,7 +48,7 @@ import { projectUrlFromKey } from './projectUrl';
 // runs only on our machines and in the engine, never in the app. The key comes
 // from the environment (apps/sync/.env locally, Secret Manager in the engine).
 
-function admin(): SupabaseClient {
+function supabaseTarget(): { url: string; key: string } {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const url = process.env.SUPABASE_URL || (key ? projectUrlFromKey(key) : null);
   if (!url || !key) {
@@ -50,6 +56,11 @@ function admin(): SupabaseClient {
       'Set SUPABASE_SERVICE_ROLE_KEY (`secret env ghostaff-ai/app` for the hosted project), plus SUPABASE_URL for a local one (see apps/sync/.env.example).',
     );
   }
+  return { url, key };
+}
+
+function admin(): SupabaseClient {
+  const { url, key } = supabaseTarget();
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
@@ -188,9 +199,33 @@ async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff';
       a.runner === 'ghostaff'
         ? `, ${a.timeout_seconds / 60} min, ${a.size}${a.max_runs_per_day ? `, up to ${a.max_runs_per_day} a day` : ''}${a.ci_repo ? `, held by ${a.ci_repo}'s CI past ${a.max_ci_queued} queued` : ''}`
         : '';
-    const where = a.runner === 'ghostaff' ? `our runner, ${a.model}${a.schedule ? '' : ', when written to'}${limits}${repos}` : a.job_name;
+    const secrets = a.runner === 'ghostaff' && Object.keys(a.secrets).length ? `, secrets ${Object.values(a.secrets).join(', ')}` : '';
+    const where = a.runner === 'ghostaff' ? `our runner, ${a.model}${a.schedule ? '' : ', when written to'}${limits}${repos}${secrets}` : a.job_name;
     console.log(`${found ? 'updated' : 'added  '} ${a.name.padEnd(11)} ${a.department.padEnd(10)} ${where}`);
   }
+  // Only names go on the row: each value is stored once per organisation, by hand.
+  const names = [...new Set(agents.flatMap((a) => (a.runner === 'ghostaff' ? Object.values(a.secrets) : [])))].sort();
+  if (names.length) {
+    console.log(`Each run gets only the secrets ${opts.org} has stored; store any not stored yet with:`);
+    for (const n of names) console.log(`  pnpm --filter @ghostaff/sync org set-secret --org ${opts.org} --name ${n}`);
+  }
+}
+
+async function setSecret(opts: { org: string; name: string }) {
+  if (!isSecretName(opts.name)) throw new Error('--name is lower case, digits and hyphens (elevenlabs, correo-gmail…)');
+  const { url } = supabaseTarget();
+  const project = vaultProjectFor(url);
+  const db = admin();
+  const orgId = await orgBySlug(db, opts.org);
+  const { data: agents, error } = await db.from('agents').select('name, secrets').eq('org_id', orgId).returns<{ name: string; secrets: AgentSecrets | null }[]>();
+  if (error) throw error;
+  const users = (agents ?? []).flatMap((a) => Object.entries(a.secrets ?? {}).filter(([, n]) => n === opts.name).map(([env]) => `${a.name} (${env})`));
+  const value = await readSecretValue(opts.name);
+  putSecret(gcloud, { project, id: agentSecretName(orgId, opts.name), value, labels: { org_id: orgId, kind: 'agent-secret' } });
+  console.log(
+    `${opts.org}'s secret «${opts.name}» stored in ${project}'s vault; ` +
+      (users.length ? `the next run of ${users.join(', ')} gets it` : 'no agent names it yet (org add-agents takes them from each yaml)'),
+  );
 }
 
 async function addMember(opts: { org: string; email: string; name: string; role: string }) {
@@ -262,6 +297,8 @@ async function main() {
       if (writes?.length && (runner !== 'ghostaff' || !only?.length)) throw new Error('--writes goes with --runner ghostaff and --only');
       return addAgents({ org: need('org'), from: need('from'), runner, only, writes, onDemand: !!values['on-demand'] });
     }
+    case 'set-secret':
+      return setSecret({ org: need('org'), name: need('name') });
     case 'set-record':
       return setRecord({ org: need('org'), repo: need('repo'), installation: need('installation') });
     case 'add-member': {
@@ -276,7 +313,7 @@ async function main() {
       return;
     }
     default:
-      throw new Error('Commands: por-decidir, add-org, add-member, set-record, add-agents, import-health');
+      throw new Error('Commands: por-decidir, add-org, add-member, set-record, add-agents, set-secret, import-health');
   }
 }
 

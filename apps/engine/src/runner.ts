@@ -10,7 +10,8 @@
 // tools and turns, the record to clone with a token for this run only (a fresh
 // GitHub installation token, or one for the agent's own user in our record
 // store, revoked when it reports), the other repos the agent may use (agents.repos,
-// each with its own GitHub token, read-only unless it may write), and the
+// each with its own GitHub token, read-only unless it may write), the
+// organisation's secrets its agent row names (agents.secrets), and the
 // organisation's Claude subscription from the vault. It reports at the end
 // through POST /runs/report, like any job (jobs.ts).
 //
@@ -20,7 +21,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { type ChatMessage } from '@ghostaff/shared';
-import { agentInstructionsPath, type AgentRepo, repoDirs } from '@ghostaff/shared/record';
+import { agentInstructionsPath, type AgentRepo, type AgentSecrets, isSecretEnv, isSecretName, repoDirs } from '@ghostaff/shared/record';
 import { Cron } from 'croner';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { madridNow } from './chat';
@@ -32,7 +33,7 @@ import { hookAgents, type RecordAgent } from './recordProvision';
 import { preReceiveHook } from './recordHook';
 import type { PastRun, TranscriptStore } from './transcripts';
 import type { RecordOrg } from './recordSync';
-import { readAiSecret, type Vault } from './vault';
+import { agentSecretName, readAiSecret, type Vault } from './vault';
 
 /** What an agent on our runner runs with (its row in `agents`). */
 export interface RunnerAgent {
@@ -46,6 +47,8 @@ export interface RunnerAgent {
   taskInRecord: boolean;
   /** The repos it may use besides the record (agents.repos). */
   repos: AgentRepo[];
+  /** The organisation's secrets it gets as variables (agents.secrets): variable → secret name. */
+  secrets: AgentSecrets;
   model: string;
   tools: string[];
   maxTurns: number;
@@ -151,6 +154,39 @@ export interface RunSpec {
   decisionsDir: string;
   /** The organisation's Google Cloud, when it has its own account there; null otherwise. */
   google: RunGoogleAccess | null;
+  /**
+   * The organisation's secrets the agent's row names, as variables of Claude Code; one the vault does not
+   * have is left out, and the prompt says so.
+   */
+  secrets: RunSecret[];
+}
+
+/** One of the organisation's secrets for a run: Claude Code gets `value` as the variable `env`. */
+export interface RunSecret {
+  env: string;
+  value: string;
+}
+
+/**
+ * The organisation's secrets an agent's row names, read from the vault for its run: only that organisation's,
+ * and only those names. One that is not stored (or that the vault fails to give) is left out, not fatal.
+ */
+async function secretsAccess(runner: RunnerDeps, orgId: string, secrets: AgentSecrets): Promise<{ given: RunSecret[]; missed: { env: string; name: string }[] }> {
+  const given: RunSecret[] = [];
+  const missed: { env: string; name: string }[] = [];
+  for (const [env, name] of Object.entries(secrets).sort(([a], [b]) => a.localeCompare(b))) {
+    let value: string | null = null;
+    if (isSecretEnv(env) && isSecretName(name)) {
+      try {
+        value = await runner.vault.get(agentSecretName(orgId, name));
+      } catch (e) {
+        console.error('a secret of the run not read', name, e instanceof Error ? e.name : typeof e);
+      }
+    }
+    if (value) given.push({ env, value });
+    else missed.push({ env, name });
+  }
+  return { given, missed };
 }
 
 /**
@@ -537,6 +573,8 @@ export function composePrompt(p: {
   google?: { account: string; project: string | null } | null;
   /** The other repos it has, and the ones it should have and could not get. */
   repos?: { reached: { repo: string; dir: string; write: boolean; main: boolean }[]; missed: string[] };
+  /** The variables it has from the organisation's secrets, and the ones its row names that the vault lacks. Never a value. */
+  secrets?: { given: { env: string }[]; missed: { env: string; name: string }[] };
 }): string {
   const { agent, orgName } = p;
   const instructions = agentInstructionsPath(agent.slug);
@@ -575,6 +613,19 @@ export function composePrompt(p: {
     parts.push(
       `No he podido darte ${p.repos.missed.map((r) => `\`${r}\``).join(', ')}, que tu ficha también nombra. Haz lo que puedas sin ` +
         `${p.repos.missed.length === 1 ? 'él' : 'ellos'} y, si lo necesitabas, dilo en tu último mensaje.`,
+    );
+  }
+  if (p.secrets?.given.length) {
+    parts.push(
+      `Tienes en tu entorno ${p.secrets.given.map((s) => `\`${s.env}\``).join(', ')}, con secretos de ${orgName}. ` +
+        'Úsalos solo para lo que tus instrucciones digan, y nunca escribas su valor en el registro, en un commit ni en un mensaje.',
+    );
+  }
+  if (p.secrets?.missed.length) {
+    parts.push(
+      `No he podido darte ${p.secrets.missed.map((s) => `\`${s.env}\` (el secreto «${s.name}»)`).join(', ')}, que tu ficha también nombra. ` +
+        'Haz lo que puedas sin ' +
+        `${p.secrets.missed.length === 1 ? 'él' : 'ellos'} y, si lo necesitabas, dilo en tu último mensaje: alguien de ${orgName} tiene que guardarlo en Ghostaff.`,
     );
   }
   if (p.google) {
@@ -679,6 +730,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
   const repos = await reposAccess(runner, record, agent.repos);
   const cloud = await googleToken(runner, run.orgId);
   const google: RunGoogleAccess | null = cloud ? { ...cloud, project: await googleProject(chat, run.orgId) } : null;
+  const secrets = await secretsAccess(runner, run.orgId, agent.secrets);
   return {
     run: run.id,
     slug: agent.slug,
@@ -691,6 +743,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
       routine,
       google,
       repos,
+      secrets,
     }),
     model: agent.model,
     tools: agent.tools,
@@ -701,6 +754,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
     claudeToken: subscription.token,
     decisionsDir: DECISIONS_DIR,
     google,
+    secrets: secrets.given,
   };
 }
 

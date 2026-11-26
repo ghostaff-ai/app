@@ -2,7 +2,7 @@
 // Cloud Run's API as the engine's own service account, which Órdago's project
 // lets start each agent's job (`lanzan` in ghostaff-ai/agents' proyecto.yaml).
 
-import type { AgentRepo } from '@ghostaff/shared/record';
+import type { AgentRepo, AgentSecrets } from '@ghostaff/shared/record';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GoogleAuth } from 'google-auth-library';
 import type { ChatAgent } from './chat';
@@ -126,7 +126,7 @@ export function supabaseJobStore(admin: SupabaseClient, opts: { afterAgentWrite?
 }
 
 const RUNNER_AGENT =
-  'id, org_id, slug, name, description, task, task_in_record, repos, model, tools, max_turns, schedule, last_scheduled_at, reads_org_runs, ' +
+  'id, org_id, slug, name, description, task, task_in_record, repos, secrets, model, tools, max_turns, schedule, last_scheduled_at, reads_org_runs, ' +
   'timeout_seconds, size, max_runs_per_day, ci_repo, max_ci_queued';
 type RunnerAgentRow = {
   id: string;
@@ -137,6 +137,7 @@ type RunnerAgentRow = {
   task: string;
   task_in_record: boolean;
   repos: AgentRepo[] | null;
+  secrets: AgentSecrets | null;
   model: string;
   tools: string[];
   max_turns: number;
@@ -158,6 +159,7 @@ const toRunnerAgent = (r: RunnerAgentRow): RunnerAgent => ({
   task: r.task,
   taskInRecord: r.task_in_record ?? false,
   repos: r.repos ?? [],
+  secrets: r.secrets ?? {},
   model: r.model,
   tools: r.tools ?? [],
   maxTurns: r.max_turns,

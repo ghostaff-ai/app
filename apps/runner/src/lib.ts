@@ -33,6 +33,17 @@ export interface RunSpec {
    * `gcloud` and `bq` default to (null: none). Absent or null when the organisation has no account.
    */
   google?: GoogleAccess | null;
+  /**
+   * The organisation's secrets the agent's row names, as variables of Claude Code. Absent from an engine
+   * older than them: none.
+   */
+  secrets?: SecretVar[];
+}
+
+/** One of the organisation's secrets: Claude Code gets `value` as the variable `env`. */
+export interface SecretVar {
+  env: string;
+  value: string;
 }
 
 export interface RepoAccess {
@@ -111,6 +122,35 @@ function isRepos(r: unknown): boolean {
   });
 }
 
+/** Variables the runner sets itself (GHOSTAFF_RUNS too), or that change how a shell, Claude Code, gcloud, git, node or the loader behave. */
+const RESERVED_ENV = new Set(['HOME', 'PATH', 'LANG', 'USER', 'SHELL', 'PWD', 'TMPDIR', 'BASH_ENV', 'ENV', 'IFS']);
+const RESERVED_ENV_PREFIX = /^(CLAUDE_|ANTHROPIC_|CLOUDSDK_|GOOGLE_|GHOSTAFF_|GIT_|LD_|NODE_|SSH_)/;
+
+/**
+ * Whether a secret may become this variable: upper case, digits and underscores, and none the runner or a tool
+ * relies on. The same rule as the database's (20261127400000_agent_secrets.sql) and the engine's
+ * (packages/shared/src/record/agents.ts, isSecretEnv); checked again here, where the environment is built.
+ */
+export const isSecretEnv = (env: unknown): env is string =>
+  typeof env === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(env) && !RESERVED_ENV.has(env) && !RESERVED_ENV_PREFIX.test(env);
+
+/**
+ * A secret's value: long enough for `redact` to hide it (8 characters), with no NUL (an environment cannot
+ * hold one), and at most 64 KB.
+ */
+const isSecretValue = (v: unknown): v is string => typeof v === 'string' && v.length >= 8 && v.length <= 65536 && !v.includes('\0');
+
+function isSecrets(s: unknown): boolean {
+  if (s === undefined) return true;
+  if (!Array.isArray(s) || s.length > 20) return false;
+  const envs = new Set<string>();
+  return s.every((x: Record<string, unknown>) => {
+    const ok = x !== null && typeof x === 'object' && isSecretEnv(x.env) && !envs.has(x.env) && isSecretValue(x.value);
+    if (ok) envs.add(x.env as string);
+    return ok;
+  });
+}
+
 function isGoogle(g: unknown): boolean {
   if (g === undefined || g === null) return true;
   const x = g as Record<string, unknown>;
@@ -141,7 +181,8 @@ export function readSpec(body: unknown): RunSpec {
     typeof b.claudeToken === 'string' && b.claudeToken.length > 0 &&
     typeof b.decisionsDir === 'string' && /^[a-z0-9_-]+$/.test(b.decisionsDir) &&
     isRepos(b.repos) &&
-    isGoogle(b.google);
+    isGoogle(b.google) &&
+    isSecrets(b.secrets);
   if (!ok) throw new Error('the engine sent a spec this runner cannot read');
   return b as unknown as RunSpec;
 }
@@ -160,14 +201,18 @@ export function claudeArgs(spec: Pick<RunSpec, 'model' | 'tools' | 'maxTurns'>):
 }
 
 /**
- * Claude Code's whole environment: its credential, its home, PATH and LANG. Nothing of the runner's.
+ * Claude Code's whole environment: its credential, its home, PATH and LANG, the organisation's Google Cloud
+ * and the organisation's secrets its agent row names. Nothing of the runner's. The secrets go in first, so
+ * that nothing the runner sets can be replaced by one, even past readSpec's check.
  *
  * KNOWN GAP (before any customer organisation uses this runner): the
- * organisation's Claude subscription token is in this environment, so the
- * agent can read it with Bash (`env`), and so can anyone who can talk the
- * agent into printing it. Today only Órdago's own agents run here. The fix is
- * a local proxy that holds the token outside the agent's reach
- * (docs/plans/ongoing/ordago-agents-in-ghostaff.md, step 5).
+ * organisation's Claude subscription token and its secrets are in this
+ * environment, so the agent can read them with Bash (`env`), and so can anyone
+ * who can talk the agent into printing them. Today only Órdago's own agents run
+ * here. The runner hides every one of them from what it prints and reports
+ * (`redact`), not from the agent. The fix is a local proxy that holds them
+ * outside the agent's reach (docs/plans/ongoing/ordago-agents-in-ghostaff.md,
+ * step 5 and item 3).
  */
 export function agentEnv(
   claudeToken: string,
@@ -176,8 +221,10 @@ export function agentEnv(
   google?: { tokenFile: string; project: string | null } | null,
   /** Where `ghostaff ejecuciones` and `ghostaff leer` ask for earlier runs: the runner on 127.0.0.1 (pastRuns.ts). */
   pastRuns?: string | null,
+  secrets: SecretVar[] = [],
 ): Record<string, string> {
   return {
+    ...Object.fromEntries(secrets.filter((s) => isSecretEnv(s.env)).map((s) => [s.env, s.value])),
     CLAUDE_CODE_OAUTH_TOKEN: claudeToken,
     HOME: home,
     PATH: '/usr/local/bin:/usr/bin:/bin',
