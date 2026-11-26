@@ -1,10 +1,10 @@
 import { type Decision, RULE_KIND } from '@ghostaff/shared';
 import { router } from 'expo-router';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Image, PanResponder, Platform, Pressable, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Image, type LayoutChangeEvent, PanResponder, Platform, Pressable, Text, View } from 'react-native';
 import { Button } from '@/components/ui';
 import { StakesReveal } from '@/components/StakesReveal';
-import { answeredLabel, canSwipe, type Choice, choicesOf, pickLabel, SWIPE_DISTANCE } from '@/lib/deck';
+import { answeredLabel, canSwipe, type Choice, choicesOf, nextFold, pickLabel, SWIPE_DISTANCE } from '@/lib/deck';
 import { dueLabel, shortDate } from '@/lib/format';
 import { selection, success } from '@/lib/haptics';
 import type { DeckMove } from '@/lib/hooks/useDecisions';
@@ -35,35 +35,63 @@ function useReducedMotion() {
   return reduced;
 }
 
-/** One card's face: who asks and when, the question, one quoted line, «Con el sí / Con el no» and the pick. */
+/**
+ * One card's face: who asks and when, the question, one quoted line, «Con el sí
+ * / Con el no» and the pick. On a short card (a small phone, larger text) it
+ * folds what doesn't fit (lib/deck.ts, nextFold), measured rather than guessed,
+ * and shows itself once it fits.
+ */
 function Face({ d, asked }: { d: Decision; asked: boolean }) {
   const due = d.dueOn ? dueLabel(d.dueOn) : null;
   const asker = askerOf(d);
+  const quote = (d.action && d.context) || d.quote;
+  const ifs = !d.options.length && (d.ifYes || d.ifNo);
+  // Each part's height as last drawn. A folded part counts as nothing, so
+  // folding one more step never waits for a new measurement.
+  const [fold, setFold] = useState(0);
+  const [room, setRoom] = useState(0);
+  const [core, setCore] = useState(0);
+  const [quoteHeight, setQuoteHeight] = useState(0);
+  const [ifsHeight, setIfsHeight] = useState(0);
+  const [foot, setFoot] = useState(0);
+  const need = core + (fold < 2 ? quoteHeight : 0) + (fold < 1 ? ifsHeight : 0) + foot;
+  const measured = room > 0 && core > 0 && foot > 0;
+  const next = measured ? nextFold(fold, need, room) : fold;
+  useEffect(() => {
+    if (next !== fold) setFold(next);
+  }, [next, fold]);
+  const height = (set: (h: number) => void) => (e: LayoutChangeEvent) => set(Math.ceil(e.nativeEvent.layout.height));
   return (
-    <View className="flex-1">
-      <View className="flex-row items-center">
-        <Image source={GHOSTS[asker.ghost].picture} style={{ width: 44, height: 44 }} resizeMode="contain" />
-        <View className="ml-2.5">
-          <Text className="text-[15px] font-semibold text-ink">{asker.name}</Text>
-          <Text className={`text-footnote ${due?.urgent ? 'font-semibold text-waiting' : 'text-muted'}`}>{due ? due.text : shortDate(d.createdOn)}</Text>
+    <View className="flex-1" onLayout={height(setRoom)} style={{ opacity: measured && next === fold ? 1 : 0 }}>
+      <View onLayout={height(setCore)}>
+        <View className="flex-row items-center">
+          <Image source={GHOSTS[asker.ghost].picture} style={{ width: 44, height: 44 }} resizeMode="contain" />
+          <View className="ml-2.5">
+            <Text className="text-[15px] font-semibold text-ink">{asker.name}</Text>
+            <Text className={`text-footnote ${due?.urgent ? 'font-semibold text-waiting' : 'text-muted'}`}>{due ? due.text : shortDate(d.createdOn)}</Text>
+          </View>
         </View>
+        <Text className="mt-4 font-display-medium text-[24px] leading-[30px] text-ink" numberOfLines={fold >= 3 ? 3 : 5}>
+          {d.question}
+        </Text>
       </View>
-      <Text className="mt-4 font-display-medium text-[24px] leading-[30px] text-ink" numberOfLines={5}>
-        {d.question}
-      </Text>
-      {d.action && d.context ? (
-        <Text className="mt-3 rounded-2xl bg-surface p-3 text-[14px] leading-[19px] text-muted" numberOfLines={7}>
-          {d.context}
-        </Text>
-      ) : null}
-      {d.quote ? (
-        <Text className="mt-3 text-[15px] leading-[22px] text-muted" numberOfLines={3}>
-          «{d.quote}»
-        </Text>
+      {quote && fold < 2 ? (
+        <View onLayout={height(setQuoteHeight)}>
+          {d.action && d.context ? (
+            <Text className="mt-3 rounded-2xl bg-surface p-3 text-[14px] leading-[19px] text-muted" numberOfLines={7}>
+              {d.context}
+            </Text>
+          ) : null}
+          {d.quote ? (
+            <Text className="mt-3 text-[15px] leading-[22px] text-muted" numberOfLines={3}>
+              «{d.quote}»
+            </Text>
+          ) : null}
+        </View>
       ) : null}
       {/* With options, what each does is on its own screen: the buttons already take the card's room. */}
-      {!d.options.length && (d.ifYes || d.ifNo) ? (
-        <View className="mt-4 flex-row gap-2.5">
+      {ifs && fold < 1 ? (
+        <View onLayout={height(setIfsHeight)} className="mt-4 flex-row gap-2.5">
           {d.ifYes ? (
             <View className="flex-1 rounded-2xl bg-surface p-3">
               <Text className="text-caption text-muted">Con el sí</Text>
@@ -83,16 +111,18 @@ function Face({ d, asked }: { d: Decision; asked: boolean }) {
         </View>
       ) : null}
       <View className="flex-1" />
-      {d.highStakes ? (
-        <Text className="text-footnote font-semibold text-ink">Importante: elige tú primero</Text>
-      ) : !d.action && (d.recommendation || d.options.length) ? (
-        <Text className="text-footnote text-muted">
-          Te recomiendo <Text className="font-semibold text-ink">{pickLabel(d)}</Text>
+      <View onLayout={height(setFoot)}>
+        {d.highStakes ? (
+          <Text className="text-footnote font-semibold text-ink">Importante: elige tú primero</Text>
+        ) : !d.action && (d.recommendation || d.options.length) ? (
+          <Text className="text-footnote text-muted">
+            Te recomiendo <Text className="font-semibold text-ink">{pickLabel(d)}</Text>
+          </Text>
+        ) : null}
+        <Text className="mt-1 text-footnote text-muted">
+          {d.action ? 'Toca para ver la conversación' : asked ? `Preguntaste a ${asker.name} · toca para verlo todo` : 'Toca para ver todo y preguntar'}
         </Text>
-      ) : null}
-      <Text className="mt-1 text-footnote text-muted">
-        {d.action ? 'Toca para ver la conversación' : asked ? `Preguntaste a ${asker.name} · toca para verlo todo` : 'Toca para ver todo y preguntar'}
-      </Text>
+      </View>
     </View>
   );
 }
@@ -188,7 +218,7 @@ export function DecisionDeck({
 
   return (
     <View className="flex-1">
-      <View className="flex-1" style={{ minHeight: 300 }}>
+      <View className="flex-1" style={{ minHeight: 200 }}>
         {cards.length > 2 ? <View className="absolute bottom-0 left-5 right-5 top-6 rounded-[28px] bg-card opacity-50" /> : null}
         {cards.length > 1 ? <View className="absolute bottom-1 left-2.5 right-2.5 top-3 rounded-[28px] bg-card opacity-75" /> : null}
         <Animated.View

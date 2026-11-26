@@ -7,6 +7,19 @@ import { type Decision, RULE_KIND } from '@ghostaff/shared';
 /** How far a card must travel, in px, for a swipe to count. */
 export const SWIPE_DISTANCE = 120;
 
+/**
+ * What a card's face leaves out when it doesn't fit (a small phone, larger
+ * text), one step at a time until it does: «Con el sí / Con el no» first, then
+ * the quoted line and the action's context, then the question past three
+ * lines. The card's own screen, a tap away, shows all of it.
+ */
+export const FACE_FOLDS = 3;
+
+/** The next fold for a face that needs `need` px and has `room`: one more while it overflows. */
+export function nextFold(fold: number, need: number, room: number): number {
+  return need > room && fold < FACE_FOLDS ? fold + 1 : fold;
+}
+
 /** When «Más tarde» brings a card back: tomorrow at 8:00, the person's own time. */
 export function tomorrowMorning(now = new Date()): Date {
   const t = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 8, 0, 0, 0);
