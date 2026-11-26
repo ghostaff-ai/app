@@ -9,8 +9,9 @@
 // URL) and with that nonce, and fetches its spec once: its prompt, model,
 // tools and turns, the record to clone with a token for this run only (a fresh
 // GitHub installation token, or one for the agent's own user in our record
-// store, revoked when it reports), and the organisation's Claude subscription
-// from the vault. It reports at the end
+// store, revoked when it reports), the other repos the agent may use (agents.repos,
+// each with its own GitHub token, read-only unless it may write), and the
+// organisation's Claude subscription from the vault. It reports at the end
 // through POST /runs/report, like any job (jobs.ts).
 //
 // One service account runs every organisation's agents, so the nonce is what
@@ -19,7 +20,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { type ChatMessage } from '@ghostaff/shared';
-import { agentInstructionsPath } from '@ghostaff/shared/record';
+import { agentInstructionsPath, type AgentRepo, repoDirs } from '@ghostaff/shared/record';
 import { Cron } from 'croner';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { madridNow } from './chat';
@@ -42,6 +43,8 @@ export interface RunnerAgent {
   task: string;
   /** Whether `task` is the projection of agentes/<slug>/AGENTS.md in the record (recordSync.ts). */
   taskInRecord: boolean;
+  /** The repos it may use besides the record (agents.repos). */
+  repos: AgentRepo[];
   model: string;
   tools: string[];
   maxTurns: number;
@@ -103,6 +106,8 @@ export interface RunSpec {
   tools: string[];
   maxTurns: number;
   record: RunRecordAccess;
+  /** The other repos it may use; one it could not get a token for is left out, and the prompt says so. */
+  repos: RunRepoAccess[];
   author: { name: string; email: string };
   claudeToken: string;
   decisionsDir: string;
@@ -151,6 +156,46 @@ export interface RunRecordAccess {
   token: string;
   /** When to ask the engine for another (POST /runs/:id/record-token). */
   expiresAt: string;
+}
+
+/**
+ * A repo besides the record, for a run: cloned into `~/repos/<dir>` (shallow when read-only), with `token` as
+ * the password of `x-access-token`, given to git by the runner's credential helper for that repo only.
+ */
+export interface RunRepoAccess {
+  repo: string;
+  dir: string;
+  cloneUrl: string;
+  write: boolean;
+  token: string;
+  /** When to ask the engine for another (POST /runs/:id/repo-token). */
+  expiresAt: string;
+}
+
+/**
+ * A fresh token for one of the agent's other repos, through the record's GitHub App installation: only an
+ * organisation whose record is on GitHub reaches other repos, and only those that installation includes.
+ */
+async function repoToken(runner: RunnerDeps, org: RecordOrg, r: AgentRepo): Promise<{ token: string; expiresAt: string }> {
+  if (org.host !== 'github') throw new Refusal(409, 'no_repos', 'only an organisation whose record is on GitHub reaches other repos');
+  return runner.freshToken(org.installation, r.repo, r.write ? 'write' : 'read');
+}
+
+/** The agent's other repos for a run, and the ones it could not reach (not in the installation, GitHub down). */
+async function reposAccess(runner: RunnerDeps, org: RecordOrg, repos: AgentRepo[]): Promise<{ reached: RunRepoAccess[]; missed: string[] }> {
+  const dirs = repoDirs(repos.map((r) => r.repo));
+  const reached: RunRepoAccess[] = [];
+  const missed: string[] = [];
+  for (const r of repos) {
+    try {
+      const t = await repoToken(runner, org, r);
+      reached.push({ repo: r.repo, dir: dirs.get(r.repo)!, cloneUrl: `https://github.com/${r.repo}.git`, write: r.write, ...t });
+    } catch (e) {
+      console.error('no token for a repo of the run', r.repo, e instanceof Error ? e.message : typeof e);
+      missed.push(r.repo);
+    }
+  }
+  return { reached, missed };
 }
 
 /** A token in our record store lives until the run reports; past a run's longest timeout the tick sweeps it. */
@@ -369,6 +414,8 @@ export function composePrompt(p: {
   routine?: { title: string; instruction: string; audience: 'me' | 'team'; from: string } | null;
   /** The organisation's Google Cloud account, when the run has a token for it. */
   google?: { account: string; project: string | null } | null;
+  /** The other repos it has, and the ones it should have and could not get. */
+  repos?: { reached: { repo: string; dir: string; write: boolean }[]; missed: string[] };
 }): string {
   const { agent, orgName } = p;
   const instructions = agentInstructionsPath(agent.slug);
@@ -384,6 +431,20 @@ export function composePrompt(p: {
       'haz commit y push, y sigue con lo que no dependa de ella: le llega sola a Hoy, en Ghostaff.',
     `Ahora es ${madridNow(p.now)}, hora de Madrid.`,
   ];
+  if (p.repos?.reached.length) {
+    parts.push(
+      'Tienes también estos repos, clonados en tu casa:\n' +
+        p.repos.reached
+          .map((r) => `- \`${r.repo}\` en \`~/repos/${r.dir}\`${r.write ? '' : ', solo para leer (clon superficial: sin historial; `git fetch --deepen` si lo necesitas)'}`)
+          .join('\n'),
+    );
+  }
+  if (p.repos?.missed.length) {
+    parts.push(
+      `No he podido darte ${p.repos.missed.map((r) => `\`${r}\``).join(', ')}, que tu ficha también nombra. Haz lo que puedas sin ` +
+        `${p.repos.missed.length === 1 ? 'él' : 'ellos'} y, si lo necesitabas, dilo en tu último mensaje.`,
+    );
+  }
   if (p.google) {
     parts.push(
       `Tienes Google Cloud como la cuenta de servicio de ${orgName}, \`${p.google.account}\`: \`gcloud\` y \`bq\` ya la usan, ` +
@@ -475,6 +536,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
   }
   const routine = run.origin === 'routine' && run.routineId ? await runner.store.routineAsk(run.routineId) : null;
   const access = await recordAccess(runner, record, agent.id, run.id);
+  const repos = await reposAccess(runner, record, agent.repos);
   const cloud = await googleToken(runner, run.orgId);
   const google: RunGoogleAccess | null = cloud ? { ...cloud, project: await googleProject(chat, run.orgId) } : null;
   return {
@@ -488,11 +550,13 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
       request,
       routine,
       google,
+      repos,
     }),
     model: agent.model,
     tools: agent.tools,
     maxTurns: agent.maxTurns,
     record: access,
+    repos: repos.reached,
     author: { name: `${agent.name} (Ghostaff)`, email: runner.commitEmail },
     claudeToken: subscription.token,
     decisionsDir: DECISIONS_DIR,
@@ -513,6 +577,23 @@ export async function runRecordToken(deps: JobDeps, caller: string | null, runId
   if (!record) throw new Refusal(409, 'no_record', 'the organisation has no record');
   const access = await recordAccess(runner, record, run.agentId, run.id);
   return { token: access.token, expiresAt: access.expiresAt };
+}
+
+/**
+ * POST /runs/:id/repo-token: a fresh token for one of the agent's other repos, for a run that has its spec and
+ * still works; only a repo its agent has now, with the access it has now.
+ */
+export async function runRepoToken(deps: JobDeps, caller: string | null, runId: string, body: unknown): Promise<{ token: string; expiresAt: string }> {
+  const runner = checkRunner(deps, caller);
+  const { nonce, repo } = (body ?? {}) as { nonce?: unknown; repo?: unknown };
+  const run = /^[0-9a-f-]{36}$/i.test(runId) ? await deps.jobs.run(runId) : null;
+  if (!run || !nonceMatches(nonce, run.nonceHash) || run.state !== 'running' || !run.specFetched) throw new Refusal(403, 'not_allowed', 'not this run');
+  const agent = await runner.store.runnerAgent(run.agentId);
+  const allowed = agent?.repos.find((r) => typeof repo === 'string' && r.repo.toLowerCase() === repo.toLowerCase());
+  if (!agent || agent.orgId !== run.orgId || !allowed) throw new Refusal(403, 'not_allowed', 'not a repo of this agent');
+  const record = await runner.record(run.orgId);
+  if (!record) throw new Refusal(409, 'no_record', 'the organisation has no record');
+  return repoToken(runner, record, allowed);
 }
 
 /**

@@ -1,5 +1,5 @@
-// Runs a command without blocking the runner's event loop. The runner serves the record's token to
-// git's credential helper from its own process (main.ts, serveRecordToken), so a command that may ask
+// Runs a command without blocking the runner's event loop. The runner serves the run's repo tokens to
+// git's credential helper from its own process (tokens.ts, serveTokens), so a command that may ask
 // for it (a clone, a fetch, a push) must never run with spawnSync: the helper's request would wait,
 // unanswered, until it times out, and git would go on without credentials (beta, 2026-11-24).
 

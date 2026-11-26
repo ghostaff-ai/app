@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { blockReason, onlyWhatRuns, type PushContext } from '../src/guard';
-import { agentEnv, claudeArgs, crashText, decisionFiles, engineClosedRun, newDecisions, tokenNearExpiry, noteworthy, passwdIds, readSpec, redact, resultOf, usageOf } from '../src/lib';
+import { agentEnv, claudeArgs, cloneArgs, crashText, credentialKey, credentialKeyOf, decisionFiles, engineClosedRun, newDecisions, tokenNearExpiry, noteworthy, passwdIds, readSpec, redact, resultOf, usageOf } from '../src/lib';
 
 const SPEC = {
   run: '40000000-0000-0000-0000-000000000001',
@@ -45,6 +45,45 @@ describe('the spec', () => {
     expect(() => readSpec({ ...SPEC, record: { ...own, cloneUrl: 'http://10.0.0.5:3000/otra/cosa.git' } })).toThrow();
     expect(() => readSpec({ ...SPEC, record: { ...own, cloneUrl: 'https://evil.example/records/x.git --upload-pack=x' } })).toThrow();
     expect(() => readSpec({ ...SPEC, record: { ...own, username: '-c core.sshCommand=x' } })).toThrow();
+  });
+
+  it('takes the other repos only from GitHub, each into its own folder, and none from an older engine', () => {
+    const apps = {
+      repo: 'ordago-app/ordago-apps',
+      dir: 'ordago-apps',
+      cloneUrl: 'https://github.com/ordago-app/ordago-apps.git',
+      write: false,
+      token: 'ghs_apps',
+      expiresAt: '2026-11-21T11:00:00Z',
+    };
+    expect(readSpec(SPEC).repos).toBeUndefined();
+    expect(readSpec({ ...SPEC, repos: [apps] }).repos).toEqual([apps]);
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, cloneUrl: 'https://github.com/otro/repo.git' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, cloneUrl: 'http://10.0.0.5:3000/records/x.git' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, dir: '../registro' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, dir: '..' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, dir: '--upload-pack=x' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, repos: [apps, { ...apps, repo: 'ordago-app/web', cloneUrl: 'https://github.com/ordago-app/web.git' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, write: 'yes' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, token: '' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, repos: apps })).toThrow();
+  });
+
+  it('clones a read-only repo shallow, and one the agent writes with its history', () => {
+    const url = 'https://github.com/ordago-app/ordago-apps.git';
+    expect(cloneArgs({ cloneUrl: url, write: false }, '/home/agente/repos/ordago-apps')).toEqual([
+      'clone', '--quiet', '--depth', '1', '--single-branch', url, '/home/agente/repos/ordago-apps',
+    ]);
+    expect(cloneArgs({ cloneUrl: url, write: true }, '/d')).toEqual(['clone', '--quiet', '--filter=blob:none', url, '/d']);
+  });
+
+  it('knows a repo the same way whether git names it with .git, a slash or other case', () => {
+    const key = credentialKeyOf('https://github.com/ordago-app/ordago-apps.git');
+    expect(credentialKey('https', 'github.com', 'ordago-app/ordago-apps.git')).toBe(key);
+    expect(credentialKey('https', 'GitHub.com', 'Ordago-App/ordago-apps/')).toBe(key);
+    expect(credentialKey('http', 'github.com', 'ordago-app/ordago-apps.git')).not.toBe(key);
+    expect(credentialKey('https', 'github.com', 'ordago-app/business.git')).not.toBe(key);
+    expect(credentialKeyOf('http://10.132.0.5:3000/records/org-1.git')).toBe(credentialKey('http', '10.132.0.5:3000', 'records/org-1.git'));
   });
 
   it('runs Claude Code with the agent’s model, tools and turns, never asking', () => {

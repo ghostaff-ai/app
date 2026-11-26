@@ -20,6 +20,11 @@ export interface RunSpec {
    * password of `username`. The token is new for this run (never cached or shared); renew it at `expiresAt`.
    */
   record: { repo: string; cloneUrl: string; username: string; token: string; expiresAt: string };
+  /**
+   * The other repos the agent may use, each cloned into `~/repos/<dir>` with its own token (read-only unless
+   * `write`): GitHub only. Absent from an engine older than them: none.
+   */
+  repos?: RepoAccess[];
   author: { name: string; email: string };
   claudeToken: string;
   decisionsDir: string;
@@ -28,6 +33,16 @@ export interface RunSpec {
    * `gcloud` and `bq` default to (null: none). Absent or null when the organisation has no account.
    */
   google?: GoogleAccess | null;
+}
+
+export interface RepoAccess {
+  repo: string;
+  dir: string;
+  cloneUrl: string;
+  write: boolean;
+  token: string;
+  /** When to ask the engine for another (POST /runs/:id/repo-token). */
+  expiresAt: string;
 }
 
 export interface GoogleAccess {
@@ -70,6 +85,26 @@ const isServiceAccount = (s: unknown): s is string =>
 /** A token that can go in a file as one line: no whitespace, nothing a shell would read. */
 const isAccessToken = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9._~+/=-]{20,4096}$/.test(s);
 
+/** A folder name under ~/repos: one path segment, nothing git or a shell reads as an option. */
+const isDir = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$/.test(s) && s !== '..';
+
+function isRepos(r: unknown): boolean {
+  if (r === undefined) return true;
+  if (!Array.isArray(r) || r.length > 10) return false;
+  const dirs = new Set<string>();
+  return r.every((x: Record<string, unknown>) => {
+    const ok =
+      x !== null && typeof x === 'object' &&
+      isRepo(x.repo) && x.cloneUrl === `https://github.com/${x.repo}.git` &&
+      isDir(x.dir) && !dirs.has(x.dir.toLowerCase()) &&
+      typeof x.write === 'boolean' &&
+      typeof x.token === 'string' && x.token.length > 0 &&
+      typeof x.expiresAt === 'string' && !Number.isNaN(Date.parse(x.expiresAt));
+    if (ok) dirs.add((x.dir as string).toLowerCase());
+    return ok;
+  });
+}
+
 function isGoogle(g: unknown): boolean {
   if (g === undefined || g === null) return true;
   const x = g as Record<string, unknown>;
@@ -99,6 +134,7 @@ export function readSpec(body: unknown): RunSpec {
     typeof author.name === 'string' && typeof author.email === 'string' &&
     typeof b.claudeToken === 'string' && b.claudeToken.length > 0 &&
     typeof b.decisionsDir === 'string' && /^[a-z0-9_-]+$/.test(b.decisionsDir) &&
+    isRepos(b.repos) &&
     isGoogle(b.google);
   if (!ok) throw new Error('the engine sent a spec this runner cannot read');
   return b as unknown as RunSpec;
@@ -265,6 +301,28 @@ export function decisionFiles(dir: string): { name: string; content: string }[] 
     }
   });
 }
+
+/** Where the runner clones the agent's other repos: `~/repos/<dir>`. */
+export const reposDir = (home: string) => join(home, 'repos');
+
+/**
+ * git's arguments to clone one of the other repos: a read-only one shallow, as it is only read and can be big
+ * (`ordago-apps`), and one the agent may write with its history but its files fetched as needed.
+ */
+export function cloneArgs(r: Pick<RepoAccess, 'cloneUrl' | 'write'>, dest: string): string[] {
+  return ['clone', '--quiet', ...(r.write ? ['--filter=blob:none'] : ['--depth', '1', '--single-branch']), r.cloneUrl, dest];
+}
+
+/** A repo as git's credential helper asks for it (`credential.useHttpPath`): its scheme, host and path, normalised. */
+export function credentialKey(protocol: string, host: string, path: string): string {
+  return `${protocol}://${host.toLowerCase()}/${path.replace(/^\/+|\/+$/g, '').replace(/\.git$/, '').toLowerCase()}`;
+}
+
+/** The same key for a clone URL. */
+export const credentialKeyOf = (cloneUrl: string) => {
+  const u = new URL(cloneUrl);
+  return credentialKey(u.protocol.replace(':', ''), u.host, u.pathname);
+};
 
 /** Whether the record token is close enough to its end to ask the engine for a new one. */
 export const tokenNearExpiry = (expiresAt: string, now: number) => Date.parse(expiresAt) - now < 5 * 60_000;

@@ -10,25 +10,27 @@
 // This process is root, and keeps every secret to itself. It proves who it is
 // with a Google ID token from the metadata server and the nonce, fetches its
 // spec once (prompt, model, tools, the record and a GitHub token for it, the
-// organisation's Claude subscription and, when it has one, a token as its own
-// Google Cloud account, kept in a file root renews), serves the record token to git on
-// 127.0.0.1 through a credential helper, clones the record as the user
-// `agente` and runs the unmodified Claude Code there as `agente`, with nothing
+// agent's other repos with a token each, the organisation's Claude subscription
+// and, when it has one, a token as its own Google Cloud account, kept in a file
+// root renews), serves each repo's token to git on 127.0.0.1 through a credential
+// helper, for that repo only, clones the record and the other repos (shallow
+// when read-only) as the user `agente` and runs the unmodified Claude Code there as `agente`, with nothing
 // in its environment but its credential, HOME, PATH and LANG. At the end, or
 // on any crash before it, it reports to the engine (best effort).
 
 import { spawn } from 'node:child_process';
 import { chmodSync, chownSync, existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { run as runCommand } from './exec';
 import { recordDir } from './guard';
+import { type RepoCredential, serveTokens } from './tokens';
 import {
   agentEnv,
   claudeArgs,
+  cloneArgs,
   crashText,
+  credentialKeyOf,
   decisionFiles,
   engineClosedRun,
   failureText,
@@ -39,6 +41,7 @@ import {
   type GoogleAccess,
   readSpec,
   redact,
+  reposDir,
   type Report,
   resultOf,
   type RunSpec,
@@ -91,28 +94,6 @@ async function report(r: Omit<Report, 'run' | 'nonce'>): Promise<void> {
     }
     if (attempt < 2) await new Promise((ok) => setTimeout(ok, 5_000 * (attempt + 1)));
   }
-}
-
-/** The record token for git, on 127.0.0.1 only, renewed through the engine before it expires. */
-async function serveRecordToken(first: { token: string; expiresAt: string }): Promise<{ port: number; close(): void }> {
-  let { token, expiresAt } = first;
-  const server = createServer(async (req, res) => {
-    if (req.url !== '/token') return res.writeHead(404).end();
-    try {
-      if (tokenNearExpiry(expiresAt, Date.now())) {
-        const r = await callEngine(`/runs/${run}/record-token`, { nonce });
-        if (r.ok) {
-          ({ token, expiresAt } = (await r.json()) as { token: string; expiresAt: string });
-          secrets.push(token);
-        }
-      }
-    } catch (e) {
-      console.error('record token not renewed', crashText(e, secrets));
-    }
-    res.writeHead(200, { 'Content-Type': 'text/plain' }).end(token);
-  });
-  await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
-  return { port: (server.address() as AddressInfo).port, close: () => server.close() };
 }
 
 /**
@@ -208,24 +189,40 @@ async function main(): Promise<number> {
     throw new Error(`the engine refused the spec: ${res.status}`);
   }
   const spec = readSpec(await res.json());
-  secrets.push(spec.claudeToken, spec.record.token);
+  const others = spec.repos ?? [];
+  secrets.push(spec.claudeToken, spec.record.token, ...others.map((r) => r.token));
   if (spec.google) secrets.push(spec.google.token);
 
   const ids = passwdIds(readFileSync('/etc/passwd', 'utf8'), AGENT_USER);
-  const tokens = await serveRecordToken(spec.record);
+  const credentials = new Map<string, RepoCredential>([
+    [credentialKeyOf(spec.record.cloneUrl), { ...spec.record, renew: () => callEngine(`/runs/${run}/record-token`, { nonce }) }],
+    ...others.map((r): [string, RepoCredential] => [
+      credentialKeyOf(r.cloneUrl),
+      { username: 'x-access-token', token: r.token, expiresAt: r.expiresAt, renew: () => callEngine(`/runs/${run}/repo-token`, { nonce, repo: r.repo }) },
+    ]),
+  ]);
+  const tokens = await serveTokens(credentials, (token) => secrets.push(token), (e) => console.error('repo token not renewed', crashText(e, secrets)));
   const google = spec.google ? serveGoogleToken(spec.google, ids.gid) : null;
   try {
     const env = gitEnv(ids.home);
     const git = asAgent(ids, env);
     await git(['config', '--global', 'user.name', spec.author.name]);
     await git(['config', '--global', 'user.email', spec.author.email]);
-    // The helper answers git only for the record's own host, with the run's user.
-    const remote = new URL(spec.record.cloneUrl);
-    await git(['config', '--global', 'credential.helper', `!node ${HELPER} ${tokens.port} ${remote.protocol.replace(':', '')} ${remote.host} ${spec.record.username}`]);
+    // git says which repo it wants (useHttpPath), and the helper answers only for the run's own, each with its token.
+    await git(['config', '--global', 'credential.helper', `!node ${HELPER} ${tokens.port}`]);
+    await git(['config', '--global', 'credential.useHttpPath', 'true']);
     await git(['config', '--global', 'push.default', 'current']);
     const record = recordDir(ids.home);
     await git(['clone', '--quiet', spec.record.cloneUrl, record]);
     if (existsSync(join(record, '.githooks'))) await asAgent(ids, env, record)(['config', 'core.hooksPath', '.githooks']);
+    // The other repos: one that does not clone leaves the run going without it.
+    for (const r of others) {
+      try {
+        await git(cloneArgs(r, join(reposDir(ids.home), r.dir)));
+      } catch (e) {
+        console.error('repo not cloned', r.repo, crashText(e, secrets));
+      }
+    }
 
     const decisions = join(record, spec.decisionsDir);
     const before = new Set(yamlNames(decisions));

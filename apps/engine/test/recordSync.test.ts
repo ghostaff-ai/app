@@ -259,6 +259,16 @@ describe('the GitHub App', () => {
     expect(await fresh(7, 'ordago-app/business')).toEqual({ token: 't1', expiresAt: '2026-11-21T11:00:00Z' });
     expect((await fresh(7, 'ordago-app/business')).token).toBe('t2');
   });
+
+  it('a token for a repo an agent only reads may read its contents and nothing more', async () => {
+    const asked: unknown[] = [];
+    const f = (async (_url: string, init?: RequestInit) => {
+      asked.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ token: 't1', expires_at: '2026-11-21T11:00:00Z' }), { status: 201 });
+    }) as typeof fetch;
+    await freshRepoToken(async () => ({ appId: '42', privateKey: pem }), f)(7, 'ordago-app/ordago-apps', 'read');
+    expect(asked[0]).toEqual({ repositories: ['ordago-apps'], permissions: { contents: 'read', metadata: 'read' } });
+  });
 });
 
 describe('POST /cron', () => {

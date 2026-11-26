@@ -29,7 +29,7 @@ It describes the platform as built, plus the target where one is decided and not
 | App | `apps/mobile` | Phones (EAS builds, over-the-air updates), web | Everything a person sees. Reads and writes only through `@ghostaff/shared/services`, which call Supabase (row-level security) or the engine |
 | Database | `supabase/` | Supabase, Frankfurt | Auth, every organisation's operational data. The app writes only through `security definer` functions that check the caller |
 | Engine | `apps/engine` | Cloud Run service `engine` | Connects AI accounts and outside accounts into the vault, answers in the team chat, starts and receives agent runs, syncs the record on the tick. The only holder of the service-role key and the vault |
-| Runner | `apps/runner` | Cloud Run job `agent-runner` | One agent run: fetches its spec from the engine once, clones the record, runs `claude -p`, pushes, reports |
+| Runner | `apps/runner` | Cloud Run job `agent-runner` | One agent run: fetches its spec from the engine once, clones the record and the agent's other repos, runs `claude -p`, pushes, reports |
 | Sync | `apps/sync` | By hand | The record's `por-decidir/` into the database from a checkout. The engine's `recordSync.ts` does the same on the tick through GitHub's API |
 | Shared | `packages/shared` | Everywhere | Models, the record's file formats, the data services |
 | Record store | **Target** | A Compute Engine VM per project | Forgejo: every organisation's record, the agents' instructions and memory. See [Target: the record](#target-the-record) |
@@ -63,8 +63,8 @@ A run on our runner, end to end:
 
 1. A person writes to the agent, or the tick finds its timetable or one of its routines due.
 2. The engine records the run with the hash of a one-time nonce and starts an `agent-runner` execution with only the run id and the nonce.
-3. The runner calls `POST /runs/:id/spec` with its Google ID token and the nonce. The engine checks both and hands over, once: the prompt, model, tools, turns, a one-hour GitHub token for the record only, and the organisation's Claude token from the vault.
-4. Claude Code works on the clone as the unprivileged user `agente`, under a read-only constitution and a push guard.
+3. The runner calls `POST /runs/:id/spec` with its Google ID token and the nonce. The engine checks both and hands over, once: the prompt, model, tools, turns, a one-hour GitHub token for the record only, one for each other repo the agent may use (`agents.repos`, read-only unless it may write; through the record's GitHub App installation, so a record on GitHub only), the organisation's Google Cloud token when it has an account, and the organisation's Claude token from the vault. Each token is renewed at its own endpoint (`record-token`, `repo-token`, `google-token`).
+4. Claude Code works on the clones as the unprivileged user `agente`, under a read-only constitution and a push guard: the record in `~/registro`, the other repos in `~/repos/<name>` (shallow when read-only). git gets each repo's token from the runner on 127.0.0.1 through a credential helper that answers only for the run's own repos (`credential.useHttpPath`). The guard lets it push only from the record, to its default branch.
 5. The runner reports to `POST /runs/report`: the answer lands in the thread, or in each person's chat for a scheduled run with news; the decisions it opened reach the inbox through the sync; usage and limits go to the AI account's card.
 
 ### Target: the record

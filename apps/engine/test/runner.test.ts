@@ -26,6 +26,7 @@ const spec = (a: ChatAgent, over: Partial<RunnerAgent> = {}): RunnerAgent => ({
   description: 'Dice qué dice la ley.',
   task: 'Revisa la ley del juego.',
   taskInRecord: false,
+  repos: [],
   model: 'claude-opus-5-5',
   tools: ['Read', 'Edit', 'WebSearch'],
   maxTurns: 200,
@@ -77,6 +78,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date; 
   let now = opts.now ?? new Date('2026-11-21T10:00:00Z');
   let working: string | null = null;
   let minted = 0;
+  const tokenAccess: string[] = [];
   let cloudMinted = 0;
   const chat: ChatStore = {
     levelFor: async () => 'talk',
@@ -174,8 +176,10 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date; 
           ? { id: ORG, slug: 'ordago', repo: 'ordago-app/business', host: 'github', installation: 7 }
           : { id: orgId, slug: 'taller', repo: 'taller/registro', host: 'github', installation: 8 },
       recordStore: null,
-      freshToken: async (inst, repo) => {
+      freshToken: async (inst, repo, access = 'write') => {
+        if (repo === 'ordago-app/fuera') throw new Error('GitHub refused an installation token for ordago-app/fuera: 422');
         minted += 1;
+        tokenAccess.push(`${repo}:${access}`);
         return { token: `ghs_${inst}_${repo}_${now.getTime()}_${minted}`, expiresAt: new Date(now.getTime() + 3600_000).toISOString() };
       },
       commitEmail: 'bot@example.com',
@@ -218,7 +222,7 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date; 
   const fetchSpec = (run: string, nonce: string, as = RUNNER) => post(`/runs/${run}/spec`, as, { nonce });
   const report = (body: unknown, as = RUNNER) => post('/runs/report', as, body);
   return {
-    ask, fetchSpec, report, post, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf, deleted, copies, thread,
+    ask, fetchSpec, report, post, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf, deleted, copies, thread, tokenAccess,
     setNow: (d: Date) => {
       now = d;
     },
@@ -357,6 +361,104 @@ describe('POST /runs/:id/spec', () => {
     expect(fresh.token).toBe(`ghs_7_ordago-app/business_${Date.parse('2026-11-21T11:00:00Z')}_2`);
     expect(fresh.expiresAt).toBe('2026-11-21T12:00:00.000Z');
     expect((await t.post(`/runs/${run}/record-token`, RUNNER, { nonce: 'y'.repeat(43) })).status).toBe(403);
+  });
+});
+
+describe('other repos in a run', () => {
+  const withRepos = (t: ReturnType<typeof setup>) => {
+    t.agents.get(LEGAL)!.repos = [
+      { repo: 'ordago-app/ordago-apps', write: false },
+      { repo: 'ordago-app/ordago-reels', write: true },
+    ];
+  };
+
+  it('without other repos, a run gets none and is not told of any', async () => {
+    const t = setup();
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    const s = await (await t.fetchSpec(run!, nonce!)).json();
+    expect(s.repos).toEqual([]);
+    expect(s.prompt).not.toContain('~/repos/');
+  });
+
+  it('gives each repo its own fresh token, read-only unless the agent may write it, and tells the agent where', async () => {
+    const t = setup();
+    withRepos(t);
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    const s = await (await t.fetchSpec(run!, nonce!)).json();
+    expect(s.repos).toMatchObject([
+      { repo: 'ordago-app/ordago-apps', dir: 'ordago-apps', cloneUrl: 'https://github.com/ordago-app/ordago-apps.git', write: false, expiresAt: '2026-11-21T11:00:00.000Z' },
+      { repo: 'ordago-app/ordago-reels', dir: 'ordago-reels', cloneUrl: 'https://github.com/ordago-app/ordago-reels.git', write: true },
+    ]);
+    expect(s.repos[0].token).toMatch(/^ghs_7_ordago-app\/ordago-apps_/);
+    expect(s.repos[0].token).not.toBe(s.record.token);
+    expect(t.tokenAccess).toEqual(['ordago-app/business:write', 'ordago-app/ordago-apps:read', 'ordago-app/ordago-reels:write']);
+    expect(s.prompt).toContain('- `ordago-app/ordago-apps` en `~/repos/ordago-apps`, solo para leer');
+    expect(s.prompt).toContain('- `ordago-app/ordago-reels` en `~/repos/ordago-reels`\n');
+    expect(s.prompt).not.toContain('ghs_');
+  });
+
+  it('a repo GitHub refuses (not in the installation) is left out, and the agent is told, not stopped', async () => {
+    const t = setup();
+    t.agents.get(LEGAL)!.repos = [{ repo: 'ordago-app/fuera', write: false }, { repo: 'ordago-app/ordago-apps', write: false }];
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    const res = await t.fetchSpec(run!, nonce!);
+    expect(res.status).toBe(200);
+    const s = await res.json();
+    expect(s.repos.map((r: { repo: string }) => r.repo)).toEqual(['ordago-app/ordago-apps']);
+    expect(s.prompt).toContain('No he podido darte `ordago-app/fuera`');
+  });
+
+  it('an organisation whose record is in our record store gets no other repos, and its agent is told', async () => {
+    const t = setup();
+    withRepos(t);
+    const record = t.jobDeps.runner!.record;
+    t.jobDeps.runner!.record = async (orgId) => {
+      const r = await record(orgId);
+      return r && orgId === ORG ? { ...r, host: 'ghostaff' } : r;
+    };
+    t.jobDeps.runner!.recordStore = {
+      admin: {
+        ensureAgentUser: async () => {},
+        setHook: async () => {},
+        mintRunToken: async () => ({ token: 'fgj_run' }),
+        cloneUrl: (repo: string) => `http://records.internal/records/${repo}.git`,
+      } as never,
+      adminUser: 'ghostaff',
+      agentsOf: async () => [],
+    };
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    const s = await (await t.fetchSpec(run!, nonce!)).json();
+    expect(s.repos).toEqual([]);
+    expect(s.prompt).toContain('No he podido darte `ordago-app/ordago-apps`, `ordago-app/ordago-reels`');
+  });
+
+  it('renews a repo token only for a run with its spec, with its nonce, and only a repo its agent has, with its access', async () => {
+    const t = setup();
+    withRepos(t);
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    const ask = (body: unknown, as = RUNNER) => t.post(`/runs/${run}/repo-token`, as, body);
+    expect((await ask({ nonce, repo: 'ordago-app/ordago-apps' })).status).toBe(403);
+    await t.fetchSpec(run!, nonce!);
+    expect((await ask({ nonce: 'y'.repeat(43), repo: 'ordago-app/ordago-apps' })).status).toBe(403);
+    expect((await ask({ nonce, repo: 'ordago-app/ordago-apps' }, 'someone@else.iam.gserviceaccount.com')).status).toBe(403);
+    expect((await ask({ nonce, repo: 'ordago-app/secreto' })).status).toBe(403);
+    expect((await ask({ nonce, repo: 'taller/registro' })).status).toBe(403);
+    expect((await ask({ nonce })).status).toBe(403);
+    t.tokenAccess.length = 0;
+    t.setNow(new Date('2026-11-21T11:00:00Z'));
+    const res = await ask({ nonce, repo: 'Ordago-App/Ordago-Apps' });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(await res.json()).toMatchObject({ token: expect.stringMatching(/^ghs_7_ordago-app\/ordago-apps_/), expiresAt: '2026-11-21T12:00:00.000Z' });
+    expect(t.tokenAccess).toEqual(['ordago-app/ordago-apps:read']);
+    // Taken away meanwhile: no more tokens for it.
+    t.agents.get(LEGAL)!.repos = [];
+    expect((await ask({ nonce, repo: 'ordago-app/ordago-apps' })).status).toBe(403);
   });
 });
 

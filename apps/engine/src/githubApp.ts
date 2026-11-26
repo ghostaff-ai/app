@@ -47,17 +47,20 @@ export interface MintedToken {
   expiresAt: string;
 }
 
-/** A new installation token for one repo, with contents write; never cached. */
-export type FreshRepoToken = (installation: number, repo: string) => Promise<MintedToken>;
+/** What a token may do with a repo's contents. */
+export type RepoAccess = 'read' | 'write';
+
+/** A new installation token for one repo, with contents write unless `access` says read; never cached. */
+export type FreshRepoToken = (installation: number, repo: string, access?: RepoAccess) => Promise<MintedToken>;
 
 export function freshRepoToken(loadConfig: () => Promise<GithubAppConfig | null>, f: Fetch = fetch, now = () => Date.now()): FreshRepoToken {
-  return async (installation, repo) => {
+  return async (installation, repo, access = 'write') => {
     const cfg = await loadConfig();
     if (!cfg) throw new Error('the GitHub record connector is not configured (GITHUB_APP_ID and its key)');
     const res = await f(`${GITHUB_API}/app/installations/${installation}/access_tokens`, {
       method: 'POST',
       headers: { ...githubHeaders(appJwt(cfg, now())), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repositories: [repo.split('/')[1]], permissions: { contents: 'write', metadata: 'read' } }),
+      body: JSON.stringify({ repositories: [repo.split('/')[1]], permissions: { contents: access, metadata: 'read' } }),
     });
     if (!res.ok) throw new Error(`GitHub refused an installation token for ${repo}: ${res.status}`);
     const body = (await res.json()) as { token: string; expires_at: string };
