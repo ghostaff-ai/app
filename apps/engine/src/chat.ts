@@ -15,10 +15,11 @@
 // that needs them.
 
 import { type AgentGhost, type ChatMessage, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
-import { type AccountAskPart, type ActionPart, type DecisionPart, type GuidePart, isDecisionPart, isDecisionQuotePart } from '@ghostaff/shared';
-import { DECISION_TOOL, DECISION_TOOLS, type DecisionBrief, decisionIds, decisionLine, type DecisionOpener, proposeDecision } from './decisionAsks';
-import { ASK_TOOL, ASK_TOOLS, askLines, askResumable, type AskStore, proposeAsk } from './accountAsks';
-import { GUIDE_TOOL, GUIDE_TOOLS, guideLines, guideResumable, type GuideStore, proposeGuide } from './guides';
+import type { AccountAskPart, ActionPart, DecisionPart, GuidePart } from '@ghostaff/shared';
+import { DECISION_TOOL, DECISION_TOOLS, type DecisionBrief, decisionIds, type DecisionOpener, proposeDecision } from './decisionAsks';
+import { ASK_TOOL, ASK_TOOLS, askResumable, type AskStore, proposeAsk } from './accountAsks';
+import { bodyOf, type ContextStore, CONVERSATION_TOOL, conversationTools, type ConversationSummary, personOf, stampOf, summarizeIfLong, summaryTurn, windowOf } from './context';
+import { GUIDE_TOOL, GUIDE_TOOLS, guideResumable, type GuideStore, proposeGuide } from './guides';
 import { previewOf } from './actions';
 import { Refusal } from './connections';
 import { askJob, type JobDeps } from './jobs';
@@ -98,8 +99,8 @@ export function failureKind(e: unknown): FailureKind {
   return 'failed';
 }
 
-/** The database as the chat needs it (service role). */
-export interface ChatStore {
+/** The database as the chat needs it (service role); the conversation's summary and search as context.ts does. */
+export interface ChatStore extends ContextStore {
   levelFor(agentId: string, userId: string): Promise<Level>;
   /** A member's level on one conversation: their level on its agent, lowered by who the conversation is for (chat-permissions.md). */
   threadLevelFor(threadId: string, userId: string): Promise<Level>;
@@ -110,7 +111,7 @@ export interface ChatStore {
   orgName(orgId: string): Promise<string>;
   /** Display names of the organisation's members. */
   memberNames(orgId: string): Promise<string[]>;
-  /** The thread's latest messages, oldest first. */
+  /** The thread's latest messages, oldest first: who answers, and what a job agent reads. A chat agent reads `conversation`. */
   recentMessages(threadId: string, limit: number): Promise<ChatMessage[]>;
   /**
    * Inserts the agent's «working» message; null when a reply is already being
@@ -216,7 +217,7 @@ export function madridNow(at: Date): string {
 }
 
 /** What the agent is told about its reach: the connected accounts it may use, or that it has none. */
-function reachLines(accounts: string[], today: string, canAsk: boolean, canGuide: boolean): string[] {
+function reachLines(accounts: string[], canAsk: boolean, canGuide: boolean): string[] {
   const askLine = canAsk
     ? `Si para lo que te piden necesitas una cuenta de fuera que no tienes (un calendario, documentos, facturas, una red social…), pídela con ${ASK_TOOL} en vez de decir que no puedes, y termina el mensaje diciendo qué harás cuando la tengas.`
     : '';
@@ -236,7 +237,6 @@ function reachLines(accounts: string[], today: string, canAsk: boolean, canGuide
   }
   return [
     ask,
-    `Ahora es ${today}, hora de Madrid.`,
     `Puedes usar estas cuentas de la organización, con las herramientas que tienes: ${accounts.join('; ')}. No tienes acceso al registro ni al correo.`,
     'Mira los datos reales con las herramientas antes de hablar de ellos.',
     'Lo que crea o cambia algo fuera de Ghostaff (un evento, una hoja, una publicación, una respuesta pública) no se hace al pedirlo: queda como propuesta en tu mensaje hasta que alguien propietario la apruebe. Úsalo solo para lo que te han pedido en esta conversación y di que queda pendiente de aprobación.',
@@ -261,7 +261,7 @@ const ROUTINE_LINES = [
 export function systemPrompt(
   agent: ChatAgent,
   orgName: string,
-  opts: { broughtInto?: string; accounts?: string[]; now?: Date; settings?: boolean; routines?: boolean; canAsk?: boolean; canGuide?: boolean; canDecide?: boolean } = {},
+  opts: { broughtInto?: string; accounts?: string[]; settings?: boolean; routines?: boolean; canAsk?: boolean; canGuide?: boolean; canDecide?: boolean } = {},
 ): string {
   const job = agentJob(agent);
   const broughtInto = opts.broughtInto;
@@ -271,9 +271,10 @@ export function systemPrompt(
     broughtInto
       ? `Te han mencionado en una conversación con ${broughtInto}, otro agente del equipo; contesta a lo que te piden a ti, sin hacer su trabajo.`
       : '',
-    'Hablas en una conversación compartida: pueden escribir varias personas de la organización; cada mensaje de una persona empieza con su nombre.',
+    'Hablas en una conversación compartida: pueden escribir varias personas de la organización; cada mensaje de una persona empieza con su nombre y cuándo lo escribió, hora de Madrid. Lo último que te escriben es lo de ahora.',
+    `De la conversación ves un resumen de lo antiguo y los últimos mensajes; si necesitas el detalle exacto de algo anterior, búscalo con ${CONVERSATION_TOOL} antes de suponerlo.`,
     'Contesta en español, en primera persona y de tú, breve y concreto, sin fórmulas de cortesía. Usa listas solo si ayudan.',
-    ...reachLines(opts.accounts ?? [], madridNow(opts.now ?? new Date()), opts.canAsk ?? false, opts.canGuide ?? false),
+    ...reachLines(opts.accounts ?? [], opts.canAsk ?? false, opts.canGuide ?? false),
     ...(opts.settings ? SETTINGS_LINES : []),
     ...(opts.routines ? ROUTINE_LINES : []),
     'No inventes datos de la organización. Si no sabes algo, pregúntalo.',
@@ -312,19 +313,26 @@ export function whoAnswers(messages: ChatMessage[], threadAgent: ChatAgent, agen
   return out;
 }
 
-/** The thread as model turns: the agent's own words as the assistant, everyone else's as the user, signed. */
-export function toTurns(messages: ChatMessage[], agentId: string, briefs: ReadonlyMap<string, DecisionBrief> = new Map()): ModelTurn[] {
-  const turns: ModelTurn[] = [];
+/**
+ * The thread as model turns: the agent's own words as the assistant, everyone
+ * else's as the user, signed with who and when; opened by the summary of what
+ * came before, when there is one (context.ts).
+ */
+export function toTurns(
+  messages: ChatMessage[],
+  agentId: string,
+  briefs: ReadonlyMap<string, DecisionBrief> = new Map(),
+  summary: ConversationSummary | null = null,
+): ModelTurn[] {
+  const turns: ModelTurn[] = summary ? [{ role: 'user', content: summaryTurn(summary) }] : [];
   for (const m of messages) {
     // An agent's cards asking for an account, a guide or a decision read as a line, so it knows where it
     // stopped and what was answered; a decision a person asks about goes before their words.
-    const quoted = m.parts.filter(isDecisionQuotePart).map((p) => decisionLine(briefs.get(p.decisionId), 'quoted', p.question));
-    const asked = m.parts.filter(isDecisionPart).map((p) => decisionLine(briefs.get(p.decisionId), 'mine', p.question));
-    const text = [...quoted, messageText(m.parts).trim(), ...askLines(m.parts), ...guideLines(m.parts), ...asked].filter(Boolean).join('\n\n');
+    const text = bodyOf(m, briefs);
     if (!text || (m.authorKind === 'agent' && m.state !== 'done')) continue;
     const mine = m.authorKind === 'agent' && m.authorAgentId === agentId;
     const role = mine ? 'assistant' : 'user';
-    const content = mine ? text : `${m.authorName}: ${text}`;
+    const content = mine ? text : `${personOf(m)}: ${text}`;
     const prev = turns[turns.length - 1];
     if (prev && prev.role === role) prev.content += `\n\n${content}`;
     else turns.push({ role, content });
@@ -334,11 +342,17 @@ export function toTurns(messages: ChatMessage[], agentId: string, briefs: Readon
   return turns;
 }
 
-/** The thread as model turns, with what became of the decisions in it. */
-async function turnsOf(deps: ChatDeps, messages: ChatMessage[], agentId: string): Promise<ModelTurn[]> {
-  const ids = decisionIds(messages.map((m) => m.parts));
+/**
+ * What a chat agent reads of the thread (agent-context.md): the summary of
+ * what came before and the latest messages, never the whole conversation, with
+ * what became of the decisions in them.
+ */
+async function turnsOf(deps: ChatDeps, threadId: string, agentId: string): Promise<ModelTurn[]> {
+  const { summary, messages } = await deps.chat.conversation(threadId, agentId);
+  const latest = windowOf(messages);
+  const ids = decisionIds(latest.map((m) => m.parts));
   const briefs = ids.length && deps.decisions ? await deps.decisions.briefs(ids).catch(() => new Map<string, DecisionBrief>()) : new Map<string, DecisionBrief>();
-  return toTurns(messages, agentId, briefs);
+  return toTurns(latest, agentId, briefs, summary);
 }
 
 async function requireTalk(deps: ChatDeps, agentId: string, userId: string) {
@@ -360,10 +374,12 @@ async function writeReply(
   agent: ChatAgent,
   system: string,
   turns: ModelTurn[],
-  tools: AgentTools,
+  given: AgentTools,
   who: { threadId: string; userId: string },
   first = 'Leyendo la conversación',
 ): Promise<{ text: string; ok: boolean }> {
+  // Every reply may search the conversation it answers in (context.ts).
+  const tools = mergeTools(conversationTools(deps.chat, who.threadId, agent.id), given);
   const now = deps.now ?? Date.now;
   const flushMs = deps.flushMs ?? 400;
   const started = now();
@@ -573,7 +589,6 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
     deps.chat.orgAgents(orgId),
     deps.toolsFor(orgId),
   ]);
-  const now = new Date(deps.now ? deps.now() : Date.now());
   const reachOf = async (who: ChatAgent, broughtInto?: string): Promise<{ tools: AgentTools; system: string }> => {
     let mine = restrictTo(tools, who.accounts);
     // A guided access is this agent's own identity in the app: only it gets the tool, whatever agents.accounts says.
@@ -595,7 +610,7 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
     if (deps.asks) mine = mergeTools(mine, ASK_TOOLS);
     if (deps.guides) mine = mergeTools(mine, GUIDE_TOOLS);
     if (deps.decisions) mine = mergeTools(mine, DECISION_TOOLS);
-    const system = systemPrompt(who, orgName, { broughtInto, accounts: mine.accounts, now, settings, routines: asked, canAsk: !!deps.asks, canGuide: !!deps.guides, canDecide: !!deps.decisions });
+    const system = systemPrompt(who, orgName, { broughtInto, accounts: mine.accounts, settings, routines: asked, canAsk: !!deps.asks, canGuide: !!deps.guides, canDecide: !!deps.decisions });
     return { tools: mine, system };
   };
   return { names, orgName, agents, reachOf };
@@ -652,10 +667,10 @@ export async function replyInThread(deps: ChatDeps, userId: string, threadId: un
         replied = true;
         continue;
       }
-      // A second agent reads the first one's answer too.
-      const history = i === 0 ? messages : await deps.chat.recentMessages(thread.id, 40);
+      // Read now, so a second agent reads the first one's answer too.
       const mine = await reachOf(who, who.id === agent.id ? undefined : agent.name);
-      await writeReply(deps, replyId, who, mine.system, await turnsOf(deps, history, who.id), mine.tools, { threadId: thread.id, userId });
+      await writeReply(deps, replyId, who, mine.system, await turnsOf(deps, thread.id, who.id), mine.tools, { threadId: thread.id, userId });
+      await summarizeIfLong(deps, thread, who);
       replied = true;
     }
   }
@@ -754,12 +769,13 @@ async function goOn(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, wa
   const threadAgent = agent.id === thread.agentId ? null : await deps.chat.agent(thread.agentId);
   const { reachOf } = await orgReach(deps, thread.orgId, accessToken);
   const mine = await reachOf(agent, threadAgent?.name);
-  const turns = await turnsOf(deps, await deps.chat.recentMessages(thread.id, 40), agent.id);
+  const turns = await turnsOf(deps, thread.id, agent.id);
   const line = `${who}: Ya tienes acceso a ${waited.name}. Sigue con lo que se te pidió.`;
   const lastTurn = turns[turns.length - 1];
   if (lastTurn?.role === 'user') lastTurn.content += `\n\n${line}`;
   else turns.push({ role: 'user', content: line });
   await writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId: actorId }, 'Retomando');
+  await summarizeIfLong(deps, thread, agent);
   await deps.chat.touchThread(thread.id).catch(() => {});
 }
 
@@ -782,15 +798,18 @@ export interface RoutineAsk {
 export async function answerRoutine(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, replyId: string, ask: RoutineAsk): Promise<{ text: string; ok: boolean }> {
   const { reachOf } = await orgReach(deps, agent.orgId, undefined);
   const mine = await reachOf(agent);
-  const turns = await turnsOf(deps, await deps.chat.recentMessages(thread.id, 40), agent.id);
+  const turns = await turnsOf(deps, thread.id, agent.id);
+  const now = new Date(deps.now ? deps.now() : Date.now());
   const line =
-    `${ask.from}: ${ask.instruction}\n\n` +
+    `${ask.from} (${stampOf(now.toISOString())}): ${ask.instruction}\n\n` +
     `(Es su rutina «${ask.title}»: te la ha lanzado su horario y nadie está esperando delante. ` +
     `Hazla y contesta para esa persona, corto y con lo que importe. Si no hay nada que contarle, contesta exactamente ${NOTHING_NEW}, sin nada más, y no le llegará nada.)`;
   const last = turns[turns.length - 1];
   if (last?.role === 'user') last.content += `\n\n${line}`;
   else turns.push({ role: 'user', content: line });
-  return writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId: ask.userId }, 'Con tu rutina');
+  const said = await writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId: ask.userId }, 'Con tu rutina');
+  await summarizeIfLong(deps, thread, agent);
+  return said;
 }
 
 function introTurn(orgName: string): ModelTurn {

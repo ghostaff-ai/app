@@ -60,6 +60,9 @@ function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: st
     orgName: async () => 'Panadería',
     memberNames: async () => ['Bea', 'Ana'],
     recentMessages: async () => [],
+    conversation: async () => ({ summary: null, messages: [] }),
+    saveSummary: async () => true,
+    searchMessages: async () => [],
     startReply: async (thread: ChatThreadHead, _a, _s, routineId) => {
       if (opts.busy) return null;
       const id = `reply-${replies.length + 1}`;
@@ -168,7 +171,7 @@ describe('a routine on the tick (agent-routines.md)', () => {
     expect(t.replies).toEqual([{ id: 'reply-1', routineId: '50000000-0000-0000-0000-000000000001', thread: `chat-${FINANZAS}-${BEA}` }]);
     const turn = t.asked[0]!.messages.at(-1)!;
     expect(turn).toMatchObject({ role: 'user' });
-    expect(turn.content).toContain('Bea: Mándame el resumen de ventas de la semana');
+    expect(turn.content).toMatch(/Bea \([^)]+\): Mándame el resumen de ventas de la semana/);
     expect(turn.content).toContain('SIN NOVEDAD');
     expect(t.asked[0]!.tools.filter((n) => n.startsWith('settings_'))).toEqual([]);
     expect(t.updates.at(-1)).toMatchObject({ id: 'reply-1', text: 'Esta semana: 1.200 € en ventas.', state: 'done' });

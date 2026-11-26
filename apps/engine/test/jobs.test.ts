@@ -55,6 +55,9 @@ function setup(opts: { launchFails?: boolean } = {}) {
     orgName: async () => 'Órdago',
     memberNames: async () => ['Ana'],
     recentMessages: async () => messages,
+    conversation: async () => ({ summary: null, messages }),
+    saveSummary: async () => true,
+    searchMessages: async () => [],
     startReply: async (_t, agent) => {
       if (working) return null;
       working = `reply-${messages.filter((m) => m.authorKind === 'agent').length + 1}`;
