@@ -6,7 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
 import { addTokens, atLimit, type ChatMessage, estimateCostUsd, limitsFromRow, limitsToRow, mergeLimits, NO_TOKENS, type TokenUsage, tokensFromUsage } from '@ghostaff/shared';
-import { messageFromRow } from '@ghostaff/shared/services';
+import { MESSAGE_COLUMNS, messageFromRow } from '@ghostaff/shared/services';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CloudAccountNotReady } from './cloudAccounts';
 import { type AiAccount, AiFailure, CHAT_EFFORT, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, type Writer } from './chat';
@@ -21,8 +21,6 @@ function check<T>(r: { data: T; error: unknown }): T {
 }
 
 const text = (t: string) => [{ type: 'text', text: t }];
-
-const MESSAGE_COLUMNS = 'id, thread_id, author_kind, author_user, author_agent, author_name, parts, state, steps, routine_id, created_at';
 
 /** The most messages after a summary the engine reads at once: far past what a turn carries (context.ts). */
 const CONVERSATION_ROWS = 1000;
@@ -111,7 +109,7 @@ export function supabaseChatStore(admin: SupabaseClient, opts: { afterAgentWrite
         text: r.body,
       }));
     },
-    async startReply(thread: ChatThreadHead, agent: ChatAgent, steps, routineId) {
+    async startReply(thread: ChatThreadHead, agent: ChatAgent, steps, opts) {
       const { data, error } = await admin
         .from('messages')
         .insert({
@@ -123,7 +121,8 @@ export function supabaseChatStore(admin: SupabaseClient, opts: { afterAgentWrite
           parts: [],
           state: 'working',
           steps,
-          routine_id: routineId ?? null,
+          routine_id: opts?.routineId ?? null,
+          reply_to: opts?.replyTo ?? null,
         })
         .select('id')
         .single();
@@ -170,20 +169,8 @@ export function supabaseChatStore(admin: SupabaseClient, opts: { afterAgentWrite
     async touchThread(threadId) {
       check(await admin.from('threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId));
     },
-    async personalChat(orgId, agentId, title, userId) {
-      const find = async () =>
-        (check(await admin.from('threads').select('id').eq('agent_id', agentId).eq('personal_of', userId).maybeSingle()) as { id: string } | null)?.id;
-      const found = await find();
-      if (found) return found;
-      const { data, error } = await admin
-        .from('threads')
-        .insert({ org_id: orgId, agent_id: agentId, title, created_by: userId, personal_of: userId })
-        .select('id')
-        .single();
-      // Opened meanwhile by the person's first message (chat_with): use that one.
-      if (error?.code === '23505') return (await find()) ?? Promise.reject(new Error('chat not created'));
-      if (error || !data) throw error ?? new Error('chat not created');
-      return data.id as string;
+    async agentChat(agentId) {
+      return check(await admin.rpc('agent_chat', { target_agent: agentId })) as string;
     },
     async aiAccounts(orgId): Promise<AiAccount[]> {
       const rows =

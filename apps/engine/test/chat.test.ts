@@ -2,7 +2,7 @@ import { AGENT_JOBS, type ChatMessage, MAIN_AGENT_JOB } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import type { DecisionOpener } from '../src/decisionAsks';
-import { type AiAccount, AiFailure, type AiUse, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, whoAnswers, type Writer } from '../src/chat';
+import { type AiAccount, AiFailure, type AiUse, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, systemPrompt, toTurns, waitingRuns, whoAnswers, type Writer } from '../src/chat';
 import { CONVERSATION_TOOL, type ConversationSummary, type MessageQuery, stampOf } from '../src/context';
 import type { AskRecord, AskStore } from '../src/accountAsks';
 import type { AsPerson } from '../src/settings';
@@ -76,6 +76,7 @@ function setup(
   let working: string | null = null;
   let startedAt = 0; // where the reply sits: it was created when it started
   const replier = new Map<string, ChatAgent>();
+  const replyTo = new Map<string, string | null>();
   const chat: ChatStore = {
     levelFor: async (a, u) => levels[a === REDES ? `${u}/redes` : u] ?? 'none',
     threadLevelFor: async (_t, u) => opts.threadLevels?.[u] ?? levels[u] ?? 'none',
@@ -98,10 +99,11 @@ function setup(
       return [];
     },
     // The reply joins the thread once finished, as the database would show it.
-    startReply: async (thread, agent) => {
+    startReply: async (thread, agent, _steps, o) => {
       if (working) return null;
       working = `reply-${agent.name}-${messages.length}`;
       replier.set(working, agent);
+      replyTo.set(working, o?.replyTo ?? null);
       startedAt = messages.length;
       return working;
     },
@@ -110,14 +112,17 @@ function setup(
       if (patch.state && patch.state !== 'working') {
         working = null;
         const a = replier.get(id) ?? finanzas;
-        messages.splice(startedAt, 0, msg({ id, authorKind: 'agent', authorAgentId: a.id, authorUserId: null, authorName: a.name, text: patch.text ?? '' }));
+        messages.splice(startedAt, 0, {
+          ...msg({ id, authorKind: 'agent', authorAgentId: a.id, authorUserId: null, authorName: a.name, text: patch.text ?? '' }),
+          replyTo: replyTo.get(id) ?? null,
+        });
       }
     },
     deleteMessage: async () => {},
     touchThread: async () => {},
-    personalChat: async (_o, agentId, title) => {
+    agentChat: async (agentId) => {
       const id = '30000000-0000-0000-0000-000000000009';
-      threads.push({ id, orgId: ORG, agentId, title });
+      threads.push({ id, orgId: ORG, agentId, title: 'Finanzas' });
       return id;
     },
     aiAccounts: async () => opts.accounts ?? [{ id: 'key-1', provider: 'anthropic' }],
@@ -356,6 +361,7 @@ describe('an agent answering in a thread', () => {
     const holder: { messages?: ChatMessage[] } = {};
     let first = true;
     const { call, asked } = setup({
+      levels: { ana: 'talk', bea: 'talk' },
       write: async ({ onText }) => {
         onText('Vale.');
         if (first) {
@@ -429,6 +435,84 @@ describe('what a turn carries (agent-context.md)', () => {
     await call('ana', `/threads/${THREAD}/reply`);
     expect(searched).toEqual([expect.objectContaining({ threadId: THREAD, words: ['gestoría'] })]);
     expect(found).toMatchObject({ isError: false });
+  });
+
+  it('answers what waits one person at a time, in order, each reading the chat up to their message (group-chat-per-agent.md, decision 5)', async () => {
+    const holder: { messages?: ChatMessage[] } = {};
+    let first = true;
+    const { call, asked } = setup({
+      levels: { ana: 'talk', bea: 'talk' },
+      write: async ({ onText }) => {
+        onText('Vale.');
+        if (first) {
+          first = false;
+          holder.messages?.push(msg({ authorUserId: 'bea', authorName: 'Bea', text: 'Lo mío primero' }));
+          holder.messages?.push(msg({ text: 'Y lo mío después' }));
+        }
+      },
+      expose: holder,
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(asked).toHaveLength(3);
+    const second = JSON.stringify(asked[1]?.messages);
+    expect(second).toMatch(/Bea \([^)]*\): Lo mío primero/);
+    expect(second).not.toContain('Y lo mío después');
+    expect(JSON.stringify(asked[2]?.messages)).toMatch(/Ana \([^)]*\): Y lo mío después/);
+  });
+
+  it('passes over a message from someone who can no longer talk to the agent', async () => {
+    const holder: { messages?: ChatMessage[] } = {};
+    let first = true;
+    const { call, asked } = setup({
+      write: async ({ onText }) => {
+        onText('Vale.');
+        if (first) {
+          first = false;
+          holder.messages?.push(msg({ authorUserId: 'bea', authorName: 'Bea', text: 'Antes podía' }));
+        }
+      },
+      expose: holder,
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(asked).toHaveLength(1);
+  });
+});
+
+describe('what waits for an answer in an agent’s chat', () => {
+  const agentSays = (p: Partial<ChatMessage> & { text?: string } = {}) =>
+    msg({ authorKind: 'agent', authorAgentId: AGENT, authorUserId: null, authorName: 'Finanzas', text: 'Hecho', ...p });
+
+  it('starts after the agent’s last word in a chat from before the queue', () => {
+    const ms = [msg({ text: 'Hola' }), agentSays(), msg({ authorUserId: 'bea', authorName: 'Bea', text: '¿Y?' })];
+    expect(waitingRuns(ms)).toEqual([{ authorId: 'bea', upTo: 2 }]);
+  });
+
+  it('starts after the last message a reply answered, whatever the agent wrote on its own since', () => {
+    const ana = msg({ text: 'Hola' });
+    const bea = msg({ authorUserId: 'bea', authorName: 'Bea', text: 'Y yo' });
+    const ms = [ana, bea, agentSays({ replyTo: ana.id }), agentSays({ text: 'Informe del mes' })];
+    expect(waitingRuns(ms)).toEqual([{ authorId: 'bea', upTo: 1 }]);
+  });
+
+  it('groups one person’s messages in a row, and keeps the order of people', () => {
+    const ms = [
+      agentSays(),
+      msg({ text: 'Uno' }),
+      msg({ text: 'Dos' }),
+      msg({ authorUserId: 'bea', authorName: 'Bea', text: 'Tres' }),
+      msg({ text: 'Cuatro' }),
+    ];
+    expect(waitingRuns(ms)).toEqual([
+      { authorId: 'ana', upTo: 2 },
+      { authorId: 'bea', upTo: 3 },
+      { authorId: 'ana', upTo: 4 },
+    ]);
+  });
+
+  it('nothing, once the newest message was answered, or a person who left', () => {
+    const ana = msg({ text: 'Hola' });
+    expect(waitingRuns([ana, agentSays({ replyTo: ana.id })])).toEqual([]);
+    expect(waitingRuns([agentSays(), msg({ authorUserId: null, authorName: 'Eva', text: 'Me fui' })])).toEqual([]);
   });
 });
 

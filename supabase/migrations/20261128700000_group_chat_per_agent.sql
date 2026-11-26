@@ -111,6 +111,13 @@ alter table public.agents drop column chat_default;
 
 create unique index threads_one_per_agent on public.threads (agent_id);
 
+-- The queue (decision 5): a message written while the agent answers someone
+-- else waits, and is answered after, one at a time, in order. A reply names
+-- the person's message it answers, so the engine knows which come after it;
+-- what the agent writes on its own answers none.
+alter table public.messages
+  add column reply_to uuid references public.messages (id) on delete set null;
+
 -- The rule ---------------------------------------------------------------------
 
 /**

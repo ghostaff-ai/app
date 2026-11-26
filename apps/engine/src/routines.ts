@@ -1,14 +1,14 @@
 // Routines on the tick (docs/plans/ongoing/agent-routines.md): what a person
 // asked an agent to do on its own at an hour. A routine is a message the
 // clock writes for its creator: when it fires, the engine does what it does
-// when they write the instruction to the agent, in their chat with it. A chat
-// agent answers with a chat turn; an agent on our runner with a run. Nobody
-// picks «chat or job»: that is the agent's runner, the engine's business.
+// when they write the instruction to the agent, in its chat. A chat agent
+// answers with a chat turn; an agent on our runner with a run. Nobody picks
+// «chat or job»: that is the agent's runner, the engine's business.
 //
-// A team routine's answer also reaches, as a copy, everyone else who can see
-// the agent. One with nothing to tell (SIN NOVEDAD) leaves nothing behind.
-// One whose creator left, or can no longer talk to the agent, is paused, and
-// Secretaría tells the owners (decision 5).
+// The answer is in the agent's chat, which everyone who can see the agent
+// reads (group-chat-per-agent.md). One with nothing to tell (SIN NOVEDAD)
+// leaves nothing behind. One whose creator left, or can no longer talk to the
+// agent, is paused, and the main agent says so in its chat (decision 5).
 
 import { firedBetween, type Routine } from '@ghostaff/shared';
 import { routineFromRow, type RoutineRow } from '@ghostaff/shared/services';
@@ -27,7 +27,7 @@ export interface RoutineStore {
   pause(id: string, reason: 'creator_gone'): Promise<void>;
   /** Its creator's name, if they may still have it run: a member who talks to the agent, and an owner for the team's. */
   creator(r: Routine): Promise<{ name: string } | null>;
-  /** A word from Secretaría in each owner's chat with her. */
+  /** A word from the main agent in its chat. */
   notifyOwners(orgId: string, text: string): Promise<number>;
 }
 
@@ -74,11 +74,11 @@ async function fire(chat: ChatDeps, deps: JobDeps, store: RoutineStore, r: Routi
     );
     return false;
   }
-  const threadId = await chat.chat.personalChat(agent.orgId, agent.id, agent.name, r.createdBy);
+  const threadId = await chat.chat.agentChat(agent.id);
   const thread: ChatThreadHead = { id: threadId, orgId: agent.orgId, agentId: agent.id, title: agent.name };
-  const replyId = await chat.chat.startReply(thread, agent, ['Con tu rutina'], r.id);
+  const replyId = await chat.chat.startReply(thread, agent, ['Con tu rutina'], { routineId: r.id });
   if (!replyId) {
-    // The agent is answering in that chat right now: the next tick tries this hour again.
+    // The agent is answering in its chat right now: the next tick tries this hour again.
     await store.claim(r.id, now.toISOString(), new Date(r.lastFiredAt));
     return false;
   }
@@ -109,7 +109,6 @@ async function answerInChat(chat: ChatDeps, deps: JobDeps, r: Routine, agent: Ch
   }
   await deps.jobs.finishRun(runId, { state: out.ok ? 'done' : 'failed', summary: out.text || null, noteworthy: true, decisionsOpened: 0 });
   await chat.chat.touchThread(thread.id).catch(() => {});
-  if (out.ok && out.text) await deps.jobs.postRoutineCopies(r.id, out.text, r.createdBy);
 }
 
 const ROUTINE_COLUMNS =

@@ -58,10 +58,13 @@ function setup(opts: { launchFails?: boolean } = {}) {
     conversation: async () => ({ summary: null, messages }),
     saveSummary: async () => true,
     searchMessages: async () => [],
-    startReply: async (_t, agent) => {
+    startReply: async (_t, agent, _s, o) => {
       if (working) return null;
       working = `reply-${messages.filter((m) => m.authorKind === 'agent').length + 1}`;
-      messages.push(msg({ id: working, authorKind: 'agent', authorAgentId: agent.id, authorUserId: null, authorName: agent.name, text: '', state: 'working' }));
+      messages.push({
+        ...msg({ id: working, authorKind: 'agent', authorAgentId: agent.id, authorUserId: null, authorName: agent.name, text: '', state: 'working' }),
+        replyTo: o?.replyTo ?? null,
+      });
       return working;
     },
     updateReply: async (id, patch) => {
@@ -70,7 +73,7 @@ function setup(opts: { launchFails?: boolean } = {}) {
     },
     deleteMessage: async () => {},
     touchThread: async () => {},
-    personalChat: async () => 'x',
+    agentChat: async () => 'x',
     aiAccounts: async () => [],
     recordAiUse: async () => {},
     proposeAction: async () => 'a',
@@ -91,10 +94,8 @@ function setup(opts: { launchFails?: boolean } = {}) {
       return true;
     },
     staleRuns: async () => [...runs.values()].filter((r) => r.state === 'running' && r.messageId),
-    postRoutineCopies: async () => 0,
-    postToPersonalChats: async (a, text) => {
+    postToAgentChat: async (a, text) => {
       notices.push(`${a.name}: ${text}`);
-      return 2;
     },
   };
   const app = createApp({

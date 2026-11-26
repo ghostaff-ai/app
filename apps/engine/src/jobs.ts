@@ -80,18 +80,8 @@ export interface JobStore {
   run(id: string): Promise<RunRecord | null>;
   /** Closes a run still «running»; false when it was already closed (a report sent twice, or expired). */
   finishRun(id: string, patch: { state: 'done' | 'failed'; summary: string | null; noteworthy: boolean; decisionsOpened: number } & RunEnding): Promise<boolean>;
-  /**
-   * A finished message from the agent in the chat of every person who may see
-   * it, opening the chats that don't exist yet (three-tabs.md, decision 12).
-   * Returns how many chats it reached.
-   */
-  postToPersonalChats(agent: ChatAgent, text: string): Promise<number>;
-  /**
-   * A routine's answer in the chat of everyone else who gets it: for the
-   * team's, each person who can see the agent but `except` (who got it in
-   * full); for «Solo para mí», nobody else. Returns how many chats it reached.
-   */
-  postRoutineCopies(routineId: string, text: string, except: string | null): Promise<number>;
+  /** A finished message from the agent in its chat, once for everyone who sees it (group-chat-per-agent.md). */
+  postToAgentChat(agent: ChatAgent, text: string): Promise<void>;
   /**
    * Runs still «running» whose job died without reporting: past their own deadline at `now`, or, without
    * one (the legacy jobs), started before `before`.
@@ -323,14 +313,9 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
     }
     await chat.chat.updateReply(run.messageId, { text, state: report.ok ? 'done' : 'failed', steps: ['Trabajando en ello', 'Hecho'] });
     await chat.chat.touchThread(run.threadId).catch(() => {});
-    if (run.routineId && report.ok) {
-      await deps.jobs
-        .postRoutineCopies(run.routineId, text, run.requestedBy ?? null)
-        .catch((e) => console.error('routine copies not posted', e instanceof Error ? e.message : typeof e));
-    }
     return { run: run.id, threadId: run.threadId };
   }
-  if (noteworthy) await deps.jobs.postToPersonalChats(agent, text);
+  if (noteworthy) await deps.jobs.postToAgentChat(agent, text);
   return { run: run.id, threadId: null };
 }
 

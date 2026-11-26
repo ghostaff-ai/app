@@ -107,11 +107,10 @@ function setup(
     },
     deleteMessage: async () => {},
     touchThread: async () => {},
-    personalChat: async (orgId, agentId, title, userId) => {
-      opened.push(userId);
-      const id = userId === 'ana' ? CHAT : '30000000-0000-0000-0000-00000000000b';
-      if (!threads.some((t) => t.id === id)) threads.push({ id, orgId, agentId, title });
-      return id;
+    agentChat: async (agentId) => {
+      opened.push(agentId);
+      if (!threads.some((t) => t.id === CHAT)) threads.push({ id: CHAT, orgId: ORG, agentId, title: 'Secretaría' });
+      return CHAT;
     },
     aiAccounts: async () => [{ id: 'key-1', provider: 'anthropic' }],
     recordAiUse: async () => {},
@@ -158,10 +157,10 @@ function setup(
 }
 
 describe('POST /agents/:id/voice-notes', () => {
-  it('stores the audio and writes the note in the person’s own chat, still to be transcribed', async () => {
+  it('stores the audio and writes the note in the agent’s chat, still to be transcribed', async () => {
     const { sent, stored, messages, opened, heard, voicePart } = setup();
     const message = await sent({ type: 'audio/mp4', body: new Uint8Array([7, 8, 9]) });
-    expect(opened).toEqual(['ana']);
+    expect(opened).toEqual(['20000000-0000-0000-0000-000000000001']);
     expect(message.threadId).toBe(CHAT);
     expect(message.authorUserId).toBe('ana');
     expect(message.parts).toHaveLength(1);

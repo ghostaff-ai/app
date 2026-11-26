@@ -627,13 +627,12 @@ describe('the stores call afterAgentWrite', () => {
     expect(after).not.toHaveBeenCalled();
   });
 
-  it('after an agent posts to everyone’s personal chat, and a routine’s copies', async () => {
+  it('after an agent posts in its chat', async () => {
     const after = vi.fn();
-    const jobs = supabaseJobStore(writes({ rpc: 2 }).client, { afterAgentWrite: after });
+    const jobs = supabaseJobStore(writes({ rpc: 'm1' }).client, { afterAgentWrite: after });
     const agent = { id: 'a1', orgId: 'o1', name: 'Ana', ghost: null, department: 'ventas', runner: 'ghostaff' } as never;
-    expect(await jobs.postToPersonalChats(agent, 'Te he dejado 2 decisiones')).toBe(2);
-    expect(await jobs.postRoutineCopies('rt1', 'Resumen', null)).toBe(2);
-    expect(after).toHaveBeenCalledTimes(2);
+    await jobs.postToAgentChat(agent, 'Te he dejado 2 decisiones');
+    expect(after).toHaveBeenCalledTimes(1);
   });
 
   it('is optional', async () => {

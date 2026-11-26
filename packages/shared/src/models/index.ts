@@ -261,8 +261,6 @@ export interface Agent {
   department: Department;
   /** The level a member has on it until an owner chooses one: talk for Secretaría, read for the rest. */
   memberDefault: AgentLevel;
-  /** Who reads a new conversation with it unless its opener says otherwise; set by an owner. */
-  chatDefault: ConversationVisibility;
   /** How it runs: only in chat, as one of Órdago's jobs while they migrate, or on Ghostaff's own runner. */
   runner: AgentRunner;
   /** Its own one-line job, when it has one (Órdago's agents); else its ghost's. */
@@ -297,13 +295,6 @@ export interface AgentRun {
 // owner always talks.
 export const AGENT_LEVELS = ['none', 'read', 'talk'] as const;
 export type AgentLevel = (typeof AGENT_LEVELS)[number];
-
-// Who reads and writes a conversation besides whoever opened it
-// (docs/plans/ongoing/chat-permissions.md): private only them; read also
-// everyone who may see the agent, reading; write also everyone who may see the
-// agent, each by their level on it. The agent's levels are always the ceiling.
-export const CONVERSATION_VISIBILITIES = ['private', 'read', 'write'] as const;
-export type ConversationVisibility = (typeof CONVERSATION_VISIBILITIES)[number];
 
 /** One member's level on one agent, as its owners see it. */
 export interface AgentAccess {

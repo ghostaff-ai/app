@@ -89,7 +89,7 @@ export async function sendVoiceNote(
   if (!deps.limiter.take(userId)) throw new Refusal(429, 'too_many', 'too many voice notes in the last hour');
   const audio = await readAudio(note);
 
-  const threadId = await deps.chat.chat.personalChat(agent.orgId, agent.id, agent.name, userId);
+  const threadId = await deps.chat.chat.agentChat(agent.id);
   const id = randomUUID();
   const path = `${agent.orgId}/${threadId}/${id}.${EXTENSIONS[mimeType] ?? 'audio'}`;
   await voice.putAudio(path, audio, mimeType);

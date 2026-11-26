@@ -254,9 +254,9 @@ const stepsOf = (history: readonly GuideHistoryEntry[]) =>
   history.filter((e): e is Extract<GuideHistoryEntry, { type: 'step' }> => e.type === 'step').map((e) => e.step);
 
 /**
- * What the guide's screen needs. Anyone who may read the conversation may read
- * it; so may an owner who cannot, while the guide waits for an owner, and once
- * they decided it (a member's guide in their personal chat, approved from Conexiones).
+ * What the guide's screen needs. Anyone who may read the agent's chat may read
+ * it; so may an owner, while the guide waits for an owner and once they
+ * decided it (approved from Conexiones).
  */
 export async function getGuide(deps: GuideDeps, userId: string, id: unknown): Promise<GuideView> {
   const g = await load(deps, id);
@@ -503,8 +503,8 @@ async function decidable(deps: GuideDeps, userId: string, id: unknown) {
 
 /**
  * An owner approves a member's grant: the access is written, for the guide's
- * agent only, and the agent goes on in the guide's conversation as the member
- * who did the guide (the owner may not see it: a member's personal chat). Answers
+ * agent only, and the agent goes on in its chat as the member who did the
+ * guide, whatever screen the owner approved it from. Answers
  * once that reply is written. `resumed` is false when the agent could not go on
  * now (it was answering, or someone's chat let it go on first): the chat does it
  * when it next sees the guide done, once.

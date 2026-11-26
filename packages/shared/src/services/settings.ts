@@ -17,8 +17,6 @@ import {
   AGENT_LEVELS,
   type AgentGhost,
   type AgentLevel,
-  CONVERSATION_VISIBILITIES,
-  type ConversationVisibility,
   type Department,
   DEPARTMENT_NAMES,
   DEPARTMENTS,
@@ -48,7 +46,6 @@ import {
   revokeInvitation,
   setAgentAccess,
   setAgentAccounts,
-  setAgentChatDefault,
   setAiOrder,
 } from './index';
 
@@ -114,12 +111,6 @@ function oneOf<T extends string>(input: Record<string, unknown>, key: string, al
 
 const LEVEL_WORDS: Record<AgentLevel, string> = { none: 'nada', read: 'ver', talk: 'hablar' };
 
-const VISIBILITY_WORDS: Record<ConversationVisibility, string> = {
-  private: 'solo quien la abre',
-  read: 'el equipo puede leer',
-  write: 'el equipo puede escribir',
-};
-
 const providerName = (p: string) => ((ACCOUNT_PROVIDERS as readonly string[]).includes(p) ? connectorFor(p as AccountProvider).name : p);
 
 const toolsWords = (tools: readonly string[] | null) =>
@@ -178,7 +169,6 @@ export const SETTING_TOOLS: SettingTool[] = [
           you: a.id === ctx.agentId,
           accounts: a.accounts ?? 'all',
           member_default: a.memberDefault,
-          chat_default: a.chatDefault,
           access: access[i]?.filter((p) => p.role !== 'owner').map((p) => ({ user_id: p.userId, name: p.displayName, level: p.level })) ?? undefined,
         })),
         connected_accounts: connections
@@ -281,35 +271,6 @@ export const SETTING_TOOLS: SettingTool[] = [
       const level = oneOf<AgentLevel>(input, 'level', AGENT_LEVELS);
       await setAgentAccess(ctx.client, agent.id, member.userId, level);
       return `${member.displayName} puede ahora ${LEVEL_WORDS[level]} con ${agent.name}.`;
-    },
-  },
-  {
-    name: 'settings_agent_chat_default',
-    description:
-      "Propose who reads a new conversation with one agent unless whoever opens it chooses otherwise: 'private' (only them), 'read' (everyone who may see the agent reads it) or 'write' (they may also write, by their level on the agent). It never changes a conversation already open: those are their openers' alone.",
-    input_schema: {
-      type: 'object',
-      properties: {
-        agent_id: { type: 'string' },
-        visibility: { type: 'string', enum: [...CONVERSATION_VISIBILITIES] },
-      },
-      required: ['agent_id', 'visibility'],
-    },
-    writes: true,
-    step: 'Preparando el cambio de conversaciones',
-    async describe(ctx, input) {
-      const agent = await agentOf(ctx, uuid(input, 'agent_id'));
-      const visibility = oneOf<ConversationVisibility>(input, 'visibility', CONVERSATION_VISIBILITIES);
-      return {
-        label: `Cambiar quién lee las conversaciones nuevas con ${agent.name}`,
-        preview: `Ahora: ${VISIBILITY_WORDS[agent.chatDefault]}\nDespués: ${VISIBILITY_WORDS[visibility]}`,
-      };
-    },
-    async run(ctx, input) {
-      const agent = await agentOf(ctx, uuid(input, 'agent_id'));
-      const visibility = oneOf<ConversationVisibility>(input, 'visibility', CONVERSATION_VISIBILITIES);
-      await setAgentChatDefault(ctx.client, agent.id, visibility);
-      return `Las conversaciones nuevas con ${agent.name}: ${VISIBILITY_WORDS[visibility]}, salvo que quien la abra elija otra cosa.`;
     },
   },
   {
@@ -767,7 +728,6 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   create_agent: { reach: 'agent', tool: 'settings_create_agent' },
   set_agent_accounts: { reach: 'agent', tool: 'settings_agent_accounts' },
   set_agent_access: { reach: 'agent', tool: 'settings_agent_access' },
-  set_agent_chat_default: { reach: 'agent', tool: 'settings_agent_chat_default' },
   set_ai_order: { reach: 'agent', tool: 'settings_ai_order' },
   rename_ai_connection: { reach: 'agent', tool: 'settings_rename_ai_account' },
   invite_member: { reach: 'agent', tool: 'settings_invite_member' },
@@ -787,7 +747,6 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   agent_slug_for: { reach: 'not_a_setting' },
   agents_fill_slug: { reach: 'not_a_setting' },
   ask_about_decision: { reach: 'never', why: 'a person writing to an agent, not a setting; an agent asks with pedir_decision' },
-  set_conversation_visibility: { reach: 'never', why: "a conversation's privacy is its opener's alone" },
   accept_invitation: { reach: 'never', why: 'a person joins an organisation themselves' },
   save_profile: { reach: 'never', why: "a person's own profile" },
   create_organization: { reach: 'never', why: 'a new organisation is outside this one' },
@@ -797,6 +756,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
 
   agent_level: { reach: 'not_a_setting' },
   agent_level_for: { reach: 'not_a_setting' },
+  agent_chat: { reach: 'not_a_setting' },
   agent_repos_valid: { reach: 'not_a_setting' },
   agent_secret_env_valid: { reach: 'not_a_setting' },
   agent_secrets_valid: { reach: 'not_a_setting' },
@@ -805,7 +765,6 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   claim_pushes: { reach: 'not_a_setting' },
   can_hear_voice_note: { reach: 'not_a_setting' },
   chat_with: { reach: 'not_a_setting' },
-  conversation_readers: { reach: 'not_a_setting' },
   connections_place_last: { reach: 'not_a_setting' },
   daily_push_candidates: { reach: 'not_a_setting' },
   ensure_main_agent: { reach: 'not_a_setting' },
@@ -818,7 +777,6 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   may_change_routine: { reach: 'not_a_setting' },
   messages_notify: { reach: 'not_a_setting' },
   notify_owners: { reach: 'not_a_setting' },
-  post_routine_copies: { reach: 'not_a_setting' },
   mark_thread_read: { reach: 'not_a_setting' },
   my_agent_levels: { reach: 'not_a_setting' },
   my_email: { reach: 'not_a_setting' },
@@ -828,7 +786,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   post_message: { reach: 'not_a_setting' },
   save_conversation_summary: { reach: 'not_a_setting' },
   search_thread_messages: { reach: 'not_a_setting' },
-  post_to_personal_chats: { reach: 'not_a_setting' },
+  post_to_agent_chat: { reach: 'not_a_setting' },
   release_refresh_lease: { reach: 'not_a_setting' },
   request_connector: { reach: 'not_a_setting' },
   slug_for: { reach: 'not_a_setting' },
@@ -837,7 +795,6 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   unsnooze_action: { reach: 'not_a_setting' },
   my_pending_actions: { reach: 'not_a_setting' },
   unsnooze_decision: { reach: 'not_a_setting' },
-  start_thread: { reach: 'not_a_setting' },
   take_refresh_lease: { reach: 'not_a_setting' },
   thread_level: { reach: 'not_a_setting' },
   thread_level_for: { reach: 'not_a_setting' },
