@@ -1,5 +1,5 @@
 import type { Agent, ChatMessage, ChatThread } from '@ghostaff/shared';
-import { audienceLine, canWriteIn, readOnlyNote, shortTime, showAuthors, teamRows, vacancies, widens } from '@/lib/chat';
+import { shortTime, showAuthors, teamRows, vacancies } from '@/lib/chat';
 import { addMessage } from '@/lib/hooks/useChat';
 
 const agent = (id: string, ghost: Agent['ghost'], isMain = ghost === 'secretaria'): Agent => ({
@@ -13,7 +13,6 @@ const agent = (id: string, ghost: Agent['ghost'], isMain = ghost === 'secretaria
   description: null,
   schedule: null,
   memberDefault: 'read',
-  chatDefault: 'private',
   accounts: null,
   createdAt: '2026-11-17T00:00:00Z',
 });
@@ -73,60 +72,25 @@ describe('the chat rules', () => {
     expect(list[0]?.state).toBe('done');
   });
 
-  it('lists one row per agent: the main one first, then who spoke last', () => {
+  it('lists one row per agent, its chat: the main one first, then who spoke last', () => {
     const team = [agent('fin', 'finanzas'), agent('red', 'redes'), agent('sec', 'secretaria'), agent('inc', 'incorporacion')];
     const t = (id: string, agentId: string, at: string, more: Partial<ChatThread> = {}): ChatThread => ({
-      id, agentId, title: id, createdAt: at, lastMessageAt: at, lastAuthor: 'Ana', lastText: 'hola', unread: false, personal: true,
-      visibility: 'private', mine: true, following: true, ...more,
+      id, agentId, title: id, createdAt: at, lastMessageAt: at, lastAuthor: 'Ana', lastText: 'hola', unread: false, following: true, ...more,
     });
     const rows = teamRows(team, [
       t('fin-chat', 'fin', '2026-11-20T10:00:00Z'),
       t('red-chat', 'red', '2026-11-22T10:00:00Z', { unread: true }),
-      // A titled conversation the person doesn't follow stays on the agent's page.
-      t('inc-team', 'inc', '2026-11-23T10:00:00Z', { personal: false, visibility: 'write', mine: false, following: false, unread: true }),
+      // A chat the person doesn't follow is still the agent's row: everyone who sees the agent reads it.
+      t('inc-chat', 'inc', '2026-11-23T10:00:00Z', { following: false, unread: true }),
     ]);
-    expect(rows.map((r) => r.agent.id)).toEqual(['sec', 'red', 'fin', 'inc']);
-    expect(rows[1]?.last?.id).toBe('red-chat');
-    expect(rows.map((r) => r.unread)).toEqual([false, true, false, false]);
+    expect(rows.map((r) => r.agent.id)).toEqual(['sec', 'inc', 'red', 'fin']);
+    expect(rows[2]?.last?.id).toBe('red-chat');
+    expect(rows.map((r) => r.unread)).toEqual([false, true, true, false]);
   });
 
   it('puts the main agent first by its role, even when it is not drawn as secretaria', () => {
     const team = [agent('fin', 'finanzas'), agent('main', 'base', true), agent('sec', 'secretaria', false)];
     expect(teamRows(team, []).map((r) => r.agent.id)).toEqual(['main', 'sec', 'fin']);
-  });
-
-  it('adds a row for each titled conversation the person follows, by its last word', () => {
-    const team = [agent('fin', 'finanzas'), agent('sec', 'secretaria')];
-    const t = (id: string, agentId: string, at: string, more: Partial<ChatThread> = {}): ChatThread => ({
-      id, agentId, title: id, createdAt: at, lastMessageAt: at, lastAuthor: 'Ana', lastText: 'hola', unread: false, personal: false,
-      visibility: 'write', mine: false, following: true, ...more,
-    });
-    const rows = teamRows(team, [
-      t('fin-chat', 'fin', '2026-11-20T10:00:00Z', { personal: true, visibility: 'private', mine: true }),
-      t('cierre', 'fin', '2026-11-22T10:00:00Z', { unread: true }),
-      t('sueldos', 'fin', '2026-11-21T10:00:00Z', { visibility: 'private', mine: true }),
-      // The main agent's titled conversations don't jump ahead with it.
-      t('sec-topic', 'sec', '2026-11-19T10:00:00Z'),
-    ]);
-    expect(rows.map((r) => `${r.kind}:${r.kind === 'agent' ? r.agent.id : r.last.id}`)).toEqual([
-      'agent:sec', 'conversation:cierre', 'conversation:sueldos', 'agent:fin', 'conversation:sec-topic',
-    ]);
-    expect(rows[1]?.unread).toBe(true);
-  });
-
-  it('says who sees a conversation, and who may write in it', () => {
-    expect(audienceLine('private', 'Finanzas', 1)).toBe('Solo tú y Finanzas');
-    expect(audienceLine('read', 'Finanzas', 4)).toBe('La lee el equipo de Finanzas · 4 personas');
-    expect(audienceLine('write', 'Finanzas', 1)).toBe('La escribe el equipo de Finanzas · 1 persona');
-    expect(audienceLine('write', 'Finanzas', null)).toBe('La escribe el equipo de Finanzas');
-    expect(canWriteIn({ visibility: 'read', mine: true }, 'talk')).toBe(true);
-    expect(canWriteIn({ visibility: 'read', mine: false }, 'talk')).toBe(false);
-    expect(canWriteIn({ visibility: 'write', mine: false }, 'talk')).toBe(true);
-    expect(canWriteIn({ visibility: 'write', mine: false }, 'read')).toBe(false);
-    expect(readOnlyNote('read', 'Ana', 'Olga')).toBe('Pide acceso a Olga');
-    expect(readOnlyNote('talk', 'Ana', 'Olga')).toBe('La abrió Ana');
-    expect(widens('private', 'read')).toBe(true);
-    expect(widens('write', 'read')).toBe(false);
   });
 
   it('lists the jobs nobody does yet', () => {

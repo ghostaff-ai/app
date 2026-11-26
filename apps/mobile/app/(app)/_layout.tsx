@@ -74,9 +74,6 @@ export default function AppLayout() {
         <Stack.Screen name="acceso/[id]" options={{ title: 'Quién puede' }} />
         <Stack.Screen name="herramientas/[id]" options={{ title: 'Herramientas' }} />
         <Stack.Screen name="conversacion/[id]" options={{ ...beside, title: '' }} />
-        <Stack.Screen name="nueva-conversacion/[agent]" options={{ title: 'Nueva conversación' }} />
-        <Stack.Screen name="visibilidad/[id]" options={{ title: 'Quién la ve', presentation: 'modal' }} />
-        <Stack.Screen name="conversaciones/[id]" options={{ title: 'Conversaciones nuevas' }} />
         <Stack.Screen name="chat/[agent]" options={{ ...beside, title: '' }} />
         <Stack.Screen name="rutinas/[agent]" options={{ title: 'Rutinas' }} />
         <Stack.Screen name="rutina" options={{ ...modal, title: 'Nueva rutina' }} />

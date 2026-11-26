@@ -3,23 +3,21 @@ import { agentJob, deleteAgent, getAgent } from '@ghostaff/shared/services';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { ThreadRow } from '@/components/chat/ThreadRow';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
-import { Brain, ChatsCircle, Clock, Eye, LinkSimple, Plus, Prohibit } from '@/components/icons';
+import { Brain, Clock, Eye, LinkSimple, Prohibit } from '@/components/icons';
 import { Button, ErrorText, LEVEL_NAMES, ListRow, ListSection, Loading, Notice, RowIcon } from '@/components/ui';
-import { VISIBILITY_NAMES, visibilityTag } from '@/lib/chat';
-import { useMyLevels, useThreads } from '@/lib/hooks/useChat';
+import { useMyLevels } from '@/lib/hooks/useChat';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
 import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
 // One agent's page, opened from its name on top of the chat (three-tabs.md,
 // decision 6): live in 3D on top (drag to spin it, tap to make it hop), its
-// job, «Nueva conversación» and «Rutinas» for whoever may talk to it, its «Memoria» for whoever may
-// see it, and every titled
-// conversation with it the person may see (chat-permissions.md). An owner
-// sets who may use it, who reads its new conversations by default and which
-// connected accounts it uses, and can remove it (two taps, so not by accident).
+// job, «Rutinas» for whoever may talk to it and its «Memoria» for whoever may
+// see it. Its chat is the one everyone with access shares
+// (group-chat-per-agent.md): who reads and who writes there is «Quién puede».
+// An owner sets that and which connected accounts it uses, and can remove it
+// (two taps, so not by accident).
 
 export default function Agente() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -30,15 +28,13 @@ export default function Agente() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [focused, setFocused] = useState(true);
-  const { threads, reload: reloadThreads } = useThreads(orgId, id);
   const { levels, reload: reloadLevels } = useMyLevels(orgId);
   useFocusEffect(
     useCallback(() => {
       setFocused(true);
-      void reloadThreads();
       void reloadLevels();
       return () => setFocused(false);
-    }, [reloadThreads, reloadLevels]),
+    }, [reloadLevels]),
   );
   useEffect(() => {
     if (!id) return;
@@ -55,8 +51,6 @@ export default function Agente() {
   const g = GHOSTS[agent.ghost];
   const owner = active?.role === 'owner' && active.id === agent.orgId;
   const level = levels[agent.id];
-  // Its titled conversations: the person's own and those shared with them.
-  const conversations = threads.filter((t) => !t.personal);
 
   const remove = async () => {
     setBusy(true);
@@ -84,39 +78,16 @@ export default function Agente() {
         </Text>
         <Text className="mt-1.5 text-center text-[17px] leading-6 text-ink">{agentJob(agent)}</Text>
 
-        {level === 'talk' ? (
+        {level === 'talk' && agent.runner !== 'ordago_job' ? (
           <ListSection>
             <ListRow
-              testID="new-conversation"
-              leading={<RowIcon icon={Plus} />}
-              title="Nueva conversación"
-              subtitle="Tú eliges quién la ve"
+              testID="agent-routines"
+              leading={<RowIcon icon={Clock} />}
+              title="Rutinas"
+              subtitle={`Lo que ${agent.name} hace solo, a su hora`}
               chevron
-              onPress={() => router.push(`/nueva-conversacion/${agent.id}`)}
+              onPress={() => router.push(`/rutinas/${agent.id}`)}
             />
-            {agent.runner !== 'ordago_job' ? (
-              <ListRow
-                testID="agent-routines"
-                leading={<RowIcon icon={Clock} />}
-                title="Rutinas"
-                subtitle={`Lo que ${agent.name} hace solo, a su hora`}
-                chevron
-                onPress={() => router.push(`/rutinas/${agent.id}`)}
-              />
-            ) : null}
-          </ListSection>
-        ) : null}
-        {conversations.length > 0 ? (
-          <ListSection header="Conversaciones">
-            {conversations.map((t) => (
-              <ThreadRow
-                key={t.id}
-                testID={`conversation-${t.id}`}
-                thread={t}
-                tag={visibilityTag(t.visibility)}
-                onPress={() => router.push(`/conversacion/${t.id}`)}
-              />
-            ))}
           </ListSection>
         ) : null}
         {agent.runner === 'chat' ? (
@@ -142,14 +113,6 @@ export default function Agente() {
               subtitle={`Ver o hablar con ${agent.name}, persona a persona`}
               chevron
               onPress={() => router.push(`/acceso/${agent.id}`)}
-            />
-            <ListRow
-              testID="chat-default"
-              leading={<RowIcon icon={ChatsCircle} />}
-              title="Conversaciones nuevas"
-              value={VISIBILITY_NAMES[agent.chatDefault]}
-              chevron
-              onPress={() => router.push(`/conversaciones/${agent.id}`)}
             />
             <ListRow
               leading={<RowIcon icon={LinkSimple} />}

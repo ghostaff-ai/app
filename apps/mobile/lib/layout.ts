@@ -33,27 +33,17 @@ export type DesktopList = 'team' | 'connections';
 /** Where the list's own screen is: what shows when nothing in it is open. */
 export const LIST_HOME: Record<DesktopList, string> = { team: '/', connections: '/empresa/conexiones' };
 
-// An agent's chat and every page about the agent or a conversation: they open
-// from Equipo's list and keep it beside them.
-const TEAM_DETAILS = new Set([
-  'chat',
-  'conversacion',
-  'agente',
-  'acceso',
-  'herramientas',
-  'rutinas',
-  'rutina',
-  'nueva-conversacion',
-  'conversaciones',
-  'visibilidad',
-]);
+// An agent's chat and every page about the agent: they open from Equipo's
+// list and keep it beside them. `conversacion` is an old link to a chat by its
+// thread, which opens the agent's (group-chat-per-agent.md).
+const TEAM_DETAILS = new Set(['chat', 'conversacion', 'agente', 'acceso', 'herramientas', 'rutinas', 'rutina']);
 // Equipo's, but wide pages of their own: the jobs to hire for.
 const TEAM_PAGES = new Set(['anadir-agente', 'nuevo-agente', 'contratar']);
 
 /**
  * Which sidebar entry a path is under, and which list (if any) stands beside
  * it. `open` is the id in the path of the item open beside the list: an agent
- * or a conversation in Equipo, a connector in Conexiones.
+ * in Equipo, a connector in Conexiones.
  */
 export function desktopSection(path: string): { nav: DesktopNav | null; list: DesktopList | null; open: string | null } {
   const [first, second, third] = path.split('/').filter(Boolean);

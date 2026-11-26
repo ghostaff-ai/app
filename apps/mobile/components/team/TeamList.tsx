@@ -5,7 +5,7 @@ import { Image, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Icon, Plus, UsersThree, WarningCircle } from '@/components/icons';
 import { SpaceSwitcher } from '@/components/SpaceSwitcher';
 import { EmptyState, ErrorText, ListRow, ListSection, Loading, RowIcon, ScreenTitle } from '@/components/ui';
-import { shortTime, teamRows, visibilityTag } from '@/lib/chat';
+import { shortTime, teamRows } from '@/lib/chat';
 import { canRunAgents } from '@/lib/connections';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useThreads } from '@/lib/hooks/useChat';
@@ -19,10 +19,9 @@ import { usePalette } from '@/lib/theme';
 
 // Equipo's list (three-tabs.md, decisions 2 and 4): one row per agent, as in
 // WhatsApp, Secretaría first and then whoever spoke last, with its last word
-// and an orange dot while it waits unread. A tap opens the chat with it
-// (decision 3). Titled conversations the person follows sit among them, like
-// groups (chat-permissions.md, decision 3). An owner adds agents from the last
-// row (decision 5).
+// and an orange dot while it waits unread. A tap opens its chat, everyone's
+// with it (group-chat-per-agent.md). An owner adds agents from the last row
+// (decision 5).
 // On a phone it is the Equipo tab; on a desktop the column beside the open
 // chat (docs/plans/ongoing/desktop-web.md), with that chat's row marked.
 
@@ -54,7 +53,7 @@ export function TeamList() {
   useEffect(() => {
     if (desktop) void reloadThreads();
   }, [desktop, path, reloadThreads]);
-  // Secretaría comes hired with a new space and says hello in your chat with her
+  // Secretaría comes hired with a new space and says hello in her chat
   // once its AI is there (welcome-and-spaces.md); her row then shows it, unread.
   useFirstHello(
     active,
@@ -116,8 +115,7 @@ export function TeamList() {
         />
       ) : (
         <ListSection>
-          {rows.map((row) => {
-            const { agent: a, last, unread } = row;
+          {rows.map(({ agent: a, last, unread }) => {
             const said = last?.lastText ? (last.lastAuthor && last.lastAuthor !== a.name ? `${last.lastAuthor}: ${last.lastText}` : last.lastText) : null;
             const trailing = last ? (
               <View className="items-end">
@@ -126,24 +124,6 @@ export function TeamList() {
               </View>
             ) : undefined;
             const ghost = <Image source={GHOSTS[a.ghost].picture} style={{ width: 48, height: 48 }} resizeMode="contain" />;
-            if (row.kind === 'conversation') {
-              const tag = `${a.name} · ${visibilityTag(row.last.visibility)}`;
-              return (
-                <ListRow
-                  key={row.last.id}
-                  testID={`conversation-${row.last.id}`}
-                  accessibilityLabel={`${row.last.title}, con ${a.name}${unread ? ', mensajes sin leer' : ''}`}
-                  leading={ghost}
-                  title={row.last.title}
-                  subtitle={said ? `${tag}. ${said}` : tag}
-                  emphasis={unread}
-                  trailing={trailing}
-                  selected={desktop ? open === row.last.id : undefined}
-                  href={`/conversacion/${row.last.id}`}
-                  replace={replace}
-                />
-              );
-            }
             return (
               <ListRow
                 key={a.id}

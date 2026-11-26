@@ -3,7 +3,6 @@ import {
   askAgent,
   askAboutDecision,
   chatWith,
-  conversationReaders,
   type EngineAccess,
   getThread,
   listMembers,
@@ -61,7 +60,7 @@ function useLoad<T>(fetch: (() => Promise<T>) | null, empty: T) {
   return { data, loading, error, reload: load };
 }
 
-/** Threads the person may see in the organisation, newest first; with `agentId`, that agent's. */
+/** The agents' chats the person may see in the organisation, newest first; with `agentId`, that agent's. */
 export function useThreads(orgId: string | null, agentId?: string) {
   const fetch = useCallback(() => listThreads(supabase, orgId!, agentId), [orgId, agentId]);
   const { data, ...rest } = useLoad<ChatThread[]>(orgId ? fetch : null, []);
@@ -173,17 +172,7 @@ export function useThread(threadId: string | null) {
   /** Shows a message the engine wrote for the person (a voice note) without waiting for Realtime. */
   const add = useCallback((m: ChatMessage) => setMessages((list) => addMessage(list, m)), []);
 
-  // Who sees it may change (its opener, on another screen): read the head again.
-  const reloadHead = useCallback(async () => {
-    if (!threadId) return;
-    try {
-      setHead(await getThread(supabase, threadId));
-    } catch (e) {
-      setError(message(e));
-    }
-  }, [threadId]);
-
-  return { head, messages, error, send, add, reloadHead };
+  return { head, messages, error, send, add };
 }
 
 /**
@@ -238,17 +227,24 @@ function useMarkReadWhileSeen(threadId: string | null) {
   return api;
 }
 
-/** How many people read a conversation, once known; null while loading or if it can't be read. */
-export function useReaders(threadId: string | null, visibility: string | undefined) {
-  const [readers, setReaders] = useState<number | null>(null);
-  const load = useCallback(async () => {
-    if (!threadId || !visibility) return;
-    setReaders(await conversationReaders(supabase, threadId).catch(() => null));
-  }, [threadId, visibility]);
+/**
+ * Which agent a thread is the chat of: for a link to a thread id (a push or a
+ * card from before one chat per agent). Undefined while loading, null when the
+ * person may not read it.
+ */
+export function useThreadAgent(threadId: string | null) {
+  const [agentId, setAgentId] = useState<string | null | undefined>(undefined);
   useEffect(() => {
-    void load();
-  }, [load]);
-  return { readers, reload: load };
+    if (!threadId) return;
+    let alive = true;
+    getThread(supabase, threadId)
+      .then((h) => alive && setAgentId(h?.agentId ?? null))
+      .catch(() => alive && setAgentId(null));
+    return () => {
+      alive = false;
+    };
+  }, [threadId]);
+  return agentId;
 }
 
 /** A short-lived link to play a voice note. */
@@ -263,15 +259,15 @@ export function letAgentAnswer(engine: EngineAccess, threadId: string, onError?:
 }
 
 /**
- * The person's one chat with an agent (three-tabs.md, decision 3), live, with
- * what the agent did on its own in it too (decision 12). The first message
- * opens the chat; `send` writes in it and asks the agent to answer.
+ * An agent's one chat, live, shared by everyone who may see the agent
+ * (group-chat-per-agent.md), with what the agent did on its own in it too. The
+ * first message opens the chat; `send` writes in it and asks the agent to answer.
  */
 export function useAgentChat(orgId: string | null, agentId: string | null) {
   const fetch = useCallback(() => listThreads(supabase, orgId!, agentId!), [orgId, agentId]);
   const { data: threads, loading, reload } = useLoad<ChatThread[]>(orgId && agentId ? fetch : null, []);
   const [opened, setOpened] = useState<string | null>(null);
-  const chatId = threads.find((t) => t.personal)?.id ?? opened;
+  const chatId = threads[0]?.id ?? opened;
   const chat = useThread(chatId);
   const engine = useEngine();
   const [error, setError] = useState<string | null>(null);

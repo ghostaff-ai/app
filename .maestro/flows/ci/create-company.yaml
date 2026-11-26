@@ -65,7 +65,7 @@ name: A new person creates a company, connects its AI, walks its three tabs and 
     timeout: 15000
 - tapOn: "Que empiece"
 - extendedWaitUntil:
-    visible: "Esta conversación es solo entre tú y .*"
+    visible: "La ve todo el que tiene acceso a .*"
     timeout: 20000
 - back
 - back
