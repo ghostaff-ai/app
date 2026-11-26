@@ -6,7 +6,7 @@
 // provider's code on to the app, which finishes the connect signed in (accounts.ts).
 
 import { createNodeWebSocket } from '@hono/node-ws';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { type ClaudeSession, type ClaudeSessionDeps, claudeSession, MAX_MESSAGE } from './claudeSession';
@@ -24,7 +24,7 @@ import { connectAi, type Deps, disconnectAi, Refusal, requireOwner } from './con
 import { bearer, type CallerFromToken } from './googleCaller';
 import type { PushDrain } from './notify';
 import { NoteLimiter, type Transcriber } from './transcribe';
-import { sendVoiceNote, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
+import { type IncomingNote, sendVoiceNote, sendVoiceNoteToThread, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
 import { receiveRunAudio } from './agentAudio';
 
 /** Calls from Google service accounts, not people: the scheduler's tick (ordago-agents-in-ghostaff.md). */
@@ -363,15 +363,21 @@ export function createApp(deps: AppDeps) {
 
   // Voice notes (voiceNotes.ts): the note in, the message out at once; then its transcript and the agent's answer.
   const voice = { chat: deps.chat, voice: deps.voice, transcriber: deps.transcriber, limiter: deps.transcribeLimiter ?? new NoteLimiter() };
-  app.post('/agents/:id/voice-notes', async (c) => {
-    const message = await sendVoiceNote(voice, c.get('userId'), c.req.param('id'), {
-      contentType: c.req.header('Content-Type'),
-      contentLength: c.req.header('Content-Length'),
-      body: c.req.raw.body,
-      durationMs: c.req.query('durationMs'),
-    });
-    return c.json({ message }, 201);
+  // `?mention=<agent id>`, repeated: agents tagged before recording (general-chat.md, decision 6).
+  const incoming = (c: Context<Env>): IncomingNote => ({
+    contentType: c.req.header('Content-Type'),
+    contentLength: c.req.header('Content-Length'),
+    body: c.req.raw.body,
+    durationMs: c.req.query('durationMs'),
+    mentions: c.req.queries('mention') ?? [],
   });
+  app.post('/agents/:id/voice-notes', async (c) =>
+    c.json({ message: await sendVoiceNote(voice, c.get('userId'), c.req.param('id'), incoming(c)) }, 201),
+  );
+  // A note in a chat by its id: General, the people's chat (general-chat.md).
+  app.post('/threads/:id/voice-notes', async (c) =>
+    c.json({ message: await sendVoiceNoteToThread(voice, c.get('userId'), c.req.param('id'), incoming(c)) }, 201),
+  );
 
   // Answers when the agent has answered: Cloud Run keeps the CPU only while a request is open.
   app.post('/voice-notes/:id/transcribe', async (c) =>

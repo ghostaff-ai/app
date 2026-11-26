@@ -28,8 +28,12 @@ export interface VoiceNoteStore {
   putAudio(path: string, audio: Uint8Array, mimeType: string): Promise<void>;
   getAudio(path: string): Promise<Uint8Array>;
   removeAudio(path: string): Promise<void>;
-  /** Writes the person's message holding the note, signed with their name in the organisation. */
-  addVoiceNote(note: { id: string; threadId: string; orgId: string; userId: string; part: VoicePart }): Promise<ChatMessage>;
+  /**
+   * Writes the person's message holding the note, signed with their name in
+   * the organisation; `mentions` («@Finanzas»), when it was tagged, as a text
+   * part before it.
+   */
+  addVoiceNote(note: { id: string; threadId: string; orgId: string; userId: string; part: VoicePart; mentions?: string }): Promise<ChatMessage>;
   message(id: string): Promise<ChatMessage | null>;
   setParts(id: string, parts: ChatMessage['parts']): Promise<void>;
 }
@@ -68,39 +72,75 @@ const EXTENSIONS: Record<string, string> = {
   'audio/flac': 'flac',
 };
 
+/** A voice note as it arrives: the audio, its length and the agents it is for (general-chat.md, decision 6). */
+export interface IncomingNote {
+  contentType: string | undefined;
+  contentLength: string | undefined;
+  body: ReadableStream<Uint8Array> | null;
+  durationMs: unknown;
+  /** Agents tagged before recording: ids, written as «@Name» before the note. */
+  mentions?: unknown[];
+}
+
 /**
- * Stores a voice note to `agentId` in the person's own chat with it, opening
- * the chat if it isn't yet, and returns the message, still to be transcribed.
+ * Stores a voice note to `agentId` in its chat, opening the chat if nobody has
+ * written in it yet, and returns the message, still to be transcribed.
  */
-export async function sendVoiceNote(
-  deps: VoiceNoteDeps,
-  userId: string,
-  agentId: unknown,
-  note: { contentType: string | undefined; contentLength: string | undefined; body: ReadableStream<Uint8Array> | null; durationMs: unknown },
-): Promise<ChatMessage> {
+export async function sendVoiceNote(deps: VoiceNoteDeps, userId: string, agentId: unknown, note: IncomingNote): Promise<ChatMessage> {
   if (!isUuid(agentId)) throw new Refusal(400, 'bad_request', 'agent must be a uuid');
   const agent = await deps.chat.chat.agent(agentId);
   if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
   if ((await deps.chat.chat.levelFor(agent.id, userId)) !== 'talk') throw new Refusal(403, 'not_allowed', 'you may not talk to this agent');
+  return storeNote(deps, userId, agent.orgId, () => deps.chat.chat.agentChat(agent.id), note);
+}
+
+/**
+ * Stores a voice note in a chat the person may write in, by its id: General,
+ * the people's chat (general-chat.md), or an agent's.
+ */
+export async function sendVoiceNoteToThread(deps: VoiceNoteDeps, userId: string, threadId: unknown, note: IncomingNote): Promise<ChatMessage> {
+  if (!isUuid(threadId)) throw new Refusal(400, 'bad_request', 'thread must be a uuid');
+  const thread = await deps.chat.chat.thread(threadId);
+  // A chat the person can't see is as unknown as a missing one.
+  const level = thread ? await deps.chat.chat.threadLevelFor(thread.id, userId) : 'none';
+  if (!thread || level === 'none') throw new Refusal(404, 'not_found', 'thread not found');
+  if (level !== 'talk') throw new Refusal(403, 'not_allowed', 'you may not write in this conversation');
+  return storeNote(deps, userId, thread.orgId, async () => thread.id, note);
+}
+
+/** «@Finanzas @Redes»: the organisation's agents among `ids`, by name; unknown ids are left out. */
+async function mentionText(deps: VoiceNoteDeps, orgId: string, ids: unknown[] | undefined): Promise<string> {
+  const wanted = new Set((ids ?? []).filter(isUuid));
+  if (wanted.size === 0) return '';
+  const agents = await deps.chat.chat.orgAgents(orgId);
+  return agents
+    .filter((a) => wanted.has(a.id))
+    .map((a) => `@${a.name}`)
+    .join(' ');
+}
+
+async function storeNote(deps: VoiceNoteDeps, userId: string, orgId: string, threadOf: () => Promise<string>, note: IncomingNote): Promise<ChatMessage> {
   const { voice, transcriber } = deps;
   if (!voice || !transcriber) throw off();
   const mimeType = audioType(note.contentType);
   // After access and the type, before the body is read: a runaway client costs nothing.
   if (!deps.limiter.take(userId)) throw new Refusal(429, 'too_many', 'too many voice notes in the last hour');
   const audio = await readAudio(note);
+  const tagged = await mentionText(deps, orgId, note.mentions);
 
-  const threadId = await deps.chat.chat.agentChat(agent.id);
+  const threadId = await threadOf();
   const id = randomUUID();
-  const path = `${agent.orgId}/${threadId}/${id}.${EXTENSIONS[mimeType] ?? 'audio'}`;
+  const path = `${orgId}/${threadId}/${id}.${EXTENSIONS[mimeType] ?? 'audio'}`;
   await voice.putAudio(path, audio, mimeType);
   let message: ChatMessage;
   try {
     message = await voice.addVoiceNote({
       id,
       threadId,
-      orgId: agent.orgId,
+      orgId,
       userId,
       part: { type: 'voice', path, mediaType: mimeType, durationMs: durationOf(note.durationMs), transcription: 'pending' },
+      ...(tagged ? { mentions: tagged } : {}),
     });
   } catch (e) {
     // No message points to it: don't keep the audio.
@@ -131,8 +171,10 @@ export async function transcribeVoiceNote(
   if (!part) throw new Refusal(400, 'bad_request', 'not a voice note');
   if (part.transcription === 'done' || part.transcription === 'empty') return { transcription: part.transcription, replied: false };
 
+  // The mentions written before the note stay before it; the transcript goes after it.
+  const before = message.parts.slice(0, message.parts.indexOf(part));
   const set = (transcription: VoicePart['transcription'], text?: string) =>
-    voice.setParts(message.id, [{ ...part, transcription }, ...(text ? [{ type: 'text', text }] : [])]);
+    voice.setParts(message.id, [...before, { ...part, transcription }, ...(text ? [{ type: 'text', text }] : [])]);
   // A retry shows «Transcribiendo…» again while it runs.
   if (part.transcription === 'failed') await set('pending');
   let text: string;
@@ -186,7 +228,7 @@ export function supabaseVoiceNoteStore(admin: SupabaseClient): VoiceNoteStore {
           author_kind: 'person',
           author_user: note.userId,
           author_name: (member?.display_name as string | undefined) ?? '',
-          parts: [note.part],
+          parts: [...(note.mentions ? [{ type: 'text', text: note.mentions }] : []), note.part],
         })
         .select(MESSAGE_COLUMNS)
         .single();

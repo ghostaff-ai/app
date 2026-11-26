@@ -53,6 +53,8 @@ function setup(
     tools?: AgentTools;
     /** The thread's agent (Finanzas by default). */
     agent?: ChatAgent;
+    /** The thread is General, the people's chat, with no agent of its own (general-chat.md). */
+    general?: boolean;
     asPerson?: AsPerson;
     asks?: AskStore;
     guidedToolsFor?: (orgId: string, agentId: string) => Promise<AgentTools>;
@@ -67,7 +69,7 @@ function setup(
   const levels = opts.levels ?? { ana: 'talk', bea: 'read' };
   const messages: ChatMessage[] = opts.messages ?? [msg({ text: '¿Cómo vamos este mes?' })];
   if (opts.expose) opts.expose.messages = messages;
-  const threads: ChatThreadHead[] = [{ id: THREAD, orgId: ORG, agentId: AGENT, title: 'Cierre' }];
+  const threads: ChatThreadHead[] = [{ id: THREAD, orgId: ORG, agentId: opts.general ? null : AGENT, title: opts.general ? 'General' : 'Cierre' }];
   const updates: Array<{ id: string; text?: string; steps?: string[]; state?: string; cards?: unknown[] }> = [];
   const proposed: Array<{ tool: string; input: unknown; label: string; requestedBy: string; messageId: string }> = [];
   const used: AiUse[] = [];
@@ -332,6 +334,29 @@ describe('an agent answering in a thread', () => {
     expect(updates).toEqual([]);
   });
 
+  it('in General, nobody answers a message that mentions no agent', async () => {
+    const { call, updates } = setup({ general: true, messages: [msg({ text: 'Mañana abrimos a las 7' })] });
+    expect(await (await call('ana', `/threads/${THREAD}/reply`)).json()).toEqual({ replied: false });
+    expect(updates).toEqual([]);
+  });
+
+  it('in General, an agent mentioned answers as whoever asked, told that the whole team reads it', async () => {
+    const asks = msg({ text: '@Finanzas ¿cómo vamos este mes?' });
+    const { call, updates, asked } = setup({ general: true, messages: [msg({ authorUserId: 'bea', authorName: 'Bea', text: 'Hola' }), asks] });
+    expect(await (await call('ana', `/threads/${THREAD}/reply`)).json()).toEqual({ replied: true });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.system).toContain('Eres Finanzas');
+    expect(asked[0]?.system).toContain('Te han mencionado en General');
+    expect(asked[0]?.system).not.toContain('conversación con');
+    expect(updates[updates.length - 1]).toMatchObject({ text: 'Vamos bien.', state: 'done' });
+  });
+
+  it('in General, an agent the asker may not talk to stays out', async () => {
+    const { call, updates } = setup({ general: true, levels: { ana: 'talk' }, messages: [msg({ text: '@Redes publica esto' })] });
+    expect(await (await call('ana', `/threads/${THREAD}/reply`)).json()).toEqual({ replied: false });
+    expect(updates).toEqual([]);
+  });
+
   it('a new agent opens its chat with the person who added it, and introduces itself there', async () => {
     const { call, updates, threads, asked } = setup({ messages: [] });
     const res = await call('ana', `/agents/${AGENT}/hello`);
@@ -484,14 +509,14 @@ describe('what waits for an answer in an agent’s chat', () => {
 
   it('starts after the agent’s last word in a chat from before the queue', () => {
     const ms = [msg({ text: 'Hola' }), agentSays(), msg({ authorUserId: 'bea', authorName: 'Bea', text: '¿Y?' })];
-    expect(waitingRuns(ms)).toEqual([{ authorId: 'bea', upTo: 2 }]);
+    expect(waitingRuns(ms)).toEqual([{ authorId: 'bea', from: 2, upTo: 2 }]);
   });
 
   it('starts after the last message a reply answered, whatever the agent wrote on its own since', () => {
     const ana = msg({ text: 'Hola' });
     const bea = msg({ authorUserId: 'bea', authorName: 'Bea', text: 'Y yo' });
     const ms = [ana, bea, agentSays({ replyTo: ana.id }), agentSays({ text: 'Informe del mes' })];
-    expect(waitingRuns(ms)).toEqual([{ authorId: 'bea', upTo: 1 }]);
+    expect(waitingRuns(ms)).toEqual([{ authorId: 'bea', from: 1, upTo: 1 }]);
   });
 
   it('groups one person’s messages in a row, and keeps the order of people', () => {
@@ -503,9 +528,9 @@ describe('what waits for an answer in an agent’s chat', () => {
       msg({ text: 'Cuatro' }),
     ];
     expect(waitingRuns(ms)).toEqual([
-      { authorId: 'ana', upTo: 2 },
-      { authorId: 'bea', upTo: 3 },
-      { authorId: 'ana', upTo: 4 },
+      { authorId: 'ana', from: 1, upTo: 2 },
+      { authorId: 'bea', from: 3, upTo: 3 },
+      { authorId: 'ana', from: 4, upTo: 4 },
     ]);
   });
 
@@ -534,6 +559,14 @@ describe('the chat as the model reads it', () => {
     expect(turns[0]?.content).toContain('Ana pidió el cierre.');
     expect(turns[0]?.content).toContain(CONVERSATION_TOOL);
     expect(turns[1]?.content).toBe('Ya está');
+  });
+
+  it('in General, picks only the agents mentioned, also before a voice note in the same burst', () => {
+    const who = (...texts: string[]) => whoAnswers(texts.map((text) => msg({ text })), null, [finanzas, redes], ['Bea']).map((a) => a.name);
+    expect(who('hola')).toEqual([]);
+    expect(who('@Bea mira')).toEqual([]);
+    expect(who('@Finanzas ¿cómo vamos?')).toEqual(['Finanzas']);
+    expect(who('@Finanzas escucha esto', 'lo que te cuento en el audio')).toEqual(['Finanzas']);
   });
 
   it('picks who answers: the thread\'s agent, the agents mentioned, or nobody', () => {

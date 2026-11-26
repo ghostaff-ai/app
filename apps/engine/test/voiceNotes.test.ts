@@ -13,6 +13,7 @@ const AGENT = '20000000-0000-0000-0000-000000000001';
 const CHAT = '30000000-0000-0000-0000-000000000009';
 const secretaria: ChatAgent = { id: AGENT, orgId: ORG, name: 'Secretaría', ghost: 'secretaria', department: 'direccion' };
 const MISSING = '40000000-0000-0000-0000-000000000000';
+const GENERAL = '30000000-0000-0000-0000-000000000001';
 
 function setup(
   opts: {
@@ -28,7 +29,8 @@ function setup(
   const messages: ChatMessage[] = [];
   const stored = new Map<string, { audio: Uint8Array; mimeType: string }>();
   const heard: Array<{ audio: Uint8Array; mimeType: string }> = [];
-  const threads: ChatThreadHead[] = [];
+  // General, the people's chat, exists with the organisation (general-chat.md).
+  const threads: ChatThreadHead[] = [{ id: GENERAL, orgId: ORG, agentId: null, title: 'General' }];
   const opened: string[] = [];
   const asked: unknown[] = [];
 
@@ -53,7 +55,7 @@ function setup(
         authorUserId: note.userId,
         authorAgentId: null,
         authorName: note.userId === 'ana' ? 'Ana' : 'Bea',
-        parts: [note.part],
+        parts: [...(note.mentions ? [{ type: 'text', text: note.mentions }] : []), note.part],
         state: 'done',
         steps: [],
         createdAt: new Date(2026, 10, 23, 10, messages.length).toISOString(),
@@ -152,8 +154,14 @@ function setup(
     expect(res.status).toBe(201);
     return ((await res.json()) as { message: ChatMessage }).message;
   };
-  const voicePart = (m: ChatMessage) => m.parts[0] as unknown as VoicePart;
-  return { send, sent, transcribe, messages, stored, heard, opened, asked, voicePart };
+  const sendTo = (thread: string, query = '?durationMs=4200', user = 'ana') =>
+    app.request(`/threads/${thread}/voice-notes${query}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer token-${user}`, 'Content-Type': 'audio/mp4' },
+      body: new Uint8Array([1, 2, 3]),
+    });
+  const voicePart = (m: ChatMessage) => m.parts.find((p) => p.type === 'voice') as unknown as VoicePart;
+  return { send, sent, sendTo, transcribe, messages, stored, heard, opened, asked, voicePart };
 }
 
 describe('POST /agents/:id/voice-notes', () => {
@@ -316,5 +324,41 @@ describe('POST /voice-notes/:id/transcribe', () => {
     const note = await h.sent();
     h.messages[0]!.parts = [{ type: 'text', text: 'Hola' }];
     expect((await h.transcribe(note.id)).status).toBe(400);
+  });
+});
+
+describe('POST /threads/:id/voice-notes (General, general-chat.md)', () => {
+  it('stores a note in General, and nobody answers it once transcribed', async () => {
+    const { sendTo, transcribe, stored, opened, asked, voicePart } = setup();
+    const res = await sendTo(GENERAL);
+    expect(res.status).toBe(201);
+    const { message } = (await res.json()) as { message: ChatMessage };
+    expect(message.threadId).toBe(GENERAL);
+    expect(voicePart(message).path).toBe(`${ORG}/${GENERAL}/${message.id}.m4a`);
+    expect(stored.size).toBe(1);
+    expect(opened).toEqual([]);
+    expect(await (await transcribe(message.id)).json()).toEqual({ transcription: 'done', replied: false });
+    expect(asked).toEqual([]);
+  });
+
+  it('a note tagged before recording reaches that agent, its mention kept before the audio', async () => {
+    const { sendTo, transcribe, messages, asked } = setup();
+    const res = await sendTo(GENERAL, `?durationMs=4200&mention=${AGENT}&mention=${MISSING}&mention=nope`);
+    const { message } = (await res.json()) as { message: ChatMessage };
+    expect(message.parts[0]).toEqual({ type: 'text', text: '@Secretaría' });
+    expect(await (await transcribe(message.id)).json()).toEqual({ transcription: 'done', replied: true });
+    const note = messages.find((m) => m.id === message.id)!;
+    expect(note.parts.map((p) => p.type)).toEqual(['text', 'voice', 'text']);
+    expect(JSON.stringify(asked[0])).toMatch(/Ana \([^)]*\): @Secretaría/);
+    expect(JSON.stringify(asked[0])).toContain('Llama mañana al proveedor de harina.');
+  });
+
+  it('needs someone who may write in that chat', async () => {
+    const { sendTo, stored } = setup();
+    expect((await sendTo(GENERAL, undefined, 'carla')).status).toBe(403);
+    expect((await sendTo(GENERAL, undefined, 'zoe')).status).toBe(404);
+    expect((await sendTo(MISSING)).status).toBe(404);
+    expect((await sendTo('nope')).status).toBe(400);
+    expect(stored.size).toBe(0);
   });
 });
