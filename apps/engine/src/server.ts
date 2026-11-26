@@ -229,6 +229,7 @@ const chatDeps: ChatDeps = {
   costOf,
   toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
   asPerson,
+  orgReader: admin,
   jobs,
   asks: supabaseAskStore(admin),
   guidedToolsFor: guidedTools,
