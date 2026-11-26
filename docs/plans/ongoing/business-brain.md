@@ -40,7 +40,7 @@ What is missing:
 2. **No photo or PDF in the chat**, only text and voice notes. The app already has `expo-image-picker` and `expo-image-manipulator` (guides).
 3. **No tool to read a link** someone pastes.
 4. **Nowhere in the app to open what was filed.** Registro shows only decisions; a reply's links open only `http(s)` and `mailto` (`OPENABLE` in `components/chat/Markdown.tsx`).
-5. **«Sobre ti» doesn't exist**: agent-memory.md builds it after the Empresa and agent stores (its decision 7). See Open questions.
+5. **«Sobre ti» doesn't exist**: agent-memory.md builds it after the Empresa and agent stores (its decision 7). Until then Secretaría files nothing private (decision 7 below).
 
 ## Design: the first way in, the chat with Secretaría
 
