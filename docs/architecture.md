@@ -61,6 +61,8 @@ An agent row says how it runs (`agents.runner`):
 
 **Routines** ([agent-routines.md](plans/ongoing/agent-routines.md)): whatever the runner, a person may give an agent routines, «cada viernes a las 9, mándame el resumen de ventas». On the tick, a due routine is a message the clock writes for its creator: the engine answers it in their chat with the agent as it would answer them, with a chat turn (`chat`) or a run (`ghostaff`); no settings tools, since nobody is there to read as. A team routine's answer is copied to everyone else who sees the agent; one with nothing to tell (`SIN NOVEDAD`) leaves nothing. `ordago_job` agents take none. An agent's own `schedule` (from its definition) still starts its usual task as below.
 
+**What each reply or run costs, and what came of it** ([model-routing.md](plans/ongoing/model-routing.md), phase 0): every `chat` reply and `ghostaff` run writes a row to `ai_usage` with its account, model, effort, tokens (uncached, cache read, cache write), estimated cost, and the agent's message or run it paid for; `tier` stays empty until the model policy routes. `ai_reply_outcomes()` reads, as the caller, what a person did next with each reply: approved its card as drafted, approved it after «Editar», rejected it, or wrote again (to be classified later). «Editar»: a writing tool declares the text fields a person may change on its card before approving (`Tool.editable`); the engine accepts only those, keeps the agent's draft in `agent_actions.drafted_input` and runs the edited input. Every reply today runs at one effort, `CHAT_EFFORT` (`apps/engine/src/chat.ts`).
+
 A run on our runner, end to end:
 
 1. A person writes to the agent, or the tick finds its timetable or one of its routines due.

@@ -838,10 +838,17 @@ export async function disconnectAccount(engine: EngineAccess, orgId: string, pro
 /**
  * An owner's answer to an action an agent proposed (a card in its message):
  * approving runs it with the organisation's connected account; the card then
- * shows how it went. Anyone but an owner is refused.
+ * shows how it went. Anyone but an owner is refused. `edits`, on approving:
+ * the person's changes to its editable text, by field («Editar»).
  */
-export async function decideAction(engine: EngineAccess, actionId: string, decision: 'approve' | 'reject'): Promise<{ status: string; result?: string }> {
-  return callEngine(engine, 'POST', `/actions/${encodeURIComponent(actionId)}/${decision}`);
+export async function decideAction(
+  engine: EngineAccess,
+  actionId: string,
+  decision: 'approve' | 'reject',
+  edits?: Record<string, string>,
+): Promise<{ status: string; result?: string }> {
+  const body = decision === 'approve' && edits && Object.keys(edits).length ? { edits } : undefined;
+  return callEngine(engine, 'POST', `/actions/${encodeURIComponent(actionId)}/${decision}`, body);
 }
 
 /**
