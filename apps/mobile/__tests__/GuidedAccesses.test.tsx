@@ -25,6 +25,9 @@ jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 let mockRefocus: () => void = () => {};
 jest.mock('expo-router', () => ({
   router: { push: (...a: unknown[]) => mockPush(...a) },
+  Link: ({ children }: { children: unknown }) => children,
+  usePathname: () => '/empresa/conexiones',
+  useGlobalSearchParams: () => ({}),
   useFocusEffect: (effect: () => void) => {
     const { useEffect } = require('react');
     useEffect(() => {

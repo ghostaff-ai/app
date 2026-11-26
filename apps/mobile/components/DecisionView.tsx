@@ -20,8 +20,7 @@ import { usePalette } from '@/lib/theme';
 // button. The full context stays one tap away. An answer given here can be
 // taken back until the sync has handed it to the agent.
 
-// The decision screen on the phone (app/(app)/decision/[id].tsx), and the
-// detail beside the list on a desktop's Hoy (docs/plans/ideas/desktop-web.md).
+// The decision screen (app/(app)/decision/[id].tsx).
 export function DecisionView({ id, onAnswered }: { id: string | undefined; onAnswered?: () => void }) {
   const { decision, loading, error, answer, takeBack, streak } = useDecision(id);
   const { active } = useActiveOrg();

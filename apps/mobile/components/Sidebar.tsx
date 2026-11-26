@@ -1,70 +1,22 @@
-import { router, usePathname, type Href } from 'expo-router';
-import { useEffect, type ReactNode } from 'react';
+import { Link, router, usePathname, type Href } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
-import { spaceLook, type SpaceLook } from '@ghostaff/shared';
+import { spaceLook } from '@ghostaff/shared';
+import { Buildings, CaretDown, Icon, LinkSimple, SealCheck, Tray, User, UsersThree, type IconComponent } from '@/components/icons';
+import { SpaceAvatar } from '@/components/SpaceAvatar';
 import { useInbox } from '@/lib/hooks/useDecisions';
+import { desktopSection, type DesktopNav } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useProfile } from '@/lib/profile/ProfileContext';
-import { SpaceAvatar } from '@/components/SpaceAvatar';
 import { usePalette } from '@/lib/theme';
 
-// The desktop's navigation (docs/plans/ideas/desktop-web.md): it stands in for
-// the phone's three tabs (three-tabs.md). The organisation's name on top opens
-// the switcher, as in the space's own page (Empresa or Perfil).
+// The desktop's navigation (docs/plans/ongoing/desktop-web.md, decision 4): the
+// phone's three tabs (three-tabs.md), and under the space's own page
+// (Empresa, or Perfil in a personal space) its Conexiones and Registro, one
+// click away because a desk is where things are set up. The space's name on
+// top opens the switcher, as on top of every tab on a phone.
 
-type Item = { href: Href; label: string; icon: (color: string) => ReactNode; match: (path: string) => boolean };
-
-const stroke = { fill: 'none', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
-
-const ITEMS: Item[] = [
-  {
-    href: '/',
-    label: 'Equipo',
-    match: (p) => p === '/' || p.startsWith('/chat') || p.startsWith('/agente') || p.startsWith('/conversacion') || p.startsWith('/acceso') || p.startsWith('/anadir-agente'),
-    icon: (c) => (
-      <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
-        <Circle cx={9} cy={8} r={3.5} />
-        <Path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5" />
-        <Circle cx={17} cy={9} r={2.5} />
-        <Path d="M17 14c2.3.2 3.9 1.9 4.5 4.5" />
-      </Svg>
-    ),
-  },
-  {
-    href: '/decisiones',
-    label: 'Decisiones',
-    match: (p) => p.startsWith('/decisiones') || p.startsWith('/decision/'),
-    icon: (c) => (
-      <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
-        <Circle cx={12} cy={12} r={9} />
-        <Path d="M8 12.5l2.7 2.7L16 9.8" />
-      </Svg>
-    ),
-  },
-];
-
-const SPACE_ICONS: Record<SpaceLook['icon'], (color: string) => ReactNode> = {
-  building: (c) => (
-    <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
-      <Path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M2.5 21h19M8 8h3M8 12h3M8 16h3" />
-    </Svg>
-  ),
-  person: (c) => (
-    <Svg width={18} height={18} viewBox="0 0 24 24" {...stroke} stroke={c}>
-      <Circle cx={12} cy={8} r={4} />
-      <Path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" />
-    </Svg>
-  ),
-};
-
-// The third item is the space's own page: «Perfil» or «Empresa» (spaces.ts).
-const spaceItem = (look: SpaceLook): Item => ({
-  href: '/empresa',
-  label: look.tab,
-  match: (p) => p.startsWith('/empresa') || p.startsWith('/herramientas'),
-  icon: SPACE_ICONS[look.icon],
-});
+type Item = { nav: DesktopNav; href: Href; label: string; icon: IconComponent; under?: boolean };
 
 const initials = (name: string | null | undefined) =>
   (name ?? '')
@@ -84,6 +36,16 @@ export function Sidebar() {
   // Answering a decision happens on another route: count again on every move.
   useEffect(() => void reload(), [path, reload]);
   const waiting = inbox.decisions.filter((d) => !d.answer).length;
+  const look = spaceLook(active?.kind);
+  const current = desktopSection(path).nav;
+
+  const items: Item[] = [
+    { nav: 'equipo', href: '/', label: 'Equipo', icon: UsersThree },
+    { nav: 'decisiones', href: '/decisiones', label: 'Decisiones', icon: SealCheck },
+    { nav: 'empresa', href: '/empresa', label: look.tab, icon: look.icon === 'person' ? User : Buildings },
+    { nav: 'conexiones', href: '/empresa/conexiones', label: 'Conexiones', icon: LinkSimple, under: true },
+    { nav: 'registro', href: '/empresa/registro', label: 'Registro', icon: Tray, under: true },
+  ];
 
   return (
     <View accessibilityRole="navigation" className="w-60 border-r border-line bg-surface px-4 py-5">
@@ -91,34 +53,37 @@ export function Sidebar() {
         accessibilityRole="button"
         accessibilityLabel={`${active?.name ?? ''}. Cambiar de espacio`}
         onPress={() => router.push('/organizaciones')}
-        className="mb-4 flex-row items-center rounded-xl border border-line bg-card px-3 py-2.5"
+        className="mb-4 min-h-11 flex-row items-center rounded-xl border border-line bg-card px-3 py-2.5 hover:bg-sunk"
       >
         {active ? <SpaceAvatar space={active} /> : null}
         <Text className="ml-2.5 flex-1 font-display text-base text-ink" numberOfLines={1}>
           {active?.name}
         </Text>
-        <Text className="text-sm text-muted">▾</Text>
+        <Icon icon={CaretDown} size={14} color={c.muted} weight="bold" />
       </Pressable>
 
-      {[...ITEMS, spaceItem(spaceLook(active?.kind))].map((item) => {
-        const on = item.match(path);
-        const badge = item.label === 'Decisiones' && waiting > 0 ? waiting : 0;
+      {items.map((item) => {
+        const on = item.nav === current;
+        const badge = item.nav === 'decisiones' ? waiting : 0;
         return (
-          <Pressable
-            key={item.label}
-            accessibilityRole="link"
-            accessibilityState={{ selected: on }}
-            onPress={() => router.navigate(item.href)}
-            className={`mb-1 flex-row items-center rounded-xl px-3 py-2.5 ${on ? 'bg-sunk' : ''}`}
-          >
-            {item.icon(c.ink)}
-            <Text className={`ml-2.5 flex-1 text-sm text-ink ${on ? 'font-semibold' : ''}`}>{item.label}</Text>
-            {badge ? (
-              <View accessibilityLabel={`${badge} te esperan`} className="min-w-5 items-center rounded-full bg-waiting px-1.5 py-0.5">
-                <Text className="text-xs font-semibold text-white">{badge}</Text>
-              </View>
-            ) : null}
-          </Pressable>
+          <Link key={item.nav} href={item.href} asChild>
+            <Pressable
+              testID={`sidebar-${item.nav}`}
+              accessibilityRole="link"
+              aria-current={on ? 'page' : undefined}
+              className={`mb-1 min-h-11 flex-row items-center rounded-xl px-3 py-2 ${item.under ? 'ml-5' : ''} ${on ? 'bg-sunk' : 'hover:bg-sunk'}`}
+            >
+              <Icon icon={item.icon} size={18} color={on ? c.ink : c.muted} weight={on ? 'regular' : 'light'} />
+              <Text className={`ml-2.5 flex-1 text-sm text-ink ${on ? 'font-semibold' : ''}`} numberOfLines={1}>
+                {item.label}
+              </Text>
+              {badge > 0 ? (
+                <View accessibilityLabel={`${badge} te esperan`} className="min-w-5 items-center rounded-full bg-waiting px-1.5 py-0.5">
+                  <Text className="text-xs font-semibold text-white">{badge}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+          </Link>
         );
       })}
 
@@ -129,7 +94,7 @@ export function Sidebar() {
           <View className="h-7 w-7 items-center justify-center rounded-full bg-sunk">
             <Text className="text-xs font-semibold text-ink">{initials(profile.fullName)}</Text>
           </View>
-          <Text className="ml-2.5 text-sm text-muted" numberOfLines={1}>
+          <Text className="ml-2.5 flex-1 text-sm text-muted" numberOfLines={1}>
             {profile.fullName}
           </Text>
         </View>

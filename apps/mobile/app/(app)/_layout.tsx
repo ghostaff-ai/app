@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { useRef } from 'react';
 import { View } from 'react-native';
 import { CloseButton } from '@/components/CloseButton';
+import { DesktopListColumn } from '@/components/DesktopListColumn';
 import { Sidebar } from '@/components/Sidebar';
 import { Button, Loading, Notice } from '@/components/ui';
 import { canRunAgents } from '@/lib/connections';
@@ -29,6 +30,8 @@ export default function AppLayout() {
   // A modal's way out: an X on the right, not a back arrow (welcome-and-spaces.md).
   const modal = { presentation: 'modal', headerBackVisible: false, headerLeft: () => null, headerRight: () => <CloseButton /> } as const;
   const desktop = useIsDesktop();
+  // On a desktop a chat opens beside Equipo's list, which is the way back: no arrow.
+  const beside = desktop ? ({ headerBackVisible: false, headerLeft: () => null } as const) : {};
   const connections = useConnections(org.active?.id ?? null);
   // Wait for the connections only on the way in: switching or creating an
   // organisation keeps the screens mounted and the gate follows once they're read.
@@ -67,11 +70,11 @@ export default function AppLayout() {
         <Stack.Screen name="agente/[id]" options={{ title: '' }} />
         <Stack.Screen name="acceso/[id]" options={{ title: 'Quién puede' }} />
         <Stack.Screen name="herramientas/[id]" options={{ title: 'Herramientas' }} />
-        <Stack.Screen name="conversacion/[id]" options={{ title: '' }} />
+        <Stack.Screen name="conversacion/[id]" options={{ ...beside, title: '' }} />
         <Stack.Screen name="nueva-conversacion/[agent]" options={{ title: 'Nueva conversación' }} />
         <Stack.Screen name="visibilidad/[id]" options={{ title: 'Quién la ve', presentation: 'modal' }} />
         <Stack.Screen name="conversaciones/[id]" options={{ title: 'Conversaciones nuevas' }} />
-        <Stack.Screen name="chat/[agent]" options={{ title: '' }} />
+        <Stack.Screen name="chat/[agent]" options={{ ...beside, title: '' }} />
         <Stack.Screen name="rutinas/[agent]" options={{ title: 'Rutinas' }} />
         <Stack.Screen name="rutina" options={{ ...modal, title: 'Nueva rutina' }} />
         <Stack.Screen name="guia/[id]" options={{ title: '' }} />
@@ -105,11 +108,13 @@ export default function AppLayout() {
   );
 
   // On a desktop, once inside an organisation, the sidebar stands beside every
-  // screen (docs/plans/ideas/desktop-web.md); the way in keeps the whole window.
+  // screen, and Equipo's or Conexiones' list beside the item it opened
+  // (docs/plans/ongoing/desktop-web.md); the way in keeps the whole window.
   if (!desktop || !inOrg || needsAi) return stack;
   return (
     <View className="flex-1 flex-row bg-surface">
       <Sidebar />
+      <DesktopListColumn />
       <View className="flex-1">{stack}</View>
     </View>
   );

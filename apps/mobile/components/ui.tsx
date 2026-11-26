@@ -1,3 +1,4 @@
+import { Link, type Href } from 'expo-router';
 import { Children, createContext, isValidElement, useContext, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { CaretRight, Check, Icon, type IconComponent, MagnifyingGlass, XCircle } from '@/components/icons';
@@ -394,6 +395,9 @@ export function ListRow({
   accessibilityLabel,
   accessibilityHint,
   checked,
+  selected,
+  href,
+  replace,
 }: {
   title: string;
   subtitle?: string | null;
@@ -413,6 +417,12 @@ export function ListRow({
   accessibilityHint?: string;
   /** One of a few choices: read out as a radio button, with a check when chosen. */
   checked?: boolean;
+  /** The item open beside its list, on a desktop (lib/layout.ts). */
+  selected?: boolean;
+  /** It goes somewhere: a link on the web (a new tab with a modifier click), a push on a phone. */
+  href?: Href;
+  /** With `href`: take the current screen's place instead of going on top of it. */
+  replace?: boolean;
 }) {
   const { first } = useContext(RowPlace);
   const c = usePalette();
@@ -453,6 +463,23 @@ export function ListRow({
     </>
   );
   const row = 'flex-row items-center pl-4';
+  const label = accessibilityLabel ?? (subtitle ? `${title}. ${subtitle}` : title);
+  if (href)
+    return (
+      <Link href={href} replace={replace} asChild>
+        <Pressable
+          testID={testID}
+          accessibilityRole="link"
+          aria-current={selected ? 'page' : undefined}
+          accessibilityLabel={label}
+          accessibilityHint={accessibilityHint}
+          onPress={onPress}
+          className={`${row} ${selected ? 'bg-sunk' : 'active:bg-sunk hover:bg-sunk'}`}
+        >
+          {body}
+        </Pressable>
+      </Link>
+    );
   if (!onPress)
     return (
       <View testID={testID} className={row}>
@@ -463,11 +490,11 @@ export function ListRow({
     <Pressable
       testID={testID}
       accessibilityRole={checked === undefined ? 'button' : 'radio'}
-      accessibilityState={checked === undefined ? undefined : { checked }}
-      accessibilityLabel={accessibilityLabel ?? (subtitle ? `${title}. ${subtitle}` : title)}
+      accessibilityState={checked !== undefined ? { checked } : selected !== undefined ? { selected } : undefined}
+      accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
       onPress={onPress}
-      className={`${row} active:bg-sunk`}
+      className={`${row} ${selected ? 'bg-sunk' : 'active:bg-sunk hover:bg-sunk'}`}
     >
       {body}
     </Pressable>
