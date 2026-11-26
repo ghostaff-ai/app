@@ -16,7 +16,7 @@ import { agentHello, type ChatDeps, replyInThread, resumeInThread } from './chat
 import { approveGuide, checkGuide, type GuideDeps, getGuide, guidedAccessUndo, guideStep, MAX_STEP_BODY, pendingGuides, rejectGuide, removeGuidedAccess } from './guides';
 import { PHOTO_TOO_BIG } from './guideModel';
 import { reportRun } from './jobs';
-import { runGoogleToken, runRecordToken, runSpec } from './runner';
+import { runGoogleToken, runRepoToken, runRecordToken, runSpec } from './runner';
 import { clientMetadataDocument } from './mcp';
 import { connectAi, type Deps, disconnectAi, Refusal, requireOwner } from './connections';
 import { bearer, type CallerFromToken } from './googleCaller';
@@ -150,6 +150,16 @@ export function createApp(deps: AppDeps) {
     const body = await c.req.json().catch(() => null);
     c.header('Cache-Control', 'no-store');
     return c.json(await runRecordToken(deps.chat.jobs, caller, c.req.param('id'), body));
+  });
+
+  app.post('/runs/:id/repo-token', async (c) => {
+    const reports = deps.reports;
+    const token = bearer(c.req.header('Authorization'));
+    const caller = reports && token ? await reports.callerFromToken(token, reports.audience) : null;
+    if (!reports || !caller || !deps.chat.jobs?.runner) return c.json({ error: 'unauthorized' }, 401);
+    const body = await c.req.json().catch(() => null);
+    c.header('Cache-Control', 'no-store');
+    return c.json(await runRepoToken(deps.chat.jobs, caller, c.req.param('id'), body));
   });
 
   app.post('/runs/:id/google-token', async (c) => {

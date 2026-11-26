@@ -234,6 +234,7 @@ describe("a routine's run on our runner", () => {
     description: null,
     task: 'Revisa la ley.',
     taskInRecord: false,
+    repos: [],
     model: 'm',
     tools: [],
     maxTurns: 10,

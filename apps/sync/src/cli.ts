@@ -145,6 +145,15 @@ async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff';
   const orgId = await orgBySlug(db, opts.org);
   const agents = readProjectAgents(opts.from, { runner: opts.runner, only: opts.only, onDemand: opts.onDemand });
   if (agents.length === 0) throw new Error('No agent to import: check --from and --only');
+  // Other repos are reached through the record's GitHub App installation: a record on GitHub, first.
+  const withRepos = agents.filter((a) => a.runner === 'ghostaff' && a.repos.length > 0);
+  if (withRepos.length > 0) {
+    const { data: org, error } = await db.from('organizations').select('record_host').eq('id', orgId).single<{ record_host: string | null }>();
+    if (error) throw error;
+    if (org.record_host !== 'github') {
+      throw new Error(`${withRepos.map((a) => a.slug).join(', ')} use other repos, which need ${opts.org}'s record on GitHub (it is ${org.record_host ?? 'not set'})`);
+    }
+  }
   // Upsert by (org, slug): running it again refreshes the job and the text, and keeps the agent's
   // threads, runs and access levels. The partial unique index needs the conflict target spelled out.
   for (const a of agents) {
@@ -168,7 +177,8 @@ async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff';
       ? await db.from('agents').update(row).eq('id', found.id)
       : await db.from('agents').insert({ ...row, org_id: orgId, member_default: 'read' });
     if (error) throw error;
-    const where = a.runner === 'ghostaff' ? `our runner, ${a.model}${a.schedule ? '' : ', when written to'}` : a.job_name;
+    const repos = a.runner === 'ghostaff' && a.repos.length ? `, with ${a.repos.map((r) => `${r.repo}${r.write ? ' (writes)' : ''}`).join(', ')}` : '';
+    const where = a.runner === 'ghostaff' ? `our runner, ${a.model}${a.schedule ? '' : ', when written to'}${repos}` : a.job_name;
     console.log(`${found ? 'updated' : 'added  '} ${a.name.padEnd(11)} ${a.department.padEnd(10)} ${where}`);
   }
 }
