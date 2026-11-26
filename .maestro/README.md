@@ -45,7 +45,7 @@ never touches another app's emulator or your phone.
   are there; a flow run alone skips it. No engine runs in e2e, so the agent's answer in
   `team-chat.yaml` is written by `scripts/agent-reply.js` the way the engine leaves a finished
   one; the real engine with a stand-in model is the step after
-  ([the plan](../docs/plans/ongoing/e2e-decision-and-chat-flows.md)).
+  ([why](../docs/decisions/e2e-seeded-record-and-scripted-reply.md)).
 - `flows/google/` signs in with Google for real. It needs, once:
   1. a Google account on the emulator: boot it with a window (`pnpm e2e:avd`), Settings,
      Passwords & accounts, Add account, Google, and sign in by hand;
