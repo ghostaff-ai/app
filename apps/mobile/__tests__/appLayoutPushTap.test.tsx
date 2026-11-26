@@ -22,6 +22,7 @@ jest.mock('@/lib/layout', () => ({ useIsDesktop: () => false }));
 jest.mock('@/lib/header', () => ({ headerFor: () => ({}) }));
 jest.mock('@/lib/theme', () => ({ usePalette: () => ({}) }));
 jest.mock('@/components/Sidebar', () => ({ Sidebar: () => null }));
+jest.mock('@/components/DesktopListColumn', () => ({ DesktopListColumn: () => null }));
 jest.mock('@/components/CloseButton', () => ({ CloseButton: () => null }));
 jest.mock('@/components/ui', () => ({ Loading: () => null, Notice: () => null, Button: () => null }));
 jest.mock('expo-router', () => {

@@ -2,8 +2,7 @@ import type { PendingGuide } from '@ghostaff/shared';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
-import { Group } from '@/components/connections/Group';
-import { Button, ListRow } from '@/components/ui';
+import { Button, ListRow, ListSection } from '@/components/ui';
 import { checkedWhen } from '@/lib/guide';
 
 // «Pendientes de aprobar» in Conexiones (docs/plans/ongoing/guided-access.md, decision 2):
@@ -52,13 +51,11 @@ function PendingRow({ guide, decide }: { guide: PendingGuide; decide: (id: strin
 
 /** The section, or nothing when no guide waits. */
 export function PendingGuides({
-  desktop,
   items,
   failed,
   reload,
   decide,
 }: {
-  desktop: boolean;
   items: PendingGuide[];
   failed: boolean;
   reload: () => Promise<void>;
@@ -66,24 +63,22 @@ export function PendingGuides({
 }) {
   if (failed && items.length === 0) {
     return (
-      <Group desktop={desktop} header="Pendientes de aprobar">
-        {[
-          <View key="failed" className="px-4 py-3">
-            <Text className="text-footnote text-no">No hemos podido cargar lo pendiente de aprobar.</Text>
-            <View className="mt-2 self-start">
-              <Button label="Reintentar" variant="secondary" size="small" onPress={() => void reload()} />
-            </View>
-          </View>,
-        ]}
-      </Group>
+      <ListSection header="Pendientes de aprobar">
+        <View className="px-4 py-3">
+          <Text className="text-footnote text-no">No hemos podido cargar lo pendiente de aprobar.</Text>
+          <View className="mt-2 self-start">
+            <Button label="Reintentar" variant="secondary" size="small" onPress={() => void reload()} />
+          </View>
+        </View>
+      </ListSection>
     );
   }
   if (items.length === 0) return null;
   return (
-    <Group desktop={desktop} header="Pendientes de aprobar" footer="Lo hizo alguien del equipo. Al aprobarlo, el agente tiene ese acceso y sigue con lo que le pidieron.">
+    <ListSection header="Pendientes de aprobar" footer="Lo hizo alguien del equipo. Al aprobarlo, el agente tiene ese acceso y sigue con lo que le pidieron.">
       {items.map((g) => (
         <PendingRow key={g.id} guide={g} decide={decide} />
       ))}
-    </Group>
+    </ListSection>
   );
 }
