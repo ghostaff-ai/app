@@ -1,7 +1,7 @@
 // The record sync's database side, with the service role (apps/engine only).
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { applySync, markWrittenBack, type SyncAgent } from '@ghostaff/shared/record';
+import { applySync, type ExternalSyncRow, markWrittenBack, type SyncAgent } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
 import type { RecordAgent } from './recordProvision';
 import type { RecordOrg, RecordSyncStore } from './recordSync';
@@ -86,6 +86,40 @@ export function supabaseRecordStore(db: SupabaseClient): RecordSyncStore {
         .update(change.inRecord ? { task: change.task, task_in_record: true } : { task_in_record: false })
         .eq('id', agentId);
       if (error) throw error;
+    },
+    async externalParties(orgId) {
+      const { data, error } = await db
+        .from('external_parties')
+        .select('id, path, kind, name, role, departments, email, phone, website, added_by_name, added_at, proposed_by_name, content_hash, pending, updated_at')
+        .eq('org_id', orgId)
+        .returns<ExternalSyncRow[]>();
+      if (error) throw error;
+      return data ?? [];
+    },
+    async applyExternal(orgId, plan) {
+      // Every upsert carries the same columns (ExternalUpsert), so one batch writes no NULL over a column.
+      if (plan.upserts.length) {
+        const { error } = await db.from('external_parties').upsert(plan.upserts, { onConflict: 'org_id,path' });
+        if (error) throw error;
+      }
+      if (plan.deletes.length) {
+        const { error } = await db.from('external_parties').delete().eq('org_id', orgId).in('id', plan.deletes);
+        if (error) throw error;
+      }
+    },
+    async markExternalWritten(written) {
+      for (const w of written) {
+        if (w.hash === null) {
+          const { error } = await db.from('external_parties').delete().eq('id', w.rowId).eq('pending', 'remove');
+          if (error) throw error;
+          continue;
+        }
+        // The file is the row's now, whatever happens next; only a row nobody changed since is done.
+        const { error } = await db.from('external_parties').update({ path: w.path, content_hash: w.hash }).eq('id', w.rowId);
+        if (error) throw error;
+        const { error: done } = await db.from('external_parties').update({ pending: null }).eq('id', w.rowId).eq('updated_at', w.updatedAt);
+        if (done) throw done;
+      }
     },
     async syncState(orgId, err) {
       const { error } = await db

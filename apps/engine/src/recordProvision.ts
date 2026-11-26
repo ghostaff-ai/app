@@ -42,10 +42,12 @@ commit, con quién lo hizo y cuándo.
 - \`memoria/agentes/<agente>/\`: lo que cada agente ha aprendido haciendo su trabajo. Cada agente escribe solo en la suya.
 - \`agentes/<agente>/AGENTS.md\`: las instrucciones de cada agente. Solo las cambian personas, desde Ghostaff.
 - \`por-decidir/\`: lo que espera la decisión de una persona.
+- \`externos/\`: las personas, empresas y servicios con los que trabaja ${orgName}, y qué hace cada uno. Los añade o confirma una persona desde Ghostaff; un agente los propone.
 `,
     },
     { path: 'memoria/empresa/.gitkeep', content: '' },
     { path: 'por-decidir/.gitkeep', content: '' },
+    { path: 'externos/.gitkeep', content: '' },
   ];
 }
 

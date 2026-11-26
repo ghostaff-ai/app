@@ -63,7 +63,7 @@ describe('records for every organisation', () => {
       adminUser: 'ghostaff',
       agentsOf: async (orgId) => (orgId === ORG_ID ? agents : []),
     });
-    expect(did).toEqual(['owner', `record records/${ORG_ID} [AGENTS.md, memoria/empresa/.gitkeep, por-decidir/.gitkeep] hook:legal`]);
+    expect(did).toEqual(['owner', `record records/${ORG_ID} [AGENTS.md, memoria/empresa/.gitkeep, por-decidir/.gitkeep, externos/.gitkeep] hook:legal`]);
     expect(set).toEqual([`${ORG_ID} records/${ORG_ID}`]);
     expect(out).toEqual([`panaderia: record made, records/${ORG_ID}`, 'taller: record not made: Forgejo 500 on POST /orgs/records/repos']);
   });
@@ -116,6 +116,9 @@ describe('which records this engine reaches', () => {
         syncState: async () => {},
         instructedAgents: async () => [],
         setInstructions: async () => {},
+        externalParties: async () => [],
+        applyExternal: async () => {},
+        markExternalWritten: async () => {},
       },
     });
     expect(r).toEqual([]);
@@ -158,6 +161,9 @@ describe('the sync on a record in our record store', () => {
           markWrittenBack: async () => {},
           syncState: async () => {},
           instructedAgents: async () => [{ id: 'a-seo', slug: 'seo', task: null, taskInRecord: false }],
+          externalParties: async () => [],
+          applyExternal: async () => {},
+          markExternalWritten: async () => {},
           setInstructions: async (id, change) => void instructed.push([id, change]),
         },
       },

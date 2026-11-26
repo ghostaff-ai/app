@@ -83,6 +83,17 @@ describe('forgejoRepo', () => {
     });
   });
 
+  it('deletes a file with the sha it had, and skips one already gone', async () => {
+    let sent: any;
+    const { f } = fake({ ...base, 'POST /repos/records/org-1/contents': (b) => ((sent = b), { status: 201, body: {} }) });
+    const r = forgejoRepo(CFG, repo, f);
+    expect(await r.commit({ branch: 'main', sha: 'head1' }, [{ path: 'por-decidir/a.yaml', content: null }, { path: 'nada.md', content: null }], 'externos')).toBe(true);
+    expect(sent.files).toEqual([{ operation: 'delete', path: 'por-decidir/a.yaml', sha: 's-a' }]);
+    sent = undefined;
+    expect(await r.commit({ branch: 'main', sha: 'head1' }, [{ path: 'nada.md', content: null }], 'externos')).toBe(true);
+    expect(sent).toBeUndefined();
+  });
+
   it('answers false when the record moved under a file (409)', async () => {
     const { f } = fake({ ...base, 'POST /repos/records/org-1/contents': () => ({ status: 409, body: { message: 'sha does not match' } }) });
     expect(await forgejoRepo(CFG, repo, f).commit({ branch: 'main', sha: 'head1' }, [{ path: 'por-decidir/a.yaml', content: 'x' }], 'm')).toBe(false);
