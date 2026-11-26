@@ -1,4 +1,4 @@
--- The organisation's secrets an agent gets as variables (20261126800000_agent_secrets.sql):
+-- The organisation's secrets an agent gets as variables (20261127100000_agent_secrets.sql):
 -- a map of variable to secret name, never a value; no variable the runner or a tool relies on;
 -- and no one but the service role sets it.
 begin;
