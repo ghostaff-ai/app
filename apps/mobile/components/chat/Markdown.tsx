@@ -1,4 +1,6 @@
 import { splitMentions } from '@ghostaff/shared';
+import { MEMORY_LINK_PREFIX, memoryPath } from '@ghostaff/shared';
+import { router } from 'expo-router';
 import { Lexer, type Token, type Tokens } from 'marked';
 import { Fragment, type ReactNode, useMemo } from 'react';
 import { Linking, Platform, Text, View } from 'react-native';
@@ -72,6 +74,14 @@ function Inline({ tokens, names }: { tokens: Token[]; names: string[] }) {
           case 'link': {
             const link = t as Tokens.Link;
             const children = <Inline tokens={link.tokens} names={names} />;
+            // A file of the organisation's memory opens in the app (business-brain.md); only a path the memory could hold.
+            const inApp = link.href.startsWith(MEMORY_LINK_PREFIX) ? memoryPath(link.href) : null;
+            if (inApp)
+              return (
+                <Text key={i} className="text-accent underline" accessibilityRole="link" onPress={() => router.push(`${MEMORY_LINK_PREFIX}${inApp}`)}>
+                  {children}
+                </Text>
+              );
             // A reply is untrusted: only these schemes open, anything else is plain text.
             if (!OPENABLE.test(link.href)) return <Fragment key={i}>{children}</Fragment>;
             return (

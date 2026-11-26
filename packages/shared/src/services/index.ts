@@ -174,6 +174,43 @@ export async function listDecidedDecisions(client: SupabaseClient, orgId: string
   return (data ?? []).map(decisionFromRow);
 }
 
+/** A file of the organisation's memory, as the app shows it (business-brain.md); the record is its master. */
+export interface MemoryNote {
+  /** Inside the store, e.g. `proveedores/gestoria.md`. */
+  path: string;
+  content: string;
+  updatedAt: string;
+  /** As its last commit signs it («Secretaría (por Ana)»); null when it came from the record another way. */
+  updatedBy: string | null;
+}
+
+/** The organisation's memory, the latest changed first, without each file's text. */
+export async function listMemories(client: SupabaseClient, orgId: string): Promise<Omit<MemoryNote, 'content'>[]> {
+  const { data, error } = await client
+    .from('memories')
+    .select('path, updated_at, updated_by')
+    .eq('org_id', orgId)
+    .eq('store', 'empresa')
+    .order('updated_at', { ascending: false })
+    .limit(1000)
+    .returns<Array<{ path: string; updated_at: string; updated_by: string | null }>>();
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ path: r.path, updatedAt: r.updated_at, updatedBy: r.updated_by }));
+}
+
+/** One file of the organisation's memory, or null when it isn't there (or no longer). */
+export async function readMemory(client: SupabaseClient, orgId: string, path: string): Promise<MemoryNote | null> {
+  const { data, error } = await client
+    .from('memories')
+    .select('path, content, updated_at, updated_by')
+    .eq('org_id', orgId)
+    .eq('store', 'empresa')
+    .eq('path', path)
+    .maybeSingle<{ path: string; content: string; updated_at: string; updated_by: string | null }>();
+  if (error) throw error;
+  return data ? { path: data.path, content: data.content, updatedAt: data.updated_at, updatedBy: data.updated_by } : null;
+}
+
 /** How many decisions wait for a person in each of these organisations (none listed: 0). */
 export async function countWaiting(client: SupabaseClient, orgIds: string[]): Promise<Record<string, number>> {
   const counts: Record<string, number> = Object.fromEntries(orgIds.map((id) => [id, 0]));

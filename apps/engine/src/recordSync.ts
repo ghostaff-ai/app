@@ -33,6 +33,7 @@ import {
 } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
 import { type ForgejoConfig, forgejoRepo } from './forgejo';
+import { type MemoryStore, projectMemory } from './memory';
 import { GITHUB_API, githubHeaders, type RepoTokens } from './githubApp';
 
 type Fetch = typeof fetch;
@@ -104,6 +105,8 @@ export interface RecordSyncDeps {
   tokens: RepoTokens | null;
   /** Our record store; null when this environment has none. */
   forgejo: ForgejoConfig | null;
+  /** The organisation's memory (memory.ts): projected from a record in our record store; none without it. */
+  memory?: MemoryStore;
   fetch?: Fetch;
   now?: () => Date;
 }
@@ -142,6 +145,10 @@ export interface RecordRepo {
   files(dir: string, ref: string): Promise<{ name: string; content: string }[]>;
   /** One file at `ref`, or null. */
   file(path: string, ref: string): Promise<string | null>;
+  /** Every file under `dir` at `ref`, at any depth: its path inside `dir` and its blob; empty when the folder does not exist. */
+  tree(dir: string, ref: string): Promise<{ path: string; sha: string }[]>;
+  /** A blob's text, by the sha `tree` gave. */
+  blob(sha: string): Promise<string>;
   /** One commit on top of `head` writing these files, or deleting those whose content is null; false when the record moved meanwhile. */
   commit(head: { branch: string; sha: string }, files: RecordChange[], message: string): Promise<boolean>;
 }
@@ -172,6 +179,14 @@ export function githubRepo(repo: string, token: string, f: Fetch = fetch): Recor
     const b = must(await call<{ content: string; encoding: string }>('GET', `/git/blobs/${sha}`), `blob ${sha}`);
     return Buffer.from(b.content, b.encoding === 'base64' ? 'base64' : 'utf8').toString('utf8');
   };
+  /** A folder's tree sha, from its parent's listing; null when it does not exist. */
+  const dirSha = async (dir: string, ref: string): Promise<string | null> => {
+    const parts = dir.split('/').filter(Boolean);
+    const name = parts.pop();
+    if (!name) return null;
+    const list = await call<Array<{ name: string; type: string; sha: string }>>('GET', `/contents${parts.length ? `/${parts.join('/')}` : ''}?ref=${ref}`);
+    return (Array.isArray(list) ? list : []).find((e) => e.name === name && e.type === 'dir')?.sha ?? null;
+  };
   return {
     /** The default branch and the commit at its head. */
     async head(): Promise<{ branch: string; sha: string }> {
@@ -193,6 +208,14 @@ export function githubRepo(repo: string, token: string, f: Fetch = fetch): Recor
       const e = await call<{ sha: string; type: string }>('GET', `/contents/${path}?ref=${ref}`);
       return e && e.type === 'file' ? blob(e.sha) : null;
     },
+    async tree(dir: string, ref: string): Promise<{ path: string; sha: string }[]> {
+      const sha = await dirSha(dir, ref);
+      if (!sha) return [];
+      const t = must(await call<{ tree: Array<{ path: string; type: string; sha: string }>; truncated: boolean }>('GET', `/git/trees/${sha}?recursive=1`), 'tree');
+      if (t.truncated) throw new GithubError(413, `tree ${dir} (too many files)`);
+      return t.tree.filter((e) => e.type === 'blob').map((e) => ({ path: e.path, sha: e.sha }));
+    },
+    blob,
     /** One commit on top of `head` with these files; false when the branch moved meanwhile. */
     async commit(head: { branch: string; sha: string }, files: RecordChange[], message: string): Promise<boolean> {
       const parent = must(await call<{ tree: { sha: string } }>('GET', `/git/commits/${head.sha}`), 'commit');
@@ -283,6 +306,8 @@ export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<Org
     const plan = planSync({ orgId: org.id, files, existing: await deps.store.decisions(org.id), agents: await deps.store.agents(org.id), commit: head.sha, now });
     await deps.store.apply(plan);
     const instructions = await projectInstructions(deps.store, gh, org.id, head.sha);
+    // Only a record in our record store has a memory the chat reads (memory.ts).
+    if (org.host === 'ghostaff' && deps.memory) instructions.push(...(await projectMemory(deps.memory, gh, org.id, head.sha)));
 
     const written: string[] = [];
     let waits: string | null = null;
@@ -348,6 +373,13 @@ export async function openDecision(
     return { decisionId, recordId: id };
   }
   throw new Error('the record kept moving; try again');
+}
+
+/** The organisation's record when it is in our record store and this engine reaches it: the one whose memory the chat reads and writes. */
+export async function ownRecordRepo(deps: RecordSyncDeps, orgId: string): Promise<RecordRepo | null> {
+  if (!deps.forgejo) return null;
+  const org = await deps.store.orgWithRecord(orgId);
+  return org?.host === 'ghostaff' ? forgejoRepo(deps.forgejo, org.repo, deps.fetch) : null;
 }
 
 /** Every organisation with a record this engine can reach, one after another. */
