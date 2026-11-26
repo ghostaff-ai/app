@@ -2,7 +2,7 @@
 
 **Priority:** high — Órdago's founders talk about the business in a Telegram group the agents never read; moving that talk into Ghostaff is how the agents learn what the people decide
 **Gate:** blocked:ghostaff-ai/app#84 (one chat per agent) and ghostaff-ai/app#81 (agent context): both change `threads`, `chat.ts` and the voice notes this builds on
-**Next:** PR 1 (Tasks, below) on `feat/general-chat`, branched from `develop` once #84 and #81 have landed: the migration and its pgTAP test first, then the engine, then the app; land it with `pnpm pr:land`
+**Next:** land PR 1 ([ghostaff-ai/app#94](https://github.com/ghostaff-ai/app/pull/94), stacked on #84) with `pnpm pr:land` once #84 is in `develop`; then PR 2, the daily summary
 
 **Goal:** Every organisation has one chat called **General** where its people talk to each other, mostly by voice notes, as in a WhatsApp group. Agents stay out of it unless someone @mentions one. What is said there reaches every agent once a day as a summary, and any agent can search it.
 
@@ -45,7 +45,7 @@ Jaime, 2026-11-26, after the plan's review (all my picks):
 - **In Equipo**, General is pinned first, above Secretaría, with a group icon and its last line («Álvaro: 🎤 1:24»). It shows only once the organisation has two or more people: alone, there is nobody to talk to. That works the same in a company and in a personal space, so no screen checks `kind` (welcome-and-spaces.md).
 - **The screen**, `app/(app)/general.tsx`: the header says «General» and the members' names. Messages from others sit on the left in bubbles with their name; yours sit on the right. Agents (only when mentioned) are flat with their ghost, as in their chats. The composer is today's: the mic when the box is empty, send when there is text, and @ suggests the agents the person may talk to and the members.
 - **Voice notes in General**: the same recorder, bucket, part and player. `VoiceNote` takes `transcript: 'shown' | 'folded'`. In General it is folded behind «Ver transcripción», and its states («Transcribiendo…», «No se ha podido transcribir · Reintentar») show only when unfolded or failed.
-- **Pushes**: a person's message in General sends a push to every other member who has a phone. Title: the author's name. Body: the text, or «Nota de voz · 0:38». Tapping it opens `/general`. A new `push_outbox.kind = 'message'` carries it, so `reply` keeps meaning an agent answered. Pushes about the same thread collapse into one (`collapse_id` = the thread), as in WhatsApp.
+- **Pushes**: a person's message in General sends a push to every other member who has a phone. Title: the author's name. Body: the text, or «Nota de voz · 0:38». Tapping it opens `/general`. It rides on `push_outbox.kind = 'reply'` (built: one row per person and message, closed as read once they read the chat, stale after an hour), which already means «a message in a chat for you»; a kind of its own would have copied all of that. Pushes about the same thread collapse into one (`collapse_id` = the thread), as in WhatsApp.
 
 ### Agents in General
 
@@ -90,14 +90,17 @@ PR 2, the daily summary:
 
 ## Tasks
 
-### PR 1: General
+### PR 1: General ([ghostaff-ai/app#94](https://github.com/ghostaff-ai/app/pull/94), stacked on #84, 2026-11-26)
 
-1. [ ] Migration and pgTAP test. `pnpm db:test`.
-2. [ ] Engine, test first: a thread without an agent in `answerWaiting` and `whoAnswers`; `POST /threads/:id/voice-notes`.
-3. [ ] Shared: services and types, with tests.
-4. [ ] App: General in Equipo and on the desktop list, the screen, the folded transcript, the push route; Jest.
-5. [ ] Maestro flow `general-chat.yaml`; `pnpm e2e`.
-6. [ ] Check on the web against local Supabase with two people: a text and a voice note live on the other screen, nobody answering, an @Secretaría answered in General, the push queued. `pnpm check`, then `pnpm pr:land`.
+1. [x] Migration `20261127000000_general_chat.sql` and pgTAP `general_chat.test.sql`; the older chat tests scoped to agent chats.
+2. [x] Engine: a thread without an agent in `answerWaiting`, `whoAnswers` over a person's whole burst; `POST /threads/:id/voice-notes` and `?mention=` on both voice-note routes.
+3. [x] Shared: `ChatThread.kind`, `lastVoiceMs`, `sendVoiceNoteToThread`, `onlyMentions`, with tests.
+4. [x] App: General pinned in Equipo and beside it on the desktop, `/general`, the folded transcript, a colleague's note drawn as audio in every chat (it was its transcript only), the tagged note from the composer; Jest.
+5. [x] Maestro flow `general-chat.yaml`. Not run locally (no Android SDK on this Mac): CI runs it.
+6. [x] Checked on the web against a local Supabase with two people: General pinned with its unread dot, a voice note played from the bucket and its transcript unfolded, texts live both ways, a plain message answered by nobody, @Secretaría answering in General (stand-in key, so «No he podido contestar»), phone width and dark mode. `pnpm check` and `pnpm db:test` green.
+7. [ ] `pnpm pr:land` once #84 is in `develop`; then on the beta app: a real voice note between two phones, its push.
+
+Not covered by tests or the local check: real recording and transcription of a note to General (the local engine has no Vertex), and pushes reaching a phone.
 
 ### PR 2: the daily summary
 
