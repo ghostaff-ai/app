@@ -2,7 +2,7 @@
 
 **Priority:** high — people talk in Ghostaff the way they talk in WhatsApp, or they go back to WhatsApp (and Telegram)
 **Gate:** blocked:ghostaff-ai/app#94 (General), which this builds on; phase 1 is stacked on it
-**Next:** phase 1 on `feat/chat-look`, stacked on `feat/general-chat`
+**Next:** land the stack once #84 is in `develop`, in order: #94 (General) → #98 (its daily summary) → #99 → #100 → #102 → #103, each with `pnpm pr:land`; then try recording, files and typing on two phones with the beta
 
 Jaime (2026-11-26), after trying General on the web: «es feísima la interfaz». Days, times, emoji, replying to one message and files are missing; the audio box is ugly; holding the mic should record, and keep recording for a long note. «Revisa cómo es la interfaz de WhatsApp y haz una interfaz y mete funcionalidades igual de top». It covers General ([general-chat.md](general-chat.md)) and every chat with an agent ([group-chat-per-agent.md](../ongoing/group-chat-per-agent.md)): one set of components for both.
 
@@ -45,3 +45,12 @@ My calls, stated so they can be undone:
 - Jest for the day labels, the list with separators, the bubble's time and ticks, the composer's hold, slide and lock; the Maestro flows that tap the old mic or look for the old layout updated.
 
 Phases 2 to 4 are written against that day's code when each starts.
+
+## Progress (2026-11-26, all four phases built, waiting on #84 to land)
+
+- [x] Phase 1, [ghostaff-ai/app#99](https://github.com/ghostaff-ai/app/pull/99): bubbles for everyone (agents included), time and read ticks (`thread_read_by_all`), day pills, «sin leer», the scroll button; voice notes with waveform (`VoicePart.waveform`), seek, speed and the unplayed dot, no transcript in General; hold to record, slide to cancel or lock, pause.
+- [x] Phase 2, [ghostaff-ai/app#100](https://github.com/ghostaff-ai/app/pull/100): long-press menu (six reactions and any emoji, Responder, Copiar, Reenviar a un agente, Fijar, Editar 15 min, Eliminar for everyone), swipe to reply with a quote snapshot, live reactions (`message_reactions`), a pinned message, the emoji panel; agents read quotes and forwards.
+- [x] Phase 3, [ghostaff-ai/app#102](https://github.com/ghostaff-ai/app/pull/102): clip (Documento, Fotos, Cámara) and camera; the private bucket `documents` with plain keys; photos in the bubble and full screen, document cards; each chat's Archivos and Empresa › Archivos; agents see the photos they are asked about. `expo-document-picker` is a new native module: the next beta is a build.
+- [x] Phase 4, [ghostaff-ai/app#103](https://github.com/ghostaff-ai/app/pull/103): «está escribiendo / grabando un audio» on a private Realtime broadcast per chat, search in the chat, link previews from public pages.
+
+Not checked anywhere but a phone: recording itself (the browser pane blocks the microphone), the system's photo and document pickers, the camera. Left for later: agents reading PDFs and other documents (business-brain.md, PR 2), sticky day pills, a mini-player for a note while you leave the chat, «visto por» per person.
