@@ -70,7 +70,7 @@ describe('routines as settings (agent-routines.md)', () => {
     id, org_id: 'o', name, ghost, department: 'finanzas', member_default: 'read', chat_default: 'private', runner: 'chat', accounts: null, created_at: '',
   });
   const routineRow = {
-    id: routine, org_id: 'o', agent_id: finanzas, created_by: 'u', audience: 'me', title: 'Ventas', instruction: 'Resumen de ventas',
+    id: routine, org_id: 'o', agent_id: finanzas, created_by: 'u', title: 'Ventas', instruction: 'Resumen de ventas',
     kind: 'days', weekdays: [5], month_day: null, hour: 9, minute: 0, timezone: 'Europe/Madrid', paused: false, paused_reason: null,
     last_fired_at: '', created_at: '',
   };
@@ -93,27 +93,31 @@ describe('routines as settings (agent-routines.md)', () => {
   }
   const tool = (name: string) => SETTING_TOOLS.find((t) => t.name === name)!;
 
-  it('turns «los viernes a las 9» into a card its asker approves, for «Solo para mí»', async () => {
-    const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: secretaria };
-    const input = { agent_id: finanzas, audience: 'me', title: 'Ventas', instruction: 'Mándame el resumen de ventas', days: [5], hour: 9 };
+  it('turns «los viernes a las 9» into a card its asker approves, for the team (group-chat-per-agent.md, decision 6)', async () => {
+    const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: secretaria, userId: 'u' };
+    const input = { agent_id: finanzas, title: 'Ventas', instruction: 'Mándame el resumen de ventas', days: [5], hour: 9 };
     expect(await tool('settings_create_routine').describe!(ctx, input)).toEqual({
       label: 'Rutina de Finanzas: «Ventas»',
-      preview: 'Cuándo: Cada viernes, 9:00\nQué: Mándame el resumen de ventas\nPara: solo para quien la pide',
+      preview: 'Cuándo: Cada viernes, 9:00\nQué: Mándame el resumen de ventas\nLo lee: todo el equipo que ve al agente',
       decider: 'requester',
     });
-    expect((await tool('settings_create_routine').describe!(ctx, { ...input, audience: 'team' })).decider).toBe('owner');
+  });
+
+  it('leaves a change to someone else\'s routine to an owner', async () => {
+    const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: secretaria, userId: 'otra' };
+    expect((await tool('settings_pause_routine').describe!(ctx, { routine_id: routine, paused: true })).decider).toBe('owner');
   });
 
   it('refuses a timetable that is not one, in words', async () => {
     const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: secretaria };
-    const input = { agent_id: finanzas, audience: 'me', title: 'Ventas', instruction: 'x', days: [], hour: 9 };
+    const input = { agent_id: finanzas, title: 'Ventas', instruction: 'x', days: [], hour: 9 };
     await expect(tool('settings_create_routine').describe!(ctx, input)).rejects.toThrow('Elige al menos un día.');
     await expect(tool('settings_create_routine').describe!(ctx, { ...input, days: [1], hour: 25 })).rejects.toBeInstanceOf(SettingError);
   });
 
   it('lets an agent that is not the main one propose only its own', async () => {
     const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: secretaria, onlySelf: true };
-    const input = { agent_id: finanzas, audience: 'me', title: 'Ventas', instruction: 'x', hour: 9 };
+    const input = { agent_id: finanzas, title: 'Ventas', instruction: 'x', hour: 9 };
     await expect(tool('settings_create_routine').describe!(ctx, input)).rejects.toThrow(/Solo puedes proponer rutinas tuyas/);
     await expect(tool('settings_pause_routine').describe!(ctx, { routine_id: routine, paused: true })).rejects.toBeInstanceOf(SettingError);
     const own: SettingsContext = { ...ctx, agentId: finanzas };
@@ -122,7 +126,7 @@ describe('routines as settings (agent-routines.md)', () => {
 
   it('pauses through the function the screen calls, never deletes', async () => {
     const calls: Array<[string, unknown]> = [];
-    const ctx: SettingsContext = { client: client(calls), orgId: 'o', agentId: secretaria };
+    const ctx: SettingsContext = { client: client(calls), orgId: 'o', agentId: secretaria, userId: 'u' };
     expect(await tool('settings_pause_routine').describe!(ctx, { routine_id: routine, paused: true })).toEqual({
       label: 'Pausar la rutina «Ventas»',
       preview: 'Ahora: Cada viernes, 9:00\nDespués: en pausa',

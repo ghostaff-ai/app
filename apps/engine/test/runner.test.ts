@@ -212,7 +212,7 @@ function setup(
     useConnection: async (id, connectionId) => {
       runs.get(id)!.connectionId = connectionId;
     },
-    routineAsk: async (id) => (id === ROUTINE ? { title: 'Ley', instruction: 'Mira si cambió la ley', audience: 'me', from: 'Ana' } : null),
+    routineAsk: async (id) => (id === ROUTINE ? { title: 'Ley', instruction: 'Mira si cambió la ley', from: 'Ana' } : null),
     setTranscript: async (id, path) => {
       runs.get(id)!.transcriptPath = path;
     },

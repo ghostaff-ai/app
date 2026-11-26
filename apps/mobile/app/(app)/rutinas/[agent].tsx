@@ -10,10 +10,10 @@ import { useRoutines } from '@/lib/hooks/useRoutines';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 
 // An agent's routines (agent-routines.md), opened from the clock on its chat
-// or the row on its page: what it does on its own, at an hour, and whose
-// chat its answer reaches. The person's own first, then the team's. A tap
-// opens one to change, pause or delete it. Only its creator changes a «Solo
-// para mí» one, only an owner a team's (the database checks it too).
+// or the row on its page: what it does on its own, at an hour, answering in
+// its chat, which everyone with access reads (group-chat-per-agent.md,
+// decision 6). The person's own first, then the rest. A tap opens one to
+// change, pause or delete it: its creator or an owner (the database checks it too).
 
 export default function Rutinas() {
   const { agent: agentId } = useLocalSearchParams<{ agent: string }>();
@@ -32,9 +32,9 @@ export default function Rutinas() {
   const me = session?.user.id;
   const owner = active?.role === 'owner';
   const canTalk = levels[agent.id] === 'talk' && agent.runner !== 'ordago_job';
-  const mine = items.filter((r) => r.audience === 'me');
-  const team = items.filter((r) => r.audience === 'team');
-  const mayChange = (r: Routine) => (r.audience === 'me' ? r.createdBy === me : owner);
+  const mine = items.filter((r) => r.createdBy === me);
+  const others = items.filter((r) => r.createdBy !== me);
+  const mayChange = (r: Routine) => r.createdBy === me || owner;
   const add = () => router.push({ pathname: '/rutina', params: { agent: agent.id } });
 
   const row = (r: Routine) => (
@@ -57,7 +57,7 @@ export default function Rutinas() {
           title="Ninguna rutina todavía"
           body={
             canTalk
-              ? `${agent.name} puede hacer algo solo, a su hora, y contestarte en vuestro chat. Por ejemplo: «cada viernes a las 9, mándame el resumen de ventas».`
+              ? `${agent.name} puede hacer algo solo, a su hora, y contestar en su chat. Por ejemplo: «cada viernes a las 9, mándame el resumen de ventas».`
               : `${agent.name} no tiene rutinas que puedas ver.`
           }
           action={canTalk ? <Button testID="routine-new" label="Nueva rutina" onPress={add} /> : undefined}
@@ -65,14 +65,10 @@ export default function Rutinas() {
       ) : (
         <>
           <Text className="mt-2 px-1 text-base text-muted">
-            Lo que {agent.name} hace solo, a su hora. Lo que conteste te llega a tu chat con {agent.name}.
+            Lo que {agent.name} hace solo, a su hora. Lo que conteste queda en su chat, que lee todo el que tiene acceso.
           </Text>
           {mine.length > 0 ? <ListSection header="Tuyas">{mine.map(row)}</ListSection> : null}
-          {team.length > 0 ? (
-            <ListSection header="Del equipo" footer="Su respuesta llega a todas las personas que ven a este agente.">
-              {team.map(row)}
-            </ListSection>
-          ) : null}
+          {others.length > 0 ? <ListSection header="Del resto del equipo">{others.map(row)}</ListSection> : null}
           {canTalk ? (
             <View className="mt-8">
               <Button testID="routine-new" label="Nueva rutina" onPress={add} />

@@ -25,7 +25,7 @@ export interface RoutineStore {
   claim(id: string, prev: string, to: Date): Promise<boolean>;
   /** Pauses a routine the engine cannot run any more, saying why. */
   pause(id: string, reason: 'creator_gone'): Promise<void>;
-  /** Its creator's name, if they may still have it run: a member who talks to the agent, and an owner for the team's. */
+  /** Its creator's name, if they may still have it run: a member who talks to the agent. */
   creator(r: Routine): Promise<{ name: string } | null>;
   /** A word from the main agent in its chat. */
   notifyOwners(orgId: string, text: string): Promise<number>;
@@ -66,11 +66,10 @@ async function fire(chat: ChatDeps, deps: JobDeps, store: RoutineStore, r: Routi
   const creator = r.createdBy ? await store.creator(r) : null;
   if (!r.createdBy || !creator) {
     await store.pause(r.id, 'creator_gone');
-    const what = r.audience === 'team' ? `la rutina «${r.title}» de ${agent.name}` : `una rutina personal de ${agent.name}`;
     await store.notifyOwners(
       r.orgId,
-      `He pausado ${what}: quien la creó ya no está en la empresa o ya no puede hablar con ${agent.name}. ` +
-        (r.audience === 'team' ? 'Puedes reanudarla desde la ficha del agente, en Rutinas.' : 'Si vuelve a tener acceso, puede reanudarla.'),
+      `He pausado la rutina «${r.title}» de ${agent.name}: quien la creó ya no está en la empresa o ya no puede hablar con ${agent.name}. ` +
+        'Quien sea propietario puede reanudarla desde la ficha del agente, en Rutinas.',
     );
     return false;
   }
@@ -112,7 +111,7 @@ async function answerInChat(chat: ChatDeps, deps: JobDeps, r: Routine, agent: Ch
 }
 
 const ROUTINE_COLUMNS =
-  'id, org_id, agent_id, created_by, audience, title, instruction, kind, weekdays, month_day, hour, minute, timezone, paused, paused_reason, last_fired_at, created_at';
+  'id, org_id, agent_id, created_by, title, instruction, kind, weekdays, month_day, hour, minute, timezone, paused, paused_reason, last_fired_at, created_at';
 
 function check<T>(r: { data: T; error: unknown }): T {
   if (r.error) throw r.error;
@@ -141,7 +140,6 @@ export function supabaseRoutineStore(admin: SupabaseClient): RoutineStore {
         await admin.from('memberships').select('role, display_name').eq('org_id', r.orgId).eq('user_id', r.createdBy).maybeSingle(),
       ) as { role: string; display_name: string } | null;
       if (!m) return null;
-      if (r.audience === 'team' && m.role !== 'owner') return null;
       const level = check(await admin.rpc('agent_level_for', { target_agent: r.agentId, member: r.createdBy })) as string;
       return level === 'talk' ? { name: m.display_name } : null;
     },

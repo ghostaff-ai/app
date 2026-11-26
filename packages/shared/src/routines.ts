@@ -4,9 +4,6 @@
 // one place that turns them into the next time it fires, for the engine's
 // tick and the app's clock, and into the words people read («Cada viernes, 9:00»).
 
-export const ROUTINE_AUDIENCES = ['me', 'team'] as const;
-export type RoutineAudience = (typeof ROUTINE_AUDIENCES)[number];
-
 export const ROUTINE_KINDS = ['days', 'monthly'] as const;
 export type RoutineKind = (typeof ROUTINE_KINDS)[number];
 
@@ -32,8 +29,8 @@ export interface Routine extends RoutineWhen {
   id: string;
   orgId: string;
   agentId: string;
+  /** Who made it: they or an owner change it; everyone who sees the agent reads its answers. */
   createdBy: string | null;
-  audience: RoutineAudience;
   /** A few words: «Resumen de ventas». */
   title: string;
   /** What the agent is asked, as the person would write it. */

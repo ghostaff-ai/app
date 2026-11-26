@@ -326,7 +326,7 @@ export function MessageView({
   asks?: AskControls;
   /** The title of the routine that started this answer, when the viewer sees it. */
   routineTitle?: string | null;
-  /** The viewer: their own «Solo para mí» routine's card is theirs to decide, owner or not. */
+  /** The viewer: a card for a routine they asked for is theirs to decide, owner or not. */
   me?: string;
   /** What an agent's guide cards can do here (guided-access.md). */
   guides?: GuideControls;

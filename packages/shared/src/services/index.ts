@@ -34,7 +34,7 @@ import type {
 } from '../models';
 import { ACTION_KIND } from '../models';
 import { type ChatMessage, type ChatThread, isDecisionQuotePart, type MessagePart, type OrgMember } from '../chat';
-import type { Routine, RoutineAudience, RoutineWhen, Weekday } from '../routines';
+import type { Routine, RoutineWhen, Weekday } from '../routines';
 
 // The only place the app talks to the database. Screens, hooks and components
 // call these functions, never `supabase.from(...)` (the same rule as
@@ -1454,7 +1454,6 @@ export interface RoutineRow {
   org_id: string;
   agent_id: string;
   created_by: string | null;
-  audience: RoutineAudience;
   title: string;
   instruction: string;
   kind: Routine['kind'];
@@ -1475,7 +1474,6 @@ export function routineFromRow(r: RoutineRow): Routine {
     orgId: r.org_id,
     agentId: r.agent_id,
     createdBy: r.created_by,
-    audience: r.audience,
     title: r.title,
     instruction: r.instruction,
     kind: r.kind,
@@ -1492,7 +1490,7 @@ export function routineFromRow(r: RoutineRow): Routine {
 }
 
 const ROUTINE_COLUMNS =
-  'id, org_id, agent_id, created_by, audience, title, instruction, kind, weekdays, month_day, hour, minute, timezone, paused, paused_reason, last_fired_at, created_at';
+  'id, org_id, agent_id, created_by, title, instruction, kind, weekdays, month_day, hour, minute, timezone, paused, paused_reason, last_fired_at, created_at';
 
 /** The routines the person sees in an organisation (or with one agent), oldest first. */
 export async function listRoutines(client: SupabaseClient, orgId: string, agentId?: string): Promise<Routine[]> {
@@ -1518,16 +1516,16 @@ const whenArgs = (w: RoutineInput) => ({
   minute: w.minute,
 });
 
-/** A new routine with an agent the person may talk to; «Para todo el equipo» is an owner's. */
-export async function createRoutine(client: SupabaseClient, agentId: string, audience: RoutineAudience, r: RoutineInput): Promise<Routine> {
+/** A new routine with an agent the person may talk to: the team's, as every routine (group-chat-per-agent.md, decision 6). */
+export async function createRoutine(client: SupabaseClient, agentId: string, r: RoutineInput): Promise<Routine> {
   const { data, error } = await client
-    .rpc('create_routine', { target_agent: agentId, audience, ...whenArgs(r) })
+    .rpc('create_routine', { target_agent: agentId, ...whenArgs(r) })
     .single<RoutineRow>();
   if (error) throw error;
   return routineFromRow(data);
 }
 
-/** What it does and when; it starts again from now. Its creator for «Solo para mí», an owner for the team's. */
+/** What it does and when; it starts again from now. Its creator or an owner. */
 export async function updateRoutine(client: SupabaseClient, routineId: string, r: RoutineInput): Promise<Routine> {
   const { data, error } = await client
     .rpc('update_routine', { target_routine: routineId, ...whenArgs(r) })
