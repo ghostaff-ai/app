@@ -1,8 +1,8 @@
 # What a chat agent reads on each turn: a summary, the latest messages and a search, never the whole conversation
 
 **Priority:** high — with one group chat per agent the conversation grows without end, and what a turn carries decides how good and how dear every reply is
-**Gate:** none
-**Next:** PR 1 (Tasks, below) on `feat/agent-context`: the migration and its pgTAP test first, then `context.ts` with its tests, then the engine; land it with `pnpm pr:land`
+**Gate:** blocked:business-brain — PR 2 needs chat agents to reach the record, which business-brain's PR 1 (ghostaff-ai/app#91) gives them (recheck 2026-11-30)
+**Next:** once #91 lands, plan PR 2 (Tasks, below) against that day's code: the agent writes what should still be true tomorrow through the memory tools at the end of each turn
 
 Jaime (2026-11-24), on the line «the engine reads the last 40 messages» in [group-chat-per-agent.md](group-chat-per-agent.md): sending the last 40 messages «no tiene sentido». He decided how it works instead on 2026-11-26 (Decisions, below).
 
@@ -51,7 +51,10 @@ The prefix a turn sends is `tools` → `system` → summary → messages, and st
 
 ## Tasks
 
-### PR 1: summary, latest messages, search, caching
+### PR 1: summary, latest messages, search, caching — landed
+
+Merged 2026-11-26 as ghostaff-ai/app#81. Still to check on beta: the «chat usage» log shows cache reads on a second reply within five minutes, and a long chat gets a row in `conversation_summaries`.
+
 
 1. Migration and pgTAP test (File Structure). `pnpm db:test`.
 2. `context.ts`, test first: the window under the budget, the ceiling, the summary turn; `summarizeIfLong` folds the oldest messages up to the first unfinished one and leaves `KEEP_VERBATIM`, never saves a summary older than the one stored, fails quietly; the search tool's input checks and output.
