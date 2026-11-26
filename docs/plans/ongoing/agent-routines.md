@@ -2,9 +2,11 @@
 
 **Priority:** high — «runs its routine work» is half of what Ghostaff promises, and today no customer can make an agent work on a timetable: only we can, by CLI
 **Gate:** none
-**Next:** once the deploy of #70 is on beta, make a «Solo para mí» routine with a chat agent a few minutes ahead and check it answers in your chat; then one by asking Secretaría, approving its card
+**Next:** once group-chat-per-agent's two PRs are on beta, make a routine with a chat agent a few minutes ahead and check it answers in the agent's chat; then one by asking Secretaría, approving its card
 
 **Goal:** Anyone who talks to an agent can give it routines («cada viernes a las 9, mándame el resumen de ventas»), from a clock on top of its chat or by asking, and each routine's answer lands in their chat with that agent as if they had written to it at that hour.
+
+**Changed 2026-11-26 ([group-chat-per-agent.md](group-chat-per-agent.md), decision 6, Jaime):** there is no «Solo para mí» any more. An agent has one chat everyone with access reads, so every routine is the team's and answers there; anyone who talks to the agent makes one, and its creator or an owner changes, pauses or deletes it. What this plan says below about «Solo para mí», «para quién» and owners-only team routines is history.
 
 ## Context
 
