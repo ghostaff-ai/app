@@ -1,10 +1,10 @@
-import { createPublicKey, createVerify, generateKeyPairSync } from 'node:crypto';
-import type { SyncPlan } from '@ghostaff/shared/record';
+import { createHash, createPublicKey, createVerify, generateKeyPairSync } from 'node:crypto';
+import type { ExternalSyncPlan, ExternalSyncRow, SyncPlan } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { appJwt, freshRepoToken, queuedRuns, repoTokens } from '../src/githubApp';
-import { type InstructedAgent, openDecision, type RecordOrg, type RecordSyncStore, syncOrg } from '../src/recordSync';
+import { type ExternalWritten, type InstructedAgent, openDecision, type RecordOrg, type RecordSyncStore, syncOrg } from '../src/recordSync';
 
 const ORG: RecordOrg = { id: 'org-1', slug: 'ordago', repo: 'ordago-app/business', host: 'github', installation: 7 };
 
@@ -26,8 +26,8 @@ function fakeGithub(files: Record<string, string>, opts: { moved?: boolean } = {
     return sha;
   };
   const tree: Record<string, string> = Object.fromEntries(Object.entries(files).map(([p, c]) => [p, shaOf(c)]));
-  const commits: Array<{ message: string; files: Record<string, string> }> = [];
-  let pendingTree: Record<string, string> = {};
+  const commits: Array<{ message: string; files: Record<string, string | null> }> = [];
+  let pendingTree: Record<string, string | null> = {};
   let pendingMessage = '';
   const calls: string[] = [];
   const f = (async (input: string | URL, init?: RequestInit) => {
@@ -50,7 +50,7 @@ function fakeGithub(files: Record<string, string>, opts: { moved?: boolean } = {
     }
     if (method === 'GET' && url === '/git/commits/head1') return json({ tree: { sha: 'tree1' } });
     if (method === 'POST' && url === '/git/trees') {
-      pendingTree = Object.fromEntries(body.tree.map((e: { path: string; content: string }) => [e.path, e.content]));
+      pendingTree = Object.fromEntries(body.tree.map((e: { path: string; content?: string; sha?: null }) => [e.path, e.content ?? null]));
       return json({ sha: 'tree2' });
     }
     if (method === 'POST' && url === '/git/commits') {
@@ -69,8 +69,10 @@ function fakeGithub(files: Record<string, string>, opts: { moved?: boolean } = {
   return { f, commits, calls };
 }
 
-function store(rows: DecisionRow[] = [], agents: InstructedAgent[] = []) {
+function store(rows: DecisionRow[] = [], agents: InstructedAgent[] = [], externals: ExternalSyncRow[] = []) {
   const applied: SyncPlan[] = [];
+  const appliedExternal: ExternalSyncPlan[] = [];
+  const externalWritten: ExternalWritten[] = [];
   const instructions: Array<[string, unknown]> = [];
   const written: string[] = [];
   const states: Array<string | null> = [];
@@ -95,8 +97,15 @@ function store(rows: DecisionRow[] = [], agents: InstructedAgent[] = []) {
     setInstructions: async (id, change) => {
       instructions.push([id, change]);
     },
+    externalParties: async () => externals,
+    applyExternal: async (_o, p) => {
+      appliedExternal.push(p);
+    },
+    markExternalWritten: async (w) => {
+      externalWritten.push(...w);
+    },
   };
-  return { s, applied, written, states, instructions };
+  return { s, applied, written, states, instructions, appliedExternal, externalWritten };
 }
 
 const appAnswered = (recordId: string): DecisionRow =>
@@ -191,6 +200,59 @@ describe('syncOrg', () => {
     const r = await syncOrg({ store: db.s, tokens: async () => 'tok', forgejo: null, fetch: gh.f }, ORG);
     expect(r.ok).toBe(true);
     expect(db.applied[0]!.upserts).toEqual([]);
+  });
+});
+
+describe('syncOrg on externos/ (external-parties.md)', () => {
+  const ANA = '---\ntipo: persona\nnombre: Ana López\nhace: Hace las ilustraciones\ndepartamentos: [marketing]\n---\n\nFactura a 30 días.\n';
+  const hash = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
+  const row = (over: Partial<ExternalSyncRow>): ExternalSyncRow => ({
+    id: 'r1', path: 'externos/ana-lopez.md', kind: 'person', name: 'Ana López', role: 'Hace las ilustraciones', departments: ['marketing'],
+    email: null, phone: null, website: null, added_by_name: '', added_at: '2026-11-26T09:30:00.000Z', proposed_by_name: null,
+    content_hash: hash(ANA), pending: null, updated_at: 'u1', ...over,
+  });
+
+  it('reads the folder into the rows, leaving out what is not a party', async () => {
+    const gh = fakeGithub({ 'externos/ana-lopez.md': ANA, 'externos/.gitkeep': '' });
+    const db = store();
+    const r = await syncOrg({ store: db.s, tokens: async () => 't', forgejo: null, fetch: gh.f }, ORG);
+    expect(r.ok).toBe(true);
+    expect(db.appliedExternal[0]?.upserts).toMatchObject([{ path: 'externos/ana-lopez.md', name: 'Ana López', content_hash: hash(ANA) }]);
+    expect(gh.commits).toEqual([]);
+    expect(r.summary).toContain('externos: 1 from the record');
+  });
+
+  it("writes an owner's changes in one commit, a new file and a deleted one, then marks them", async () => {
+    const gh = fakeGithub({ 'externos/ana-lopez.md': ANA, 'externos/bunq.md': '---\ntipo: servicio\nnombre: bunq\nhace: El banco\n---\n' });
+    const bunq = '---\ntipo: servicio\nnombre: bunq\nhace: El banco\n---\n';
+    const db = store([], [], [
+      row({ role: 'Ilustra y maqueta', pending: 'save', updated_at: 'u2' }),
+      row({ id: 'r2', path: 'externos/bunq.md', kind: 'service', name: 'bunq', role: 'El banco', departments: [], content_hash: hash(bunq), pending: 'remove' }),
+      row({ id: 'r3', path: null, kind: 'company', name: 'Gestoría López', role: 'Presenta el IVA', departments: ['finanzas'], content_hash: null, pending: 'save' }),
+    ]);
+    const r = await syncOrg({ store: db.s, tokens: async () => 't', forgejo: null, fetch: gh.f }, ORG);
+    expect(r.ok).toBe(true);
+    expect(gh.commits).toHaveLength(1);
+    expect(gh.commits[0]?.message).toBe('externos: cambios desde Ghostaff (ana-lopez, bunq, gestoria-lopez)');
+    const files = gh.commits[0]!.files;
+    expect(files['externos/ana-lopez.md']).toContain('hace: Ilustra y maqueta');
+    expect(files['externos/ana-lopez.md']).toContain('Factura a 30 días.');
+    expect(files['externos/bunq.md']).toBeNull();
+    expect(files['externos/gestoria-lopez.md']).toContain('tipo: empresa');
+    expect(db.externalWritten).toEqual([
+      { rowId: 'r1', path: 'externos/ana-lopez.md', hash: hash(files['externos/ana-lopez.md']!), updatedAt: 'u2' },
+      { rowId: 'r2', path: 'externos/bunq.md', hash: null, updatedAt: 'u1' },
+      { rowId: 'r3', path: 'externos/gestoria-lopez.md', hash: hash(files['externos/gestoria-lopez.md']!), updatedAt: 'u1' },
+    ]);
+  });
+
+  it('leaves the changes pending when someone pushed meanwhile', async () => {
+    const gh = fakeGithub({ 'externos/ana-lopez.md': ANA }, { moved: true });
+    const db = store([], [], [row({ pending: 'remove' })]);
+    const r = await syncOrg({ store: db.s, tokens: async () => 't', forgejo: null, fetch: gh.f }, ORG);
+    expect(r.ok).toBe(true);
+    expect(db.externalWritten).toEqual([]);
+    expect(r.summary).toContain('externos: write-back waits: the record moved');
   });
 });
 

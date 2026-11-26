@@ -108,8 +108,13 @@ export function forgejoRepo(cfg: ForgejoConfig, repo: string, f: Fetch = fetch):
       for (const x of files) {
         const e = await entry(x.path, head.sha);
         const sha = e && !Array.isArray(e) && e.type === 'file' ? e.sha : null;
-        ops.push(sha ? { operation: 'update', path: x.path, sha, content: b64(x.content) } : { operation: 'create', path: x.path, content: b64(x.content) });
+        if (x.content === null) {
+          if (sha) ops.push({ operation: 'delete', path: x.path, sha });
+        } else {
+          ops.push(sha ? { operation: 'update', path: x.path, sha, content: b64(x.content) } : { operation: 'create', path: x.path, content: b64(x.content) });
+        }
       }
+      if (!ops.length) return true;
       try {
         await call('POST', at('/contents'), { branch: head.branch, message, files: ops });
         return true;

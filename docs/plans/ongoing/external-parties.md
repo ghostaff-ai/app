@@ -2,7 +2,7 @@
 
 **Priority:** medium — the record and the agents get more useful once they know who does what outside, so they route work instead of asking every time
 **Gate:** none
-**Next:** pull request 2: `packages/shared/src/record/externos.ts` and the sync both ways in `syncOrg` (Tasks)
+**Next:** pull request 3: the Empresa row «Con quién trabajáis», the list and the form, with its Maestro flow (Tasks)
 
 **Goal:** Each organisation keeps one list of the people, companies and services it works with outside, each with what it does for the organisation, the departments it works with and how to reach it. Owners add them in Empresa → «Con quién trabajáis»; any chat agent proposes the ones it sees in mail and invoices, and an owner confirms. The list is a folder of the record, `externos/`, and reaches the app through the database.
 
@@ -130,9 +130,9 @@ In `syncOrg`, after the decisions and the instructions, the plan worked out in `
 | `packages/shared/src/record/externos.ts` (+ `record/index.ts`) | 2 | Read and write the file; `planExternalSync` |
 | `packages/shared/test/externos.test.ts` | 2 | Format round trip, body kept, slugs, the plan's cases |
 | `apps/engine/src/recordSync.ts`, `apps/engine/src/forgejo.ts` | 2 | The sync both ways; deleting a file on both hosts |
-| `apps/engine/src/*Store*` (the sync's store) | 2 | `externalParties`, `applyExternal`, `markExternalWritten` |
+| `apps/engine/src/recordStore.ts` | 2 | `externalParties`, `applyExternal`, `markExternalWritten` |
 | `apps/engine/src/recordHook.ts`, `apps/engine/src/recordProvision.ts` | 2 | Agents can't push `externos/`; the seed's `AGENTS.md` names the folder |
-| `apps/engine/test/recordSync.test.ts`, `recordHook.test.ts` | 2 | |
+| `apps/engine/test/{recordSync,recordStore,recordHook,forgejo}.test.ts` | 2 | Both ways on GitHub, deleting on Forgejo, the hook's refusal, the seed |
 | `docs/architecture.md` | 2 | `externos/` in what the record holds |
 | `apps/mobile/app/(app)/(tabs)/empresa/index.tsx` | 3 | The row |
 | `apps/mobile/app/(app)/(tabs)/empresa/externos/{index,[id]}.tsx`, `apps/mobile/lib/hooks/useExternalParties.ts` | 3 | The list and the form |
@@ -142,7 +142,7 @@ In `syncOrg`, after the decisions and the instructions, the plan worked out in `
 ## Tasks
 
 - [x] **Pull request 1 — the data and the agents' tools.** Migration and pgTAP; the model and service; the three tools in `settings.ts`, classified, given to every chat agent; tests. Lands alone: an agent can propose and an owner approve, the rows wait for the sync.
-- [ ] **Pull request 2 — the record.** `externos.ts` with its tests; the sync both ways in `syncOrg`; deleting files in `RecordRepo`; the hook and the seed; architecture.md.
+- [x] **Pull request 2 — the record.** `externos.ts` with its tests; the sync both ways in `syncOrg`; deleting files in `RecordRepo`; the hook and the seed; architecture.md.
 - [ ] **Pull request 3 — the screens.** The Empresa row, the list, the form, the Maestro flow; reviewed against the UI rules and Vercel's guidelines on the web.
 - [ ] **Pull request 4 — routines.** The three tools in a routine's turn (`chat.ts`), after agreeing the change with the agent-context session.
 - [ ] Checked on beta: an owner adds one and it appears in the record's `externos/`; an agent proposes one in a chat, the card is in the deck, approving it adds it.

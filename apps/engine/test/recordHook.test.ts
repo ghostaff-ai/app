@@ -73,6 +73,12 @@ describe('the record’s pre-receive hook', () => {
     expect(push(FINANZAS, { 'memoria/agentes/secretaria/a.md': 'x\n' })).toContain('es de otro agente');
   });
 
+  it('keeps who the organisation works with for people, even from the main agent (external-parties.md)', () => {
+    expect(push(FINANZAS, { 'externos/gestoria.md': 'x\n' })).toContain('lo añade o confirma una persona desde Ghostaff');
+    expect(push(SECRETARIA, { 'externos/gestoria.md': 'x\n' })).toContain('lo añade o confirma una persona desde Ghostaff');
+    expect(push(ADMIN, { 'externos/gestoria.md': 'x\n' })).toBeNull();
+  });
+
   it('keeps the company’s memory for the main agent', () => {
     expect(push(FINANZAS, { 'memoria/empresa/precios.md': 'x\n' })).toContain('la cambian las personas desde Ghostaff');
     expect(push(FINANZAS, { 'memoria/empresa/clientes.md': null })).toContain('la cambian las personas desde Ghostaff');

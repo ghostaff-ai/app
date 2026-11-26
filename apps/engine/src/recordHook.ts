@@ -9,6 +9,8 @@
 // - `memoria/empresa/` only the main agent may push there, once it runs on our runner (today it is a
 //   chat agent, so no agent can: people change it from Ghostaff);
 // - in `memoria/agentes/`, each agent only its own folder;
+// - `externos/` no agent: who the organisation works with is added or confirmed by a person
+//   (external-parties.md, decision 1); an agent proposes one with a settings tool;
 // - only `main`, never deleted.
 //
 // POSIX sh: Forgejo's image is Alpine (busybox). Forgejo gives the pusher as GITEA_PUSHER_NAME.
@@ -56,6 +58,7 @@ while read -r old new ref; do
       memoria/agentes/"$own"/*) ;;
       memoria/agentes/*) deny "esa memoria ($f) es de otro agente." ;;
       memoria/*) deny "en memoria/ solo escribes en memoria/agentes/$own/ ($f)." ;;
+      externos/*) deny "con quién trabaja la organización ($f) lo añade o confirma una persona desde Ghostaff. Propónlo en tu respuesta." ;;
     esac
   done || exit 1
 done

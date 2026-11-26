@@ -8,11 +8,18 @@
 // commit on top of the head it read: if someone pushed meanwhile, GitHub
 // refuses the fast-forward and the next tick tries again on the new head.
 
+import { createHash } from 'node:crypto';
 import {
   agentInstructionsPath,
   appendHistoryRow,
   DECISIONS_DIR,
+  describeExternalSync,
   describeSync,
+  EXTERNAL_DIR,
+  type ExternalSyncPlan,
+  type ExternalSyncRow,
+  isExternalFile,
+  planExternalSync,
   HISTORY_PATH,
   historyRow,
   MAX_INSTRUCTIONS,
@@ -71,8 +78,24 @@ export interface RecordSyncStore {
   instructedAgents(orgId: string): Promise<InstructedAgent[]>;
   /** The agent's instructions from its file (`task` set), or its file gone (`task` kept as it was). */
   setInstructions(agentId: string, change: { task: string; inRecord: true } | { inRecord: false }): Promise<void>;
+  /** The organisation's rows of `external_parties`, pending ones included. */
+  externalParties(orgId: string): Promise<ExternalSyncRow[]>;
+  /** What the record holds of `externos/`, into the rows. */
+  applyExternal(orgId: string, plan: ExternalSyncPlan): Promise<void>;
+  /** App changes now in the record: a saved row takes its path and hash, a removed one goes. */
+  markExternalWritten(written: ExternalWritten[]): Promise<void>;
   /** When the record was last read, and why the last attempt failed (null when it did not). */
   syncState(orgId: string, error: string | null): Promise<void>;
+}
+
+/** An app change to `externos/` the record now has. */
+export interface ExternalWritten {
+  rowId: string;
+  path: string;
+  /** The hash of the file written; null when it was deleted. */
+  hash: string | null;
+  /** The row's `updated_at` when planned: a row changed again since stays pending, with the new file's hash. */
+  updatedAt: string;
 }
 
 export interface RecordSyncDeps {
@@ -119,8 +142,14 @@ export interface RecordRepo {
   files(dir: string, ref: string): Promise<{ name: string; content: string }[]>;
   /** One file at `ref`, or null. */
   file(path: string, ref: string): Promise<string | null>;
-  /** One commit on top of `head` with these files; false when the record moved meanwhile. */
-  commit(head: { branch: string; sha: string }, files: { path: string; content: string }[], message: string): Promise<boolean>;
+  /** One commit on top of `head` writing these files, or deleting those whose content is null; false when the record moved meanwhile. */
+  commit(head: { branch: string; sha: string }, files: RecordChange[], message: string): Promise<boolean>;
+}
+
+/** A file a commit writes, or deletes (`content` null). */
+export interface RecordChange {
+  path: string;
+  content: string | null;
 }
 
 /** A small client for the few Git data calls the sync makes on one repo. */
@@ -165,12 +194,13 @@ export function githubRepo(repo: string, token: string, f: Fetch = fetch): Recor
       return e && e.type === 'file' ? blob(e.sha) : null;
     },
     /** One commit on top of `head` with these files; false when the branch moved meanwhile. */
-    async commit(head: { branch: string; sha: string }, files: { path: string; content: string }[], message: string): Promise<boolean> {
+    async commit(head: { branch: string; sha: string }, files: RecordChange[], message: string): Promise<boolean> {
       const parent = must(await call<{ tree: { sha: string } }>('GET', `/git/commits/${head.sha}`), 'commit');
       const tree = must(
         await call<{ sha: string }>('POST', '/git/trees', {
           base_tree: parent.tree.sha,
-          tree: files.map((x) => ({ path: x.path, mode: '100644', type: 'blob', content: x.content })),
+          // A null sha deletes the file from the tree.
+          tree: files.map((x) => (x.content === null ? { path: x.path, mode: '100644', type: 'blob', sha: null } : { path: x.path, mode: '100644', type: 'blob', content: x.content })),
         }),
         'tree',
       );
@@ -216,6 +246,29 @@ export async function projectInstructions(store: RecordSyncStore, repo: RecordRe
   return notes;
 }
 
+const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
+
+/**
+ * The organisation's `externos/` with its `external_parties` rows, both ways (external-parties.md):
+ * the record's files into the rows, then the app's changes in one commit on the head it reads now
+ * (the decisions' write-back may have moved it). Returns what happened, for the tick's summary.
+ */
+export async function syncExternals(store: RecordSyncStore, repo: RecordRepo, orgId: string, now: Date): Promise<string[]> {
+  const head = await repo.head();
+  const files = (await repo.files(EXTERNAL_DIR, head.sha))
+    .filter((f) => isExternalFile(f.name))
+    .map((f) => ({ path: `${EXTERNAL_DIR}/${f.name}`, content: f.content, hash: sha256(f.content) }));
+  const plan = planExternalSync({ orgId, files, rows: await store.externalParties(orgId), now });
+  await store.applyExternal(orgId, plan);
+  if (!plan.writes.length) return describeExternalSync(plan, 0);
+  const names = plan.writes.map((w) => w.path.slice(EXTERNAL_DIR.length + 1, -3)).join(', ');
+  if (!(await repo.commit(head, plan.writes.map(({ path, content }) => ({ path, content })), `externos: cambios desde Ghostaff (${names})`))) {
+    return [...describeExternalSync(plan, 0), 'externos: write-back waits: the record moved'];
+  }
+  await store.markExternalWritten(plan.writes.map((w) => ({ rowId: w.rowId, path: w.path, hash: w.content === null ? null : sha256(w.content), updatedAt: w.updatedAt })));
+  return describeExternalSync(plan, plan.writes.length);
+}
+
 /** Syncs one organisation's decisions with its record. Never throws: a failure is recorded on the organisation. */
 export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<OrgSyncResult> {
   const now = deps.now?.() ?? new Date();
@@ -230,32 +283,35 @@ export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<Org
     const plan = planSync({ orgId: org.id, files, existing: await deps.store.decisions(org.id), agents: await deps.store.agents(org.id), commit: head.sha, now });
     await deps.store.apply(plan);
     const instructions = await projectInstructions(deps.store, gh, org.id, head.sha);
-    const withInstructions = (summary: string) => [summary, ...instructions].join('\n');
 
     const written: string[] = [];
+    let waits: string | null = null;
     if (plan.writeBacks.length) {
       const byId = new Map(files.map((x) => [x.id, x.yaml]));
       let csv = await gh.file(HISTORY_PATH, head.sha);
-      const changed: { path: string; content: string }[] = [];
+      const changed: RecordChange[] = [];
+      const ids: string[] = [];
       for (const w of plan.writeBacks) {
         const yaml = byId.get(w.recordId);
         if (yaml === undefined) continue;
         changed.push({ path: `${DECISIONS_DIR}/${w.recordId}.yaml`, content: writeAnswer(yaml, w.recordId, w.answer) });
         csv = appendHistoryRow(csv, historyRow(readDecision(w.recordId, yaml), w.answer));
-        written.push(w.recordId);
+        ids.push(w.recordId);
       }
       if (changed.length) {
         changed.push({ path: HISTORY_PATH, content: csv ?? '' });
-        const ok = await gh.commit(head, changed, `por-decidir: respuestas desde Ghostaff (${written.join(', ')})`);
-        if (!ok) {
-          await deps.store.syncState(org.id, null);
-          return { org: org.slug, ok: true, summary: withInstructions(`${describeSync(org.slug, plan, [])}\nwrite-back waits: the record moved`) };
+        if (await gh.commit(head, changed, `por-decidir: respuestas desde Ghostaff (${ids.join(', ')})`)) {
+          written.push(...ids);
+          await deps.store.markWrittenBack(plan.writeBacks.filter((w) => written.includes(w.recordId)).map((w) => w.rowId));
+        } else {
+          waits = 'write-back waits: the record moved';
         }
-        await deps.store.markWrittenBack(plan.writeBacks.filter((w) => written.includes(w.recordId)).map((w) => w.rowId));
       }
     }
+    const externals = await syncExternals(deps.store, gh, org.id, now);
     await deps.store.syncState(org.id, null);
-    return { org: org.slug, ok: true, summary: withInstructions(describeSync(org.slug, plan, written)) };
+    const summary = [describeSync(org.slug, plan, written), waits, ...instructions, ...externals].filter((x): x is string => !!x).join('\n');
+    return { org: org.slug, ok: true, summary };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await deps.store.syncState(org.id, msg.slice(0, 500)).catch(() => {});
