@@ -37,7 +37,7 @@ const RESERVED_ENV_PREFIX = /^(CLAUDE_|ANTHROPIC_|CLOUDSDK_|GOOGLE_|GHOSTAFF_|GI
 
 /**
  * Whether a secret may become this variable: upper case, digits and underscores, and none the runner or a tool
- * relies on. The same rule as the database's check (20261127100000_agent_secrets.sql) and the runner's (isSecretEnv).
+ * relies on. The same rule as the database's check (20261127400000_agent_secrets.sql) and the runner's (isSecretEnv).
  */
 export const isSecretEnv = (env: string) => /^[A-Z][A-Z0-9_]{0,63}$/.test(env) && !RESERVED_ENV.has(env) && !RESERVED_ENV_PREFIX.test(env);
 

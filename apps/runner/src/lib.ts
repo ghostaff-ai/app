@@ -128,7 +128,7 @@ const RESERVED_ENV_PREFIX = /^(CLAUDE_|ANTHROPIC_|CLOUDSDK_|GOOGLE_|GHOSTAFF_|GI
 
 /**
  * Whether a secret may become this variable: upper case, digits and underscores, and none the runner or a tool
- * relies on. The same rule as the database's (20261127100000_agent_secrets.sql) and the engine's
+ * relies on. The same rule as the database's (20261127400000_agent_secrets.sql) and the engine's
  * (packages/shared/src/record/agents.ts, isSecretEnv); checked again here, where the environment is built.
  */
 export const isSecretEnv = (env: unknown): env is string =>
