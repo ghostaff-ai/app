@@ -1,4 +1,4 @@
--- The organisation's memory (20261127350000_memories.sql): every member reads it, another
+-- The organisation's memory (20261127900000_memories.sql): every member reads it, another
 -- organisation's member doesn't, nobody but the engine writes it or searches it.
 begin;
 select plan(10);

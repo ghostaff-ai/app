@@ -1,6 +1,6 @@
 // The organisation's memory («Empresa») in a chat turn (docs/plans/ongoing/business-brain.md,
 // docs/plans/ready/agent-memory.md). It is a folder of the record, `memoria/empresa/`; the database
-// keeps its projection (`memories`, supabase/migrations/20261127350000_memories.sql) so a turn reads
+// keeps its projection (`memories`, supabase/migrations/20261127900000_memories.sql) so a turn reads
 // it without a clone and the app shows it.
 //
 // Every chat agent reads it; only Secretaría, the main agent, writes it (agent-memory.md decision 4).
