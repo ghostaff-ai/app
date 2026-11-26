@@ -47,7 +47,7 @@ Consequence of 2 and 3, to handle in the fold: what the agent did on its own was
 ## Consequences to weigh
 
 - **Privacy.** Everything a person tells the agent is read by everyone with access to it. Today a member can ask Finanzas something without the owner reading it; in the group they can't. The access level per agent becomes the only privacy control.
-- **The agent's context.** With several people writing, the last 40 messages fill faster and mix topics. Jaime doesn't think a turn should carry the last 40 messages at all, but its memory and a few recent ones: [agent-context.md](../ideas/agent-context.md).
+- **The agent's context.** With several people writing, the last 40 messages fill faster and mix topics. Jaime doesn't think a turn should carry the last 40 messages at all, but its memory and a few recent ones: [agent-context.md](agent-context.md).
 - **Acting with the asker's rights** (team-chat.md decision 7) still works message by message: the agent acts as the person whose message it is answering.
 - **Simpler.** One thread per agent, no copies of the agent's own reports, no visibility to choose.
 
@@ -83,4 +83,4 @@ Two pull requests. The first makes the group; until the second lands, a «Solo p
 
 Not decided on 2026-11-26; it doesn't hold up the build.
 
-1. **What a turn reads.** Which messages and how much memory an agent's turn carries is [agent-context.md](../ideas/agent-context.md), still waiting on Jaime. This plan works with today's last 40 messages; that plan changes them.
+1. **What a turn reads.** Decided by Jaime on 2026-11-26 in [agent-context.md](agent-context.md): a summary, the latest messages up to about 30K tokens, and a search over the rest. This plan works with today's last 40 messages; that plan changes them, and says what the fold does with its summaries.
