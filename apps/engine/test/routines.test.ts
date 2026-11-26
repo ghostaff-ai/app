@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Routine } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
 import type { ChatAgent, ChatDeps, ChatStore, ChatThreadHead, ModelTurn } from '../src/chat';
@@ -60,7 +61,7 @@ const routine = (over: Partial<Routine> = {}): Routine => ({
   ...over,
 });
 
-function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: string } | null; busy?: boolean } = {}) {
+function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: string } | null; busy?: boolean; orgReader?: SupabaseClient } = {}) {
   const routines = new Map((opts.routines ?? [routine()]).map((r) => [r.id, { ...r }]));
   const replies: Array<{ id: string; routineId?: string; thread: string }> = [];
   const updates: Array<{ id: string; text?: string; state?: string }> = [];
@@ -113,6 +114,7 @@ function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: st
     asPerson: () => {
       throw new Error('a routine reads as nobody');
     },
+    orgReader: opts.orgReader,
   };
   const jobs: JobStore = {
     job: async () => null,
@@ -181,6 +183,16 @@ function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: st
 }
 
 describe('a routine on the tick (agent-routines.md)', () => {
+  it('may still propose who the organisation works with, read with the engine\'s client (external-parties.md)', async () => {
+    const t = setup({ orgReader: {} as SupabaseClient });
+    expect(await startRoutines(t.chatDeps, t.jobDeps, t.store, friday9)).toBe(1);
+    expect(t.asked[0]!.tools.filter((n) => n.startsWith('settings_')).sort()).toEqual([
+      'settings_read_external_parties',
+      'settings_remove_external_party',
+      'settings_save_external_party',
+    ]);
+  });
+
   it('waits for its hour', async () => {
     const t = setup();
     expect(await startRoutines(t.chatDeps, t.jobDeps, t.store, new Date('2026-11-24T09:00:00Z'))).toBe(0);

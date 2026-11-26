@@ -14,6 +14,7 @@
 // (guides.ts). No record, no mail yet: it says so when asked for something
 // that needs them.
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { type AgentGhost, type ChatMessage, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
 import type { AccountAskPart, ActionPart, DecisionPart, EditableField, GuidePart } from '@ghostaff/shared';
 import { DECISION_TOOL, DECISION_TOOLS, type DecisionBrief, decisionIds, type DecisionOpener, proposeDecision } from './decisionAsks';
@@ -26,7 +27,7 @@ import { askJob, type JobDeps } from './jobs';
 import { askRunner } from './runner';
 import { agentJob, isMainAgent } from '@ghostaff/shared/services';
 import { NOTHING_NEW } from './runner';
-import { type AsPerson, settingsTools } from './settings';
+import { type AsPerson, settingsTools, unaskedSettingsTools } from './settings';
 import { type AgentTools, mergeTools, NO_TOOLS, restrictTo } from './tools';
 
 export type Level = 'none' | 'read' | 'talk';
@@ -203,6 +204,11 @@ export interface ChatDeps {
   toolsFor(orgId: string): Promise<AgentTools>;
   /** A client signed in as a person: the main agent reads the settings as whoever asked (settings.ts). */
   asPerson?: AsPerson;
+  /**
+   * The engine's own client (service role), for the one setting a turn nobody asked for may read:
+   * who the organisation works with (unaskedSettingsTools). Without it, such a turn has no settings tools.
+   */
+  orgReader?: SupabaseClient;
   /** Agents that run as jobs (jobs.ts); without it every agent answers with the model. */
   jobs?: JobDeps;
   /** An agent asking for an account it lacks (accountAsks.ts); without it agents cannot ask. */
@@ -639,6 +645,9 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
     if (asked && deps.asPerson && accessToken) {
       // Every agent may propose its own routines; the main agent every setting.
       mine = mergeTools(mine, settingsTools({ client: deps.asPerson(accessToken), orgId: who.orgId, agentId: who.id, onlySelf: !settings }));
+    } else if (deps.orgReader) {
+      // A routine's turn: who the organisation works with, so an agent reading the morning's invoices can propose one.
+      mine = mergeTools(mine, unaskedSettingsTools(deps.orgReader, who.orgId, who.id));
     }
     if (deps.asks) mine = mergeTools(mine, ASK_TOOLS);
     if (deps.guides) mine = mergeTools(mine, GUIDE_TOOLS);
@@ -825,7 +834,8 @@ export interface RoutineAsk {
 /**
  * A routine's turn for an agent that answers in chat (agent-routines.md): its
  * instruction, as if its creator wrote it now, answered in the message
- * `replyId` of their chat. No settings tools: nobody is there to read as.
+ * `replyId` of their chat. Of the settings tools, only who the organisation works with
+ * (unaskedSettingsTools): nobody is there to read as.
  * Returns what the agent said; `SIN NOVEDAD` when it had nothing to tell.
  */
 export async function answerRoutine(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, replyId: string, ask: RoutineAsk): Promise<{ text: string; ok: boolean }> {

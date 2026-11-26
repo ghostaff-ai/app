@@ -7,7 +7,7 @@
 // app; a change only once an owner approves it (actions.ts), as that owner, so
 // the database checks it exactly as if they had made it on the screen.
 
-import { EVERY_AGENT_TOOL_NAMES, SETTING_TOOLS, SettingError, type SettingsContext } from '@ghostaff/shared/services';
+import { EVERY_AGENT_TOOL_NAMES, EXTERNAL_TOOL_NAMES, SETTING_TOOLS, SettingError, type SettingsContext } from '@ghostaff/shared/services';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { AgentTools } from './tools';
 
@@ -72,8 +72,9 @@ export async function runSetting(ctx: SettingsContext, name: string, input: unkn
  * (`ctx.onlySelf`, agent-routines.md) and those for who the organisation works
  * with outside (external-parties.md).
  */
-export function settingsTools(ctx: SettingsContext): AgentTools {
-  const tools = ctx.onlySelf ? SETTING_TOOLS.filter((t) => (EVERY_AGENT_TOOL_NAMES as readonly string[]).includes(t.name)) : SETTING_TOOLS;
+export function settingsTools(ctx: SettingsContext, only?: readonly string[]): AgentTools {
+  const allowed: readonly string[] | null = only ?? (ctx.onlySelf ? EVERY_AGENT_TOOL_NAMES : null);
+  const tools = allowed ? SETTING_TOOLS.filter((t) => allowed.includes(t.name)) : SETTING_TOOLS;
   const byName = new Map(tools.map((t) => [t.name, t]));
   return {
     specs: tools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
@@ -91,3 +92,14 @@ export function settingsTools(ctx: SettingsContext): AgentTools {
 }
 
 export { SettingError };
+
+/**
+ * The settings tools of a turn nobody asked for (a routine's, agent-routines.md decision 3): only
+ * who the organisation works with (external-parties.md). With no person to read as, the list is read
+ * with the engine's own client, scoped to the organisation: every member may read it, so it shows
+ * nothing a person in the organisation could not see. A proposal still waits for an owner's approval
+ * and then runs as that owner (actions.ts).
+ */
+export function unaskedSettingsTools(engineClient: SupabaseClient, orgId: string, agentId: string): AgentTools {
+  return settingsTools({ client: engineClient, orgId, agentId, onlySelf: true }, EXTERNAL_TOOL_NAMES);
+}
