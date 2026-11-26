@@ -89,6 +89,9 @@ function setup(opts: { subscribed?: boolean; launchFails?: boolean; now?: Date; 
     orgName: async (id) => (id === ORG ? 'Órdago' : 'Taller'),
     memberNames: async () => ['Ana'],
     recentMessages: async () => messages,
+    conversation: async () => ({ summary: null, messages }),
+    saveSummary: async () => true,
+    searchMessages: async () => [],
     startReply: async (_t, agent) => {
       if (working) return null;
       working = `reply-${messages.filter((m) => m.authorKind === 'agent').length + 1}`;

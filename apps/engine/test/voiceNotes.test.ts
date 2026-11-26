@@ -80,6 +80,9 @@ function setup(
     orgName: async () => 'Panadería',
     memberNames: async () => ['Ana', 'Bea'],
     recentMessages: async () => messages,
+    conversation: async () => ({ summary: null, messages }),
+    saveSummary: async () => true,
+    searchMessages: async () => [],
     startReply: async () => {
       if (working) return null;
       working = `reply-${messages.length}`;
@@ -245,7 +248,7 @@ describe('POST /voice-notes/:id/transcribe', () => {
     expect(voicePart(stored).transcription).toBe('done');
     expect(stored.parts[1]).toEqual({ type: 'text', text: 'Llama mañana al proveedor de harina.' });
     // The agent read the transcript, as if it were typed.
-    expect(JSON.stringify(asked[0])).toContain('Ana: Llama mañana al proveedor de harina.');
+    expect(JSON.stringify(asked[0])).toMatch(/Ana \([^)]+\): Llama mañana al proveedor de harina\./);
     expect(messages.at(-1)).toMatchObject({ authorKind: 'agent', parts: [{ type: 'text', text: 'Apuntado.' }] });
   });
 

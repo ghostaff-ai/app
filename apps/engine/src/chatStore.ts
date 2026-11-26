@@ -10,6 +10,7 @@ import { messageFromRow } from '@ghostaff/shared/services';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CloudAccountNotReady } from './cloudAccounts';
 import { type AiAccount, AiFailure, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, type Writer } from './chat';
+import type { FoundMessage } from './context';
 import { type PrintRunner, runClaudePrint } from './claudeCode';
 import { subscriptionWriter } from './claudeWriter';
 import { readAiSecret, type Vault } from './vault';
@@ -20,6 +21,11 @@ function check<T>(r: { data: T; error: unknown }): T {
 }
 
 const text = (t: string) => [{ type: 'text', text: t }];
+
+const MESSAGE_COLUMNS = 'id, thread_id, author_kind, author_user, author_agent, author_name, parts, state, steps, routine_id, created_at';
+
+/** The most messages after a summary the engine reads at once: far past what a turn carries (context.ts). */
+const CONVERSATION_ROWS = 1000;
 
 /**
  * `afterAgentWrite` runs after each write that finishes an agent's message (the
@@ -56,12 +62,54 @@ export function supabaseChatStore(admin: SupabaseClient, opts: { afterAgentWrite
       const rows = check(
         await admin
           .from('messages')
-          .select('id, thread_id, author_kind, author_user, author_agent, author_name, parts, state, steps, routine_id, created_at')
+          .select(MESSAGE_COLUMNS)
           .eq('thread_id', threadId)
           .order('created_at', { ascending: false })
           .limit(limit),
       );
       return (rows ?? []).map(messageFromRow).reverse();
+    },
+    async conversation(threadId, agentId) {
+      const row = check(
+        await admin
+          .from('conversation_summaries')
+          .select('summary, through_at, through_message')
+          .eq('thread_id', threadId)
+          .eq('agent_id', agentId)
+          .maybeSingle(),
+      );
+      let q = admin.from('messages').select(MESSAGE_COLUMNS).eq('thread_id', threadId);
+      if (row) q = q.gt('created_at', row.through_at);
+      const rows = check(await q.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(CONVERSATION_ROWS));
+      return {
+        summary: row ? { text: row.summary as string, throughAt: row.through_at as string, throughMessage: row.through_message as string } : null,
+        messages: (rows ?? []).map(messageFromRow).reverse(),
+      };
+    },
+    async saveSummary(s) {
+      return check(
+        await admin.rpc('save_conversation_summary', {
+          target_thread: s.threadId,
+          target_agent: s.agentId,
+          body: s.text,
+          covers_until: s.throughAt,
+          last_message: s.throughMessage,
+        }),
+      ) as boolean;
+    },
+    async searchMessages(threadId, q): Promise<FoundMessage[]> {
+      const rows =
+        check(
+          await admin.rpc('search_thread_messages', { target_thread: threadId, words: q.words, since: q.since, until: q.until, max_rows: q.max }),
+        ) ?? [];
+      return (rows as Array<{ id: string; author_kind: 'person' | 'agent'; author_name: string; author_agent: string | null; created_at: string; body: string }>).map((r) => ({
+        id: r.id,
+        authorKind: r.author_kind,
+        authorName: r.author_name,
+        authorAgentId: r.author_agent,
+        createdAt: r.created_at,
+        text: r.body,
+      }));
     },
     async startReply(thread: ChatThreadHead, agent: ChatAgent, steps, routineId) {
       const { data, error } = await admin
@@ -217,6 +265,11 @@ export const MAX_TOOL_ROUNDS = 8;
  * Streams with any Anthropic-shaped client. Chat is quick back-and-forth: low
  * effort. When the model asks for tools, runs them and lets it go on, until it
  * answers or reaches MAX_TOOL_ROUNDS.
+ *
+ * Cached automatically: a turn's prefix (tools, system, the summary, the
+ * messages so far) repeats from one request to the next until the summary is
+ * rewritten (context.ts), so each request pays full price only for what is new.
+ * The log line per reply shows how much was read from the cache.
  */
 export function streamWith(client: Anthropic | AnthropicVertex): Writer {
   return async ({ system, messages, tools, onText, onTool, onUsage }) => {
@@ -232,13 +285,17 @@ export function streamWith(client: Anthropic | AnthropicVertex): Writer {
         : { role: m.role, content: m.content },
     );
     let used = NO_TOKENS;
-    const done = () => onUsage?.({ model: CHAT_MODEL, tokens: used, limits: null });
+    const done = () => {
+      console.info(JSON.stringify({ message: 'chat usage', model: CHAT_MODEL, ...used }));
+      onUsage?.({ model: CHAT_MODEL, tokens: used, limits: null });
+    };
     let wrote = false;
     let gap = false; // a new round after tools: separate its text from what came before
     for (let round = 0; ; round++) {
       const stream = client.messages.stream({
         model: CHAT_MODEL,
         max_tokens: 8000,
+        cache_control: { type: 'ephemeral' },
         system,
         messages: history,
         ...(tools.specs.length ? { tools: tools.specs as Anthropic.Tool[] } : {}),

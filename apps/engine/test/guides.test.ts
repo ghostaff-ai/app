@@ -203,6 +203,9 @@ function setup(
     orgName: async () => 'Panadería',
     memberNames: async () => ['Ana', 'Luis', 'Bea'],
     recentMessages: async () => messages,
+    conversation: async () => ({ summary: null, messages }),
+    saveSummary: async () => true,
+    searchMessages: async () => [],
     startReply: async () => {
       if (working) return null;
       working = MESSAGE;
