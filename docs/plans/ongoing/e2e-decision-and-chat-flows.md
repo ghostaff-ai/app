@@ -2,7 +2,7 @@
 
 **Priority:** medium — merges and the beta are gated on flows that stop at creating a company; what the first version is for (answering a decision) and an agent's reply in the chat reach the phone untested as a release build
 **Gate:** none
-**Next:** on branch `test/e2e-decision-and-chat` (worktree `.claude/worktrees/e2e-flows`), write the fixture record and `scripts/e2e/seed.sh`, then the two flows (Tasks below)
+**Next:** #82 landed (2026-11-26, `29e19b4`); once `develop`'s run of `29e19b4` passes the end-to-end lane, retire this plan to `docs/decisions/` (last task below)
 
 **Goal:** The job that gates merges and the beta also proves, on the release build, that a person can answer a decision and write in the team chat, so a crash or a broken screen there stops at CI instead of reaching the founders' phones.
 
@@ -89,22 +89,26 @@ What moved since the proposal (`339f87e`, 2026-11-22), and what it changes here:
 ## Tasks
 
 Seed
-- [ ] The two fixture decisions; check they read with `readDecision` (the sync reports `skipped` otherwise)
-- [ ] `scripts/e2e/seed.sh seed` and `verify`; run both by hand against the local Supabase
-- [ ] `android.sh test` seeds, passes `SEED_COMPANY`, `DECIDER_EMAIL`, `CHAT_EMAIL`, and verifies after the full suite
-- [ ] `connect-ai.js` skips an organisation that already has AI accounts
+- [x] The two fixture decisions; check they read with `readDecision` (the sync reports `skipped` otherwise)
+- [x] `scripts/e2e/seed.sh seed` and `verify`; run both by hand against the local Supabase
+- [x] `android.sh test` seeds, passes `SEED_COMPANY`, `DECIDER_EMAIL`, `CHAT_EMAIL`, and verifies after the full suite
+- [x] `connect-ai.js` skips an organisation that already has AI accounts
 
 Flows
-- [ ] `answer-decision.yaml`
-- [ ] `agent-reply.js` and `team-chat.yaml`
-- [ ] `pnpm e2e` green locally, the seven flows that were there included
+- [x] `answer-decision.yaml`
+- [x] `agent-reply.js` and `team-chat.yaml`
+- [ ] `pnpm e2e` green locally: waived, not run, because this Mac has no Android SDK and `android.sh` boots an x86_64 image, so Jaime chose (2026-11-26) to let the PR's CI lane be the first run; arm64 support in `android.sh` is left for its own PR
 
 Docs and landing
-- [ ] `.maestro/README.md` and `ci.yml`'s comment
-- [ ] `pnpm pr:land` to exit 0; the end-to-end lane green on the PR and then on `develop`
+- [x] `.maestro/README.md` and `ci.yml`'s comment
+- [x] `pnpm pr:land` to exit 0 (#82, merged as `29e19b4`); the end-to-end lane green on the PR, all ten flows (run 45896774098). Still owed: green on `develop`
 - [ ] Retire this plan once `develop`'s run passes with the two flows; the rationale (seeded record, scripted reply, why not the engine yet) goes to `docs/decisions/`
 
 ## Handoff
+
+What the PR's runs taught (2026-11-26):
+- The first run caught a real bug: on Android the deck's buttons in Decisiones fell under the tab bar, so `deck-ok` was not tappable. `develop` had fixed it meanwhile (`b686493`), so the PR dropped its own fix.
+- `create-company.yaml` failed twice on this branch with the app gone from the screen (once at `hideKeyboard`, once after the cold relaunch), then passed; it never failed on `develop` in the same window. Nothing in the job saves logcat, so the cause is unknown. If it recurs, dump `adb logcat` into the `maestro-debug` artifact before guessing.
 
 The local stack: `pnpm db:start`, `pnpm e2e:avd`, `pnpm e2e:build` (again after native or config changes), `pnpm e2e`. A single flow by hand (`bash scripts/e2e/android.sh test .maestro/flows/ci/team-chat.yaml`) still seeds, but skips the write-back check.
 
