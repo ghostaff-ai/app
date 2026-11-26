@@ -1,4 +1,4 @@
-import { type ActionPart, type ChatMessage, isAccountAskPart, isActionPart, isDecisionPart, isDecisionQuotePart, isGuidePart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
+import { type ActionPart, type ChatMessage, type EditableField, isAccountAskPart, isActionPart, isDecisionPart, isDecisionQuotePart, isGuidePart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
@@ -7,6 +7,7 @@ import { GuideCard } from '@/components/chat/GuideCard';
 import { Markdown } from '@/components/chat/Markdown';
 import { VoiceNote } from '@/components/chat/VoiceNote';
 import { Clock, Icon } from '@/components/icons';
+import { Field } from '@/components/ui';
 import type { AskControls } from '@/lib/hooks/useAccountAsks';
 import type { GuideControls } from '@/lib/hooks/useGuideCards';
 import { GHOSTS, type GhostId } from '@/lib/team';
@@ -137,7 +138,8 @@ function linkIn(result: string | undefined): string | null {
 
 /**
  * What an agent wants to do outside Ghostaff, waiting for an owner (apps/engine/
- * src/actions.ts). Nothing happens until someone presses «Aprobar».
+ * src/actions.ts). Nothing happens until someone presses «Aprobar». When its tool
+ * lets them, whoever decides may change its text first («Editar»).
  */
 export function ActionCard({
   action,
@@ -146,16 +148,26 @@ export function ActionCard({
 }: {
   action: ActionPart;
   canDecide: boolean;
-  onDecide?: (actionId: string, decision: 'approve' | 'reject') => Promise<void>;
+  onDecide?: (actionId: string, decision: 'approve' | 'reject', edits?: Record<string, string>) => Promise<void>;
 }) {
   const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The texts being edited, by field; null while not editing.
+  const [draft, setDraft] = useState<Record<string, string> | null>(null);
+  const editable = action.editable ?? [];
   const decide = async (d: 'approve' | 'reject') => {
     if (!onDecide) return;
+    const edits = d === 'approve' && draft ? changedTexts(editable, draft) : undefined;
+    if (edits === null) {
+      setError('Ningún texto puede quedar vacío.');
+      return;
+    }
     setBusy(d);
     setError(null);
     try {
-      await onDecide(action.actionId, d);
+      if (edits && Object.keys(edits).length) await onDecide(action.actionId, d, edits);
+      else await onDecide(action.actionId, d);
+      setDraft(null);
     } catch {
       setError('No se ha podido. Inténtalo otra vez.');
     } finally {
@@ -163,25 +175,42 @@ export function ActionCard({
     }
   };
   const link = action.status === 'done' ? linkIn(action.result) : null;
+  const pending = action.status === 'pending';
+  const editing = pending && canDecide && draft !== null;
   return (
     <View className="mt-2 rounded-xl border border-line bg-card p-3" accessibilityLabel={`Propuesta: ${action.label}. ${ACTION_STATUS[action.status]}`}>
       <Text className="text-footnote font-semibold text-ink">{action.label}</Text>
-      {action.preview ? (
+      {editing ? (
+        editable.map((f) => (
+          <Field
+            key={f.field}
+            label={f.label}
+            value={draft[f.field] ?? f.value}
+            onChangeText={(t) => setDraft((d) => ({ ...(d ?? {}), [f.field]: t }))}
+            maxLength={f.max}
+            multiline={f.multiline}
+            editable={busy === null}
+          />
+        ))
+      ) : action.preview ? (
         <Text className="mt-1 text-caption text-muted" selectable numberOfLines={8}>
           {action.preview}
         </Text>
       ) : null}
-      <Text className={`mt-2 text-caption ${action.status === 'failed' ? 'text-no' : action.status === 'done' ? 'text-ok' : 'text-muted'}`}>
-        {ACTION_STATUS[action.status]}
-        {action.decidedBy && action.status !== 'pending' ? ` · ${action.decidedBy}` : ''}
-      </Text>
+      {editing ? null : (
+        <Text className={`mt-2 text-caption ${action.status === 'failed' ? 'text-no' : action.status === 'done' ? 'text-ok' : 'text-muted'}`}>
+          {ACTION_STATUS[action.status]}
+          {action.decidedBy && !pending ? ` · ${action.decidedBy}` : ''}
+          {action.edited && !pending ? ' · con cambios' : ''}
+        </Text>
+      )}
       {action.status === 'failed' && action.result ? <Text className="mt-1 text-caption text-no">{action.result}</Text> : null}
       {link ? (
         <Text className="mt-1 text-caption text-accent" selectable>
           {link}
         </Text>
       ) : null}
-      {action.status === 'pending' && canDecide ? (
+      {pending && canDecide ? (
         <View className="mt-3 flex-row gap-2">
           <Pressable
             accessibilityRole="button"
@@ -191,20 +220,64 @@ export function ActionCard({
           >
             {busy === 'approve' ? <ActivityIndicator size="small" /> : <Text className="text-footnote font-semibold text-on-accent">Aprobar</Text>}
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy !== null}
-            onPress={() => void decide('reject')}
-            className="flex-1 items-center rounded-full border border-line bg-surface px-3 py-2"
-          >
-            {busy === 'reject' ? <ActivityIndicator size="small" /> : <Text className="text-footnote font-semibold text-ink">Rechazar</Text>}
-          </Pressable>
+          {editing ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy !== null}
+              onPress={() => {
+                setDraft(null);
+                setError(null);
+              }}
+              className="flex-1 items-center rounded-full border border-line bg-surface px-3 py-2"
+            >
+              <Text className="text-footnote font-semibold text-ink">Cancelar</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy !== null}
+              onPress={() => void decide('reject')}
+              className="flex-1 items-center rounded-full border border-line bg-surface px-3 py-2"
+            >
+              {busy === 'reject' ? <ActivityIndicator size="small" /> : <Text className="text-footnote font-semibold text-ink">Rechazar</Text>}
+            </Pressable>
+          )}
         </View>
       ) : null}
-      {action.status === 'pending' && !canDecide ? <Text className="mt-2 text-caption text-muted">Lo aprueba quien es propietario de la empresa.</Text> : null}
-      {error ? <Text className="mt-2 text-caption text-no">{error}</Text> : null}
+      {pending && canDecide && !editing && editable.length ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Editar el texto antes de aprobar: ${action.label}`}
+          disabled={busy !== null}
+          onPress={() => setDraft(Object.fromEntries(editable.map((f) => [f.field, f.value])))}
+          className="mt-1 min-h-11 items-center justify-center"
+        >
+          <Text className="text-footnote font-semibold text-accent">Editar</Text>
+        </Pressable>
+      ) : null}
+      {pending && !canDecide ? <Text className="mt-2 text-caption text-muted">Lo aprueba quien es propietario de la empresa.</Text> : null}
+      {error ? (
+        <Text className="mt-2 text-caption text-no" accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
+}
+
+/**
+ * The texts a person changed, by field; null when one is left empty (the engine
+ * would refuse it). Only what differs from the agent's draft is sent.
+ */
+export function changedTexts(fields: readonly EditableField[], draft: Record<string, string>): Record<string, string> | null {
+  const changed: Record<string, string> = {};
+  for (const f of fields) {
+    const value = draft[f.field];
+    if (value === undefined || value === f.value) continue;
+    if (!value.trim()) return null;
+    changed[f.field] = value;
+  }
+  return changed;
 }
 
 export function MessageView({
@@ -231,7 +304,7 @@ export function MessageView({
   names: string[];
   /** Whether the viewer may approve the agent's proposed actions (owners). */
   canDecide?: boolean;
-  onDecide?: (actionId: string, decision: 'approve' | 'reject') => Promise<void>;
+  onDecide?: (actionId: string, decision: 'approve' | 'reject', edits?: Record<string, string>) => Promise<void>;
   /** Asks again for a voice note's transcript. */
   onRetryTranscript?: (messageId: string) => Promise<void>;
   /** What an agent's cards asking for an account can do here (connector-in-chat.md). */

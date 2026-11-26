@@ -217,6 +217,11 @@ export function googleTools(now: () => Date = () => new Date()): Tool[] {
       writes: true,
       step: 'Creando el evento en el calendario',
       action: 'Crear un evento en el calendario de Google',
+      editable: [
+        { field: 'title', label: 'Título', max: 300 },
+        { field: 'description', label: 'Notas', max: 4000, multiline: true },
+        { field: 'location', label: 'Lugar', max: 300 },
+      ],
       async run(ctx, input) {
         const title = str(input.title, 300);
         if (!title) throw new ToolError('Falta el título del evento.');
@@ -260,6 +265,7 @@ export function googleTools(now: () => Date = () => new Date()): Tool[] {
       writes: true,
       step: 'Creando la hoja de cálculo',
       action: 'Crear una hoja de cálculo en Google Drive',
+      editable: [{ field: 'title', label: 'Nombre', max: 200 }],
       async run(ctx, input) {
         const title = str(input.title, 200);
         if (!title) throw new ToolError('Falta el nombre de la hoja.');
@@ -302,6 +308,8 @@ export function googleTools(now: () => Date = () => new Date()): Tool[] {
       writes: true,
       step: 'Creando el documento',
       action: 'Crear un documento en Google Drive',
+      // Its content is HTML: not something to retouch in a text box.
+      editable: [{ field: 'title', label: 'Nombre', max: 200 }],
       async run(ctx, input) {
         const title = str(input.title, 200);
         if (!title) throw new ToolError('Falta el nombre del documento.');

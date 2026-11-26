@@ -221,6 +221,7 @@ export function tiktokTools(): Tool[] {
       writes: true,
       step: 'Subiendo el vídeo a TikTok',
       action: 'Subir un vídeo a TikTok',
+      editable: [{ field: 'caption', label: 'Texto', max: 2200, multiline: true }],
       async run(ctx, input) {
         const url = publicHttpsUrl(input.video);
         const privacy = typeof input.privacy === 'string' ? input.privacy : 'PUBLIC_TO_EVERYONE';

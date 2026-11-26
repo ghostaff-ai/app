@@ -20,7 +20,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Limits, limitsFromEvent, mergeLimits, NO_TOKENS, tokensFromUsage } from '@ghostaff/shared';
-import { AiFailure, type ModelTurn, type Writer } from './chat';
+import { AiFailure, CHAT_EFFORT, type ModelTurn, type Writer } from './chat';
 import { CLAUDE_SLOTS, makeHome, type PrintRunner, type Slots } from './claudeCode';
 import { MCP_SERVER_NAME, startToolServer, type ToolServer } from './toolServer';
 
@@ -80,7 +80,7 @@ export function claudeArgs(model: string, system: string, mcpConfigPath?: string
     '--strict-mcp-config',
     '--no-session-persistence',
     '--effort',
-    'low',
+    CHAT_EFFORT,
     ...(mcpConfigPath ? ['--mcp-config', mcpConfigPath] : []),
     ...(allowed.length ? ['--allowedTools', allowed.join(',')] : []),
   ];
@@ -173,7 +173,7 @@ async function runOnce(
         const kind = atLimit ? 'limited' : status === 401 || status === 403 ? 'refused' : 'failed';
         throw new AiFailure(kind, `claude code failed (${status ?? result.subtype ?? 'error'})`, limits);
       }
-      onUsage?.({ model, tokens: result.usage ? tokensFromUsage(result.usage) : NO_TOKENS, limits });
+      onUsage?.({ model, effort: CHAT_EFFORT, tokens: result.usage ? tokensFromUsage(result.usage) : NO_TOKENS, limits });
     } finally {
       clearTimeout(timer);
       await child.kill();

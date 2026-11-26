@@ -6,7 +6,7 @@
 // hands it a fresh access token for the organisation of the run, taken from the
 // run and never from the model.
 
-import type { AccountProvider } from '@ghostaff/shared';
+import type { AccountProvider, EditableField } from '@ghostaff/shared';
 
 /** The JSON Schema of a tool's input, as the model sees it. */
 export interface ToolInputSchema {
@@ -36,9 +36,18 @@ export interface Tool {
   step: string;
   /** For a tool that writes: what the approval card says it will do («Publicar en Instagram»). */
   action?: string;
+  /** For a tool that writes: the text fields a person may change before approving it («Editar»). */
+  editable?: EditableSpec[];
   /** Returns what the model reads back. Throws ToolError for a failure the model should hear about. */
   run(ctx: ToolContext, input: Record<string, unknown>): Promise<string>;
 }
+
+/**
+ * A text field of a writing tool's input that a person may change before
+ * approving (docs/plans/ongoing/model-routing.md, decision 9). `max` is the
+ * tool's own limit, or less for one too long to edit in a card.
+ */
+export type EditableSpec = Omit<EditableField, 'value'>;
 
 /** A failure the model is told, in words it can pass on. */
 export class ToolError extends Error {}
@@ -76,6 +85,8 @@ export interface AgentTools {
   writes(name: string, input?: unknown): boolean;
   /** What the approval card says a writing tool will do. */
   actionFor(name: string): string;
+  /** The text fields of a writing tool a person may change before approving it; none when absent. */
+  editableFor?(name: string): EditableSpec[];
   /** For a writing tool that can say exactly what it will change (a setting): the card's label and preview. Throws on bad input. */
   describe?(name: string, input: Record<string, unknown>): Promise<{ label: string; preview: string; decider?: 'owner' | 'requester' } | null>;
   /** The connected account a tool belongs to; undefined for one that belongs to none. */
@@ -125,6 +136,7 @@ export function mergeTools(a: AgentTools, b: AgentTools): AgentTools {
     stepFor: (name) => pick(name).stepFor(name),
     writes: (name, input) => pick(name).writes(name, input),
     actionFor: (name) => pick(name).actionFor(name),
+    editableFor: (name) => pick(name).editableFor?.(name) ?? [],
     describe: async (name, input) => (await pick(name).describe?.(name, input)) ?? null,
     providerOf: (name) => pick(name).providerOf?.(name),
     run: (name, input) => pick(name).run(name, input),

@@ -178,7 +178,7 @@ describe('several AI accounts', () => {
       writers: {
         'sub-1': async ({ onText, onUsage }) => {
           onText('Hola.');
-          onUsage?.({ model: 'claude-opus-5-5', tokens: { input: 5, output: 50, cacheRead: 0, cacheWrite: 0 }, limits: { sevenDay: { utilization: 0.5, resetsAt: null, status: 'allowed' } } });
+          onUsage?.({ model: 'claude-opus-5-5', effort: 'low', tokens: { input: 5, output: 50, cacheRead: 0, cacheWrite: 0 }, limits: { sevenDay: { utilization: 0.5, resetsAt: null, status: 'allowed' } } });
         },
       },
     });
@@ -189,6 +189,8 @@ describe('several AI accounts', () => {
     expect(used).toEqual([
       expect.objectContaining({ connectionId: 'sub-1', outcome: 'ok', costUsd: null, model: 'claude-opus-5-5', source: 'chat', agentId: AGENT, limits: expect.objectContaining({ sevenDay: expect.anything() }) }),
     ]);
+    // Tied to the reply it paid for, at its effort, so its outcome can be read against its cost (model-routing.md).
+    expect(used[0]).toMatchObject({ messageId: updates.at(-1)?.id, effort: 'low' });
   });
 
   it('one at its limit before writing: the next answers, and the first is marked limited', async () => {
@@ -503,6 +505,20 @@ describe("an agent using its organisation's tools", () => {
     expect(last).toMatchObject({ state: 'done', text: 'Lo dejo para que lo apruebes.' });
     expect(last?.cards).toEqual([
       { type: 'action', actionId: 'action-1', label: 'Publicar en Instagram', preview: 'kind: reel\nmedia: ["https://cdn.example/v.mp4"]', status: 'pending' },
+    ]);
+  });
+
+  it('a card carries the text its tool lets a person change before approving («Editar»)', async () => {
+    const { call, updates } = setup({
+      tools: { ...tools, editableFor: (name) => (name === 'instagram_publish' ? [{ field: 'caption', label: 'Texto', max: 2200, multiline: true }] : []) },
+      write: async ({ tools: t, onText }) => {
+        await t.run('instagram_publish', { kind: 'reel', caption: 'Pan del día' });
+        onText('Lista para aprobar.');
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(updates.at(-1)?.cards).toEqual([
+      expect.objectContaining({ type: 'action', editable: [{ field: 'caption', label: 'Texto', max: 2200, multiline: true, value: 'Pan del día' }] }),
     ]);
   });
 

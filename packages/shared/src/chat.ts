@@ -30,6 +30,23 @@ export interface ActionPart {
   decider?: 'owner' | 'requester';
   /** Who asked for it, when that person decides. */
   requestedBy?: string;
+  /** The text fields the person who decides may change before approving («Editar»), with their values now. */
+  editable?: EditableField[];
+  /** It ran after a person changed what the agent drafted (docs/plans/ongoing/model-routing.md). */
+  edited?: boolean;
+}
+
+/** A text field of an action a person may change before approving it, as the card shows it. */
+export interface EditableField {
+  /** The tool input's key. */
+  field: string;
+  /** What the person reads above the box, in Spanish («Respuesta»). */
+  label: string;
+  value: string;
+  /** The most characters it takes. */
+  max: number;
+  /** A box for paragraphs rather than one line. */
+  multiline?: boolean;
 }
 
 export function isActionPart(p: MessagePart): p is ActionPart & MessagePart {

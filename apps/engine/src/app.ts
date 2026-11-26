@@ -285,7 +285,11 @@ export function createApp(deps: AppDeps) {
   });
 
   // Answers when the action has run: Cloud Run keeps the CPU only while a request is open.
-  app.post('/actions/:id/approve', async (c) => c.json(await approveAction(deps.actions, c.get('userId'), c.req.param('id'), c.get('accessToken'))));
+  app.post('/actions/:id/approve', async (c) => {
+    // «Editar»: the person's changes to the action's text, if any (docs/plans/ongoing/model-routing.md).
+    const body = (await c.req.json().catch(() => null)) as { edits?: unknown } | null;
+    return c.json(await approveAction(deps.actions, c.get('userId'), c.req.param('id'), c.get('accessToken'), body?.edits));
+  });
 
   app.post('/actions/:id/reject', async (c) => c.json(await rejectAction(deps.actions, c.get('userId'), c.req.param('id'))));
 

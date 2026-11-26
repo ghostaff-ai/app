@@ -543,6 +543,7 @@ export async function toolsFor(deps: AccountDeps, token: ReturnType<typeof acces
     stepFor: (name) => byName.get(name)?.step ?? 'Trabajando',
     writes: (name) => byName.get(name)?.writes ?? true,
     actionFor: (name) => byName.get(name)?.action ?? byName.get(name)?.step ?? name,
+    editableFor: (name) => byName.get(name)?.editable ?? [],
     async run(name, input) {
       const tool = byName.get(name);
       if (!tool) return { content: `No existe la herramienta ${name}.`, isError: true };

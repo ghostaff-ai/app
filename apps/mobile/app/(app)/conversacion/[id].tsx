@@ -70,9 +70,9 @@ export default function Conversacion() {
   const cardState = useMemo(() => ({ asks, guides }), [asks, guides]);
   // The card updates itself when the engine rewrites the message.
   const decide = useMemo(
-    () => async (actionId: string, decision: 'approve' | 'reject') => {
+    () => async (actionId: string, decision: 'approve' | 'reject', edits?: Record<string, string>) => {
       if (!engine) throw new Error('not signed in');
-      await decideAction(engine, actionId, decision);
+      await decideAction(engine, actionId, decision, edits);
     },
     [engine],
   );

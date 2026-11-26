@@ -9,7 +9,7 @@ import { addTokens, atLimit, type ChatMessage, estimateCostUsd, limitsFromRow, l
 import { messageFromRow } from '@ghostaff/shared/services';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { CloudAccountNotReady } from './cloudAccounts';
-import { type AiAccount, AiFailure, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, type Writer } from './chat';
+import { type AiAccount, AiFailure, CHAT_EFFORT, type ChatAgent, type ChatStore, type ChatThreadHead, type Level, type Writer } from './chat';
 import type { FoundMessage } from './context';
 import { type PrintRunner, runClaudePrint } from './claudeCode';
 import { subscriptionWriter } from './claudeWriter';
@@ -204,6 +204,9 @@ export function supabaseChatStore(admin: SupabaseClient, opts: { afterAgentWrite
           org_id: use.orgId,
           connection_id: use.connectionId,
           agent_id: use.agentId,
+          message_id: use.messageId ?? null,
+          run_id: use.runId ?? null,
+          effort: use.effort ?? null,
           source: use.source,
           outcome: use.outcome,
           model: use.model?.slice(0, 80) ?? null,
@@ -263,7 +266,7 @@ export const MAX_TOOL_ROUNDS = 8;
 
 /**
  * Streams with any Anthropic-shaped client. Chat is quick back-and-forth: low
- * effort. When the model asks for tools, runs them and lets it go on, until it
+ * effort (CHAT_EFFORT). When the model asks for tools, runs them and lets it go on, until it
  * answers or reaches MAX_TOOL_ROUNDS.
  *
  * Cached automatically: a turn's prefix (tools, system, the summary, the
@@ -287,7 +290,7 @@ export function streamWith(client: Anthropic | AnthropicVertex): Writer {
     let used = NO_TOKENS;
     const done = () => {
       console.info(JSON.stringify({ message: 'chat usage', model: CHAT_MODEL, ...used }));
-      onUsage?.({ model: CHAT_MODEL, tokens: used, limits: null });
+      onUsage?.({ model: CHAT_MODEL, effort: CHAT_EFFORT, tokens: used, limits: null });
     };
     let wrote = false;
     let gap = false; // a new round after tools: separate its text from what came before
@@ -299,7 +302,7 @@ export function streamWith(client: Anthropic | AnthropicVertex): Writer {
         system,
         messages: history,
         ...(tools.specs.length ? { tools: tools.specs as Anthropic.Tool[] } : {}),
-        output_config: { effort: 'low' },
+        output_config: { effort: CHAT_EFFORT },
       });
       for await (const event of stream) {
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {

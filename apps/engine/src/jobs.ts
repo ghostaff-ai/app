@@ -268,6 +268,8 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
         orgId: agent.orgId,
         connectionId: run.connectionId,
         agentId: agent.id,
+        messageId: run.messageId,
+        runId: run.id,
         source: 'run',
         outcome: runOutcome(report),
         model: u?.model ?? null,

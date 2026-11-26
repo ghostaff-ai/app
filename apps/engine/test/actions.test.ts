@@ -1,6 +1,6 @@
 import type { ActionPart } from '@ghostaff/shared';
 import { describe, expect, it } from 'vitest';
-import { type ActionRecord, type ActionStore, approveAction, previewOf, rejectAction } from '../src/actions';
+import { type ActionRecord, type ActionStore, approveAction, editableOf, previewOf, rejectAction } from '../src/actions';
 import { createApp } from '../src/app';
 import type { Membership } from '../src/connections';
 import { type AgentTools, NO_TOOLS } from '../src/tools';
@@ -21,7 +21,7 @@ function setup(opts: { state?: 'working' | 'done'; fails?: boolean } = {}) {
     messageId: 'm',
     agentId: null,
     tool: 'instagram_publish',
-    input: { kind: 'reel' },
+    input: { kind: 'reel', caption: 'Hola' },
     label: 'Publicar en Instagram',
     status: 'pending',
     messageState: opts.state ?? 'done',
@@ -30,12 +30,14 @@ function setup(opts: { state?: 'working' | 'done'; fails?: boolean } = {}) {
   };
   const cards: Array<Partial<ActionPart>> = [];
   const ran: Array<{ name: string; input: unknown }> = [];
+  const claimed: Array<{ input: Record<string, unknown>; drafted: Record<string, unknown> } | undefined> = [];
   const actions: ActionStore = {
     membership: async (o, u) => (o === ORG ? (members[u] ?? null) : null),
     action: async (id) => (id === ACTION ? record : null),
-    claim: async (_id, to) => {
+    claim: async (_id, to, _u, _n, edited) => {
       if (record.status !== 'pending') return false;
       record.status = to;
+      claimed.push(edited);
       return true;
     },
     settle: async (_id, status, result) => {
@@ -52,6 +54,7 @@ function setup(opts: { state?: 'working' | 'done'; fails?: boolean } = {}) {
     stepFor: () => '',
     writes: () => true,
     actionFor: () => '',
+    editableFor: (name) => (name === 'instagram_publish' ? [{ field: 'caption', label: 'Texto', max: 20, multiline: true }] : []),
     run: async (name, input) => {
       ran.push({ name, input });
       return opts.fails ? { content: 'Instagram no deja hacerlo.', isError: true } : { content: '{"published":true,"link":"https://ig/p/1"}', isError: false };
@@ -66,9 +69,13 @@ function setup(opts: { state?: 'working' | 'done'; fails?: boolean } = {}) {
     accounts: {} as never,
     actions: { actions, toolsFor: async () => tools },
   });
-  const press = (user: string, what: 'approve' | 'reject', id = ACTION) =>
-    app.request(`/actions/${id}/${what}`, { method: 'POST', headers: { Authorization: `Bearer token-${user}` } });
-  return { record, cards, ran, press, deps: { actions, toolsFor: async () => tools } };
+  const press = (user: string, what: 'approve' | 'reject', id = ACTION, body?: unknown) =>
+    app.request(`/actions/${id}/${what}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer token-${user}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  return { record, cards, ran, claimed, press, deps: { actions, toolsFor: async () => tools } };
 }
 
 describe('approving what an agent proposes', () => {
@@ -77,7 +84,7 @@ describe('approving what an agent proposes', () => {
     const res = await press('ana', 'approve');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: 'done', result: '{"published":true,"link":"https://ig/p/1"}' });
-    expect(ran).toEqual([{ name: 'instagram_publish', input: { kind: 'reel' } }]);
+    expect(ran).toEqual([{ name: 'instagram_publish', input: { kind: 'reel', caption: 'Hola' } }]);
     expect(cards[0]).toEqual({ status: 'running', decidedBy: 'Ana' });
     expect(cards.at(-1)).toMatchObject({ status: 'done', decidedBy: 'Ana' });
     expect(record.status).toBe('done');
@@ -109,6 +116,46 @@ describe('approving what an agent proposes', () => {
     const writing = setup({ state: 'working' });
     expect((await writing.press('ana', 'approve')).status).toBe(409);
     expect((await writing.press('ana', 'approve', 'not-a-uuid')).status).toBe(400);
+  });
+
+  it('«Editar»: an owner changes the text before approving; it runs edited, the draft is kept, the card says so', async () => {
+    const { press, ran, cards, claimed } = setup();
+    const res = await press('ana', 'approve', ACTION, { edits: { caption: 'Hola a todos' } });
+    expect(res.status).toBe(200);
+    expect(ran).toEqual([{ name: 'instagram_publish', input: { kind: 'reel', caption: 'Hola a todos' } }]);
+    expect(claimed).toEqual([{ input: { kind: 'reel', caption: 'Hola a todos' }, drafted: { kind: 'reel', caption: 'Hola' } }]);
+    expect(cards[0]).toEqual({
+      status: 'running',
+      decidedBy: 'Ana',
+      edited: true,
+      preview: 'kind: reel\ncaption: Hola a todos',
+      editable: [{ field: 'caption', label: 'Texto', max: 20, multiline: true, value: 'Hola a todos' }],
+    });
+  });
+
+  it('edits that change nothing approve it as drafted', async () => {
+    const { press, claimed, cards } = setup();
+    expect((await press('ana', 'approve', ACTION, { edits: { caption: 'Hola' } })).status).toBe(200);
+    expect(claimed).toEqual([undefined]);
+    expect(cards[0]).toEqual({ status: 'running', decidedBy: 'Ana' });
+  });
+
+  it('refuses edits to a field the tool does not let change, an empty or too long text, or edits that are not texts; nothing runs', async () => {
+    const t = setup();
+    for (const edits of [{ kind: 'image' }, { caption: '   ' }, { caption: 'x'.repeat(21) }, { caption: 3 }, ['caption']]) {
+      expect((await t.press('ana', 'approve', ACTION, { edits })).status).toBe(400);
+    }
+    expect(t.ran).toHaveLength(0);
+    expect(t.record.status).toBe('pending');
+  });
+
+  it('a card offers the editable fields the input has as text, within their limit', () => {
+    const specs = [
+      { field: 'subject', label: 'Asunto', max: 300 },
+      { field: 'text', label: 'Texto', max: 10, multiline: true },
+    ];
+    expect(editableOf(specs, { subject: 'Hola', text: 'Muy largo de verdad' })).toEqual([{ field: 'subject', label: 'Asunto', max: 300, value: 'Hola' }]);
+    expect(editableOf(specs, { replyTo: 'x', text: 'Breve' })).toEqual([{ field: 'text', label: 'Texto', max: 10, multiline: true, value: 'Breve' }]);
   });
 
   it('the card shows the input field by field, long values cut', () => {

@@ -2,7 +2,7 @@
 
 **Priority:** medium — AI is the biggest variable cost of the product, and today everything runs on the strongest model; nothing is at scale yet, so there is room to do it right
 **Gate:** none
-**Next:** land phase 0 (branch `feat/model-routing-phase0`, Tasks below): every usage row tied to its reply or run with its effort, «Editar» on action cards, and `ai_reply_outcomes`
+**Next:** land phase 0's PR (branch `feat/model-routing-phase0`) with `pnpm pr:land`, after agent-context's PR, then read a week of `ai_reply_outcomes` on beta
 
 Jaime's concern (2026-11-18), researched the same day. A small company does not know what Sonnet or Opus are and should never choose one. Something in the engine has to choose for it: the cheapest model that does the task well, never the strongest for everything.
 
@@ -88,18 +88,18 @@ What already exists (multiple-ai-accounts): `ai_usage` keeps one row per reply o
 
 - **Which reply or run it paid for** (`message_id`, `run_id`), so its outcome can be joined to it.
 - **The effort and the tier.** Effort today is `low` everywhere (`streamWith`, `subscriptionWriter`); it becomes one constant, `CHAT_EFFORT`, which the writers report with their usage. `tier` is null until phase 1 resolves one; a null tier is «not routed».
-- **The outcome**, as the view `ai_reply_outcomes` (security invoker, so row-level security applies), one row per successful reply with:
+- **The outcome**, as the function `ai_reply_outcomes(org, since)` (security invoker, so row-level security applies, like `ai_usage_daily`), one row per successful reply with:
   - `accepted`, `edited` or `rejected` when its message carries an action card a person decided: approved as drafted, approved after «Editar», or rejected;
   - otherwise `followed_up`, with the next person's message and the seconds to it, for phase 1 to classify (decision 8);
   - otherwise `none`.
   Decisions keep what they already record (the option chosen against the one recommended); tying a decision to the run that opened it is not phase 0's.
-- **«Editar» on action cards** (decision 9). A tool that writes declares which of its input's text fields a person may edit (`editable` on the tool's definition: a review reply's `comment`, a post's `caption`, a draft's `subject` and `body`). The card carries those fields and their values; «Editar» turns them into text boxes, and «Aprobar» sends the changes with the approval. The engine accepts only declared fields, as strings, within the tool's own limits, keeps the agent's draft in `agent_actions.drafted_input`, runs the edited input, and marks the card `edited`. Settings changes, guided requests and makers' MCP tools declare none in this phase, so their cards approve or reject as today. The deck's OK card does not edit: «Editar» is in the chat's card only.
+- **«Editar» on action cards** (decision 9). A tool that writes declares which of its input's text fields a person may edit (`editable` on the tool's definition: a review's `reply`, a post's `caption`, a draft's `subject` and `text`; a document's HTML is not, nor a mail longer than 20,000 characters). The card carries those fields and their values; «Editar» turns them into text boxes, and «Aprobar» sends the changes with the approval. The engine accepts only declared fields, as strings, within the tool's own limits, keeps the agent's draft in `agent_actions.drafted_input`, runs the edited input, and marks the card `edited`. Settings changes, guided requests and makers' MCP tools declare none in this phase, so their cards approve or reject as today. The deck's OK card does not edit: «Editar» is in the chat's card only.
 
 The rest of the original phase 0 (stable prompt prefixes, the Batch API for scheduled work, a spending cap per run) is not in this change: caching is agent-context's, and Batch and the cap come once the data shows where the cost is.
 
 ### File Structure
 
-- Create `supabase/migrations/<ts>_model_routing_phase0.sql`: `ai_usage` gets `message_id` (→ `messages`, on delete set null), `run_id` (→ `agent_runs`, on delete set null), `effort` (`low` … `max`), `tier` (`light` | `standard` | `deep`, null), and an index on `message_id`; `agent_actions` gets `drafted_input jsonb`; the view `ai_reply_outcomes`.
+- Create `supabase/migrations/20261126950000_model_routing_phase0.sql`: `ai_usage` gets `message_id` (→ `messages`, on delete set null), `run_id` (→ `agent_runs`, on delete set null), `effort` (`low` … `max`), `tier` (`light` | `standard` | `deep`, null), and an index on `message_id`; `agent_actions` gets `drafted_input jsonb`; the function `ai_reply_outcomes`.
 - Create `supabase/tests/database/ai_reply_outcomes.test.sql`: another organisation's member sees none of an organisation's outcomes; a member sees an outcome only for a conversation they see; the outcome is `accepted`, `edited`, `rejected`, `followed_up` or `none` as above.
 - Modify `apps/engine/src/chatStore.ts`: `CHAT_EFFORT`; `streamWith` reports it; `recordAiUse` writes `message_id`, `run_id`, `effort`.
 - Modify `apps/engine/src/claudeWriter.ts`: `--effort` from `CHAT_EFFORT`, reported with its usage.
@@ -116,12 +116,12 @@ The rest of the original phase 0 (stable prompt prefixes, the Batch API for sche
 ### Tasks
 
 Stage 1, measure (rebased on agent-context's PR, which changes the same `recordUse` calls):
-- [ ] Migration: the `ai_usage` columns and index, `agent_actions.drafted_input`, `ai_reply_outcomes`; pgTAP.
-- [ ] Engine: `CHAT_EFFORT` reported by both writers; every chat reply's and runner run's usage row carries its message, run and effort; tests.
+- [x] Migration: the `ai_usage` columns and index, `agent_actions.drafted_input`, `ai_reply_outcomes`; pgTAP; the function classified `not_a_setting` (rule 6).
+- [x] Engine: `CHAT_EFFORT` reported by both writers; every chat reply's and runner run's usage row carries its message, run and effort; tests.
 
 Stage 2, «Editar» on action cards:
-- [ ] Engine: `editable` on the writing tools; the card part lists the fields; approve with `edits` validated, the draft kept, the card marked `edited`; tests, including a field not declared and a value over the tool's limit refused.
-- [ ] Shared and app: `ActionPart.editable` / `edited`, `decideAction(…, edits)`, the card's «Editar»; component tests.
-- [ ] Architecture: usage rows and the edited approval.
+- [x] Engine: `editable` on the writing tools; the card part lists the fields; approve with `edits` validated, the draft kept, the card marked `edited`; tests, including a field not declared and a value over the tool's limit refused.
+- [x] Shared and app: `ActionPart.editable` / `edited`, `decideAction(…, edits)`, the card's «Editar»; component tests.
+- [x] Architecture: usage rows and the edited approval.
 
 After phase 0: read a week of `ai_reply_outcomes` on beta and Órdago's runs before phase 1 starts.
