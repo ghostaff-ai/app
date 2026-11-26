@@ -86,10 +86,11 @@ describe.skipIf(!url || !token)('the record store, live', () => {
     const rows = new Map<string, MemoryFile>();
     const store: MemoryStore = {
       memoryIndex: async () => [...rows.values()].map((r) => ({ path: r.path, sha: r.sha, updatedAt: r.updatedAt })),
-      memory: async (_o, p) => rows.get(p) ?? null,
+      memory: async (_o, _s, p) => rows.get(p) ?? null,
+      latestMemory: async () => [...rows.values()],
       searchMemory: async () => [],
-      saveMemory: async (_o, files) => files.forEach((f) => rows.set(f.path, { ...f, updatedAt: new Date().toISOString() })),
-      forgetMemory: async (_o, paths) => paths.forEach((p) => rows.delete(p)),
+      saveMemory: async (_o, _s, files) => files.forEach((f) => rows.set(f.path, { ...f, updatedAt: new Date().toISOString() })),
+      forgetMemory: async (_o, _s, paths) => paths.forEach((p) => rows.delete(p)),
     };
     const t = memoryTools({ store, repoFor: async () => repo, memberName: async () => 'Ana' }, repo, { orgId: 'o', agentName: 'Secretaría', canWrite: true, userId: 'u' });
     expect((await t.run('memory_create', { path: 'proveedores/gestoria.md', content: 'Gestoría López, desde 2024.' })).isError).toBe(false);

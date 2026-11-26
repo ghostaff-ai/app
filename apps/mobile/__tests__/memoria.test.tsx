@@ -1,24 +1,34 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import MemoriaDeLaEmpresa from '@/app/(app)/(tabs)/empresa/memoria';
+import MemoriaDelAgente from '@/app/(app)/agente/[id]/memoria';
+import RecuerdoDelAgente from '@/app/(app)/agente/[id]/memoria/[...path]';
 import Recuerdo from '@/app/(app)/memoria/[...path]';
 
 let mockPath: string | string[] = ['proveedores', 'gestoria.md'];
 const mockList = jest.fn();
 const mockRead = jest.fn();
+const mockListAgent = jest.fn();
+const mockReadAgent = jest.fn();
+const AGENT = '30000000-0000-0000-0000-000000000001';
 
 jest.mock('@/lib/tabs', () => ({ useTabScreenTop: () => 0 }));
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn(), replace: jest.fn() }, useFocusEffect: jest.fn(), useLocalSearchParams: () => ({ path: mockPath }) }));
+jest.mock('expo-router', () => ({ router: { push: jest.fn(), replace: jest.fn() }, useFocusEffect: jest.fn(), useLocalSearchParams: () => ({ id: AGENT, path: mockPath }) }));
 jest.mock('@/lib/org/ActiveOrgContext', () => ({ useActiveOrg: () => ({ active: { id: 'org-1' } }) }));
 jest.mock('@ghostaff/shared/services', () => ({
   listMemories: (...a: unknown[]) => mockList(...a),
   readMemory: (...a: unknown[]) => mockRead(...a),
+  listAgentMemories: (...a: unknown[]) => mockListAgent(...a),
+  readAgentMemory: (...a: unknown[]) => mockReadAgent(...a),
+  getAgent: async () => ({ id: AGENT, name: 'Finanzas' }),
 }));
 
 beforeEach(() => {
   mockList.mockReset();
   mockRead.mockReset();
+  mockListAgent.mockReset();
+  mockReadAgent.mockReset();
   (router.push as jest.Mock).mockReset();
   mockPath = ['proveedores', 'gestoria.md'];
 });
@@ -78,6 +88,32 @@ describe('a file of the memory', () => {
     mockPath = ['..', 'secreto.md'];
     await render(<Recuerdo />);
     expect(await screen.findByText('Este enlace no lleva a la memoria')).toBeOnTheScreen();
+    expect(mockRead).not.toHaveBeenCalled();
+  });
+});
+
+describe("an agent's own memory (agent-context.md PR 2)", () => {
+  it('lists what the agent keeps, and opens a file under the agent', async () => {
+    mockListAgent.mockResolvedValue([{ path: 'como-trabajo.md', updatedAt: '2026-11-26T09:00:00Z', updatedBy: 'Finanzas (por Ana)' }]);
+    await render(<MemoriaDelAgente />);
+    expect(await screen.findByText('Memoria de Finanzas')).toBeOnTheScreen();
+    expect(mockListAgent).toHaveBeenCalledWith({}, AGENT);
+    await fireEvent.press(screen.getByText('Como trabajo'));
+    expect(router.push).toHaveBeenCalledWith(`/agente/${AGENT}/memoria/como-trabajo.md`);
+  });
+
+  it('says the agent remembers nothing yet', async () => {
+    mockListAgent.mockResolvedValue([]);
+    await render(<MemoriaDelAgente />);
+    expect(await screen.findByText('Finanzas aún no recuerda nada')).toBeOnTheScreen();
+  });
+
+  it('opens one of its files', async () => {
+    mockPath = ['como-trabajo.md'];
+    mockReadAgent.mockResolvedValue({ path: 'como-trabajo.md', content: 'Ana quiere el informe en **tres líneas**.', updatedAt: '2026-11-26T09:00:00Z', updatedBy: 'Finanzas (por Ana)' });
+    await render(<RecuerdoDelAgente />);
+    expect(await screen.findByText('tres líneas')).toBeOnTheScreen();
+    expect(mockReadAgent).toHaveBeenCalledWith({}, AGENT, 'como-trabajo.md');
     expect(mockRead).not.toHaveBeenCalled();
   });
 });

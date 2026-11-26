@@ -211,6 +211,33 @@ export async function readMemory(client: SupabaseClient, orgId: string, path: st
   return data ? { path: data.path, content: data.content, updatedAt: data.updated_at, updatedBy: data.updated_by } : null;
 }
 
+/** One agent's own memory (agent-context.md PR 2), the latest changed first, without each file's text. Row-level security: whoever may see the agent. */
+export async function listAgentMemories(client: SupabaseClient, agentId: string): Promise<Omit<MemoryNote, 'content'>[]> {
+  const { data, error } = await client
+    .from('memories')
+    .select('path, updated_at, updated_by')
+    .eq('store', 'agente')
+    .eq('agent_id', agentId)
+    .order('updated_at', { ascending: false })
+    .limit(1000)
+    .returns<Array<{ path: string; updated_at: string; updated_by: string | null }>>();
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ path: r.path, updatedAt: r.updated_at, updatedBy: r.updated_by }));
+}
+
+/** One file of an agent's own memory, or null when it isn't there (or the person may not see the agent). */
+export async function readAgentMemory(client: SupabaseClient, agentId: string, path: string): Promise<MemoryNote | null> {
+  const { data, error } = await client
+    .from('memories')
+    .select('path, content, updated_at, updated_by')
+    .eq('store', 'agente')
+    .eq('agent_id', agentId)
+    .eq('path', path)
+    .maybeSingle<{ path: string; content: string; updated_at: string; updated_by: string | null }>();
+  if (error) throw error;
+  return data ? { path: data.path, content: data.content, updatedAt: data.updated_at, updatedBy: data.updated_by } : null;
+}
+
 /** How many decisions wait for a person in each of these organisations (none listed: 0). */
 export async function countWaiting(client: SupabaseClient, orgIds: string[]): Promise<Record<string, number>> {
   const counts: Record<string, number> = Object.fromEntries(orgIds.map((id) => [id, 0]));

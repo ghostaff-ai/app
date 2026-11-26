@@ -87,12 +87,12 @@ File Structure:
 
 Tasks:
 
-1. [ ] Migration and pgTAP test. `pnpm db:test`.
-2. [ ] `memory.ts` by store, test first: projection of Empresa and agent folders (an unknown slug's folder ignored); the `store` argument; writing `"empresa"` refused to everyone but Secretaría, `"propia"` allowed to every agent, one commit signed «Finanzas (por Ana)»; the store in the prompt, or its index past the budget.
-3. [ ] `recordStore.ts`, `recordSync.ts`.
-4. [ ] `chat.ts`: the own store and its lines in the system prompt; a test that two turns with the same store send the same system prompt.
-5. [ ] Shared services, the screens, the row, the link; Jest.
-6. [ ] Check on the web against local Supabase and Forgejo with a stand-in writer, as #91 did: a turn's tool call files into `memoria/agentes/<slug>/`, the next turn's system prompt carries it, the agent's «Memoria» lists it.
+1. [x] Migration and pgTAP test (`20261128600000_agent_memories.sql`, 18 checks); the 42 pgTAP files pass.
+2. [x] `memory.ts` by store, test first: projection of Empresa and agent folders (an unknown slug's folder ignored); the `store` argument; writing `"empresa"` refused to everyone but Secretaría, `"propia"` allowed to every agent, one commit signed «Finanzas (por Ana)»; the store in the prompt, or its index past the budget.
+3. [x] `recordStore.ts`, `recordSync.ts`; `supabaseMemoryStore` run against a local Supabase (Empresa's upsert keeps one row, the same path in two stores, search and forget by store).
+4. [x] `chat.ts`: the own store and its lines in the system prompt; a test that two turns with the same store send the same system prompt.
+5. [x] Shared services, the screens (on `components/memory/`, which Empresa's now use too), the row, the link; Jest.
+6. [x] Checked on the web (2026-11-26) against a local Supabase: a member who may see the agent opens Equipo → agent → «Memoria», its list and a file, desktop and phone width; with level `none` the list is empty. The tool's commit into `memoria/agentes/<slug>/` and the next turn's prompt are covered by the unit tests only (no local Forgejo or model run); the record's hook lets the engine, its admin, write there.
 7. [ ] `docs/architecture.md`; [agent-memory.md](../ready/agent-memory.md) says what is left (correcting, forgetting, history, «Sobre ti», runner agents' stores). `pnpm pr:land`.
 
 ### Later

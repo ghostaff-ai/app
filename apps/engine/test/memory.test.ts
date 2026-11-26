@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { memoryPath, memoryTitle } from '@ghostaff/shared';
-import { gitBlobSha, type MemoryDeps, type MemoryFile, type MemoryStore, memoryTools, projectMemory } from '../src/memory';
+import { COMPANY_STORE, gitBlobSha, type MemoryDeps, type MemoryFile, type MemoryPlace, type MemoryStore, memoryTools, OWN_MEMORY_BUDGET, ownMemoryLines, projectMemory } from '../src/memory';
 import type { RecordChange, RecordRepo } from '../src/recordSync';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 const ANA = '00000000-0000-0000-0000-00000000000a';
+const FINANZAS = '30000000-0000-0000-0000-000000000001';
+const LEGAL = '30000000-0000-0000-0000-000000000002';
+const own: MemoryPlace = { agentId: FINANZAS, slug: 'finanzas' };
 
 /** A record in memory: files by full path, a head that moves with each commit. */
 function fakeRepo(files: Record<string, string> = {}) {
@@ -48,36 +51,46 @@ function fakeRepo(files: Record<string, string> = {}) {
   return { repo, state };
 }
 
-/** The projection in memory. */
-function fakeStore(rows: MemoryFile[] = []): MemoryStore & { rows: Map<string, MemoryFile> } {
-  const byPath = new Map(rows.map((r) => [r.path, r]));
-  return {
-    rows: byPath,
-    async memoryIndex() {
-      return [...byPath.values()].map((r) => ({ path: r.path, sha: r.sha, updatedAt: r.updatedAt }));
+/** The projection in memory, one map per store. */
+function fakeStore(rows: MemoryFile[] = [], agents: Record<string, MemoryFile[]> = {}) {
+  const maps = new Map<string | null, Map<string, MemoryFile>>();
+  const of = (p: MemoryPlace) => {
+    if (!maps.has(p.agentId)) maps.set(p.agentId, new Map());
+    return maps.get(p.agentId)!;
+  };
+  for (const r of rows) of(COMPANY_STORE).set(r.path, r);
+  for (const [agentId, files] of Object.entries(agents)) for (const r of files) of({ agentId, slug: '' }).set(r.path, r);
+  const store: MemoryStore = {
+    async memoryIndex(_org, place) {
+      return [...of(place).values()].map((r) => ({ path: r.path, sha: r.sha, updatedAt: r.updatedAt }));
     },
-    async memory(_org, path) {
-      return byPath.get(path) ?? null;
+    async memory(_org, place, path) {
+      return of(place).get(path) ?? null;
     },
-    async searchMemory(_org, words) {
-      return [...byPath.values()].filter((r) => words.every((w) => `${r.path}\n${r.content}`.toLowerCase().includes(w.toLowerCase())));
+    async latestMemory(_org, place, max) {
+      return [...of(place).values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.path.localeCompare(b.path)).slice(0, max);
     },
-    async saveMemory(_org, files) {
-      for (const f of files) byPath.set(f.path, { ...f, updatedAt: '2026-11-26T10:00:00Z' });
+    async searchMemory(_org, place, words) {
+      return [...of(place).values()].filter((r) => words.every((w) => `${r.path}\n${r.content}`.toLowerCase().includes(w.toLowerCase())));
     },
-    async forgetMemory(_org, paths) {
-      for (const p of paths) byPath.delete(p);
+    async saveMemory(_org, place, files) {
+      for (const f of files) of(place).set(f.path, { ...f, updatedAt: '2026-11-26T10:00:00Z' });
+    },
+    async forgetMemory(_org, place, paths) {
+      for (const p of paths) of(place).delete(p);
     },
   };
+  return Object.assign(store, { rows: of(COMPANY_STORE), place: of });
 }
 
 const row = (path: string, content: string, updatedBy: string | null = null): MemoryFile => ({ path, content, sha: gitBlobSha(content), updatedAt: '2026-11-20T09:00:00Z', updatedBy });
 
-function tools(opts: { canWrite: boolean; store?: ReturnType<typeof fakeStore>; repo?: ReturnType<typeof fakeRepo> }) {
+function tools(opts: { canWrite: boolean; store?: ReturnType<typeof fakeStore>; repo?: ReturnType<typeof fakeRepo>; own?: MemoryPlace }) {
   const store = opts.store ?? fakeStore();
   const r = opts.repo ?? fakeRepo();
   const deps: MemoryDeps = { store, repoFor: async () => r.repo, memberName: async () => 'Ana' };
-  return { t: memoryTools(deps, r.repo, { orgId: ORG, agentName: opts.canWrite ? 'Secretaría' : 'Finanzas', canWrite: opts.canWrite, userId: ANA }), store, r };
+  const ctx = { orgId: ORG, agentName: opts.canWrite ? 'Secretaría' : 'Finanzas', canWrite: opts.canWrite, userId: ANA, own: opts.own ?? null };
+  return { t: memoryTools(deps, r.repo, ctx), store, r };
 }
 
 describe('memory paths (packages/shared/src/memory.ts)', () => {
@@ -198,5 +211,84 @@ describe('memoryTools', () => {
     };
     const out = await tools({ canWrite: true, repo: r }).t.run('memory_create', { path: 'a.md', content: 'x' });
     expect(out).toEqual({ content: expect.stringContaining('No he podido'), isError: true });
+  });
+});
+
+describe("each agent's own memory (agent-context.md PR 2)", () => {
+  it('projects each agent\'s folder beside Empresa, and ignores a folder of no agent', async () => {
+    const { repo } = fakeRepo({
+      'memoria/empresa/a.md': 'A\n',
+      'memoria/agentes/finanzas/como-trabajo.md': 'Informe en tres líneas\n',
+      'memoria/agentes/nadie/x.md': 'de nadie\n',
+    });
+    const store = fakeStore([], { [LEGAL]: [row('viejo.md', 'ya no está\n')] });
+    const notes = await projectMemory(store, repo, ORG, 'h1', [
+      { id: FINANZAS, slug: 'finanzas' },
+      { id: LEGAL, slug: 'legal' },
+      { id: 'sin-slug', slug: null },
+    ]);
+    expect([...store.rows.keys()]).toEqual(['a.md']);
+    expect([...store.place(own).keys()]).toEqual(['como-trabajo.md']);
+    expect(store.place({ agentId: LEGAL, slug: 'legal' }).size).toBe(0);
+    expect(notes).toEqual(['memory: 1 from the record, 0 gone', 'memory finanzas: 1 from the record, 0 gone', 'memory legal: 0 from the record, 1 gone']);
+  });
+
+  it('lets every agent write its own store, as one commit signed by who asked', async () => {
+    const { t, store, r } = tools({ canWrite: false, own });
+    expect(t.specs.map((s) => s.name)).toEqual(['memory_view', 'memory_search', 'memory_create', 'memory_str_replace']);
+    const out = await t.run('memory_create', { store: 'propia', path: 'como-trabajo.md', content: 'Ana quiere el informe en tres líneas.' });
+    expect(out).toEqual({ content: expect.stringContaining(`[como-trabajo.md](/agente/${FINANZAS}/memoria/como-trabajo.md)`), isError: false });
+    expect(out.content).toContain('tu memoria');
+    expect(r.state.commits[0]!.message).toBe('memoria: nuevo agentes/finanzas/como-trabajo.md (Finanzas (por Ana))');
+    expect(r.state.files['memoria/agentes/finanzas/como-trabajo.md']).toBe('Ana quiere el informe en tres líneas.\n');
+    expect(store.place(own).get('como-trabajo.md')?.updatedBy).toBe('Finanzas (por Ana)');
+    expect(store.rows.size).toBe(0);
+    // Its own store is where an agent that isn't Secretaría writes, said or not.
+    expect((await t.run('memory_create', { path: 'otro.md', content: 'x' })).isError).toBe(false);
+    expect(r.state.files['memoria/agentes/finanzas/otro.md']).toBe('x\n');
+  });
+
+  it('still keeps Empresa for Secretaría', async () => {
+    const reader = tools({ canWrite: false, own });
+    expect(await reader.t.run('memory_create', { store: 'empresa', path: 'a.md', content: 'x' })).toEqual({ content: expect.stringContaining('Solo Secretaría'), isError: true });
+    const keeper = tools({ canWrite: true, own: { agentId: 'secretaria-id', slug: 'secretaria' } });
+    await keeper.t.run('memory_create', { path: 'a.md', content: 'x' });
+    await keeper.t.run('memory_create', { store: 'propia', path: 'b.md', content: 'y' });
+    expect(Object.keys(keeper.r.state.files).sort()).toEqual(['memoria/agentes/secretaria/b.md', 'memoria/empresa/a.md']);
+  });
+
+  it('reads and searches its own store when asked to, and Empresa otherwise', async () => {
+    const store = fakeStore([row('clientes/acme.md', 'Acme\n')], { [FINANZAS]: [row('como-trabajo.md', 'Informe en tres líneas\n')] });
+    const { t } = tools({ canWrite: false, own, store });
+    expect((await t.run('memory_view', {})).content).toContain('clientes/');
+    const mine = await t.run('memory_view', { store: 'propia' });
+    expect(mine.content).toContain('Tu memoria');
+    expect(mine.content).toContain('como-trabajo.md');
+    const file = await t.run('memory_view', { store: 'propia', path: 'memoria/agentes/finanzas/como-trabajo.md' });
+    expect(file.content).toContain(`/agente/${FINANZAS}/memoria/como-trabajo.md`);
+    expect((await t.run('memory_search', { store: 'propia', query: 'informe' })).content).toContain('como-trabajo.md');
+    expect((await t.run('memory_search', { query: 'informe' })).content).toContain('Nada');
+  });
+
+  it('has no own store without a slug', async () => {
+    const { t } = tools({ canWrite: false });
+    expect(t.specs.map((s) => s.name)).toEqual(['memory_view', 'memory_search']);
+    expect((await t.run('memory_view', { store: 'propia' })).isError).toBe(true);
+  });
+
+  it('is in the prompt whole while it fits, and as an index past the budget', () => {
+    const files = [row('a.md', 'Primera línea de a\nmás\n'), row('b.md', 'Primera de b\n')];
+    const whole = ownMemoryLines(own, files, false).join('\n');
+    expect(whole).toContain('memoria/agentes/finanzas/');
+    expect(whole).toContain('<fichero ruta="a.md">\nPrimera línea de a\nmás\n</fichero>');
+    expect(whole).toContain('<fichero ruta="b.md">');
+    const big = [row('grande.md', 'x'.repeat(OWN_MEMORY_BUDGET)), row('b.md', 'Primera de b\nsegunda\n')];
+    const index = ownMemoryLines(own, big, true).join('\n');
+    expect(index).toContain('<fichero ruta="grande.md">');
+    expect(index).toContain('- b.md: Primera de b');
+    expect(index).not.toContain('segunda');
+    expect(index).toContain('memory_view');
+    expect(ownMemoryLines(own, [], false).join('\n')).toContain('vacía');
+    expect(ownMemoryLines(own, null, false).join('\n')).toContain('No has podido leer');
   });
 });

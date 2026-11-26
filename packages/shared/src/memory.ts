@@ -44,3 +44,45 @@ export function memoryTitle(path: string): string {
     .map((s) => (s ? s[0]!.toLocaleUpperCase('es') + s.slice(1) : s))
     .join(' › ');
 }
+
+// Each agent's own store (docs/plans/ongoing/agent-context.md PR 2): `memoria/agentes/<slug>/` in the
+// record, the same small Markdown files; the agent reads and writes it, whoever may see the agent
+// reads it in the app.
+
+/** Where agents' own stores live in the record, one folder per agent's slug. */
+export const AGENT_MEMORY_DIR = 'memoria/agentes';
+
+/** One agent's store in the record. */
+export const agentMemoryDir = (slug: string) => `${AGENT_MEMORY_DIR}/${slug}`;
+
+/** How a reply links a file of an agent's store, and the app opens it (`/agente/[id]/memoria/[...path]`). */
+export const agentMemoryLink = (agentId: string, path: string) => `/agente/${agentId}/memoria/${path}`;
+
+const AGENT_LINK = /^\/agente\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/memoria\/(.+)$/i;
+
+/** The agent and the file a link to an agent's store points at; null when it is not one. */
+export function agentMemoryHref(href: string): { agentId: string; path: string } | null {
+  const m = AGENT_LINK.exec(href.trim());
+  if (!m) return null;
+  const path = memoryPath(m[2]!);
+  return path ? { agentId: m[1]!.toLowerCase(), path } : null;
+}
+
+/**
+ * A file's path inside one agent's store, as the model or a link gives it: without the record's
+ * folder, the link's prefix or a leading slash. Null when it would leave the store.
+ */
+export function agentMemoryPath(raw: string, agentId: string, slug: string): string | null {
+  let p = raw.trim().replace(/\\/g, '/');
+  for (const prefix of [agentMemoryLink(agentId, ''), `/${agentMemoryDir(slug)}/`, `${agentMemoryDir(slug)}/`]) if (p.startsWith(prefix)) p = p.slice(prefix.length);
+  return memoryPath(p);
+}
+
+/** A folder's path inside one agent's store, '' for the store itself; null when it would leave it. */
+export function agentMemoryFolder(raw: string, slug: string): string | null {
+  const p = raw.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  const dir = agentMemoryDir(slug);
+  const inner = p === dir ? '' : p.startsWith(`${dir}/`) ? p.slice(dir.length + 1) : p;
+  if (!inner) return '';
+  return inner.split('/').some((s) => s === '' || s === '.' || s === '..' || s.startsWith('.')) ? null : inner;
+}

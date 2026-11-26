@@ -1,5 +1,5 @@
 import { splitMentions } from '@ghostaff/shared';
-import { MEMORY_LINK_PREFIX, memoryPath } from '@ghostaff/shared';
+import { agentMemoryHref, agentMemoryLink, MEMORY_LINK_PREFIX, memoryPath } from '@ghostaff/shared';
 import { router } from 'expo-router';
 import { Lexer, type Token, type Tokens } from 'marked';
 import { Fragment, type ReactNode, useMemo } from 'react';
@@ -75,10 +75,12 @@ function Inline({ tokens, names }: { tokens: Token[]; names: string[] }) {
             const link = t as Tokens.Link;
             const children = <Inline tokens={link.tokens} names={names} />;
             // A file of the organisation's memory opens in the app (business-brain.md); only a path the memory could hold.
-            const inApp = link.href.startsWith(MEMORY_LINK_PREFIX) ? memoryPath(link.href) : null;
+            // So does a file of an agent's own memory (agent-context.md PR 2).
+            const agentFile = agentMemoryHref(link.href);
+            const inApp = agentFile ? agentMemoryLink(agentFile.agentId, agentFile.path) : link.href.startsWith(MEMORY_LINK_PREFIX) ? memoryPath(link.href) : null;
             if (inApp)
               return (
-                <Text key={i} className="text-accent underline" accessibilityRole="link" onPress={() => router.push(`${MEMORY_LINK_PREFIX}${inApp}`)}>
+                <Text key={i} className="text-accent underline" accessibilityRole="link" onPress={() => router.push(agentFile ? inApp : `${MEMORY_LINK_PREFIX}${inApp}`)}>
                   {children}
                 </Text>
               );

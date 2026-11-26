@@ -3,7 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { applySync, type ExternalSyncRow, markWrittenBack, type SyncAgent } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
-import type { MemoryStore } from './memory';
+import type { MemoryPlace, MemoryStore } from './memory';
 import type { RecordAgent } from './recordProvision';
 import type { RecordOrg, RecordSyncStore } from './recordSync';
 
@@ -147,50 +147,56 @@ export async function recordAgentsOf(db: SupabaseClient, orgId: string): Promise
 
 type MemoryRow = { path: string; content: string; sha: string; updated_at: string; updated_by: string | null };
 
-/** The organisation's memory as the projection keeps it (`memories`, memory.ts), with the service role. Only the Empresa store today. */
+/** Each store of the organisation's memory as the projection keeps it (`memories`, memory.ts), with the service role. */
 export function supabaseMemoryStore(db: SupabaseClient): MemoryStore {
-  const STORE = 'empresa';
+  /** The rows of one store: Empresa's (whose rows name no agent, `memories_store_agent`), or one agent's own. */
+  const keyOf = (orgId: string, place: MemoryPlace): Record<string, string> =>
+    place.agentId === null ? { org_id: orgId, store: 'empresa' } : { org_id: orgId, store: 'agente', agent_id: place.agentId };
+  const fileOf = (r: MemoryRow) => ({ path: r.path, content: r.content, sha: r.sha, updatedAt: r.updated_at, updatedBy: r.updated_by });
   return {
-    async memoryIndex(orgId) {
-      const { data, error } = await db
-        .from('memories')
-        .select('path, sha, updated_at')
-        .eq('org_id', orgId)
-        .eq('store', STORE)
+    async memoryIndex(orgId, place) {
+      const { data, error } = await db.from('memories').select('path, sha, updated_at').match(keyOf(orgId, place))
         .order('path')
         .limit(5000)
         .returns<Array<{ path: string; sha: string; updated_at: string }>>();
       if (error) throw error;
       return (data ?? []).map((r) => ({ path: r.path, sha: r.sha, updatedAt: r.updated_at }));
     },
-    async memory(orgId, path) {
-      const { data, error } = await db
-        .from('memories')
-        .select('path, content, sha, updated_at, updated_by')
-        .eq('org_id', orgId)
-        .eq('store', STORE)
-        .eq('path', path)
-        .maybeSingle<MemoryRow>();
+    async memory(orgId, place, path) {
+      const { data, error } = await db.from('memories').select('path, content, sha, updated_at, updated_by').match(keyOf(orgId, place)).eq('path', path).maybeSingle<MemoryRow>();
       if (error) throw error;
-      return data ? { path: data.path, content: data.content, sha: data.sha, updatedAt: data.updated_at, updatedBy: data.updated_by } : null;
+      return data ? fileOf(data) : null;
     },
-    async searchMemory(orgId, words, max) {
-      const { data, error } = await db.rpc('search_memories', { target_org: orgId, target_store: STORE, words, max });
+    async latestMemory(orgId, place, max) {
+      const { data, error } = await db.from('memories').select('path, content, sha, updated_at, updated_by').match(keyOf(orgId, place))
+        .order('updated_at', { ascending: false })
+        .order('path')
+        .limit(max)
+        .returns<MemoryRow[]>();
+      if (error) throw error;
+      return (data ?? []).map(fileOf);
+    },
+    async searchMemory(orgId, place, words, max) {
+      const { data, error } =
+        place.agentId === null
+          ? await db.rpc('search_memories', { target_org: orgId, target_store: 'empresa', words, max })
+          : await db.rpc('search_agent_memories', { target_agent: place.agentId, words, max });
       if (error) throw error;
       return ((data ?? []) as Array<{ path: string; content: string; updated_at: string }>).map((r) => ({ path: r.path, content: r.content, updatedAt: r.updated_at }));
     },
-    async saveMemory(orgId, files) {
+    async saveMemory(orgId, place, files) {
       if (!files.length) return;
       const now = new Date().toISOString();
+      const store = place.agentId === null ? 'empresa' : 'agente';
       const { error } = await db.from('memories').upsert(
-        files.map((f) => ({ org_id: orgId, store: STORE, path: f.path, content: f.content, sha: f.sha, updated_by: f.updatedBy, updated_at: now })),
-        { onConflict: 'org_id,store,path' },
+        files.map((f) => ({ org_id: orgId, store, agent_id: place.agentId, path: f.path, content: f.content, sha: f.sha, updated_by: f.updatedBy, updated_at: now })),
+        { onConflict: 'org_id,store,agent_id,path' },
       );
       if (error) throw error;
     },
-    async forgetMemory(orgId, paths) {
+    async forgetMemory(orgId, place, paths) {
       if (!paths.length) return;
-      const { error } = await db.from('memories').delete().eq('org_id', orgId).eq('store', STORE).in('path', paths);
+      const { error } = await db.from('memories').delete().match(keyOf(orgId, place)).in('path', paths);
       if (error) throw error;
     },
   };

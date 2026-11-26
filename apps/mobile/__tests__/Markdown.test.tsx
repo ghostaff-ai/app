@@ -91,6 +91,14 @@ describe('Markdown', () => {
     open.mockRestore();
   });
 
+  it("opens a file of an agent's own memory inside the app", async () => {
+    const id = '30000000-0000-0000-0000-000000000001';
+    await render(<Markdown text={`[cómo trabajo](/agente/${id}/memoria/como-trabajo.md) y [esto](/agente/${id}/memoria/../x.md)`} names={[]} />);
+    await fireEvent.press(screen.getByText('cómo trabajo'));
+    expect(router.push).toHaveBeenCalledWith(`/agente/${id}/memoria/como-trabajo.md`);
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+  });
+
   it('renders a link with a blocked scheme as plain text', async () => {
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue();
     await render(<Markdown text="[x](javascript:alert(1))" names={[]} />);
