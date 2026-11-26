@@ -217,6 +217,15 @@ export const VERTEX_EU_REGIONS = ['europe-west1', 'europe-west4'] as const;
 export const DEPARTMENTS = ['direccion', 'finanzas', 'legal', 'producto', 'marketing'] as const;
 export type Department = (typeof DEPARTMENTS)[number];
 
+/** Each department's name, as the app shows it and an agent's card says it. */
+export const DEPARTMENT_NAMES: Record<Department, string> = {
+  direccion: 'Dirección',
+  finanzas: 'Finanzas',
+  legal: 'Legal',
+  producto: 'Producto',
+  marketing: 'Marketing',
+};
+
 export const AGENT_GHOSTS = ['base', 'secretaria', 'incorporacion', 'finanzas', 'redes', 'productor'] as const;
 export type AgentGhost = (typeof AGENT_GHOSTS)[number];
 
@@ -326,4 +335,45 @@ export interface PushData {
   kind: 'reply' | 'daily';
   orgId?: string;
   route: string;
+}
+
+// External parties: the people, companies and services an organisation works
+// with outside (supabase/migrations/20261126800000_external_parties.sql,
+// docs/plans/ongoing/external-parties.md). The record's `externos/` is the master.
+
+export const EXTERNAL_KINDS = ['person', 'company', 'service'] as const;
+export type ExternalKind = (typeof EXTERNAL_KINDS)[number];
+
+/** Each kind's name, as the app shows it and the record's file says it (`tipo`). */
+export const EXTERNAL_KIND_NAMES: Record<ExternalKind, string> = { person: 'Persona', company: 'Empresa', service: 'Servicio' };
+
+export interface ExternalParty {
+  id: string;
+  orgId: string;
+  kind: ExternalKind;
+  name: string;
+  /** What it does for the organisation: the point of the list. */
+  role: string;
+  departments: Department[];
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  /** The person who added it or confirmed an agent's proposal. */
+  addedByName: string;
+  addedAt: string;
+  /** The agent that proposed it, when one did. */
+  proposedByName: string | null;
+  /** Whether a change made in Ghostaff is still on its way to the record. */
+  pending: boolean;
+}
+
+/** What a person or an agent fills in for one. */
+export interface ExternalPartyInput {
+  kind: ExternalKind;
+  name: string;
+  role: string;
+  departments: Department[];
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
 }

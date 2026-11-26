@@ -2,7 +2,7 @@
 
 **Priority:** medium — the record and the agents get more useful once they know who does what outside, so they route work instead of asking every time
 **Gate:** none
-**Next:** pull request 1: the table, its functions and pgTAP, the shared service and the agents' tools (Tasks)
+**Next:** pull request 2: `packages/shared/src/record/externos.ts` and the sync both ways in `syncOrg` (Tasks)
 
 **Goal:** Each organisation keeps one list of the people, companies and services it works with outside, each with what it does for the organisation, the departments it works with and how to reach it. Owners add them in Empresa → «Con quién trabajáis»; any chat agent proposes the ones it sees in mail and invoices, and an owner confirms. The list is a folder of the record, `externos/`, and reaches the app through the database.
 
@@ -122,11 +122,11 @@ In `syncOrg`, after the decisions and the instructions, the plan worked out in `
 |---|---|---|
 | `supabase/migrations/20261126800000_external_parties.sql` | 1 | Table, row-level security, `save_external_party`, `remove_external_party` |
 | `supabase/tests/database/external_parties.test.sql` | 1 | pgTAP |
-| `packages/shared/src/models/index.ts` | 1 | `ExternalParty`, `EXTERNAL_KINDS` |
+| `packages/shared/src/models/index.ts` | 1 | `ExternalParty`, `EXTERNAL_KINDS`, and `DEPARTMENT_NAMES` moved here from the app so a card can name departments |
 | `packages/shared/src/services/externalParties.ts` (exported from `services/index.ts`) | 1 | `listExternalParties`, `getExternalParty`, `saveExternalParty`, `removeExternalParty`, `invalidExternalParty` (Spanish messages, shared by the screen and the tools) |
 | `packages/shared/src/services/settings.ts` | 1 | The three tools, `EVERY_AGENT_TOOL_NAMES`, both functions classified `agent` |
 | `apps/engine/src/settings.ts` | 1 | Non-main agents get `EVERY_AGENT_TOOL_NAMES` |
-| `apps/engine/test/settings.test.ts`, `packages/shared/test/externalParties.test.ts` | 1 | The tools' cards and calls; the reads that need no approval |
+| `apps/engine/test/settings.test.ts`, `apps/engine/test/chat.test.ts` | 1 | The tools' cards and calls, through the shared service; every chat agent gets them |
 | `packages/shared/src/record/externos.ts` (+ `record/index.ts`) | 2 | Read and write the file; `planExternalSync` |
 | `packages/shared/test/externos.test.ts` | 2 | Format round trip, body kept, slugs, the plan's cases |
 | `apps/engine/src/recordSync.ts`, `apps/engine/src/forgejo.ts` | 2 | The sync both ways; deleting a file on both hosts |
@@ -141,7 +141,7 @@ In `syncOrg`, after the decisions and the instructions, the plan worked out in `
 
 ## Tasks
 
-- [ ] **Pull request 1 — the data and the agents' tools.** Migration and pgTAP; the model and service; the three tools in `settings.ts`, classified, given to every chat agent; tests. Lands alone: an agent can propose and an owner approve, the rows wait for the sync.
+- [x] **Pull request 1 — the data and the agents' tools.** Migration and pgTAP; the model and service; the three tools in `settings.ts`, classified, given to every chat agent; tests. Lands alone: an agent can propose and an owner approve, the rows wait for the sync.
 - [ ] **Pull request 2 — the record.** `externos.ts` with its tests; the sync both ways in `syncOrg`; deleting files in `RecordRepo`; the hook and the seed; architecture.md.
 - [ ] **Pull request 3 — the screens.** The Empresa row, the list, the form, the Maestro flow; reviewed against the UI rules and Vercel's guidelines on the web.
 - [ ] **Pull request 4 — routines.** The three tools in a routine's turn (`chat.ts`), after agreeing the change with the agent-context session.

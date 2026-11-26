@@ -22,13 +22,7 @@ export const isGhostId = (id: string): id is GhostId => id in GHOSTS;
 /** The ghosts in the order the new-agent screen offers them: the team's five, then the plain one. */
 export const GHOST_ORDER: GhostId[] = ['secretaria', 'incorporacion', 'finanzas', 'redes', 'productor', 'base'];
 
-export const DEPARTMENT_NAMES: Record<Department, string> = {
-  direccion: 'Dirección',
-  finanzas: 'Finanzas',
-  legal: 'Legal',
-  producto: 'Producto',
-  marketing: 'Marketing',
-};
+export { DEPARTMENT_NAMES } from '@ghostaff/shared';
 
 /** Departments every team shows, even empty (a vacancy); the others only once they have someone. */
 export const CORE_DEPARTMENTS: readonly Department[] = ['direccion', 'finanzas', 'marketing'];

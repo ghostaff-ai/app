@@ -43,7 +43,7 @@ describe('what the main agent may change (agent-settings.md)', () => {
   });
 
   it('only reads without an approval', () => {
-    expect(SETTING_TOOLS.filter((t) => !t.writes).map((t) => t.name)).toEqual(['settings_read', 'settings_read_routines']);
+    expect(SETTING_TOOLS.filter((t) => !t.writes).map((t) => t.name)).toEqual(['settings_read', 'settings_read_routines', 'settings_read_external_parties']);
   });
 
   it('never lets an agent change its own accounts', async () => {
@@ -144,6 +144,86 @@ describe('routines as settings (agent-routines.md)', () => {
     await tool('settings_pause_routine').run(ctx, { routine_id: routine, paused: true });
     expect(calls).toEqual([['set_routine_paused', { target_routine: routine, paused: true }]]);
     expect(DATABASE_FUNCTIONS.delete_routine?.reach).toBe('never');
+  });
+});
+
+describe('who the organisation works with outside (external-parties.md)', () => {
+  const finanzas = '20000000-0000-0000-0000-000000000002';
+  const gestoria = '30000000-0000-0000-0000-000000000001';
+  const row = {
+    id: gestoria, org_id: 'o', kind: 'company', name: 'Gestoría López', role: 'Presenta el IVA cada trimestre', departments: ['finanzas'],
+    email: null, phone: '910000000', website: null, added_by_name: 'Ana', added_at: '2026-11-26T10:00:00Z', proposed_by_name: null, pending: null,
+  };
+  function client(calls: Array<[string, unknown]> = []) {
+    const query = {
+      select: () => query,
+      eq: (col: string, v: string) => (col === 'id' && v !== gestoria ? { ...query, maybeSingle: async () => ({ data: null, error: null }) } : query),
+      order: () => query,
+      returns: async () => ({ data: [row], error: null }),
+      maybeSingle: async () => ({ data: row, error: null }),
+    };
+    return {
+      from: () => query,
+      rpc: async (fn: string, args: unknown) => (calls.push([fn, args]), { data: gestoria, error: null }),
+    } as unknown as SupabaseClient;
+  }
+  const tool = (name: string) => SETTING_TOOLS.find((t) => t.name === name)!;
+  const ana = { kind: 'person', name: ' Ana López ', does: 'Hace las ilustraciones', departments: ['marketing'], email: 'ana@ejemplo.com', website: 'analopez.es' };
+
+  it('is open to every agent, not only the main one', async () => {
+    const { settingsTools } = await import('../src/settings');
+    const names = settingsTools({ client: client(), orgId: 'o', agentId: finanzas, onlySelf: true }).specs.map((t) => t.name);
+    expect(names).toEqual(expect.arrayContaining(['settings_read_external_parties', 'settings_save_external_party', 'settings_remove_external_party']));
+    expect(names).not.toContain('settings_invite_member');
+  });
+
+  it('turns a proposal into a card an owner approves, then saves it as the agent\'s', async () => {
+    const calls: Array<[string, unknown]> = [];
+    const ctx: SettingsContext = { client: client(calls), orgId: 'o', agentId: finanzas, onlySelf: true };
+    expect(await tool('settings_save_external_party').describe!(ctx, ana)).toEqual({
+      label: 'Añadir a Ana López a con quién trabajáis',
+      preview: 'Ana López (Persona · Marketing)\nHace las ilustraciones\nana@ejemplo.com\nhttps://analopez.es',
+      decider: 'owner',
+    });
+    await tool('settings_save_external_party').run(ctx, ana);
+    expect(calls).toEqual([
+      ['save_external_party', {
+        target_org: 'o', party: null, new_kind: 'person', new_name: 'Ana López', new_role: 'Hace las ilustraciones', new_departments: ['marketing'],
+        new_email: 'ana@ejemplo.com', new_phone: null, new_website: 'https://analopez.es', proposed_by: finanzas,
+      }],
+    ]);
+  });
+
+  it('shows a change as now and after', async () => {
+    const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: finanzas };
+    const input = { external_party_id: gestoria, kind: 'company', name: 'Gestoría López', does: 'Presenta el IVA y las nóminas', departments: ['finanzas'] };
+    const card = await tool('settings_save_external_party').describe!(ctx, input);
+    expect(card.label).toBe('Cambiar a Gestoría López en con quién trabajáis');
+    expect(card.preview).toBe(
+      'Ahora: Gestoría López (Empresa · Finanzas)\nPresenta el IVA cada trimestre\n910000000\n\nDespués: Gestoría López (Empresa · Finanzas)\nPresenta el IVA y las nóminas',
+    );
+  });
+
+  it('refuses what the list may not hold, in words', async () => {
+    const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: finanzas };
+    await expect(tool('settings_save_external_party').describe!(ctx, { ...ana, does: ' ' })).rejects.toThrow('Di qué hace para vosotros');
+    await expect(tool('settings_save_external_party').describe!(ctx, { ...ana, kind: 'friend' })).rejects.toBeInstanceOf(SettingError);
+    await expect(tool('settings_save_external_party').describe!(ctx, { ...ana, email: 'no' })).rejects.toThrow('Ese correo no parece válido.');
+    await expect(tool('settings_remove_external_party').describe!(ctx, { external_party_id: '30000000-0000-0000-0000-000000000009' })).rejects.toBeInstanceOf(SettingError);
+  });
+
+  it('removes through the function the screen calls', async () => {
+    const calls: Array<[string, unknown]> = [];
+    const ctx: SettingsContext = { client: client(calls), orgId: 'o', agentId: finanzas };
+    expect((await tool('settings_remove_external_party').describe!(ctx, { external_party_id: gestoria })).label).toBe('Quitar a Gestoría López de con quién trabajáis');
+    await tool('settings_remove_external_party').run(ctx, { external_party_id: gestoria });
+    expect(calls).toEqual([['remove_external_party', { party: gestoria }]]);
+  });
+
+  it('reads one department\'s for the model', async () => {
+    const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: finanzas };
+    expect(JSON.parse(await tool('settings_read_external_parties').run(ctx, { department: 'marketing' }))).toEqual([]);
+    expect(JSON.parse(await tool('settings_read_external_parties').run(ctx, { department: 'finanzas' }))).toMatchObject([{ id: gestoria, does: 'Presenta el IVA cada trimestre' }]);
   });
 });
 
