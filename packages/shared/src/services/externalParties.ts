@@ -6,7 +6,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DEPARTMENTS, type Department, EXTERNAL_KINDS, type ExternalKind, type ExternalParty, type ExternalPartyInput } from '../models';
-import { normalizeLink } from './index';
+import { normalizeLink } from './links';
 
 /** The database's own limits (20261126800000_external_parties.sql), so a person hears them before saving. */
 export const EXTERNAL_LIMITS = { name: 120, role: 300, email: 200, phone: 40, website: 300 } as const;

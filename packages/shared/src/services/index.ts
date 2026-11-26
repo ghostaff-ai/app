@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeLink } from './links';
 import { type AiUsageDay, limitsFromRow } from '../aiUsage';
 import type { AccountProvider } from '../connectors';
 import type { GuideAnswer, GuideCheckOutcome, GuideCheckValues, GuidePhoto, GuideStatus, GuideStep, GuideView, PendingGuide } from '../guides';
@@ -498,12 +499,6 @@ export async function revokeInvitation(client: SupabaseClient, invitationId: str
   if (error) throw error;
 }
 
-/** `ana.example`, `https://ana.example/` → `https://ana.example/`; empty stays empty. */
-export function normalizeLink(raw: string): string {
-  const s = raw.trim();
-  if (!s) return '';
-  return /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`;
-}
 
 /** One link per line, or separated by spaces or commas. */
 export function splitLinks(raw: string): string[] {
@@ -1551,3 +1546,4 @@ export async function forgetDevice(client: SupabaseClient, token: string): Promi
 
 export * from './settings';
 export * from './externalParties';
+export * from './links';
