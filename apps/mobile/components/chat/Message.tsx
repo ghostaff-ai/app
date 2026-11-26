@@ -1,7 +1,8 @@
 import { type ActionPart, type ChatMessage, type EditableField, isAccountAskPart, isActionPart, isAudioPart, isDecisionPart, isDecisionQuotePart, isGuidePart, isVoicePart, messageText, splitMentions } from '@ghostaff/shared';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
+import { Bubble, Stamp, StampRoom, type Ticks } from '@/components/chat/Bubble';
 import { DecisionInChat, DecisionQuote } from '@/components/chat/DecisionInChat';
 import { GuideCard } from '@/components/chat/GuideCard';
 import { Markdown } from '@/components/chat/Markdown';
@@ -10,33 +11,25 @@ import { AgentAudio } from '@/components/chat/AgentAudio';
 import { Clock, Icon } from '@/components/icons';
 import { Field } from '@/components/ui';
 import type { AskControls } from '@/lib/hooks/useAccountAsks';
+import { personColour, timeOf } from '@/lib/chat';
 import type { GuideControls } from '@/lib/hooks/useGuideCards';
 import { GHOSTS, type GhostId } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
 
-// One message of a thread (team-chat.md, decision 3): people in bubbles (yours
-// on the right in ink, colleagues on the left with their initials), agents
-// flat and full width in ink with their small ghost (app-design.md #18, changed
-// 2026-11-22), their replies' markdown rendered. Consecutive messages from the same
-// author drop the name. A voice note is drawn as its audio with the transcript
-// under it (voice.md), yours and your colleagues' alike; in General the
-// transcript is folded (general-chat.md), and the agents it was tagged for
-// show above it («@Secretaría»).
+// One message of a chat, as in WhatsApp (chat-like-whatsapp.md): everyone in
+// a bubble, yours on the right, colleagues and agents on the left with their
+// face and, on the first of a run, their name in their colour; an agent's
+// bubble is wider and renders its markdown (decision 3, reversing team-chat.md
+// decision 3). The time and your ticks sit inside. A voice note is its audio
+// (voice.md); its transcript is one tap away in an agent's chat and out of
+// sight in General, and the agents it was tagged for show above it.
 // An agent's reply carries one status line (decision 4): what it is doing
 // while it writes, then «Hecho · 3 s», which unfolds into its steps. One a
 // routine started says so above it, «Rutina · Resumen de ventas» (agent-routines.md).
 
-const AVATAR_COLOURS = ['#5B6CB8', '#3E8A8A', '#8A5B9E', '#B0703A', '#4F7D3E', '#A0506A'];
-
 export function initials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
   return ((words[0]?.[0] ?? '?') + (words.length > 1 ? (words[words.length - 1]?.[0] ?? '') : '')).toUpperCase();
-}
-
-function colourFor(key: string): string {
-  let h = 0;
-  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return AVATAR_COLOURS[h % AVATAR_COLOURS.length] ?? AVATAR_COLOURS[0]!;
 }
 
 export function Avatar({ name, id, size = 28 }: { name: string; id: string; size?: number }) {
@@ -44,7 +37,7 @@ export function Avatar({ name, id, size = 28 }: { name: string; id: string; size
     <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colourFor(id) }}
+      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: personColour(id) }}
       className="items-center justify-center"
     >
       <Text style={{ fontSize: size * 0.4 }} className="font-semibold text-white">
@@ -79,7 +72,7 @@ function voiceOf(message: ChatMessage) {
 }
 
 /** The text with @mentions in bold. */
-function Body({ text, names, className }: { text: string; names: string[]; className: string }) {
+function Body({ text, names, className, trailing }: { text: string; names: string[]; className: string; trailing?: ReactNode }) {
   return (
     <Text className={className} selectable>
       {splitMentions(text, names).map((s, i) =>
@@ -91,6 +84,7 @@ function Body({ text, names, className }: { text: string; names: string[]; class
           s.text
         ),
       )}
+      {trailing}
     </Text>
   );
 }
@@ -299,27 +293,34 @@ export function MessageView({
   mine,
   ghost,
   showAuthor,
+  group = true,
+  ticks,
   names,
-  canDecide = false,
+  canDecide,
   onDecide,
   onRetryTranscript,
   asks,
   routineTitle,
   me,
   guides,
-  foldTranscripts,
+  transcript = 'tap',
+  unplayed,
 }: {
   message: ChatMessage;
   mine: boolean;
   /** The ghost of the agent who wrote it, when an agent did. */
   ghost?: GhostId;
-  /** False for a message right after another from the same author. */
+  /** The first of a run by the same author: its tail, name and avatar. */
   showAuthor: boolean;
+  /** Several people write here: names on others' bubbles. */
+  group?: boolean;
+  /** Yours: sent, or read by everyone else. */
+  ticks?: Ticks | null;
   /** Names that can be @mentioned, to highlight them. */
   names: string[];
   /** Whether the viewer may approve the agent's proposed actions (owners). */
   canDecide?: boolean;
-  onDecide?: (actionId: string, decision: 'approve' | 'reject', edits?: Record<string, string>) => Promise<void>;
+  onDecide?: (actionId: string, decision: 'approve' | 'reject') => Promise<void>;
   /** Asks again for a voice note's transcript. */
   onRetryTranscript?: (messageId: string) => Promise<void>;
   /** What an agent's cards asking for an account can do here (connector-in-chat.md). */
@@ -330,8 +331,10 @@ export function MessageView({
   me?: string;
   /** What an agent's guide cards can do here (guided-access.md). */
   guides?: GuideControls;
-  /** Voice notes' transcripts behind «Ver transcripción»: in General (general-chat.md). */
-  foldTranscripts?: boolean;
+  /** A voice note's transcript: one tap away in an agent's chat, out of sight in General (chat-like-whatsapp.md, decision 5). */
+  transcript?: 'tap' | 'none';
+  /** Someone else's voice note that arrived since the person last read the chat. */
+  unplayed?: boolean;
 }) {
   const text = messageText(message.parts);
   const actions = message.parts.filter(isActionPart);
@@ -339,18 +342,26 @@ export function MessageView({
   const guideParts = message.parts.filter(isGuidePart);
   const decisions = message.parts.filter(isDecisionPart);
   const quote = message.parts.find(isDecisionQuotePart);
+  const time = timeOf(message.createdAt);
+  const tail = showAuthor;
+  const colour = personColour(message.authorUserId ?? message.authorAgentId ?? message.authorName);
+
   const audio = message.parts.filter(isAudioPart);
 
   if (message.authorKind === 'agent') {
     const said = text || audio.map((a) => `audio «${a.title}»`).join(', ');
+    const face = <Image source={GHOSTS[ghost ?? 'base'].picture} style={{ width: 28, height: 28 }} resizeMode="contain" />;
     return (
-      <View className={`px-4 ${showAuthor ? 'pt-4' : 'pt-1.5'}`} accessibilityLabel={`${message.authorName}: ${said}`}>
-        {showAuthor ? (
-          <View className="mb-1 flex-row items-center">
-            <Image source={GHOSTS[ghost ?? 'base'].picture} style={{ width: 22, height: 22 }} resizeMode="contain" />
-            <Text className="ml-1.5 text-footnote font-semibold text-ink">{message.authorName}</Text>
-          </View>
-        ) : null}
+      <Bubble
+        mine={false}
+        tail={tail}
+        name={message.authorName}
+        nameColour={colour}
+        avatar={face}
+        wide
+        stamp={<Stamp time={time} mine={false} />}
+        accessibilityLabel={`${message.authorName}: ${said}`}
+      >
         {message.routineId ? <RoutineLine title={routineTitle ?? null} /> : null}
         <StatusLine message={message} />
         {text ? <Markdown text={text} names={names} /> : null}
@@ -362,7 +373,7 @@ export function MessageView({
           <ActionCard
             key={a.actionId}
             action={a}
-            canDecide={(a.decider === 'requester' ? !!me && a.requestedBy === me : canDecide) && message.state !== 'working'}
+            canDecide={(a.decider === 'requester' ? !!me && a.requestedBy === me : !!canDecide) && message.state !== 'working'}
             onDecide={onDecide}
           />
         ))}
@@ -375,53 +386,41 @@ export function MessageView({
         {decisions.map((d) => (
           <DecisionInChat key={d.decisionId} part={d} writing={message.state === 'working'} />
         ))}
-      </View>
+      </Bubble>
     );
   }
 
   const voice = voiceOf(message);
-
-  if (mine) {
-    return (
-      <View className={`flex-row justify-end px-4 ${showAuthor ? 'pt-4' : 'pt-1'}`}>
-        <View className="max-w-[80%] rounded-2xl rounded-br-md bg-accent px-3.5 py-2">
-          {quote ? <DecisionQuote part={quote} onAccent /> : null}
-          {voice ? (
-            <>
-              {voice.tags ? <Body text={voice.tags} names={names} className="mb-1 text-footnote text-on-accent" /> : null}
-              <VoiceNote
-                part={voice.part}
-                transcript={voice.transcript}
-                createdAt={message.createdAt}
-                onRetry={onRetryTranscript ? () => onRetryTranscript(message.id) : undefined}
-                folded={foldTranscripts}
-              />
-            </>
-          ) : (
-            <Body text={text} names={names} className="text-base leading-6 text-on-accent" />
-          )}
-        </View>
-      </View>
-    );
-  }
-
+  const textTone = mine ? 'text-on-accent' : 'text-ink';
+  const content = voice ? (
+    <>
+      {voice.tags ? <Body text={voice.tags} names={names} className={`mb-1 text-footnote ${textTone}`} /> : null}
+      <VoiceNote
+        part={voice.part}
+        messageId={message.id}
+        transcript={transcript === 'none' ? null : voice.transcript}
+        createdAt={message.createdAt}
+        onRetry={mine && onRetryTranscript && (transcript === 'tap' || voice.tags) ? () => onRetryTranscript(message.id) : undefined}
+        tone={mine ? 'mine' : 'theirs'}
+        unplayed={unplayed}
+      />
+    </>
+  ) : (
+    <Body text={text} names={names} className={`text-base leading-[22px] ${textTone}`} trailing={<StampRoom time={time} ticks={mine ? ticks : null} />} />
+  );
   return (
-    <View className={`flex-row items-end px-4 ${showAuthor ? 'pt-4' : 'pt-1'}`}>
-      <View style={{ width: 28 }}>{showAuthor ? <Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} /> : null}</View>
-      <View className="ml-2 max-w-[78%]">
-        {showAuthor ? <Text className="mb-0.5 ml-1 text-caption font-semibold text-muted">{message.authorName}</Text> : null}
-        <View className="rounded-2xl rounded-bl-md border border-line bg-card px-3.5 py-2">
-          {quote ? <DecisionQuote part={quote} /> : null}
-          {voice ? (
-            <>
-              {voice.tags ? <Body text={voice.tags} names={names} className="mb-1 text-footnote text-ink" /> : null}
-              <VoiceNote part={voice.part} transcript={voice.transcript} createdAt={message.createdAt} tone="theirs" folded={foldTranscripts} />
-            </>
-          ) : (
-            <Body text={text} names={names} className="text-base leading-6 text-ink" />
-          )}
-        </View>
-      </View>
-    </View>
+    <Bubble
+      mine={mine}
+      tail={tail}
+      name={group && !mine ? message.authorName : null}
+      nameColour={colour}
+      avatar={<Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} />}
+      stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} />}
+      stampInline={!voice}
+      accessibilityLabel={`${mine ? 'Tú' : message.authorName}: ${voice ? 'nota de voz' : text}`}
+    >
+      {quote ? <DecisionQuote part={quote} onAccent={mine} /> : null}
+      {content}
+    </Bubble>
   );
 }

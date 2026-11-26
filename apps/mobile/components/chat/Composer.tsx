@@ -1,23 +1,28 @@
 import { completeMention, mentionQuery, mentionSuggestions, onlyMentions } from '@ghostaff/shared';
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, PanResponder, Platform, Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RecordingBar } from '@/components/chat/RecordingBar';
-import { ArrowUp, Eye, Icon, Microphone } from '@/components/icons';
+import { clock } from '@/components/chat/RecordingBar';
+import { ArrowUp, CaretLeft, CaretUp, Eye, Icon, LockSimple, Microphone, Pause, PaperPlaneRight, Trash } from '@/components/icons';
 import { tap } from '@/lib/haptics';
+import { holdMove, holdRelease } from '@/lib/hold';
 import { type RecordedNote, useVoiceNote } from '@/lib/hooks/useVoiceNote';
 import { usePalette } from '@/lib/theme';
 
-// Where a person writes in a thread (team-chat.md): a growing text box and a
-// round send button; typing @ offers the agents and people that can be
-// mentioned. With «onVoiceNote», a plain round mic sits beside send: tap it,
-// speak, and send the voice note (voice.md). When the box holds only @mentions,
-// the note goes out tagged to them, who answer it, and the box empties
-// (general-chat.md, decision 6); any other text stays. With «Ver», or in a conversation
-// its opener keeps to reading, it turns into a quiet line saying why.
+// Where a person writes in a chat, as in WhatsApp (docs/plans/ready/
+// chat-like-whatsapp.md): a growing text box and one round button, the mic
+// while the box is empty and send once there is text. Hold the mic to record
+// and let go to send; slide left to cancel; slide up to lock, and the note
+// goes on hands-free with pause, bin and send (decision 4). A short tap says
+// how. With only @mentions in the box, the note goes tagged to them (general-
+// chat.md, decision 6). A screen reader's «activate» starts a locked note.
+// Typing @ offers the agents and people that can be mentioned. With «Ver», or
+// in a conversation its opener keeps to reading, it turns into a quiet line.
 
 /** What the database takes in one message (post_message). */
 const MAX_LENGTH = 8000;
+
+type Mode = 'idle' | 'holding' | 'locked';
 
 export function Composer({
   placeholder,
@@ -43,6 +48,10 @@ export function Composer({
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState(false);
+  const [mode, setMode] = useState<Mode>('idle');
+  const modeRef = useRef<Mode>('idle');
+  const slide = useRef(new Animated.Value(0)).current;
   const input = useRef<TextInputInstance>(null);
 
   // The names the box tags while it holds nothing else: they go with the note, and leave the box once it is sent.
@@ -56,12 +65,17 @@ export function Composer({
       tagged.current = [];
     },
   });
-  const recording = voice.state !== 'idle';
-  const mic = onVoiceNote !== undefined && !busy;
+
+  const setModeBoth = (m: Mode) => {
+    modeRef.current = m;
+    setMode(m);
+  };
 
   const query = mentionQuery(text);
   const suggestions = query === null ? [] : mentionSuggestions(query, names);
-  const ready = text.trim().length > 0 && !busy;
+  const hasText = text.trim().length > 0 && tags === null;
+  const ready = hasText && !busy;
+  const micMode = onVoiceNote !== undefined && !hasText;
 
   const send = async () => {
     if (!ready) return;
@@ -79,10 +93,82 @@ export function Composer({
     }
   };
 
+  const begin = (locked: boolean) => {
+    setHint(false);
+    tagged.current = tags ?? [];
+    setModeBoth(locked ? 'locked' : 'holding');
+    tap();
+    void voice.start();
+  };
+  const end = () => {
+    slide.setValue(0);
+    setModeBoth('idle');
+  };
+
+  // Hold, slide and let go: React Native's own responder, so it ships over the air.
+  const pressedAt = useRef(0);
+  const hold = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          pressedAt.current = Date.now();
+          begin(false);
+        },
+        onPanResponderMove: (_, g) => {
+          if (modeRef.current !== 'holding') return;
+          slide.setValue(Math.min(0, g.dx));
+          const move = holdMove(g.dx, g.dy);
+          if (move === 'cancel') {
+            void voice.cancel();
+            end();
+          } else if (move === 'lock') {
+            slide.setValue(0);
+            setModeBoth('locked');
+            tap();
+          }
+        },
+        onPanResponderRelease: () => {
+          if (modeRef.current !== 'holding') return;
+          if (holdRelease(Date.now() - pressedAt.current) === 'tap') {
+            void voice.cancel();
+            setHint(true);
+          } else {
+            void voice.finish();
+          }
+          end();
+        },
+        onPanResponderTerminate: () => {
+          if (modeRef.current !== 'holding') return;
+          void voice.finish();
+          end();
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [voice.start, voice.finish, voice.cancel, tags?.join('|')],
+  );
+
+  const recording = voice.state === 'recording' || voice.state === 'paused';
+  const sending = voice.state === 'sending';
+  // Once a note is over (sent, cancelled, stopped by a call) or never began
+  // (no microphone), the box comes back.
+  const active = useRef(false);
+  useEffect(() => {
+    if (voice.state !== 'idle') active.current = true;
+    else if (active.current || voice.error) {
+      active.current = false;
+      if (modeRef.current !== 'idle') end();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice.state, voice.error]);
+  const showLocked = mode === 'locked' && (recording || voice.state === 'idle');
+  const showHolding = mode === 'holding';
+
   return (
-    <View className="border-t border-line bg-surface px-3 pt-2" style={{ paddingBottom: Math.max(12, insets.bottom) }}>
+    <View className="border-t border-line bg-surface px-2 pt-2" style={{ paddingBottom: Math.max(10, insets.bottom) }}>
       {suggestions.length > 0 ? (
-        <View className="mb-2 flex-row flex-wrap gap-2" accessibilityLabel="Mencionar a">
+        <View className="mb-2 flex-row flex-wrap gap-2 px-1" accessibilityLabel="Mencionar a">
           {suggestions.map((n) => (
             <Pressable
               key={n}
@@ -99,9 +185,14 @@ export function Composer({
           ))}
         </View>
       ) : null}
-      {error ? <Text className="mb-1 ml-2 text-footnote text-no">No se ha enviado. {error}</Text> : null}
+      {error ? <Text className="mb-1 ml-3 text-footnote text-no">No se ha enviado. {error}</Text> : null}
+      {hint ? (
+        <Text testID="hold-hint" className="mb-1 ml-3 text-footnote text-muted">
+          Mantén pulsado para grabar, suelta para enviar
+        </Text>
+      ) : null}
       {voice.error ? (
-        <View className="mb-1 ml-2 flex-row flex-wrap items-center gap-x-3">
+        <View className="mb-1 ml-3 flex-row flex-wrap items-center gap-x-3">
           <Text className="text-footnote text-no">{voice.error}</Text>
           {voice.held && !recording ? (
             <>
@@ -115,63 +206,121 @@ export function Composer({
           ) : null}
         </View>
       ) : null}
-      <View className="flex-row items-end gap-2">
-        {recording ? (
-          <RecordingBar recording={voice.state === 'recording'} seconds={voice.seconds} onCancel={() => void voice.cancel()} />
-        ) : (
-          <TextInput
-            ref={input}
-            accessibilityLabel={placeholder}
-            placeholder={placeholder}
-            placeholderTextColor={c.muted}
-            value={text}
-            onChangeText={(t) => {
-              setText(t);
-              voice.clearError();
-            }}
-            multiline
-            autoFocus={autoFocus}
-            maxLength={MAX_LENGTH}
-            onKeyPress={(e) => {
-              // On a computer, Enter sends and Shift+Enter makes a new line.
-              const ev = e.nativeEvent as { key: string; shiftKey?: boolean };
-              if (Platform.OS === 'web' && ev.key === 'Enter' && !ev.shiftKey) {
-                (e as unknown as { preventDefault?: () => void }).preventDefault?.();
-                void send();
-              }
-            }}
-            className="max-h-36 min-h-11 flex-1 rounded-3xl border border-line bg-card px-4 py-2.5 text-base text-ink"
-            textAlignVertical="center"
-          />
-        )}
-        {voice.state === 'recording' ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Enviar nota de voz"
-            onPress={() => void voice.finish()}
-            className="h-11 w-11 items-center justify-center rounded-full bg-accent"
-          >
-            <Icon icon={ArrowUp} size={20} color={c.onAccent} weight="bold" />
-          </Pressable>
-        ) : voice.state === 'sending' ? (
-          <View className="h-11 w-11 items-center justify-center rounded-full bg-accent opacity-30" accessibilityState={{ disabled: true }}>
-            <ActivityIndicator color={c.onAccent} />
+
+      {showLocked ? (
+        <View testID="recording-locked" className="rounded-3xl border border-line bg-card px-3 py-2">
+          <View className="flex-row items-center gap-2" accessibilityLabel={`${voice.state === 'paused' ? 'En pausa' : 'Grabando'}, ${clock(voice.seconds)}`}>
+            <View className={`h-2.5 w-2.5 rounded-full ${voice.state === 'paused' ? 'bg-muted' : 'bg-no'}`} />
+            <Text className="text-base text-ink" style={{ fontVariant: ['tabular-nums'] }}>
+              {clock(voice.seconds)}
+            </Text>
+            <LiveWave levels={voice.live} colour={c.muted} />
           </View>
-        ) : (
-          <>
-            {mic ? (
-              <Pressable
+          <View className="mt-2 flex-row items-center justify-between">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Descartar la grabación"
+              onPress={() => {
+                void voice.cancel();
+                end();
+              }}
+              hitSlop={8}
+              className="h-11 w-11 items-center justify-center active:opacity-60"
+            >
+              <Icon icon={Trash} size={22} color={c.muted} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={voice.state === 'paused' ? 'Seguir grabando' : 'Pausar la grabación'}
+              onPress={() => (voice.state === 'paused' ? voice.resume() : voice.pause())}
+              hitSlop={8}
+              className="h-11 w-11 items-center justify-center active:opacity-60"
+            >
+              <Icon icon={voice.state === 'paused' ? Microphone : Pause} size={24} color={c.no} weight="fill" />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Enviar nota de voz"
+              onPress={() => {
+                void voice.finish();
+                end();
+              }}
+              className="h-11 w-11 items-center justify-center rounded-full bg-accent active:opacity-80"
+            >
+              <Icon icon={PaperPlaneRight} size={20} color={c.onAccent} weight="fill" />
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <View className="flex-row items-end gap-2">
+          {showHolding ? (
+            <View testID="recording-holding" className="min-h-11 flex-1 flex-row items-center rounded-3xl border border-line bg-card px-4">
+              <View className="h-2.5 w-2.5 rounded-full bg-no" />
+              <Text className="ml-2 text-base text-ink" style={{ fontVariant: ['tabular-nums'] }} accessibilityLabel={`Grabando, ${clock(voice.seconds)}`}>
+                {clock(voice.seconds)}
+              </Text>
+              <Animated.View className="flex-1 flex-row items-center justify-center" style={{ transform: [{ translateX: slide }] }}>
+                <Icon icon={CaretLeft} size={14} color={c.muted} />
+                <Text className="ml-1 text-footnote text-muted">Desliza para cancelar</Text>
+              </Animated.View>
+            </View>
+          ) : sending ? (
+            <View className="min-h-11 flex-1 flex-row items-center rounded-3xl border border-line bg-card px-4">
+              <Text className="text-footnote text-muted">Enviando la nota…</Text>
+            </View>
+          ) : (
+            <TextInput
+              ref={input}
+              accessibilityLabel={placeholder}
+              placeholder={placeholder}
+              placeholderTextColor={c.muted}
+              value={text}
+              onChangeText={(t) => {
+                setText(t);
+                setHint(false);
+                voice.clearError();
+              }}
+              multiline
+              autoFocus={autoFocus}
+              maxLength={MAX_LENGTH}
+              onKeyPress={(e) => {
+                // On a computer, Enter sends and Shift+Enter makes a new line.
+                const ev = e.nativeEvent as { key: string; shiftKey?: boolean };
+                if (Platform.OS === 'web' && ev.key === 'Enter' && !ev.shiftKey) {
+                  (e as unknown as { preventDefault?: () => void }).preventDefault?.();
+                  void send();
+                }
+              }}
+              className="max-h-36 min-h-11 flex-1 rounded-3xl border border-line bg-card px-4 py-2.5 text-base text-ink"
+              textAlignVertical="center"
+            />
+          )}
+
+          {micMode ? (
+            <View>
+              {showHolding ? (
+                <View className="absolute -top-16 left-0 right-0 items-center" pointerEvents="none" accessibilityElementsHidden>
+                  <View className="items-center rounded-full border border-line bg-card px-2 py-2">
+                    <Icon icon={LockSimple} size={16} color={c.muted} />
+                    <Icon icon={CaretUp} size={12} color={c.muted} />
+                  </View>
+                </View>
+              ) : null}
+              <View
+                {...hold.panHandlers}
+                accessible
                 accessibilityRole="button"
                 accessibilityLabel={tags && tags.length > 0 ? `Grabar nota de voz para ${tags.join(' y ')}` : 'Grabar nota de voz'}
-                onPress={() => {
-                  tagged.current = tags ?? [];
-                  void voice.start();
-                }}
-                className="h-11 w-11 items-center justify-center rounded-full border border-line bg-card active:opacity-70"
+                accessibilityHint="Mantén pulsado para grabar y suelta para enviar"
+                accessibilityActions={[{ name: 'activate' }]}
+                onAccessibilityAction={() => begin(true)}
+                className={`items-center justify-center rounded-full bg-accent ${showHolding ? 'h-14 w-14' : 'h-11 w-11'}`}
+                style={Platform.OS === 'web' ? ({ cursor: 'pointer', userSelect: 'none', touchAction: 'none' } as object) : undefined}
               >
-                <Icon icon={Microphone} size={20} color={c.ink} weight="bold" />
-              </Pressable>
-            ) : null}
+                {sending ? <ActivityIndicator color={c.onAccent} /> : <Icon icon={Microphone} size={showHolding ? 26 : 20} color={c.onAccent} weight="fill" />}
+              </View>
+            </View>
+          ) : (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Enviar"
@@ -181,9 +330,20 @@ export function Composer({
             >
               {busy ? <ActivityIndicator color={c.onAccent} /> : <Icon icon={ArrowUp} size={20} color={c.onAccent} weight="bold" />}
             </Pressable>
-          </>
-        )}
-      </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** The latest levels as bars, newest on the right, while recording. */
+function LiveWave({ levels, colour }: { levels: number[]; colour: string }) {
+  return (
+    <View className="h-6 flex-1 flex-row items-center justify-end gap-[2px] overflow-hidden" accessibilityElementsHidden>
+      {levels.map((l, i) => (
+        <View key={i} style={{ width: 2.5, height: Math.max(3, l * 22), borderRadius: 2, backgroundColor: colour }} />
+      ))}
     </View>
   );
 }

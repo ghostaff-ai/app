@@ -370,6 +370,7 @@ export function createApp(deps: AppDeps) {
     body: c.req.raw.body,
     durationMs: c.req.query('durationMs'),
     mentions: c.req.queries('mention') ?? [],
+    waveform: c.req.query('waveform'),
   });
   app.post('/agents/:id/voice-notes', async (c) =>
     c.json({ message: await sendVoiceNote(voice, c.get('userId'), c.req.param('id'), incoming(c)) }, 201),

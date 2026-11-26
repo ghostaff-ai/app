@@ -17,7 +17,10 @@ const mockRecorder = {
   stop: jest.fn(async () => {
     mockRecording = false;
   }),
-  getStatus: () => ({ isRecording: mockRecording, durationMillis: mockRecording ? Math.max(mockMinMillis, Date.now() - mockStartedAt) : 0 }),
+  pause: jest.fn(() => {
+    mockRecording = false;
+  }),
+  getStatus: () => ({ isRecording: mockRecording, durationMillis: mockRecording ? Math.max(mockMinMillis, Date.now() - mockStartedAt) : 0, metering: -25 }),
 };
 const mockPermission = jest.fn(async () => ({ granted: true }));
 const mockDelete = jest.fn();
@@ -39,7 +42,7 @@ jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({
 const names = ['Ana', 'Secretaría'];
 const onSend = jest.fn(() => Promise.resolve());
 
-type Note = { audio: Blob; mimeType: string; durationMs: number };
+type Note = { audio: Blob; mimeType: string; durationMs: number; waveform: number[] };
 const setup = async (onVoiceNote?: (note: Note, tagged: string[]) => Promise<void>) => {
   await render(<Composer placeholder="Escribe aquí" names={names} onSend={onSend} onVoiceNote={onVoiceNote} />);
 };
@@ -55,8 +58,9 @@ const settle = async () => {
   });
 };
 
-const record = async () => {
-  await press('Grabar nota de voz');
+/** A screen reader's «activate» on the mic: a locked note, recording hands-free (holding is lib/hold.ts's, tested apart). */
+const record = async (label = 'Grabar nota de voz') => {
+  await fireEvent(screen.getByLabelText(label), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } });
   await settle();
 };
 
@@ -91,21 +95,21 @@ describe('Composer voice notes', () => {
     expect(screen.getByLabelText('Enviar')).toBeTruthy();
   });
 
-  it('keeps the mic beside send, with or without text', async () => {
+  it('shows the mic while the box is empty and send once there is text, as in WhatsApp', async () => {
     await setup(jest.fn());
     expect(screen.getByLabelText('Grabar nota de voz')).toBeTruthy();
+    expect(screen.queryByLabelText('Enviar')).toBeNull();
     await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'Hola');
-    expect(screen.getByLabelText('Grabar nota de voz')).toBeTruthy();
+    expect(screen.queryByLabelText('Grabar nota de voz')).toBeNull();
     expect(screen.getByLabelText('Enviar')).toBeTruthy();
   });
 
-  it('records and sends the note as audio, with its length, leaving the text box alone', async () => {
+  it('records and sends the note as audio, with its length', async () => {
     const onVoiceNote = jest.fn(async (_: Note) => {});
     await setup(onVoiceNote);
-    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'a medias');
     await record();
+    expect(screen.getByTestId('recording-locked')).toBeTruthy();
     expect(screen.getByText('0:00')).toBeTruthy();
-    expect(screen.getByText('Cancelar')).toBeTruthy();
     await press('Enviar nota de voz');
     await settle();
     expect(onVoiceNote).toHaveBeenCalledTimes(1);
@@ -115,7 +119,17 @@ describe('Composer voice notes', () => {
     expect(note.durationMs).toBeGreaterThanOrEqual(4200);
     expect(onSend).not.toHaveBeenCalled();
     expect(mockDelete).toHaveBeenCalled();
-    expect(screen.getByLabelText('Escribe aquí').props.value).toBe('a medias');
+    expect(screen.getByLabelText('Escribe aquí')).toBeTruthy();
+  });
+
+  it('pauses a locked note and goes on where it left off', async () => {
+    await setup(jest.fn(async () => {}));
+    await record();
+    await press('Pausar la grabación');
+    expect(mockRecorder.pause).toHaveBeenCalled();
+    expect(screen.getByLabelText(/En pausa/)).toBeTruthy();
+    await press('Seguir grabando');
+    expect(mockRecorder.record).toHaveBeenCalledTimes(2);
   });
 
   it('with only @mentions in the box, the note goes tagged to them and the box empties (general-chat.md)', async () => {
@@ -123,8 +137,7 @@ describe('Composer voice notes', () => {
     await setup(onVoiceNote);
     await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), '@Secretaría ');
     expect(screen.getByLabelText('Grabar nota de voz para Secretaría')).toBeTruthy();
-    await press('Grabar nota de voz para Secretaría');
-    await settle();
+    await record('Grabar nota de voz para Secretaría');
     await press('Enviar nota de voz');
     await settle();
     expect(onVoiceNote.mock.calls[0]![1]).toEqual(['Secretaría']);
@@ -165,15 +178,15 @@ describe('Composer voice notes', () => {
     expect(onVoiceNote).toHaveBeenCalledTimes(1);
   });
 
-  it('shows «Enviando…» and a spinner while it goes', async () => {
+  it('says it is sending, with a spinner, while it goes', async () => {
     let done: () => void = () => {};
     await setup(() => new Promise<void>((r) => (done = r)));
     await recordAndSend();
-    expect(screen.getByText('Enviando…')).toBeTruthy();
+    expect(screen.getByText('Enviando la nota…')).toBeTruthy();
     expect(screen.queryByLabelText('Enviar nota de voz')).toBeNull();
-    expect(JSON.stringify(screen.toJSON()).match(/ActivityIndicator/g)).toHaveLength(2); // the bar's and the button's
+    expect(JSON.stringify(screen.toJSON()).match(/ActivityIndicator/g)).toHaveLength(1);
     await act(async () => done());
-    expect(screen.queryByText('Enviando…')).toBeNull();
+    expect(screen.queryByText('Enviando la nota…')).toBeNull();
     expect(screen.getByLabelText('Escribe aquí')).toBeTruthy();
   });
 
@@ -206,6 +219,7 @@ describe('Composer voice notes', () => {
     await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), 'a');
     expect(screen.getByText('No se ha enviado la nota.')).toBeTruthy();
     await press('Descartar la nota');
+    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), '');
     mockPermission.mockResolvedValue({ granted: false });
     await record();
     expect(screen.getByText(/no tiene permiso/)).toBeTruthy();
@@ -241,7 +255,7 @@ describe('Composer voice notes', () => {
     const onVoiceNote = jest.fn(async (_: Note) => {});
     await setup(onVoiceNote);
     await record();
-    await press('Cancelar');
+    await press('Descartar la grabación');
     await settle();
     expect(screen.getByLabelText('Escribe aquí')).toBeTruthy();
     expect(screen.getByLabelText('Grabar nota de voz')).toBeTruthy();
@@ -263,7 +277,7 @@ describe('Composer voice notes', () => {
     await setup(onVoiceNote);
     await record();
     await goTo('active');
-    expect(screen.getByText('Cancelar')).toBeTruthy();
+    expect(screen.getByTestId('recording-locked')).toBeTruthy();
     await goTo('background');
     await settle();
     expect(onVoiceNote).not.toHaveBeenCalled();
@@ -280,11 +294,11 @@ describe('Composer voice notes', () => {
     mockPermission.mockImplementationOnce(() => new Promise((r) => (allow = r)));
     const onVoiceNote = jest.fn(async (_: Note) => {});
     await setup(onVoiceNote);
-    await press('Grabar nota de voz');
+    await fireEvent(screen.getByLabelText('Grabar nota de voz'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } });
     await goTo('background'); // Android's dialog
     await act(async () => allow({ granted: true }));
     await settle();
-    expect(screen.getByText('Cancelar')).toBeTruthy();
+    expect(screen.getByTestId('recording-locked')).toBeTruthy();
     await press('Enviar nota de voz');
     await settle();
     expect(onVoiceNote).toHaveBeenCalledTimes(1);
@@ -327,6 +341,9 @@ describe('Composer voice notes', () => {
       await settle();
       expect(onVoiceNote).toHaveBeenCalledTimes(1);
       expect(onVoiceNote.mock.calls[0]![0].durationMs).toBeGreaterThanOrEqual(600_000);
+      // How loud it was, from the recorder's metering, folded to the bubble's bars.
+      expect(onVoiceNote.mock.calls[0]![0].waveform).toHaveLength(40);
+      expect(onVoiceNote.mock.calls[0]![0].waveform[0]).toBeCloseTo(0.5);
     });
   });
 
@@ -338,5 +355,19 @@ describe('Composer voice notes', () => {
     await settle();
     expect(mockRecorder.stop).toHaveBeenCalled();
     expect(onVoiceNote).not.toHaveBeenCalled();
+  });
+});
+
+describe('holding the mic (lib/hold.ts)', () => {
+  const { holdMove, holdRelease, CANCEL_DX, LOCK_DY, TAP_MS } = jest.requireActual('@/lib/hold') as typeof import('@/lib/hold');
+  it('slid far enough left cancels, up locks, and cancel wins', () => {
+    expect(holdMove(-CANCEL_DX, 0)).toBe('cancel');
+    expect(holdMove(0, -LOCK_DY)).toBe('lock');
+    expect(holdMove(-CANCEL_DX - 1, -LOCK_DY - 1)).toBe('cancel');
+    expect(holdMove(-20, -20)).toBe('none');
+  });
+  it('a press shorter than a moment is a tap, not a note', () => {
+    expect(holdRelease(TAP_MS - 1)).toBe('tap');
+    expect(holdRelease(TAP_MS + 1)).toBe('send');
   });
 });

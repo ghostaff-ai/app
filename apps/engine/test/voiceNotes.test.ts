@@ -353,6 +353,14 @@ describe('POST /threads/:id/voice-notes (General, general-chat.md)', () => {
     expect(JSON.stringify(asked[0])).toContain('Llama mañana al proveedor de harina.');
   });
 
+  it('keeps how loud the note was, for its waveform; a malformed one is dropped', async () => {
+    const { sendTo, voicePart } = setup();
+    const ok = (await (await sendTo(GENERAL, '?durationMs=4200&waveform=0459')).json()) as { message: ChatMessage };
+    expect(voicePart(ok.message).waveform).toEqual([0, 4 / 9, 5 / 9, 1]);
+    const bad = (await (await sendTo(GENERAL, '?durationMs=4200&waveform=12a')).json()) as { message: ChatMessage };
+    expect(voicePart(bad.message).waveform).toBeUndefined();
+  });
+
   it('needs someone who may write in that chat', async () => {
     const { sendTo, stored } = setup();
     expect((await sendTo(GENERAL, undefined, 'carla')).status).toBe(403);

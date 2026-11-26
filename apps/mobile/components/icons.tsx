@@ -8,16 +8,20 @@ import { usePalette } from '@/lib/theme';
 
 export { AppWindowIcon as AppWindow } from 'phosphor-react-native/src/icons/AppWindow';
 export { ArrowDownIcon as ArrowDown } from 'phosphor-react-native/src/icons/ArrowDown';
-export { ArrowUpIcon as ArrowUp } from 'phosphor-react-native/src/icons/ArrowUp';
 export { ArrowsClockwiseIcon as ArrowsClockwise } from 'phosphor-react-native/src/icons/ArrowsClockwise';
+export { ArrowUpIcon as ArrowUp } from 'phosphor-react-native/src/icons/ArrowUp';
 export { BrainIcon as Brain } from 'phosphor-react-native/src/icons/Brain';
 export { BuildingsIcon as Buildings } from 'phosphor-react-native/src/icons/Buildings';
 export { CameraIcon as Camera } from 'phosphor-react-native/src/icons/Camera';
+export { CaretDoubleDownIcon as CaretDoubleDown } from 'phosphor-react-native/src/icons/CaretDoubleDown';
 export { CaretDownIcon as CaretDown } from 'phosphor-react-native/src/icons/CaretDown';
+export { CaretLeftIcon as CaretLeft } from 'phosphor-react-native/src/icons/CaretLeft';
 export { CaretRightIcon as CaretRight } from 'phosphor-react-native/src/icons/CaretRight';
+export { CaretUpIcon as CaretUp } from 'phosphor-react-native/src/icons/CaretUp';
 export { ChatsCircleIcon as ChatsCircle } from 'phosphor-react-native/src/icons/ChatsCircle';
 export { CheckIcon as Check } from 'phosphor-react-native/src/icons/Check';
 export { CheckCircleIcon as CheckCircle } from 'phosphor-react-native/src/icons/CheckCircle';
+export { ChecksIcon as Checks } from 'phosphor-react-native/src/icons/Checks';
 export { ClockIcon as Clock } from 'phosphor-react-native/src/icons/Clock';
 export { EnvelopeSimpleIcon as EnvelopeSimple } from 'phosphor-react-native/src/icons/EnvelopeSimple';
 export { EyeIcon as Eye } from 'phosphor-react-native/src/icons/Eye';
@@ -26,6 +30,7 @@ export { LinkSimpleIcon as LinkSimple } from 'phosphor-react-native/src/icons/Li
 export { LockSimpleIcon as LockSimple } from 'phosphor-react-native/src/icons/LockSimple';
 export { MagnifyingGlassIcon as MagnifyingGlass } from 'phosphor-react-native/src/icons/MagnifyingGlass';
 export { MicrophoneIcon as Microphone } from 'phosphor-react-native/src/icons/Microphone';
+export { PaperPlaneRightIcon as PaperPlaneRight } from 'phosphor-react-native/src/icons/PaperPlaneRight';
 export { PauseIcon as Pause } from 'phosphor-react-native/src/icons/Pause';
 export { PencilSimpleIcon as PencilSimple } from 'phosphor-react-native/src/icons/PencilSimple';
 export { PhoneIcon as Phone } from 'phosphor-react-native/src/icons/Phone';
@@ -36,6 +41,7 @@ export { SealCheckIcon as SealCheck } from 'phosphor-react-native/src/icons/Seal
 export { SignOutIcon as SignOut } from 'phosphor-react-native/src/icons/SignOut';
 export { SparkleIcon as Sparkle } from 'phosphor-react-native/src/icons/Sparkle';
 export { StopIcon as Stop } from 'phosphor-react-native/src/icons/Stop';
+export { TrashIcon as Trash } from 'phosphor-react-native/src/icons/Trash';
 export { TrayIcon as Tray } from 'phosphor-react-native/src/icons/Tray';
 export { UserIcon as User } from 'phosphor-react-native/src/icons/User';
 export { UserPlusIcon as UserPlus } from 'phosphor-react-native/src/icons/UserPlus';

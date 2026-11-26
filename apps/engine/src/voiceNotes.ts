@@ -14,7 +14,7 @@
 // Neither the audio nor the transcript is ever logged.
 
 import { randomUUID } from 'node:crypto';
-import { type ChatMessage, isVoicePart, type VoicePart } from '@ghostaff/shared';
+import { type ChatMessage, isVoicePart, type VoicePart, waveformFromDigits } from '@ghostaff/shared';
 import { messageFromRow } from '@ghostaff/shared/services';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type ChatDeps, replyInThread } from './chat';
@@ -80,6 +80,8 @@ export interface IncomingNote {
   durationMs: unknown;
   /** Agents tagged before recording: ids, written as «@Name» before the note. */
   mentions?: unknown[];
+  /** How loud it was, one digit per level (`?waveform=0379…`): the bubble draws it. */
+  waveform?: unknown;
 }
 
 /**
@@ -139,7 +141,14 @@ async function storeNote(deps: VoiceNoteDeps, userId: string, orgId: string, thr
       threadId,
       orgId,
       userId,
-      part: { type: 'voice', path, mediaType: mimeType, durationMs: durationOf(note.durationMs), transcription: 'pending' },
+      part: {
+        type: 'voice',
+        path,
+        mediaType: mimeType,
+        durationMs: durationOf(note.durationMs),
+        transcription: 'pending',
+        ...(waveformFromDigits(note.waveform) ? { waveform: waveformFromDigits(note.waveform) } : {}),
+      },
       ...(tagged ? { mentions: tagged } : {}),
     });
   } catch (e) {

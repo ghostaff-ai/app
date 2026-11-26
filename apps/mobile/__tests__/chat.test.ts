@@ -1,5 +1,5 @@
 import type { Agent, ChatMessage, ChatThread } from '@ghostaff/shared';
-import { generalChat, generalLastLine, noteLength, shortTime, showAuthors, teamRows, vacancies } from '@/lib/chat';
+import { chatRows, dayLabel, generalChat, generalLastLine, noteLength, personColour, shortTime, showAuthors, teamRows, timeOf, vacancies } from '@/lib/chat';
 import { addMessage } from '@/lib/hooks/useChat';
 
 const agent = (id: string, ghost: Agent['ghost'], isMain = ghost === 'secretaria'): Agent => ({
@@ -110,5 +110,39 @@ describe('the chat rules', () => {
 
   it('lists the jobs nobody does yet', () => {
     expect(vacancies([agent('sec', 'secretaria'), agent('x', 'base')])).toEqual(['incorporacion', 'finanzas', 'redes', 'productor']);
+  });
+});
+
+describe('a chat drawn as WhatsApp does (chat-like-whatsapp.md)', () => {
+  const now = new Date(2026, 10, 26, 18, 0);
+  const at = (d: number, h: number, m = 0) => new Date(2026, 10, d, h, m).toISOString();
+  const say = (id: string, user: string, iso: string): ChatMessage => ({
+    id, threadId: 'g', authorKind: 'person', authorUserId: user, authorAgentId: null, authorName: user === 'jaime' ? 'Jaime' : 'Álvaro',
+    parts: [{ type: 'text', text: id }], state: 'done', steps: [], createdAt: iso,
+  });
+
+  it('names the days: today, yesterday, the weekday within a week, then the date', () => {
+    expect(dayLabel(at(26, 9), now)).toBe('Hoy');
+    expect(dayLabel(at(25, 23, 59), now)).toBe('Ayer');
+    expect(dayLabel(at(22, 10), now)).toBe('domingo');
+    expect(dayLabel(at(12, 10), now)).toBe('12 de noviembre');
+    expect(dayLabel(new Date(2025, 2, 3).toISOString(), now)).toBe('3 de marzo de 2025');
+    expect(timeOf(at(26, 9, 5))).toBe('09:05');
+  });
+
+  it('puts a pill where each day starts and runs the same author’s messages together', () => {
+    const rows = chatRows([say('a', 'alvaro', at(25, 10)), say('b', 'alvaro', at(25, 10, 2)), say('c', 'jaime', at(25, 10, 3)), say('d', 'jaime', at(26, 9))], { me: 'jaime', now });
+    expect(rows.map((r) => (r.kind === 'message' ? `${r.message.id}${r.first ? '*' : ''}` : r.kind === 'day' ? r.label : 'unread'))).toEqual(['Ayer', 'a*', 'b', 'c*', 'Hoy', 'd*']);
+  });
+
+  it('marks where the unread begin, counting only what others wrote', () => {
+    const rows = chatRows([say('a', 'alvaro', at(26, 8)), say('b', 'jaime', at(26, 9)), say('c', 'alvaro', at(26, 9, 1)), say('d', 'alvaro', at(26, 9, 2))], { me: 'jaime', readAt: at(26, 8, 30), now });
+    expect(rows.map((r) => (r.kind === 'message' ? r.message.id : r.kind === 'unread' ? `unread ${r.count}` : r.label))).toEqual(['Hoy', 'a', 'b', 'unread 2', 'c', 'd']);
+    expect(rows.filter((r) => r.kind === 'message' && r.unread).map((r) => (r as { message: ChatMessage }).message.id)).toEqual(['c', 'd']);
+    expect(chatRows([say('a', 'alvaro', at(26, 8))], { me: 'jaime', readAt: null, now }).some((r) => r.kind === 'unread')).toBe(false);
+  });
+
+  it('gives each person one colour', () => {
+    expect(personColour('alvaro')).toBe(personColour('alvaro'));
   });
 });

@@ -10,6 +10,8 @@ import {
   listThreads,
   markThreadRead,
   myAgentLevels,
+  myReadMark,
+  readByAllUntil,
   postMessage,
   type OutgoingNote,
   sendVoiceNote,
@@ -121,15 +123,24 @@ export function useThread(threadId: string | null) {
   const [head, setHead] = useState<ThreadHead | null | undefined>(undefined);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const markRead = useMarkReadWhileSeen(threadId);
+  /** The person's read mark when the chat opened: where «sin leer» begins. Undefined until known. */
+  const [openedAt, setOpenedAt] = useState<string | null | undefined>(undefined);
+  const [markRead, onScreen] = useMarkReadWhileSeen(threadId);
 
   useEffect(() => {
     if (!threadId) return;
     let alive = true;
+    setOpenedAt(undefined);
+    // Read once, before the chat is marked read (the first load's markRead.found()).
+    let mark: Promise<string | null> | null = myReadMark(supabase, threadId).catch(() => null);
     const load = () =>
-      Promise.all([getThread(supabase, threadId), listMessages(supabase, threadId)])
-        .then(([h, ms]) => {
+      Promise.all([getThread(supabase, threadId), listMessages(supabase, threadId), mark])
+        .then(([h, ms, m]) => {
           if (!alive) return;
+          if (mark) {
+            setOpenedAt(m ?? null);
+            mark = null;
+          }
           setHead(h);
           setMessages((live) => ms.reduce(addMessage, live));
           if (h) markRead.found();
@@ -174,7 +185,33 @@ export function useThread(threadId: string | null) {
   /** Shows a message the engine wrote for the person (a voice note) without waiting for Realtime. */
   const add = useCallback((m: ChatMessage) => setMessages((list) => addMessage(list, m)), []);
 
-  return { head, messages, error, send, add };
+  const readByAll = useReadByAll(threadId, messages.length, onScreen);
+
+  return { head, messages, error, send, add, openedAt, readByAll };
+}
+
+/**
+ * Up to when everyone else has read the chat (readByAllUntil), for the blue
+ * ticks: asked when the chat opens, when a message arrives, and every 15 s
+ * while it is on screen (others' read marks don't come through Realtime).
+ */
+function useReadByAll(threadId: string | null, count: number, focused: boolean) {
+  const [until, setUntil] = useState<string | null>(null);
+  useEffect(() => {
+    if (!threadId || !focused) return;
+    let alive = true;
+    const ask = () =>
+      void readByAllUntil(supabase, threadId)
+        .then((u) => alive && setUntil(u))
+        .catch(() => {});
+    ask();
+    const every = setInterval(ask, 15_000);
+    return () => {
+      alive = false;
+      clearInterval(every);
+    };
+  }, [threadId, focused, count]);
+  return until;
 }
 
 /**
@@ -188,6 +225,8 @@ export function useThread(threadId: string | null) {
 function useMarkReadWhileSeen(threadId: string | null) {
   const focused = useRef(false);
   const found = useRef(false);
+  /** The same, as state: what else runs only while the chat is on screen (read ticks). */
+  const [onScreen, setOnScreen] = useState(false);
 
   const api = useMemo(() => {
     const now = () => {
@@ -215,7 +254,11 @@ function useMarkReadWhileSeen(threadId: string | null) {
   useFocusEffect(
     useCallback(() => {
       api.focus(true);
-      return () => api.focus(false);
+      setOnScreen(true);
+      return () => {
+        api.focus(false);
+        setOnScreen(false);
+      };
     }, [api]),
   );
 
@@ -226,7 +269,7 @@ function useMarkReadWhileSeen(threadId: string | null) {
     return () => sub.remove();
   }, [api]);
 
-  return api;
+  return [api, onScreen] as const;
 }
 
 /**
@@ -323,6 +366,8 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
   return {
     loading: loading && threads.length === 0,
     messages: chat.messages,
+    openedAt: chat.openedAt,
+    readByAll: chat.readByAll,
     error: error ?? chat.error,
     send,
     askAbout,
@@ -368,6 +413,8 @@ export function useGeneralChat(orgId: string | null) {
     loading: loading || (chatId !== null && chat.head === undefined),
     missing: !loading && general === null,
     messages: chat.messages,
+    openedAt: chat.openedAt,
+    readByAll: chat.readByAll,
     error: chat.error,
     send: chat.send,
     sendVoice,

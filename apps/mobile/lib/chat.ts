@@ -18,6 +18,79 @@ export function shortTime(iso: string, now = new Date()): string {
   return shortDate(todayIso(t));
 }
 
+const DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MONTHS_LONG = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/**
+ * The pill between days in a chat, as WhatsApp says it (chat-like-whatsapp.md):
+ * «Hoy», «Ayer», the weekday within the week, then «12 de noviembre», with the
+ * year when it isn't this one. In the phone's own time.
+ */
+export function dayLabel(iso: string, now = new Date()): string {
+  const t = new Date(iso);
+  const days = Math.round((Date.parse(todayIso(now)) - Date.parse(todayIso(t))) / 86_400_000);
+  if (days <= 0) return 'Hoy';
+  if (days === 1) return 'Ayer';
+  if (days < 7) return DAYS[t.getDay()] ?? '';
+  const date = `${t.getDate()} de ${MONTHS_LONG[t.getMonth()]}`;
+  return t.getFullYear() === now.getFullYear() ? date : `${date} de ${t.getFullYear()}`;
+}
+
+/** Each person's colour in a group (their name, their avatar), the same on every screen. Mid tones, read on light and dark. */
+export const PERSON_COLOURS = ['#1D9E75', '#378ADD', '#D4537E', '#BA7517', '#7F77DD', '#D85A30', '#3E8A8A', '#639922'];
+
+export function personColour(key: string): string {
+  let h = 0;
+  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return PERSON_COLOURS[h % PERSON_COLOURS.length] ?? PERSON_COLOURS[0]!;
+}
+
+/** `10:42`: when a message was written, in the phone's own time, inside its bubble. */
+export function timeOf(iso: string): string {
+  const t = new Date(iso);
+  return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+}
+
+/** One row of a chat's list: a day's pill, where the unread begin, or a message. */
+export type ChatRow =
+  | { kind: 'day'; key: string; label: string }
+  | { kind: 'unread'; key: string; count: number }
+  | {
+      kind: 'message';
+      key: string;
+      message: ChatMessage;
+      /** The first of a run by the same author: it carries the tail and, in a group, the name. */
+      first: boolean;
+      /** Arrived since the person last read the chat. */
+      unread: boolean;
+    };
+
+/** Same author, same day, within five minutes: one run, as WhatsApp groups them. */
+function sameRun(prev: ChatMessage, m: ChatMessage): boolean {
+  const same = prev.authorKind === m.authorKind && (prev.authorUserId ?? prev.authorAgentId) === (m.authorUserId ?? m.authorAgentId) && prev.authorName === m.authorName;
+  return same && todayIso(new Date(prev.createdAt)) === todayIso(new Date(m.createdAt)) && Date.parse(m.createdAt) - Date.parse(prev.createdAt) <= 5 * 60_000;
+}
+
+/**
+ * A chat's messages as the list draws them: a pill where each day starts, and
+ * «N mensajes sin leer» before the first message someone else wrote after
+ * `readAt` (the person's read mark when the chat opened; none, nothing unread).
+ */
+export function chatRows(messages: ChatMessage[], opts: { me?: string; readAt?: string | null; now?: Date } = {}): ChatRow[] {
+  const rows: ChatRow[] = [];
+  const isNew = (m: ChatMessage) => !!opts.readAt && Date.parse(m.createdAt) > Date.parse(opts.readAt) && !(m.authorKind === 'person' && m.authorUserId === opts.me);
+  const firstNew = opts.readAt ? messages.findIndex(isNew) : -1;
+  const unreadCount = firstNew < 0 ? 0 : messages.slice(firstNew).filter(isNew).length;
+  messages.forEach((m, i) => {
+    const prev = messages[i - 1];
+    const day = todayIso(new Date(m.createdAt));
+    if (!prev || todayIso(new Date(prev.createdAt)) !== day) rows.push({ kind: 'day', key: `day-${day}`, label: dayLabel(m.createdAt, opts.now) });
+    if (i === firstNew) rows.push({ kind: 'unread', key: 'unread', count: unreadCount });
+    rows.push({ kind: 'message', key: m.id, message: m, first: !prev || i === firstNew || !sameRun(prev, m), unread: firstNew >= 0 && i >= firstNew && isNew(m) });
+  });
+  return rows;
+}
+
 /** Whether each message shows its author: not when it follows the same author within five minutes. */
 export function showAuthors(messages: ChatMessage[]): boolean[] {
   return messages.map((m, i) => {

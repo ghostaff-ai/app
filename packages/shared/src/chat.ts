@@ -123,7 +123,42 @@ export type VoicePart = {
   durationMs: number | null;
   /** «empty» when nobody spoke. */
   transcription: 'pending' | 'done' | 'empty' | 'failed';
+  /**
+   * How loud it was, as the bubble draws it: up to 64 levels from 0 to 1, from
+   * the recorder's metering (chat-like-whatsapp.md). Absent on older notes and
+   * where the recorder gives none: the bubble draws a steady one.
+   */
+  waveform?: number[];
 };
+
+/** Up to 64 levels, 0 to 1, as the app sends them: one digit each, `?waveform=0379…`. */
+export function waveformFromDigits(raw: unknown): number[] | undefined {
+  if (typeof raw !== 'string' || !/^[0-9]{1,64}$/.test(raw)) return undefined;
+  return [...raw].map((d) => Number(d) / 9);
+}
+
+export function waveformToDigits(levels: number[]): string {
+  return levels
+    .slice(0, 64)
+    .map((l) => String(Math.round(Math.max(0, Math.min(1, l)) * 9)))
+    .join('');
+}
+
+/**
+ * Levels sampled while recording, folded into `bars` (the loudest of each
+ * stretch), so a long note and a short one draw the same width.
+ */
+export function foldLevels(levels: number[], bars = 40): number[] {
+  if (levels.length === 0) return [];
+  if (levels.length <= bars) return levels;
+  const out: number[] = [];
+  for (let i = 0; i < bars; i++) {
+    const from = Math.floor((i * levels.length) / bars);
+    const to = Math.max(from + 1, Math.floor(((i + 1) * levels.length) / bars));
+    out.push(Math.max(...levels.slice(from, to)));
+  }
+  return out;
+}
 
 export function isVoicePart(p: MessagePart): p is VoicePart & MessagePart {
   return p.type === 'voice' && typeof (p as { path?: unknown }).path === 'string';
