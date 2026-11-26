@@ -11,6 +11,8 @@ Make working with the team of agents feel a bit like a game, so the progress of 
 
 ## Context
 
+Jaime's idea of the agents as a world you see and a friend who talks to you, which this game would live in: [agent-world.md](agent-world.md) (2026-11-26).
+
 The product plan already gives each agent a log of what it learns and a goal it pushes up, and plans a shared toolbox for agents ([`ghostaff-producto.md`](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#lo-común-a-todos)). The game can sit on top of those instead of inventing parallel numbers.
 
 ## The ideas
