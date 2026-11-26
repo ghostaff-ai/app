@@ -1,0 +1,49 @@
+appId: ${APP_ID}
+name: An owner writes to Secretaría and sees her answer arrive
+---
+# The team chat, the other half of the first version. The seeded company
+# (scripts/e2e/seed.sh) has Secretaría; its second owner writes to her from
+# Equipo. No engine runs in e2e, so the answer is written by
+# scripts/agent-reply.js the way the engine leaves a finished one, and the app
+# has to show it live. Only what the person sees is relied on here: not how
+# conversations are kept. With no engine URL in the e2e build the chat also
+# says «El agente no ha podido contestar ahora…»; that line is not checked.
+- evalScript: ${output.run = Date.now().toString().slice(-6)}
+- evalScript: ${output.message = 'Prepara el turno del sábado ' + output.run}
+- evalScript: ${output.reply = 'Lo preparo esta tarde ' + output.run}
+- runScript:
+    file: ../../scripts/connect-ai.js
+    env:
+      COMPANY: ${SEED_COMPANY}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+- runFlow:
+    file: ../subflows/sign-in-email.yaml
+    env:
+      EMAIL: ${CHAT_EMAIL}
+- extendedWaitUntil:
+    visible:
+      id: "agent-secretaria"
+    timeout: 60000
+- tapOn:
+    id: "agent-secretaria"
+- extendedWaitUntil:
+    visible: "Escribe a Secretaría"
+    timeout: 20000
+- tapOn: "Escribe a Secretaría"
+- inputText: ${output.message}
+- tapOn: "Enviar"
+- extendedWaitUntil:
+    visible: ${output.message}
+    timeout: 20000
+- runScript:
+    file: ../../scripts/agent-reply.js
+    env:
+      COMPANY: ${SEED_COMPANY}
+      MESSAGE: ${output.message}
+      REPLY: ${output.reply}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+- extendedWaitUntil:
+    visible: ${output.reply}
+    timeout: 30000

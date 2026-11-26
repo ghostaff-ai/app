@@ -55,7 +55,9 @@ jobs:
     name: End-to-end (Android)
     # The real app, as a release build, on an Android emulator against a local
     # Supabase: the Maestro flows in .maestro/flows/ci (sign-in, sign-up,
-    # creating a company and walking its tabs, a cold relaunch). A release
+    # creating a company and walking its tabs, a cold relaunch, answering the
+    # decisions of a company seeded from a fixture record, an agent's answer
+    # arriving in the chat; .maestro/README.md). A release
     # build is what reaches phones, so a crash only it has (R8, a native module)
     # shows up here and not on Metro. Same script as locally: scripts/e2e/android.sh.
     runs-on: ubuntu-latest

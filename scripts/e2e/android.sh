@@ -6,7 +6,8 @@
 #
 #   bash scripts/e2e/android.sh avd       create (once) and boot the ghostaff-e2e emulator
 #   bash scripts/e2e/android.sh build     build the dev APK pointing at the local Supabase
-#   bash scripts/e2e/android.sh test [flows…]   install it and run the flows (default .maestro/flows/ci)
+#   bash scripts/e2e/android.sh test [flows…]   install it, seed a company (seed.sh) and run the
+#                                               flows (default .maestro/flows/ci, then seed.sh verify)
 #   bash scripts/e2e/android.sh stop      shut the emulator down
 #
 # The emulator listens on its own port (5560), so it never collides with
@@ -66,11 +67,25 @@ cmd_test() {
   eval "$(supabase_env)"
   adb -s "$SERIAL" reverse tcp:54321 tcp:54321 >/dev/null
   adb -s "$SERIAL" install -r "$APK" >/dev/null
-  local flows=("$@")
-  [[ ${#flows[@]} -gt 0 ]] || flows=("$ROOT/.maestro/flows/ci")
+  # A company of this run's own, made from the fixture record by the real sync
+  # (seed.sh): its decisions for answer-decision.yaml, its chat for team-chat.yaml.
+  local seed SEED_SLUG='' SEED_COMPANY='' DECIDER_EMAIL='' CHAT_EMAIL=''
+  seed=$(SERVICE_ROLE_KEY="${SERVICE_ROLE_KEY:-}" bash "$ROOT/scripts/e2e/seed.sh" seed)
+  while IFS='=' read -r key value; do
+    case $key in SEED_SLUG | SEED_COMPANY | DECIDER_EMAIL | CHAT_EMAIL) printf -v "$key" '%s' "$value" ;; esac
+  done <<<"$seed"
+  local flows=("$@") suite=0
+  [[ ${#flows[@]} -gt 0 ]] || { flows=("$ROOT/.maestro/flows/ci"); suite=1; }
   maestro --device "$SERIAL" test -e APP_ID="$APP_ID" -e MAILPIT_URL="${MAILPIT_URL:-http://127.0.0.1:54324}" \
     -e SUPABASE_URL=http://127.0.0.1:54321 -e SERVICE_ROLE_KEY="${SERVICE_ROLE_KEY:-}" \
+    -e SEED_COMPANY="$SEED_COMPANY" -e DECIDER_EMAIL="$DECIDER_EMAIL" -e CHAT_EMAIL="$CHAT_EMAIL" \
     ${GOOGLE_ACCOUNT:+-e GOOGLE_ACCOUNT="$GOOGLE_ACCOUNT"} "${flows[@]}"
+  # The answers the whole suite gave reach the record (a flow run alone may not have answered them).
+  if [[ $suite == 1 ]]; then
+    SERVICE_ROLE_KEY="${SERVICE_ROLE_KEY:-}" bash "$ROOT/scripts/e2e/seed.sh" verify "$SEED_SLUG"
+  else
+    echo "Not the whole suite: the write-back check (seed.sh verify $SEED_SLUG) is skipped" >&2
+  fi
 }
 
 cmd_stop() { adb -s "$SERIAL" emu kill 2>/dev/null || true; }
