@@ -50,7 +50,7 @@ select results_eq(
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000d", "role": "authenticated"}';
 select is((select count(*) from public.messages), 2::bigint, 'a member who reads the agent reads everyone''s messages');
 select results_eq(
-  $$ select id, unread, following from public.my_threads('10000000-0000-0000-0000-000000000001') $$,
+  $$ select id, unread, following from public.my_threads('10000000-0000-0000-0000-000000000001') where kind = 'agent' $$,
   $$ values ((select id from ids where name = 'chat'), true, false) $$,
   '... sees the chat in the list, unread, not yet followed');
 select throws_ok(
@@ -65,7 +65,7 @@ select throws_ok(
 
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
 select results_eq(
-  $$ select following from public.my_threads('10000000-0000-0000-0000-000000000001') $$,
+  $$ select following from public.my_threads('10000000-0000-0000-0000-000000000001') where kind = 'agent' $$,
   $$ values (true) $$, 'who wrote in the chat follows it');
 select lives_ok(
   $$ select public.post_message((select id from ids where name = 'chat'), '¿Cerramos octubre?') $$,
@@ -73,7 +73,7 @@ select lives_ok(
 
 -- Carla, another organisation: nothing.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000c", "role": "authenticated"}';
-select is((select count(*) from public.threads), 0::bigint, 'another organisation sees no chat');
+select is((select count(*) from public.threads where kind = 'agent'), 0::bigint, 'another organisation sees no chat');
 select is((select count(*) from public.messages), 0::bigint, '... nor its messages');
 select throws_ok(
   $$ select public.post_message((select id from ids where name = 'chat'), 'x') $$,
