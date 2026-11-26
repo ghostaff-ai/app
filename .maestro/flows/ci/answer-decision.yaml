@@ -1,0 +1,74 @@
+appId: ${APP_ID}
+name: An owner answers the decisions her agent left in the record, and changes one
+---
+# What the first version is for. The company was seeded before Maestro from
+# .maestro/fixtures/record by the real sync (scripts/e2e/seed.sh): two
+# decisions Secretaría asks, a rich one on top and a plain one. The owner opens
+# the rich one, answers with the agent's pick, answers the plain one from the
+# deck, finds both in Registro and changes the first to No. After the whole
+# suite, seed.sh verify writes the answers back into a copy of the record.
+- runScript:
+    file: ../../scripts/connect-ai.js
+    env:
+      COMPANY: ${SEED_COMPANY}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+- runFlow:
+    file: ../subflows/sign-in-email.yaml
+    env:
+      EMAIL: ${DECIDER_EMAIL}
+# Added as an owner, she skips the welcome and lands on her team.
+- extendedWaitUntil:
+    visible:
+      id: "agent-secretaria"
+    timeout: 60000
+- tapOn: "Decisiones"
+- extendedWaitUntil:
+    visible: "Quedan 2"
+    timeout: 20000
+- assertVisible: ".*Abrimos los domingos de diciembre.*"
+# The whole decision: what happens with each answer, and the agent's pick as the main button.
+- tapOn:
+    id: "deck-card"
+- extendedWaitUntil:
+    visible: "Con el sí"
+    timeout: 20000
+- assertVisible: "Publico el horario y pido un turno más."
+- assertVisible: "Abrir los domingos"
+- tapOn:
+    id: "choice-ok"
+- extendedWaitUntil:
+    visible:
+      id: "answered"
+    timeout: 20000
+- assertVisible: "OK de Ana E2E.*"
+- back
+# The plain one, answered from the deck.
+- extendedWaitUntil:
+    visible: "Queda 1"
+    timeout: 20000
+- assertVisible: ".*Pagamos la factura de la harina.*"
+- tapOn:
+    id: "deck-ok"
+- extendedWaitUntil:
+    visible: "Nada que decidir"
+    timeout: 20000
+# Registro has both; an answer the agent hasn't picked up yet can still change.
+- tapOn: "Ver lo decidido"
+- extendedWaitUntil:
+    visible: ".*Pagamos la factura de la harina.*"
+    timeout: 20000
+- tapOn: ".*Abrimos los domingos de diciembre.*"
+- extendedWaitUntil:
+    visible: "Cambiar la respuesta"
+    timeout: 20000
+- tapOn: "Cambiar la respuesta"
+- extendedWaitUntil:
+    visible:
+      id: "choice-no"
+    timeout: 20000
+- tapOn:
+    id: "choice-no"
+- extendedWaitUntil:
+    visible: "No de Ana E2E.*"
+    timeout: 20000
