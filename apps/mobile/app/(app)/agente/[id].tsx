@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { ThreadRow } from '@/components/chat/ThreadRow';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
-import { ChatsCircle, Clock, Eye, LinkSimple, Plus, Prohibit } from '@/components/icons';
+import { Brain, ChatsCircle, Clock, Eye, LinkSimple, Plus, Prohibit } from '@/components/icons';
 import { Button, ErrorText, LEVEL_NAMES, ListRow, ListSection, Loading, Notice, RowIcon } from '@/components/ui';
 import { VISIBILITY_NAMES, visibilityTag } from '@/lib/chat';
 import { useMyLevels, useThreads } from '@/lib/hooks/useChat';
@@ -15,7 +15,8 @@ import { DEPARTMENT_NAMES, GHOSTS } from '@/lib/team';
 
 // One agent's page, opened from its name on top of the chat (three-tabs.md,
 // decision 6): live in 3D on top (drag to spin it, tap to make it hop), its
-// job, «Nueva conversación» and «Rutinas» for whoever may talk to it, and every titled
+// job, «Nueva conversación» and «Rutinas» for whoever may talk to it, its «Memoria» for whoever may
+// see it, and every titled
 // conversation with it the person may see (chat-permissions.md). An owner
 // sets who may use it, who reads its new conversations by default and which
 // connected accounts it uses, and can remove it (two taps, so not by accident).
@@ -116,6 +117,19 @@ export default function Agente() {
                 onPress={() => router.push(`/conversacion/${t.id}`)}
               />
             ))}
+          </ListSection>
+        ) : null}
+        {agent.runner === 'chat' ? (
+          <ListSection>
+            {/* What it keeps for itself, for whoever may see it (agent-context.md PR 2, decision 7). */}
+            <ListRow
+              testID="agent-memory"
+              leading={<RowIcon icon={Brain} />}
+              title="Memoria"
+              subtitle={`Lo que ${agent.name} recuerda para hacer su trabajo`}
+              chevron
+              onPress={() => router.push(`/agente/${agent.id}/memoria`)}
+            />
           </ListSection>
         ) : null}
         {level && level !== 'talk' ? <Text className="mt-6 text-center text-footnote text-muted">Puedes {LEVEL_NAMES[level].toLowerCase()} a {agent.name}.</Text> : null}

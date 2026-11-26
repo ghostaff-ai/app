@@ -303,11 +303,12 @@ export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<Org
       const id = recordIdFromPath(x.name);
       return id ? [{ id, yaml: x.content }] : [];
     });
-    const plan = planSync({ orgId: org.id, files, existing: await deps.store.decisions(org.id), agents: await deps.store.agents(org.id), commit: head.sha, now });
+    const agents = await deps.store.agents(org.id);
+    const plan = planSync({ orgId: org.id, files, existing: await deps.store.decisions(org.id), agents, commit: head.sha, now });
     await deps.store.apply(plan);
     const instructions = await projectInstructions(deps.store, gh, org.id, head.sha);
     // Only a record in our record store has a memory the chat reads (memory.ts).
-    if (org.host === 'ghostaff' && deps.memory) instructions.push(...(await projectMemory(deps.memory, gh, org.id, head.sha)));
+    if (org.host === 'ghostaff' && deps.memory) instructions.push(...(await projectMemory(deps.memory, gh, org.id, head.sha, agents)));
 
     const written: string[] = [];
     let waits: string | null = null;

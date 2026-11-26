@@ -43,6 +43,8 @@ describe('desktopSection', () => {
     expect(desktopSection('/empresa/registro').nav).toBe('registro');
     expect(desktopSection('/empresa/memoria').nav).toBe('memoria');
     expect(desktopSection('/memoria/proveedores/gestoria.md').nav).toBe('memoria');
+    // An agent's own memory is under the agent, in Equipo.
+    expect(desktopSection('/agente/a1/memoria/como-trabajo.md')).toEqual({ nav: 'equipo', list: 'team', open: 'a1' });
     expect(desktopSection('/empresa').nav).toBe('empresa');
     expect(desktopSection('/invitar').nav).toBe('empresa');
   });

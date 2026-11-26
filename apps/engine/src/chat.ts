@@ -30,7 +30,7 @@ import { agentJob, isMainAgent } from '@ghostaff/shared/services';
 import { NOTHING_NEW } from './runner';
 import { type AsPerson, settingsTools, unaskedSettingsTools } from './settings';
 import { type AgentTools, mergeTools, NO_TOOLS, restrictTo } from './tools';
-import { type MemoryDeps, memoryTools } from './memory';
+import { type MemoryDeps, type MemoryPlace, memoryTools, OWN_MEMORY_FILES, ownMemoryLines } from './memory';
 import { givenByPerson, READ_LINK } from './links';
 
 export type Level = 'none' | 'read' | 'talk';
@@ -303,6 +303,16 @@ const MEMORY_KEEPER_LINES = [
   'Lo que guardas lo ve toda la organización. Lo que es solo de una persona (algo personal suyo, una preferencia suya) no lo guardes: dile que todavía no puedes guardar cosas privadas. Si dudas de si es de todos o solo suyo, pregúntaselo antes de guardarlo.',
 ];
 
+/**
+ * What an agent with its own store is told, before the store itself (agent-context.md PR 2,
+ * decision 6): it keeps what should still be true tomorrow, in its own turn, as runner agents do.
+ */
+const OWN_MEMORY_LINES = [
+  'Tienes tu propia memoria, en el registro de la organización: la lees al empezar cada turno (está al final de estas instrucciones), solo la escribes tú y quien puede verte la ve en Ghostaff.',
+  'Antes de contestar, mira si de lo hablado sale algo que deba seguir siendo verdad mañana para hacer tu trabajo: cómo quieren que lo hagas, una corrección que te han hecho, un dato de tu área, algo que quedó pendiente. Si sale, guárdalo en tu memoria con memory_create o memory_str_replace y store «propia»: un tema por fichero, y si ya hay uno de ese tema, añádelo ahí. Si no sale nada duradero, no escribas nada, y no digas que no has guardado nada.',
+  'Lo que es de toda la organización va a la memoria de la empresa, no a la tuya. No guardes lo que es solo de una persona ni secretos (contraseñas, claves, datos bancarios): tu memoria la ve el equipo.',
+];
+
 /** What every agent is told about routines it may propose for itself (agent-routines.md). */
 const ROUTINE_LINES = [
   'Puedes proponer rutinas tuyas con settings_create_routine: algo que harás solo, a una hora, como si te lo escribieran entonces (un resumen cada viernes, revisar algo cada mañana). Propónla cuando te pidan algo que se repite, o ofrécela tú en una frase cuando lo veas claro; queda como propuesta hasta que la aprueban.',
@@ -322,6 +332,8 @@ export function systemPrompt(
     canDecide?: boolean;
     /** The organisation's memory: read by every agent, written by Secretaría (memory.ts). */
     memory?: 'read' | 'write';
+    /** The agent's own store as `ownMemoryLines` gives it (memory.ts); last, so the rest stays the same when it changes. */
+    ownMemory?: string[];
   } = {},
 ): string {
   const job = agentJob(agent);
@@ -344,6 +356,7 @@ export function systemPrompt(
     opts.canDecide
       ? `Cuando algo sea de una persona decidirlo (dinero, algo que se publica, un cliente, un cambio de plan), pídeselo con ${DECISION_TOOL} en vez de preguntarlo en el texto, y no actúes hasta que conteste. Lo que ya respondió no lo vuelvas a preguntar.`
       : 'Cuando algo necesite la decisión de una persona, dilo de forma explícita.',
+    ...(opts.ownMemory ? [...OWN_MEMORY_LINES, ...opts.ownMemory] : []),
   ]
     .filter(Boolean)
     .join('\n');
@@ -703,7 +716,17 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
     if (deps.decisions) mine = mergeTools(mine, DECISION_TOOLS);
     if (deps.links) mine = mergeTools(mine, deps.links);
     const memory = deps.memory && record ? (isMainAgent(who) ? 'write' : 'read') : undefined;
-    if (deps.memory && record && memory) mine = mergeTools(mine, memoryTools(deps.memory, record, { orgId, agentName: who.name, canWrite: memory === 'write', userId }));
+    // Its own store, read at the start of every turn (agent-context.md PR 2); not reading it costs the store, not the reply.
+    const own: MemoryPlace | null = deps.memory && record && who.slug ? { agentId: who.id, slug: who.slug } : null;
+    let ownMemory: string[] | undefined;
+    if (deps.memory && own) {
+      const files = await deps.memory.store.latestMemory(orgId, own, OWN_MEMORY_FILES + 1).catch((e: unknown) => {
+        console.error('own memory not read', e instanceof Error ? e.name : typeof e);
+        return null;
+      });
+      ownMemory = ownMemoryLines(own, files && files.slice(0, OWN_MEMORY_FILES), !!files && files.length > OWN_MEMORY_FILES);
+    }
+    if (deps.memory && record && memory) mine = mergeTools(mine, memoryTools(deps.memory, record, { orgId, agentName: who.name, canWrite: memory === 'write', userId, own }));
     const system = systemPrompt(who, orgName, {
       broughtInto,
       accounts: mine.accounts,
@@ -713,6 +736,7 @@ async function orgReach(deps: ChatDeps, orgId: string, accessToken: string | und
       canGuide: !!deps.guides,
       canDecide: !!deps.decisions,
       memory,
+      ownMemory,
     });
     return { tools: mine, system };
   };

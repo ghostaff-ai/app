@@ -1005,7 +1005,7 @@ describe('guided tools that cannot be read', () => {
 describe("the organisation's memory in the chat (business-brain.md)", () => {
   const secretaria: ChatAgent = { id: AGENT, orgId: ORG, name: 'Secretaría', ghost: 'secretaria', department: 'direccion', isMain: true };
   const repo = {} as RecordRepo;
-  const store = { memoryIndex: async () => [], memory: async () => null, searchMemory: async () => [], saveMemory: async () => {}, forgetMemory: async () => {} };
+  const store = { memoryIndex: async () => [], memory: async () => null, latestMemory: async () => [], searchMemory: async () => [], saveMemory: async () => {}, forgetMemory: async () => {} };
   const memory = (reached: boolean): MemoryDeps => ({ store, repoFor: async () => (reached ? repo : null), memberName: async () => 'Ana' });
   const toolNames = (asked: Array<{ system: string }>) => (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
 
@@ -1043,6 +1043,49 @@ describe("the organisation's memory in the chat (business-brain.md)", () => {
     await call('ana', `/threads/${THREAD}/reply`);
     expect(outcomes[0]).toMatchObject({ isError: false });
     expect(outcomes[1]).toEqual({ content: expect.stringContaining('Solo leo enlaces que una persona ha escrito'), isError: true });
+  });
+
+  describe("each agent's own memory (agent-context.md PR 2)", () => {
+    const conSlug: ChatAgent = { ...finanzas, slug: 'finanzas' };
+    const note = { path: 'como-trabajo.md', content: 'Ana quiere el informe en tres líneas.\n', sha: 's1', updatedAt: '2026-11-20T09:00:00Z', updatedBy: 'Finanzas (por Ana)' };
+    const withOwn = (files: Array<typeof note> | Error): MemoryDeps => ({
+      ...memory(true),
+      store: {
+        ...store,
+        latestMemory: async (_o, place) => {
+          if (files instanceof Error) throw files;
+          return place.agentId === conSlug.id ? files : [];
+        },
+      },
+    });
+
+    it('reads its own store at the start of the turn and is told to keep what should still be true tomorrow', async () => {
+      const { call, asked } = setup({ agent: conSlug, memory: withOwn([note]) });
+      await call('ana', `/threads/${THREAD}/reply`);
+      expect(toolNames(asked)).toEqual(expect.arrayContaining(['memory_view', 'memory_search', 'memory_create', 'memory_str_replace']));
+      const system = asked[0]!.system;
+      expect(system).toContain('Tu memoria (memoria/agentes/finanzas/');
+      expect(system).toContain('<fichero ruta="como-trabajo.md">\nAna quiere el informe en tres líneas.\n</fichero>');
+      expect(system).toContain('deba seguir siendo verdad mañana');
+      expect(system).toContain('Solo Secretaría escribe en la memoria de la empresa');
+    });
+
+    it('sends the same system prompt while its store stays the same, so it is cached', async () => {
+      const first = setup({ agent: conSlug, memory: withOwn([note]) });
+      await first.call('ana', `/threads/${THREAD}/reply`);
+      const second = setup({ agent: conSlug, memory: withOwn([note]), messages: [msg({ text: 'Otra cosa' })] });
+      await second.call('ana', `/threads/${THREAD}/reply`);
+      expect(second.asked[0]!.system).toBe(first.asked[0]!.system);
+      const changed = setup({ agent: conSlug, memory: withOwn([{ ...note, content: 'Ahora en cinco líneas.\n' }]) });
+      await changed.call('ana', `/threads/${THREAD}/reply`);
+      expect(changed.asked[0]!.system).not.toBe(first.asked[0]!.system);
+    });
+
+    it('still answers when its store can\'t be read', async () => {
+      const { call, asked } = setup({ agent: conSlug, memory: withOwn(new Error('down')) });
+      await call('ana', `/threads/${THREAD}/reply`);
+      expect(asked[0]!.system).toContain('No has podido leer tu memoria');
+    });
   });
 
   it('gives no memory to an organisation without a record in our store', async () => {
