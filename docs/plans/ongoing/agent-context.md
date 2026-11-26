@@ -1,8 +1,8 @@
 # What a chat agent reads on each turn: a summary, the latest messages and a search, never the whole conversation
 
 **Priority:** high — with one group chat per agent the conversation grows without end, and what a turn carries decides how good and how dear every reply is
-**Gate:** blocked:business-brain — PR 2 needs chat agents to reach the record, which business-brain's PR 1 (ghostaff-ai/app#91) gives them (recheck 2026-11-30)
-**Next:** once #91 lands, plan PR 2 (Tasks, below) against that day's code: the agent writes what should still be true tomorrow through the memory tools at the end of each turn
+**Gate:** none
+**Next:** PR 2 on `feat/agent-memory-chat`: each chat agent's own store in the record, read at the start of a turn and written by the agent in it, shown read-only under the agent in Equipo (Tasks, below)
 
 Jaime (2026-11-24), on the line «the engine reads the last 40 messages» in [group-chat-per-agent.md](group-chat-per-agent.md): sending the last 40 messages «no tiene sentido». He decided how it works instead on 2026-11-26 (Decisions, below).
 
@@ -23,6 +23,11 @@ Jaime, 2026-11-26. The first answers came in the morning; in the afternoon he re
 3. **The summary is rewritten in the background** once the latest messages pass the 30K tokens, after the reply is written, so nobody waits for it. It works the same on the three providers.
 4. **The agent writes to its memory in the record at the end of each turn**, as runner agents do. It needs chat agents to reach the record ([agent-memory.md](../ready/agent-memory.md)), so it is PR 2, not this one.
 5. **Without a record the agent still has its summary, latest messages and search**, only no memory. The record is made with the organisation ([record-store.md](record-store.md), decision 4).
+
+Jaime, 2026-11-26 (evening), on PR 2, once business-brain's PR 1 (ghostaff-ai/app#91) gave chat agents the record:
+
+6. **The agent writes its memory itself, in its own turn**, as runner agents do: it has tools on its own store and its instructions tell it to keep what should still be true tomorrow before it answers. No second call after each reply. Rejected: a pass after every reply deciding what to keep, more reliable but one more call per message, which on the subscription spends its limit twice as fast.
+7. **People see what each agent remembers now, read-only**: a «Memoria» row under the agent in Equipo, for whoever may see the agent, on business-brain's screens. Correcting and forgetting stay [agent-memory.md](../ready/agent-memory.md)'s.
 
 How decision 3 is built (the engine's choice, not Jaime's): the summary is written by the organisation's own AI account, through the same `Writer` and account order as a reply, with one prompt of ours. The API's on-demand compaction returns a signed block only the Messages API reads, and the subscription can't run it; Anthropic's docs list «your own summarizer» as a supported shape. One path, one prompt, three providers.
 
@@ -63,9 +68,32 @@ Merged 2026-11-26 as ghostaff-ai/app#81. Still to check on beta: the «chat usag
 5. `streamWith`: automatic caching and the usage log; a test that two turns of the same conversation send the same prefix.
 6. `docs/architecture.md` and [agent-memory.md](../ready/agent-memory.md)'s «Today» say what a turn reads now.
 
-### PR 2: memory at the end of each turn (decision 4)
+### PR 2: each agent's own memory (decisions 4, 6 and 7)
 
-Once chat agents reach the record ([agent-memory.md](../ready/agent-memory.md)): at the end of each turn the agent writes what should still be true tomorrow to its store, and reads it at the start. Planned there, against that day's code.
+Against `develop` at `9baa85b` (2026-11-26), after #91. What #91 built: the `memories` projection (Empresa only: `store = 'empresa'`, key `(org_id, store, path)`), `projectMemory` on the tick, `memory.ts`'s four tools (`memory_view`, `memory_search` for every chat agent; `memory_create`, `memory_str_replace` for Secretaría), the recuerdo screen `/memoria/[...path]` and «Memoria de la empresa». Agents hired in Equipo have no `slug`, which the store's folder needs.
+
+**How it works.** Each chat agent has its own store, `memoria/agentes/<slug>/` in the record ([agent-memory.md](../ready/agent-memory.md) decision 1), only where the organisation's record is in our record store, as Empresa. The agent reads and writes it; nobody else's agent writes it. At the start of a turn the engine puts the store in the system prompt, whole while it fits `OWN_MEMORY_BUDGET` (24,000 characters, ~8K tokens), otherwise its index (paths and first lines) for the agent to open; the prompt changes only when the store does, so caching holds. The same four tools take a `store` argument, `"empresa"` (the default, so #91's prompts and links still work) or `"propia"`; writing `"empresa"` stays Secretaría's. The instructions say: before answering, keep in your own store what should still be true tomorrow (how they want the work done, a correction, a fact of your area), one topic per file; what the whole organisation should know, Secretaría keeps; nothing only one person's («Sobre ti» isn't built). Limits as Empresa's: 1,000 files, 10 kB each, per store.
+
+File Structure:
+
+- `supabase/migrations/<ts>_agent_memories.sql`: `agents.slug` for every agent: a trigger fills it from the name when an insert leaves it empty (`Atención al cliente` → `atencion-al-cliente`, a suffix when taken in the organisation), and the existing rows are filled the same way. `memories` gains `agent_id` (references `agents`, cascade), `store in ('empresa', 'agente')` with `agent_id` set exactly for `agente`, and its key becomes `unique nulls not distinct (org_id, store, agent_id, path)`. A second read policy: an `agente` row for whoever's `agent_level` on that agent isn't `none`. `search_agent_memories(target_agent, words, max)`, `security definer`, `service_role` only (`search_memories` stays as it is).
+- `supabase/tests/database/agent_memories.test.sql`: the slug from the name, unique per organisation, filled on insert and for existing rows; a member who may see the agent reads its store; one with level `none`, another organisation's member and anon don't; nobody but the service role writes; members can't call the search.
+- `apps/engine/src/memory.ts`: a store is `{ agentId: null }` (Empresa) or `{ agentId, slug }`; `MemoryStore`'s functions take it; `projectMemory` reads Empresa and each agent's folder; the tools' `store` argument, the refusals, the links; `ownMemoryLines` (the store or its index for the system prompt).
+- `apps/engine/src/recordStore.ts`: `supabaseMemoryStore` by store; `recordSync.ts` passes the agents to `projectMemory`.
+- `apps/engine/src/chat.ts`: `reachOf` reads the agent's own store and gives it to `systemPrompt`, with the lines on what to keep (`OWN_MEMORY_LINES`). Told to group-chat-per-agent first, which changes `reachOf` too.
+- `packages/shared/src/memory.ts`: `AGENT_MEMORY_DIR`, `agentMemoryDir(slug)`, `agentMemoryLink(agentId, path)`. `packages/shared/src/services/index.ts`: `listAgentMemories`, `readAgentMemory`; `settings.ts` classifies `search_agent_memories`.
+- `apps/mobile/app/(app)/agente/[id]/memoria.tsx` and `apps/mobile/app/(app)/agente/[id]/memoria/[...path].tsx` (new, the list and the recuerdo, sharing their pieces with Empresa's); a «Memoria» row on the agent's screen; `components/chat/Markdown.tsx` opens `/agente/<id>/memoria/…` in the app.
+- Tests: `apps/engine/test/memory.test.ts`, `recordSync.test.ts`, `chat.test.ts`; Jest for the two screens and the link.
+
+Tasks:
+
+1. [ ] Migration and pgTAP test. `pnpm db:test`.
+2. [ ] `memory.ts` by store, test first: projection of Empresa and agent folders (an unknown slug's folder ignored); the `store` argument; writing `"empresa"` refused to everyone but Secretaría, `"propia"` allowed to every agent, one commit signed «Finanzas (por Ana)»; the store in the prompt, or its index past the budget.
+3. [ ] `recordStore.ts`, `recordSync.ts`.
+4. [ ] `chat.ts`: the own store and its lines in the system prompt; a test that two turns with the same store send the same system prompt.
+5. [ ] Shared services, the screens, the row, the link; Jest.
+6. [ ] Check on the web against local Supabase and Forgejo with a stand-in writer, as #91 did: a turn's tool call files into `memoria/agentes/<slug>/`, the next turn's system prompt carries it, the agent's «Memoria» lists it.
+7. [ ] `docs/architecture.md`; [agent-memory.md](../ready/agent-memory.md) says what is left (correcting, forgetting, history, «Sobre ti», runner agents' stores). `pnpm pr:land`.
 
 ### Later
 

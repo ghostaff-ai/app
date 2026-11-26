@@ -2,7 +2,7 @@
 
 **Priority:** medium — people trust an agent they can check and correct; today the chat agents forget everything outside the conversation, so there is nothing to show yet
 **Gate:** blocked:business-brain — the Empresa store, its projection and its tools in the chat are built as PR 1 of [business-brain.md](../ongoing/business-brain.md) (Jaime, 2026-11-26); the record store is up on beta ([record-store.md](../ongoing/record-store.md)) (recheck 2026-12-03)
-**Next:** once business-brain's PR 1 lands, write the File Structure and Tasks for the agent stores and the correcting screens against that day's code, then «Sobre ti» (decision 7)
+**Next:** each chat agent's own store, read-only in the app, is PR 2 of [agent-context.md](../ongoing/agent-context.md) (2026-11-26); once it lands, write the File Structure and Tasks for the correcting screens and runner agents' stores against that day's code, then «Sobre ti» (decision 7)
 
 **Goal:** Every agent, whether people talk to it or it runs on a timetable, reads and writes memory stores that outlive a conversation; the organisation's and each agent's stores are folders of its record (git), a person's own store is private to them; people see each store in the app and correct or delete what is in it, and feedback given in a chat reaches the agent's next scheduled run. Each agent's instructions are a file of the same record, beside its memory.
 
