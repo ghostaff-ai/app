@@ -93,7 +93,7 @@ Common in small businesses: «la web la lleva mi sobrino», «eso lo tiene la ge
 
 ### Phone and computer
 
-Most of these tasks happen on a computer. The guide starts wherever the card is pressed. When a step needs a computer, it says so and offers a QR code or a link to carry on on the web ([desktop-web.md](../ideas/desktop-web.md)), where the person can **share their screen** (`getDisplayMedia`) and be guided live instead of sending photos. The phone stays useful for photographing the monitor.
+Most of these tasks happen on a computer. The guide starts wherever the card is pressed. When a step needs a computer, it says so and offers a QR code or a link to carry on on the web ([desktop-web.md](desktop-web.md)), where the person can **share their screen** (`getDisplayMedia`) and be guided live instead of sending photos. The phone stays useful for photographing the monitor.
 
 ### Where it shows
 
@@ -136,7 +136,7 @@ If the photo in step 1 shows a site on WordPress.com (or Wix), the guide hands o
 - [connector-in-chat.md](../ongoing/connector-in-chat.md): the card, `account_asks`, resume.
 - [agent-access-requests.md](../ideas/agent-access-requests.md): the same idea for Google Cloud IAM. Its request could be shown as a guide too.
 - [connectors.md](../ongoing/connectors.md): kind C, the forwarding address, the vault.
-- [external-parties.md](../ideas/external-parties.md), [desktop-web.md](../ideas/desktop-web.md), [voice.md](../ongoing/voice.md).
+- [external-parties.md](../ideas/external-parties.md), [desktop-web.md](desktop-web.md), [voice.md](../ongoing/voice.md).
 
 ## Build: the first slice, a self-hosted WordPress
 

@@ -65,7 +65,7 @@ Fewest needs first, each one moved with `org add-agents --runner ghostaff --only
 
 1. **Beta now, production with the first release** (Jaime left it to me). Órdago's organisation, its Claude sign-in and its record connection already live on the beta, and the production app is not on anyone's phone yet; waiting for production would hold the move on the first release. The cost: a broken beta stops Órdago's agents, and the organisation is made again in production later (item 8).
 2. **The prompt lives in the organisation's record**, `agentes/<slug>/AGENTS.md`, beside the agent's memory (Jaime, 2026-11-24; it replaces «on the agent row», decided earlier that day). The YAMLs are imported once and stop being a source: no customer will have a YAML in `ghostaff-ai/agents`, and each thing keeps one master. The record is the one repo per organisation, so the agent's instructions, skills and memory travel together, with git's history; the agent row keeps a projection for the chat and the settings people can't hold in a file (item 7).
-3. **The panel stops launching agents** (Jaime): starting a run and seeing its state live only in Ghostaff, and `ordago-panel/lib/ejecuciones.ts` goes when the jobs do. A web page where a customer follows their agents is wanted as part of the product, later, converging with [desktop-web.md](../../ideas/desktop-web.md).
+3. **The panel stops launching agents** (Jaime): starting a run and seeing its state live only in Ghostaff, and `ordago-panel/lib/ejecuciones.ts` goes when the jobs do. A web page where a customer follows their agents is wanted as part of the product, later, converging with [desktop-web.md](desktop-web.md).
 
 ## Steps
 
