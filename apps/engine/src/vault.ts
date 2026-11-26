@@ -45,6 +45,12 @@ export function guidedSecretName(orgId: string, guideId: string): string {
   return `org-${orgId}-guided-${guideId}`.replace(/[^A-Za-z0-9_-]/g, '-');
 }
 
+/**
+ * An organisation's secret that agents on our runner get as variables (agents.secrets), written by
+ * `org set-secret` (apps/sync): its name lives in shared, as both write or read it.
+ */
+export { agentSecretName } from '@ghostaff/shared/record';
+
 export class MemoryVault implements Vault {
   readonly secrets = new Map<string, { value: string; labels: Record<string, string> }>();
   async put(name: string, value: string, labels: Record<string, string>) {

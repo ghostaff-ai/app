@@ -125,6 +125,39 @@ describe('the spec', () => {
     expect(() => readSpec({ ...SPEC, google: { ...google, token: 'ya29 token\nX=1' } })).toThrow();
     expect(() => readSpec({ ...SPEC, google: { ...google, account: 'someone@gmail.com' } })).toThrow();
   });
+
+  it('reads the organisation’s secrets, none from an older engine, and refuses a variable that would replace one it relies on', () => {
+    const eleven = { env: 'ELEVENLABS_API_KEY', value: 'sk_eleven_1234567890' };
+    expect(readSpec(SPEC).secrets).toBeUndefined();
+    expect(readSpec({ ...SPEC, secrets: [eleven, { env: 'CORREO_GMAIL_PASSWORD', value: 'abcd efgh ijkl mnop' }] }).secrets).toHaveLength(2);
+    for (const env of ['HOME', 'PATH', 'LANG', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CONFIG_DIR', 'ANTHROPIC_BASE_URL', 'CLOUDSDK_AUTH_ACCESS_TOKEN_FILE', 'CLOUDSDK_CORE_PROJECT', 'GIT_SSH_COMMAND', 'LD_PRELOAD', 'NODE_OPTIONS', 'BASH_ENV', 'GOOGLE_APPLICATION_CREDENTIALS', 'GHOSTAFF_RUNS']) {
+      expect(() => readSpec({ ...SPEC, secrets: [{ ...eleven, env }] }), env).toThrow();
+    }
+    expect(() => readSpec({ ...SPEC, secrets: [{ ...eleven, env: 'elevenlabs_key' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, secrets: [{ ...eleven, env: 'X=1 Y' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, secrets: [eleven, { ...eleven, value: 'otro_valor_largo' }] })).toThrow();
+    // Too short for redact to hide it, or something an environment cannot hold.
+    expect(() => readSpec({ ...SPEC, secrets: [{ ...eleven, value: 'corto' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, secrets: [{ ...eleven, value: 'sk_eleven\0_1234' }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, secrets: eleven })).toThrow();
+  });
+
+  it('gives Claude Code the organisation’s secrets as variables, never over one the runner sets', () => {
+    const env = agentEnv('tok', '/home/agente', null, null, [
+      { env: 'ELEVENLABS_API_KEY', value: 'sk_eleven_1234567890' },
+      { env: 'HOME', value: '/tmp/otra-casa' },
+      { env: 'CLAUDE_CODE_OAUTH_TOKEN', value: 'sk-ant-otro-token' },
+      { env: 'GHOSTAFF_RUNS', value: 'http://evil.example:1' },
+    ]);
+    expect(env).toEqual({ ELEVENLABS_API_KEY: 'sk_eleven_1234567890', CLAUDE_CODE_OAUTH_TOKEN: 'tok', HOME: '/home/agente', PATH: '/usr/local/bin:/usr/bin:/bin', LANG: 'C.UTF-8' });
+  });
+
+  it('hides a secret’s value from what is printed and reported, spaces and all', () => {
+    const secrets = ['abcd efgh ijkl mnop', 'sk_eleven_1234567890'];
+    expect(redact('{"type":"user","content":"CORREO_GMAIL_PASSWORD=abcd efgh ijkl mnop\nELEVENLABS_API_KEY=sk_eleven_1234567890"}', secrets)).toBe(
+      '{"type":"user","content":"CORREO_GMAIL_PASSWORD=[secreto]\nELEVENLABS_API_KEY=[secreto]"}',
+    );
+  });
 });
 
 describe('the end of a run', () => {

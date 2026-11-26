@@ -794,6 +794,8 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   agent_level: { reach: 'not_a_setting' },
   agent_level_for: { reach: 'not_a_setting' },
   agent_repos_valid: { reach: 'not_a_setting' },
+  agent_secret_env_valid: { reach: 'not_a_setting' },
+  agent_secrets_valid: { reach: 'not_a_setting' },
   ai_usage_daily: { reach: 'not_a_setting' },
   ai_reply_outcomes: { reach: 'not_a_setting' },
   claim_pushes: { reach: 'not_a_setting' },

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { AgentRepo } from '@ghostaff/shared/record';
+import { type AgentRepo, type AgentSecrets, isSecretEnv, isSecretName } from '@ghostaff/shared/record';
 import { parse } from 'yaml';
 
 // Órdago's agents as Ghostaff agents (docs/plans/ongoing/ordago-agents-in-ghostaff.md,
@@ -82,6 +82,8 @@ export interface ImportedRunnerAgent extends ImportedBase {
   /** `ritmo.repo_ci` and `max_ci_en_cola`. */
   ci_repo: string | null;
   max_ci_queued: number | null;
+  /** Its yaml's `secretos`: each variable → the organisation's secret it becomes (`org set-secret`), named without the project's prefix. */
+  secrets: AgentSecrets;
   job_project: null;
   job_region: null;
   job_name: null;
@@ -117,6 +119,7 @@ type AgentYaml = {
   prohibidas?: unknown;
   recursos?: { cpu?: unknown; memoria?: unknown; timeout?: unknown };
   ritmo?: { max_ejecuciones_por_dia?: unknown; repo_ci?: unknown; max_ci_en_cola?: unknown };
+  secretos?: unknown;
 };
 
 type ProjectYaml = { cerebro?: string; gcp?: { proyecto?: string; region?: string; bucket_transcripciones?: string } };
@@ -188,11 +191,29 @@ function allowedTools(a: AgentYaml): string[] {
   return strings(a.herramientas).filter((t) => !forbidden.some((f) => t === f || t.startsWith(`${f}(`)));
 }
 
+/**
+ * Its secrets: the yaml maps each variable to a secret in the project's Google Cloud (`ordago-elevenlabs`); in
+ * Ghostaff it is the organisation's secret of the same name without the project's prefix (`elevenlabs`).
+ */
+function secretsOf(slug: string, a: AgentYaml, project: string): AgentSecrets {
+  if (a.secretos === undefined || a.secretos === null) return {};
+  if (typeof a.secretos !== 'object' || Array.isArray(a.secretos)) throw new Error(`${slug}.yaml: secretos is a map of VARIABLE to secret`);
+  const out: AgentSecrets = {};
+  for (const [env, from] of Object.entries(a.secretos as Record<string, unknown>)) {
+    const name = typeof from === 'string' ? from.replace(new RegExp(`^${project}-`), '') : '';
+    if (!isSecretEnv(env)) throw new Error(`${slug}.yaml: ${env} cannot be a secret's variable on our runner`);
+    if (!isSecretName(name)) throw new Error(`${slug}.yaml: ${String(from)} is not a secret name Ghostaff takes`);
+    out[env] = name;
+  }
+  return out;
+}
+
 function onOurRunner(
   slug: string,
   a: AgentYaml,
   conf: ProjectYaml,
   writes: string[],
+  project: string,
 ): Omit<ImportedRunnerAgent, keyof ImportedBase | 'runner' | 'job_project' | 'job_region' | 'job_name' | 'job_identity'> {
   const record = conf.cerebro ?? '';
   const tools = allowedTools(a);
@@ -209,6 +230,7 @@ function onOurRunner(
     timeout_seconds: timeoutOf(slug, a.recursos),
     size: sizeOf(slug, a.recursos),
     ...ritmoOf(slug, a.ritmo),
+    secrets: secretsOf(slug, a, project),
   };
 }
 
@@ -238,7 +260,7 @@ export function readProjectAgents(projectDir: string, opts: ImportOptions = {}):
       const place = PLACES[slug] ?? { name: slug.charAt(0).toUpperCase() + slug.slice(1), ghost: 'base', department: 'direccion' };
       const base = { slug, ...place, description: sentence(a.descripcion), schedule: !opts.onDemand && typeof a.horario === 'string' ? a.horario : null };
       if (opts.runner === 'ghostaff') {
-        return { ...base, runner: 'ghostaff', ...onOurRunner(slug, a, conf, opts.writes ?? []), job_project: null, job_region: null, job_name: null, job_identity: null };
+        return { ...base, runner: 'ghostaff', ...onOurRunner(slug, a, conf, opts.writes ?? [], project), job_project: null, job_region: null, job_name: null, job_identity: null };
       }
       const job = `${project}-${slug}`;
       return {
