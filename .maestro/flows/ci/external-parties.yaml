@@ -4,7 +4,7 @@ name: An owner adds who the company works with outside, and changes it
 # «Con quién trabajáis» (docs/plans/ongoing/external-parties.md). A new owner
 # opens it from Empresa, finds it empty, adds a freelance illustrator with what
 # she does, a department and her email, sees her in the list, then opens her
-# and changes what she does. No engine runs in e2e, so nothing reaches a record.
+# and adds a department she works with. No engine runs in e2e, so nothing reaches a record.
 - evalScript: ${output.email = 'e2e-ext-' + Date.now() + '@ghostaff.test'}
 - evalScript: ${output.company = 'Imprenta E2E ' + Date.now().toString().slice(-6)}
 - runFlow:
@@ -88,16 +88,16 @@ name: An owner adds who the company works with outside, and changes it
     visible:
       id: "external-role"
     timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "external-department-producto"
 - tapOn:
-    id: "external-role"
-- eraseText: 60
-- inputText: "Ilustra y maqueta los carteles"
-- hideKeyboard
+    id: "external-department-producto"
 - scrollUntilVisible:
     element:
       id: "external-save"
 - tapOn:
     id: "external-save"
 - extendedWaitUntil:
-    visible: "Ilustra y maqueta los carteles · Marketing"
+    visible: "Hace las ilustraciones de los carteles · Marketing, Producto"
     timeout: 20000
