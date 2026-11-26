@@ -27,7 +27,7 @@ import { madridNow } from './chat';
 import { Refusal } from './connections';
 import { agentUsername, type ForgejoAdmin } from './forgejo';
 import type { FreshRepoToken } from './githubApp';
-import { type AgentJob, indication, type JobDeps, type RunRecord } from './jobs';
+import { type AgentJob, indication, type JobDeps, RunBusy, type RunRecord } from './jobs';
 import { hookAgents, type RecordAgent } from './recordProvision';
 import { preReceiveHook } from './recordHook';
 import type { PastRun, TranscriptStore } from './transcripts';
@@ -54,7 +54,21 @@ export interface RunnerAgent {
   lastScheduledAt: string | null;
   /** Whether its runs may read the runs of its organisation's other agents (transcripts.ts); its own, always. */
   readsOrgRuns: boolean;
+  /** How long one run may take: the execution's timeout in Cloud Run. */
+  timeoutSeconds: number;
+  /** Which job it runs on (jobFor): Cloud Run cannot change CPU or memory per execution. */
+  size: RunnerSize;
+  /** Its `ritmo`: at most this many runs of its timetable a Madrid day; null for no cap. */
+  maxRunsPerDay: number | null;
+  /** Its `ritmo`: a fire of its timetable is skipped while this repo's CI has more than `maxQueued` runs queued. */
+  ci: { repo: string; maxQueued: number } | null;
 }
+
+/** The runner's jobs by size (scripts/deploy-runner.sh): `standard` 2 CPU and 4 GiB, `large` 4 CPU and 16 GiB. */
+export type RunnerSize = 'standard' | 'large';
+
+/** Why a fire of the timetable did not run (agent_runs.skip_reason). */
+export type SkipReason = 'busy' | 'daily_cap' | 'ci_busy' | 'ci_unreadable';
 
 /** The database as the runner needs it (service role). */
 export interface RunnerStore {
@@ -81,12 +95,25 @@ export interface RunnerStore {
   agentBySlug(orgId: string, slug: string): Promise<{ id: string; slug: string } | null>;
   /** An agent's runs in this organisation, newest first. */
   pastRuns(orgId: string, agentId: string, limit: number): Promise<Omit<PastRun, 'agent'>[]>;
+  /** When the agent's run going on our runner started; null when none is. */
+  runningSince(agentId: string): Promise<string | null>;
+  /** How many runs its timetable started on our runner since `since`. */
+  scheduledRunsSince(agentId: string, since: Date): Promise<number>;
+  /** Keeps a fire of the timetable that did not run, with why. */
+  skipFire(r: { orgId: string; agentId: string; reason: SkipReason }): Promise<void>;
 }
 
 export interface RunnerDeps {
   store: RunnerStore;
-  /** The `agent-runner` job, and the service account it runs as (env RUNNER_IDENTITY). */
+  /** The `agent-runner` job (the standard size), and the service account every size runs as (env RUNNER_IDENTITY). */
   job: AgentJob;
+  /** The large size's job, beside it and as the same account (env RUNNER_JOB_LARGE). */
+  largeJobName: string;
+  /**
+   * How many Actions runs are queued in a repo, read with the organisation's GitHub App installation; throws
+   * when it cannot tell. Absent: a `ritmo` with a CI rule cannot be read, and its fires are skipped.
+   */
+  ciQueued?: (installation: number, repo: string) => Promise<number>;
   /** The engine's public URL: where the run fetches its spec and reports. */
   engineUrl: string;
   vault: Pick<Vault, 'get'>;
@@ -311,16 +338,33 @@ async function failRun(chat: ChatDeps, deps: JobDeps, run: Pick<RunRecord, 'id' 
   }
 }
 
-/** Starts one run on our runner: a run row with the nonce's hash, then the job with the run id and the nonce. */
+/** After its timeout, how long the engine still waits for a run's report before closing it on the tick. */
+export const DEADLINE_MARGIN_SECONDS = 15 * 60;
+
+/** The job of the agent's size. */
+export function jobFor(runner: RunnerDeps, size: RunnerSize): AgentJob {
+  return size === 'large' ? { ...runner.job, name: runner.largeJobName } : runner.job;
+}
+
+/**
+ * Starts one run on our runner: a run row with the nonce's hash, then the job of the agent's size with the run
+ * id and the nonce, and the agent's timeout. Throws RunBusy, with no row, while another of its runs is going.
+ */
 async function launch(
   deps: JobDeps & { runner: RunnerDeps },
-  agent: ChatAgent,
+  agent: RunnerAgent,
   r: { origin: 'person' | 'schedule' | 'routine'; requestedBy: string | null; threadId: string | null; messageId: string | null; routineId?: string },
 ): Promise<string> {
   const nonce = randomBytes(32).toString('base64url');
-  const runId = await deps.jobs.startRun({ orgId: agent.orgId, agentId: agent.id, ...r, nonceHash: hashNonce(nonce) });
+  const now = deps.runner.now ? deps.runner.now() : new Date();
+  const deadlineAt = new Date(now.getTime() + (agent.timeoutSeconds + DEADLINE_MARGIN_SECONDS) * 1000).toISOString();
+  const runId = await deps.jobs.startRun({ orgId: agent.orgId, agentId: agent.id, ...r, nonceHash: hashNonce(nonce), deadlineAt });
   try {
-    await deps.launch(deps.runner.job, { GHOSTAFF_RUN: runId, GHOSTAFF_NONCE: nonce, ENGINE_URL: deps.runner.engineUrl });
+    await deps.launch(
+      jobFor(deps.runner, agent.size),
+      { GHOSTAFF_RUN: runId, GHOSTAFF_NONCE: nonce, ENGINE_URL: deps.runner.engineUrl },
+      { timeoutSeconds: agent.timeoutSeconds },
+    );
   } catch (e) {
     throw Object.assign(e instanceof Error ? e : new Error('launch failed'), { runId });
   }
@@ -348,7 +392,9 @@ export async function askRunner(
     if (!runner) throw new Error('our runner is not configured');
     const why = await preflight(chat, runner, agent.orgId);
     if (why) throw new RunnerFailure(why);
-    runId = await launch({ ...deps, runner }, agent, {
+    const spec = await runner.store.runnerAgent(agent.id);
+    if (!spec) throw new RunnerFailure(GONE);
+    runId = await launch({ ...deps, runner }, spec, {
       origin: routineId ? 'routine' : 'person',
       requestedBy: userId,
       threadId: thread.id,
@@ -358,11 +404,61 @@ export async function askRunner(
     await chat.chat.updateReply(replyId, { steps: ['Trabajando en ello: tardo unos minutos'] });
   } catch (e) {
     runId = runId ?? (e as { runId?: string }).runId ?? null;
-    const said = e instanceof RunnerFailure ? e.said : NOT_STARTED;
-    if (!(e instanceof RunnerFailure)) console.error('runner not started', e instanceof Error ? e.message : typeof e);
+    const said =
+      e instanceof RunnerFailure
+        ? e.said
+        : e instanceof RunBusy && deps.runner
+          ? busyText(await deps.runner.store.runningSince(agent.id).catch(() => null))
+          : NOT_STARTED;
+    if (!(e instanceof RunnerFailure) && !(e instanceof RunBusy)) console.error('runner not started', e instanceof Error ? e.message : typeof e);
     if (runId) await deps.jobs.finishRun(runId, { state: 'failed', summary: said, noteworthy: false, decisionsOpened: 0 }).catch(() => false);
     await chat.chat.updateReply(replyId, { text: said, state: 'failed' }).catch(() => {});
   }
+}
+
+/** What a person who asks is told while another run of the agent is going, since when it started. */
+export function busyText(since: string | null): string {
+  const at = since
+    ? new Date(since).toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit' })
+    : null;
+  return `Ahora mismo estoy con otra tarea${at ? `, desde las ${at}` : ''}, y hago una cada vez. Escríbeme cuando acabe y me pongo con esto.`;
+}
+
+/** The start of `now`'s day in Madrid, where a `ritmo`'s day is counted. */
+export function madridDayStart(now: Date): Date {
+  const wall = (d: Date) => {
+    const p = Object.fromEntries(
+      new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Madrid', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        .formatToParts(d)
+        .map((x) => [x.type, Number(x.value)]),
+    ) as Record<string, number>;
+    return Date.UTC(p.year!, p.month! - 1, p.day!, p.hour!, p.minute!, p.second!);
+  };
+  const offset = wall(now) - Math.floor(now.getTime() / 1000) * 1000;
+  const w = new Date(wall(now));
+  // Madrid changes its clocks at 02:00-03:00, never across midnight: today's offset holds at its start.
+  return new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate()) - offset);
+}
+
+/**
+ * Whether a fire of the agent's timetable is held back, and why (the legacy's arranque/ritmo.py): another of its
+ * runs is going; its `ritmo` already ran its day's runs; or the CI its pull requests share has more queued than
+ * it allows, or cannot be read (what cannot be known is not taken as fine).
+ */
+async function holdBack(runner: RunnerDeps, a: RunnerAgent, now: Date): Promise<SkipReason | null> {
+  if (await runner.store.runningSince(a.id)) return 'busy';
+  if (a.maxRunsPerDay !== null && (await runner.store.scheduledRunsSince(a.id, madridDayStart(now))) >= a.maxRunsPerDay) return 'daily_cap';
+  if (a.ci) {
+    const org = await runner.record(a.orgId);
+    if (!org || org.host !== 'github' || !runner.ciQueued) return 'ci_unreadable';
+    try {
+      if ((await runner.ciQueued(org.installation, a.ci.repo)) > a.ci.maxQueued) return 'ci_busy';
+    } catch (e) {
+      console.error('ci queue not read', a.ci.repo, e instanceof Error ? e.message : typeof e);
+      return 'ci_unreadable';
+    }
+  }
+  return null;
 }
 
 /** Whether a timetable had a fire time in (`since`, `now`]. A bad cron never fires. */
@@ -380,7 +476,8 @@ export function firedBetween(schedule: string, since: Date, now: Date): boolean 
  * last started it. Several fire times missed (the engine was down) start one
  * run, not a backlog. `last_scheduled_at` moves first and atomically, so two
  * ticks at once never start the same run twice. An agent never started yet
- * only takes now as its starting point.
+ * only takes now as its starting point. A fire its `ritmo` holds back, or that
+ * finds another of its runs going, is kept as skipped, with why.
  */
 export async function startScheduled(chat: ChatDeps, deps: JobDeps): Promise<number> {
   const runner = deps.runner;
@@ -397,16 +494,27 @@ export async function startScheduled(chat: ChatDeps, deps: JobDeps): Promise<num
     if (!(await runner.store.claimSchedule(a.id, a.lastScheduledAt, now))) continue;
     const agent = await chat.chat.agent(a.id);
     if (!agent) continue;
+    const skip = (reason: SkipReason) =>
+      runner.store.skipFire({ orgId: a.orgId, agentId: a.id, reason }).catch((e) => console.error('skipped fire not kept', e instanceof Error ? e.message : typeof e));
     try {
+      const held = await holdBack(runner, a, now);
+      if (held) {
+        await skip(held);
+        continue;
+      }
       const why = await preflight(chat, runner, a.orgId);
       if (why) {
         const runId = await deps.jobs.startRun({ orgId: a.orgId, agentId: a.id, origin: 'schedule', requestedBy: null, threadId: null, messageId: null });
         await failRun(chat, deps, { id: runId, messageId: null, threadId: null }, agent, why);
         continue;
       }
-      await launch({ ...deps, runner }, agent, { origin: 'schedule', requestedBy: null, threadId: null, messageId: null });
+      await launch({ ...deps, runner }, a, { origin: 'schedule', requestedBy: null, threadId: null, messageId: null });
       started += 1;
     } catch (e) {
+      if (e instanceof RunBusy) {
+        await skip('busy'); // a person's run got there between the check and the launch
+        continue;
+      }
       console.error('scheduled run not started', e instanceof Error ? e.message : typeof e);
       const runId = (e as { runId?: string }).runId;
       if (runId) await failRun(chat, deps, { id: runId, messageId: null, threadId: null }, agent, NOT_STARTED);

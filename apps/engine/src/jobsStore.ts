@@ -6,7 +6,7 @@ import type { AgentRepo } from '@ghostaff/shared/record';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GoogleAuth } from 'google-auth-library';
 import type { ChatAgent } from './chat';
-import type { JobStore, LaunchJob, RunRecord } from './jobs';
+import { type JobStore, type LaunchJob, RunBusy, type RunRecord } from './jobs';
 import type { RunnerAgent, RunnerStore } from './runner';
 
 function check<T>(r: { data: T; error: unknown }): T {
@@ -57,23 +57,26 @@ export function supabaseJobStore(admin: SupabaseClient, opts: { afterAgentWrite?
       return r ? toAgent(r) : null;
     },
     async startRun(x) {
-      const r = check(
-        await admin
-          .from('agent_runs')
-          .insert({
-            org_id: x.orgId,
-            agent_id: x.agentId,
-            origin: x.origin,
-            requested_by: x.requestedBy,
-            thread_id: x.threadId,
-            message_id: x.messageId,
-            nonce_hash: x.nonceHash ?? null,
-            routine_id: x.routineId ?? null,
-          })
-          .select('id')
-          .single(),
-      );
-      return (r as { id: string }).id;
+      const res = await admin
+        .from('agent_runs')
+        .insert({
+          org_id: x.orgId,
+          agent_id: x.agentId,
+          origin: x.origin,
+          requested_by: x.requestedBy,
+          thread_id: x.threadId,
+          message_id: x.messageId,
+          nonce_hash: x.nonceHash ?? null,
+          routine_id: x.routineId ?? null,
+          deadline_at: x.deadlineAt ?? null,
+        })
+        .select('id')
+        .single();
+      // One run of an agent on our runner at a time (20261127200000_runner_limits.sql).
+      if ((res.error as { code?: string; message?: string } | null)?.code === '23505' && res.error?.message.includes('agent_runs_one_running')) {
+        throw new RunBusy();
+      }
+      return (check(res) as { id: string }).id;
     },
     async run(id) {
       const r = check(await admin.from('agent_runs').select(RUN).eq('id', id).maybeSingle());
@@ -83,20 +86,28 @@ export function supabaseJobStore(admin: SupabaseClient, opts: { afterAgentWrite?
       const rows = check(
         await admin
           .from('agent_runs')
-          .update({ state: p.state, summary: p.summary?.slice(0, 20_000) ?? null, noteworthy: p.noteworthy, decisions_opened: p.decisionsOpened, finished_at: new Date().toISOString() })
+          .update({
+            state: p.state,
+            summary: p.summary?.slice(0, 20_000) ?? null,
+            noteworthy: p.noteworthy,
+            decisions_opened: p.decisionsOpened,
+            finished_at: new Date().toISOString(),
+            ...(p.turns != null ? { turns: p.turns } : {}),
+            ...(p.ending ? { ending: p.ending } : {}),
+          })
           .eq('id', id)
           .eq('state', 'running')
           .select('id'),
       );
       return (rows ?? []).length > 0;
     },
-    async staleRuns(before) {
+    async staleRuns(before, now) {
       const rows = check(
         await admin
           .from('agent_runs')
           .select('id, org_id, agent_id, origin, state, thread_id, message_id')
           .eq('state', 'running')
-          .lt('started_at', before.toISOString())
+          .or(`deadline_at.lt.${now.toISOString()},and(deadline_at.is.null,started_at.lt.${before.toISOString()})`)
           .limit(100),
       ) ?? [];
       return rows.map((r) => ({ id: r.id, orgId: r.org_id, agentId: r.agent_id, origin: r.origin, state: r.state, threadId: r.thread_id, messageId: r.message_id }));
@@ -114,7 +125,9 @@ export function supabaseJobStore(admin: SupabaseClient, opts: { afterAgentWrite?
   };
 }
 
-const RUNNER_AGENT = 'id, org_id, slug, name, description, task, task_in_record, repos, model, tools, max_turns, schedule, last_scheduled_at, reads_org_runs';
+const RUNNER_AGENT =
+  'id, org_id, slug, name, description, task, task_in_record, repos, model, tools, max_turns, schedule, last_scheduled_at, reads_org_runs, ' +
+  'timeout_seconds, size, max_runs_per_day, ci_repo, max_ci_queued';
 type RunnerAgentRow = {
   id: string;
   org_id: string;
@@ -130,6 +143,11 @@ type RunnerAgentRow = {
   schedule: string | null;
   last_scheduled_at: string | null;
   reads_org_runs: boolean | null;
+  timeout_seconds: number;
+  size: RunnerAgent['size'];
+  max_runs_per_day: number | null;
+  ci_repo: string | null;
+  max_ci_queued: number | null;
 };
 const toRunnerAgent = (r: RunnerAgentRow): RunnerAgent => ({
   id: r.id,
@@ -146,6 +164,10 @@ const toRunnerAgent = (r: RunnerAgentRow): RunnerAgent => ({
   schedule: r.schedule,
   lastScheduledAt: r.last_scheduled_at,
   readsOrgRuns: r.reads_org_runs ?? false,
+  timeoutSeconds: r.timeout_seconds,
+  size: r.size,
+  maxRunsPerDay: r.max_runs_per_day,
+  ci: r.ci_repo && r.max_ci_queued != null ? { repo: r.ci_repo, maxQueued: r.max_ci_queued } : null,
 });
 
 /** Our runner's database side (runner.ts), with the service role. */
@@ -180,6 +202,31 @@ export function supabaseRunnerStore(admin: SupabaseClient): RunnerStore {
           .maybeSingle(),
       );
       return r ? toRun(r) : null;
+    },
+    async runningSince(agentId) {
+      const r = check(
+        await admin.from('agent_runs').select('started_at').eq('agent_id', agentId).eq('state', 'running').not('nonce_hash', 'is', null).maybeSingle(),
+      ) as { started_at: string } | null;
+      return r?.started_at ?? null;
+    },
+    async scheduledRunsSince(agentId, since) {
+      const { count, error } = await admin
+        .from('agent_runs')
+        .select('id', { count: 'exact', head: true })
+        .eq('agent_id', agentId)
+        .eq('origin', 'schedule')
+        .not('nonce_hash', 'is', null)
+        .gte('started_at', since.toISOString());
+      if (error) throw error;
+      return count ?? 0;
+    },
+    async skipFire(x) {
+      const at = new Date().toISOString();
+      check(
+        await admin
+          .from('agent_runs')
+          .insert({ org_id: x.orgId, agent_id: x.agentId, origin: 'schedule', state: 'skipped', skip_reason: x.reason, started_at: at, finished_at: at }),
+      );
     },
     async useConnection(runId, connectionId) {
       check(await admin.from('agent_runs').update({ connection_id: connectionId }).eq('id', runId));
@@ -236,12 +283,18 @@ export function supabaseRunnerStore(admin: SupabaseClient): RunnerStore {
 
 /** Starts one execution of a Cloud Run job with environment overrides (the same call the Telegram webhook makes). */
 export function cloudRunLauncher(auth: GoogleAuth): LaunchJob {
-  return async (job, env) => {
+  return async (job, env, opts) => {
     const client = await auth.getClient();
     const res = await client.request({
       url: `https://run.googleapis.com/v2/projects/${job.project}/locations/${job.region}/jobs/${job.name}:run`,
       method: 'POST',
-      data: { overrides: { containerOverrides: [{ env: Object.entries(env).map(([name, value]) => ({ name, value })) }] } },
+      data: {
+        overrides: {
+          containerOverrides: [{ env: Object.entries(env).map(([name, value]) => ({ name, value })) }],
+          // The execution's own task timeout, in place of the job's (RunJobRequest.Overrides.timeout).
+          ...(opts?.timeoutSeconds ? { timeout: `${opts.timeoutSeconds}s` } : {}),
+        },
+      },
       validateStatus: () => true,
     });
     if (res.status < 200 || res.status >= 300) throw new Error(`Cloud Run ${res.status} starting ${job.name}`);

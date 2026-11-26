@@ -52,6 +52,7 @@ import {
   transcriptSink,
   usageOf,
   tokenNearExpiry,
+  endingOf,
 } from './lib';
 
 const METADATA_IDENTITY = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity';
@@ -303,6 +304,7 @@ async function main(): Promise<number> {
       usage,
       rateLimit,
       model: spec.model,
+      ...endingOf(last),
     });
     return ok ? 0 : 1;
   } finally {

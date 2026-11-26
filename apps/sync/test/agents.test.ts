@@ -26,6 +26,13 @@ function project() {
   );
   writeFileSync(join(dir, 'agentes', 'desarrollo.yaml'), 'descripcion: hace de noche el trabajo objetivo\n');
   writeFileSync(join(dir, 'agentes', 'prueba.yaml'), 'descripcion: x\n');
+  writeFileSync(
+    join(dir, 'agentes', 'nocturno.yaml'),
+    'modelo: claude-opus-5-5\nprompt: Abre PRs de noche.\nhorario: "0 2-5 * * *"\n' +
+      'herramientas: [Bash, Read, Edit, Agent, WebFetch, "WebSearch(ordago)"]\nprohibidas: [WebFetch, WebSearch]\n' +
+      'ritmo:\n  max_ejecuciones_por_dia: 3\n  repo_ci: ordago-app/ordago-apps\n  max_ci_en_cola: 4\n' +
+      'recursos:\n  cpu: "4"\n  memoria: 16Gi\n  timeout: 10800s\n  reintentos: 0\n',
+  );
   writeFileSync(join(dir, 'agentes', 'nuevo.yaml'), 'descripcion: algo nuevo\n');
   return dir;
 }
@@ -33,7 +40,7 @@ function project() {
 describe('readProjectAgents', () => {
   it('turns each agent file into a job agent, in the department Álvaro chose', () => {
     const agents = readProjectAgents(project());
-    expect(agents.map((a) => a.slug)).toEqual(['desarrollo', 'direccion', 'legal', 'nuevo', 'organico']);
+    expect(agents.map((a) => a.slug)).toEqual(['desarrollo', 'direccion', 'legal', 'nocturno', 'nuevo', 'organico']);
     expect(agents[2]).toEqual({
       slug: 'legal',
       name: 'Legal',
@@ -48,7 +55,7 @@ describe('readProjectAgents', () => {
       job_identity: 'ordago-legal@ordago-agents.iam.gserviceaccount.com',
     });
     expect(agents[0]).toMatchObject({ department: 'producto', schedule: null });
-    expect(agents[3]).toMatchObject({ name: 'Nuevo', department: 'direccion', ghost: 'base' });
+    expect(agents[4]).toMatchObject({ name: 'Nuevo', department: 'direccion', ghost: 'base' });
   });
 
   it('with runner ghostaff and only legal, moves Legal onto our runner with its task, model, tools, turns and timetable', () => {
@@ -68,6 +75,11 @@ describe('readProjectAgents', () => {
         max_turns: 200,
         repos: [],
         reads_org_runs: false,
+        timeout_seconds: 3600,
+        size: 'standard',
+        max_runs_per_day: null,
+        ci_repo: null,
+        max_ci_queued: null,
         job_project: null,
         job_region: null,
         job_name: null,
@@ -114,5 +126,44 @@ describe('readProjectAgents', () => {
   it('on demand, it gets no timetable: its old job keeps it', () => {
     const [legal] = readProjectAgents(project(), { runner: 'ghostaff', only: ['legal'], onDemand: true });
     expect(legal).toMatchObject({ slug: 'legal', runner: 'ghostaff', schedule: null });
+  });
+
+  it('carries its legacy limits: timeout and size from recursos, its ritmo, and its tools without the forbidden ones', () => {
+    const [nocturno] = readProjectAgents(project(), { runner: 'ghostaff', only: ['nocturno'] });
+    expect(nocturno).toMatchObject({
+      tools: ['Bash', 'Read', 'Edit', 'Agent'],
+      timeout_seconds: 10_800,
+      size: 'large',
+      max_runs_per_day: 3,
+      ci_repo: 'ordago-app/ordago-apps',
+      max_ci_queued: 4,
+    });
+    expect(nocturno).not.toHaveProperty('reintentos');
+  });
+
+  it('sizes an agent by the smallest job that holds what it asked for', () => {
+    const sized = (recursos: string) => {
+      const dir = project();
+      writeFileSync(join(dir, 'agentes', 'x.yaml'), `modelo: m\nprompt: p\nherramientas: [Read]\nrecursos:\n${recursos}`);
+      return readProjectAgents(dir, { runner: 'ghostaff', only: ['x'] })[0]!;
+    };
+    expect(sized('  cpu: "1"\n  memoria: 2Gi\n  timeout: 900s\n')).toMatchObject({ size: 'standard', timeout_seconds: 900 });
+    expect(sized('  cpu: "2"\n  memoria: 4Gi\n  timeout: 3600s\n')).toMatchObject({ size: 'standard' });
+    expect(sized('  cpu: "4"\n  memoria: 8Gi\n  timeout: 3600s\n')).toMatchObject({ size: 'large' });
+    expect(sized('  cpu: "2"\n  memoria: 512Mi\n  timeout: 60s\n')).toMatchObject({ size: 'standard', timeout_seconds: 60 });
+    expect(() => sized('  cpu: "8"\n  memoria: 32Gi\n  timeout: 3600s\n')).toThrow(/largest job/);
+    expect(() => sized('  cpu: "2"\n  memoria: 4Gi\n  timeout: 4h\n')).toThrow(/recursos.timeout/);
+    expect(() => sized('  cpu: "2"\n  memoria: 4Gi\n  timeout: 10801s\n')).toThrow(/recursos.timeout/);
+  });
+
+  it('refuses a ritmo it cannot hold: no cap, or half a CI rule', () => {
+    const withRitmo = (ritmo: string) => {
+      const dir = project();
+      writeFileSync(join(dir, 'agentes', 'x.yaml'), `modelo: m\nprompt: p\nherramientas: [Read]\nritmo:\n${ritmo}`);
+      return () => readProjectAgents(dir, { runner: 'ghostaff', only: ['x'] });
+    };
+    expect(withRitmo('  max_ejecuciones_por_dia: 0\n')).toThrow(/max_ejecuciones_por_dia/);
+    expect(withRitmo('  max_ejecuciones_por_dia: 2\n  repo_ci: ordago-app/ordago-apps\n')).toThrow(/repo_ci/);
+    expect(withRitmo('  max_ejecuciones_por_dia: 2\n')()[0]).toMatchObject({ max_runs_per_day: 2, ci_repo: null, max_ci_queued: null });
   });
 });

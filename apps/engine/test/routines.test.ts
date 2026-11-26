@@ -13,6 +13,26 @@ const LEGAL = '20000000-0000-0000-0000-000000000003';
 const BEA = '00000000-0000-0000-0000-00000000000b';
 const finanzas: ChatAgent = { id: FINANZAS, orgId: ORG, name: 'Finanzas', ghost: 'finanzas', department: 'finanzas', runner: 'chat' };
 const legal: ChatAgent = { id: LEGAL, orgId: ORG, name: 'Legal', ghost: 'base', department: 'legal', runner: 'ghostaff' };
+const legalOnRunner: RunnerAgent = {
+  id: LEGAL,
+  orgId: ORG,
+  slug: 'legal',
+  name: 'Legal',
+  description: null,
+  task: 'Revisa la ley.',
+  taskInRecord: false,
+  repos: [],
+  model: 'm',
+  tools: [],
+  maxTurns: 10,
+  schedule: null,
+  lastScheduledAt: null,
+  readsOrgRuns: false,
+  timeoutSeconds: 3600,
+  size: 'standard',
+  maxRunsPerDay: null,
+  ci: null,
+};
 
 // Tuesday 24 November 2026 10:00 in Madrid; a Friday-at-9 routine last fired a week ago.
 const lastWeek = '2026-11-20T08:00:00.000Z';
@@ -125,8 +145,9 @@ function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: st
     },
     syncOrg: async () => {},
     runner: {
-      store: {} as RunnerStore,
+      store: { runnerAgent: async (id: string) => (id === LEGAL ? legalOnRunner : null) } as RunnerStore,
       job: runnerJob,
+      largeJobName: 'agent-runner-large',
       engineUrl: 'https://engine',
       vault,
       record: async () => ({ id: ORG, slug: 'panaderia', repo: 'panaderia/registro', host: 'github', installation: 1 }),
@@ -229,22 +250,7 @@ describe('a routine on the tick (agent-routines.md)', () => {
 });
 
 describe("a routine's run on our runner", () => {
-  const agent: RunnerAgent = {
-    id: LEGAL,
-    orgId: ORG,
-    slug: 'legal',
-    name: 'Legal',
-    description: null,
-    task: 'Revisa la ley.',
-    taskInRecord: false,
-    repos: [],
-    model: 'm',
-    tools: [],
-    maxTurns: 10,
-    schedule: null,
-    lastScheduledAt: null,
-    readsOrgRuns: false,
-  };
+  const agent = legalOnRunner;
 
   it('is told the routine, who gets the answer and how to say there is nothing', () => {
     const p = composePrompt({

@@ -3,7 +3,7 @@ import type { SyncPlan } from '@ghostaff/shared/record';
 import type { DecisionRow } from '@ghostaff/shared/services';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { appJwt, freshRepoToken, repoTokens } from '../src/githubApp';
+import { appJwt, freshRepoToken, queuedRuns, repoTokens } from '../src/githubApp';
 import { type InstructedAgent, openDecision, type RecordOrg, type RecordSyncStore, syncOrg } from '../src/recordSync';
 
 const ORG: RecordOrg = { id: 'org-1', slug: 'ordago', repo: 'ordago-app/business', host: 'github', installation: 7 };
@@ -268,6 +268,22 @@ describe('the GitHub App', () => {
     }) as typeof fetch;
     await freshRepoToken(async () => ({ appId: '42', privateKey: pem }), f)(7, 'ordago-app/ordago-apps', 'read');
     expect(asked[0]).toEqual({ repositories: ['ordago-apps'], permissions: { contents: 'read', metadata: 'read' } });
+  });
+
+  it('counts a repo’s queued Actions runs with a token that may only read its Actions, and throws when it cannot tell', async () => {
+    const calls: Array<{ url: string; body?: unknown; auth?: string }> = [];
+    const github = (runs: Response) =>
+      (async (url: string, init?: RequestInit) => {
+        calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined, auth: (init?.headers as Record<string, string>)?.Authorization });
+        return url.endsWith('/access_tokens') ? new Response(JSON.stringify({ token: 'ghs_ci', expires_at: '' }), { status: 201 }) : runs;
+      }) as typeof fetch;
+    const cfg = async () => ({ appId: '42', privateKey: pem });
+    expect(await queuedRuns(cfg, github(new Response(JSON.stringify({ total_count: 5, workflow_runs: [] }))))(7, 'ordago-app/ordago-apps')).toBe(5);
+    expect(calls[0]!.body).toEqual({ repositories: ['ordago-apps'], permissions: { actions: 'read', metadata: 'read' } });
+    expect(calls[1]).toMatchObject({ url: 'https://api.github.com/repos/ordago-app/ordago-apps/actions/runs?status=queued&per_page=1', auth: 'Bearer ghs_ci' });
+    await expect(queuedRuns(cfg, github(new Response('{}', { status: 403 })))(7, 'ordago-app/ordago-apps')).rejects.toThrow(/403/);
+    await expect(queuedRuns(cfg, github(new Response('{}')))(7, 'ordago-app/ordago-apps')).rejects.toThrow(/no count/);
+    await expect(queuedRuns(async () => null, github(new Response('{}')))(7, 'ordago-app/ordago-apps')).rejects.toThrow(/not configured/);
   });
 });
 

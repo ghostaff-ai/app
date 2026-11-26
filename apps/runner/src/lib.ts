@@ -68,6 +68,9 @@ export interface Report {
   /** The last `rate_limit_info` Claude Code reported: the subscription's 5-hour and weekly limits. */
   rateLimit?: unknown;
   model?: string;
+  /** How the run ended (its `result` event): turns, and the subtype (success, error_max_turns…). */
+  turns?: number;
+  ending?: string;
 }
 
 /** What a scheduled run's last message is when there is nothing to tell. */
@@ -208,6 +211,20 @@ export function usageOf(line: string): { rateLimit?: unknown; usage?: unknown } 
     // not JSON: nothing to read
   }
   return {};
+}
+
+/** How the run ended, from the final stream-json event: its turns and its subtype, when it is a `result`. */
+export function endingOf(lastLine: string): { turns?: number; ending?: string } {
+  try {
+    const e = JSON.parse(lastLine) as { type?: string; num_turns?: unknown; subtype?: unknown };
+    if (e.type !== 'result') return {};
+    return {
+      ...(Number.isInteger(e.num_turns) ? { turns: e.num_turns as number } : {}),
+      ...(typeof e.subtype === 'string' && /^[a-z_]{1,40}$/.test(e.subtype) ? { ending: e.subtype } : {}),
+    };
+  } catch {
+    return {};
+  }
 }
 
 /** The final stream-json event: whether it is a successful result, and what Claude said last. */

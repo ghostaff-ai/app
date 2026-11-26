@@ -148,12 +148,13 @@ async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff';
   const agents = readProjectAgents(opts.from, { runner: opts.runner, only: opts.only, writes: opts.writes, onDemand: opts.onDemand });
   if (agents.length === 0) throw new Error('No agent to import: check --from and --only');
   // Other repos are reached through the record's GitHub App installation: a record on GitHub, first.
-  const withRepos = agents.filter((a) => a.runner === 'ghostaff' && a.repos.length > 0);
+  // So is a `ritmo` with a CI rule: its queue is read the same way.
+  const withRepos = agents.filter((a) => a.runner === 'ghostaff' && (a.repos.length > 0 || a.ci_repo));
   if (withRepos.length > 0) {
     const { data: org, error } = await db.from('organizations').select('record_host').eq('id', orgId).single<{ record_host: string | null }>();
     if (error) throw error;
     if (org.record_host !== 'github') {
-      throw new Error(`${withRepos.map((a) => a.slug).join(', ')} use other repos, which need ${opts.org}'s record on GitHub (it is ${org.record_host ?? 'not set'})`);
+      throw new Error(`${withRepos.map((a) => a.slug).join(', ')} use other repos or read a CI queue, which need ${opts.org}'s record on GitHub (it is ${org.record_host ?? 'not set'})`);
     }
   }
   // Upsert by (org, slug): running it again refreshes the job and the text, and keeps the agent's
@@ -183,7 +184,11 @@ async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff';
       a.runner === 'ghostaff' && a.repos.length
         ? `, with ${a.repos.map((r) => `${r.repo}${r.main ? ' (writes, main too)' : r.write ? ' (writes)' : ''}`).join(', ')}`
         : '';
-    const where = a.runner === 'ghostaff' ? `our runner, ${a.model}${a.schedule ? '' : ', when written to'}${repos}` : a.job_name;
+    const limits =
+      a.runner === 'ghostaff'
+        ? `, ${a.timeout_seconds / 60} min, ${a.size}${a.max_runs_per_day ? `, up to ${a.max_runs_per_day} a day` : ''}${a.ci_repo ? `, held by ${a.ci_repo}'s CI past ${a.max_ci_queued} queued` : ''}`
+        : '';
+    const where = a.runner === 'ghostaff' ? `our runner, ${a.model}${a.schedule ? '' : ', when written to'}${limits}${repos}` : a.job_name;
     console.log(`${found ? 'updated' : 'added  '} ${a.name.padEnd(11)} ${a.department.padEnd(10)} ${where}`);
   }
 }

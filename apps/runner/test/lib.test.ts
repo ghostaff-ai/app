@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { blockReason, onlyWhatRuns, type PushContext, readPushRules } from '../src/guard';
-import { agentEnv, claudeArgs, cloneArgs, crashText, credentialKey, credentialKeyOf, pushRules, decisionFiles, engineClosedRun, newDecisions, tokenNearExpiry, noteworthy, passwdIds, readSpec, redact, resultOf, usageOf } from '../src/lib';
+import { agentEnv, claudeArgs, cloneArgs, crashText, credentialKey, credentialKeyOf, pushRules, decisionFiles, endingOf, engineClosedRun, newDecisions, tokenNearExpiry, noteworthy, passwdIds, readSpec, redact, resultOf, usageOf } from '../src/lib';
 
 const SPEC = {
   run: '40000000-0000-0000-0000-000000000001',
@@ -133,6 +133,14 @@ describe('the end of a run', () => {
     expect(resultOf('{"type":"result","is_error":true,"result":"Se acabaron los turnos"}')).toEqual({ ok: false, text: 'Se acabaron los turnos' });
     expect(resultOf('{"type":"assistant"}')).toEqual({ ok: false, text: null });
     expect(resultOf('not json')).toEqual({ ok: false, text: null });
+  });
+
+  it('reads how the run ended from its result event: turns and subtype, nothing else', () => {
+    expect(endingOf('{"type":"result","subtype":"error_max_turns","num_turns":400,"is_error":true}')).toEqual({ turns: 400, ending: 'error_max_turns' });
+    expect(endingOf('{"type":"result","subtype":"success","num_turns":12}')).toEqual({ turns: 12, ending: 'success' });
+    expect(endingOf('{"type":"result","subtype":"<script>","num_turns":"12"}')).toEqual({});
+    expect(endingOf('{"type":"assistant","num_turns":3}')).toEqual({});
+    expect(endingOf('not json')).toEqual({});
   });
 
   it('has something to tell unless it says exactly SIN NOVEDAD', () => {
