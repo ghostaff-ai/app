@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth/AuthContext';
 import { useDeck } from '@/lib/hooks/useDecisions';
 import { useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
-import { useTabScreenTop } from '@/lib/tabs';
+import { useTabBarSpace, useTabScreenTop } from '@/lib/tabs';
 
 // Decisiones, the middle tab (three-tabs.md, decision 7): what waits for you,
 // one card at a time (components/DecisionDeck.tsx). What you put aside comes
@@ -17,7 +17,9 @@ import { useTabScreenTop } from '@/lib/tabs';
 // Registro, where an answer can still be changed until the agent has it.
 
 export default function Decisiones() {
-  const top = useTabScreenTop();
+  // The deck doesn't scroll, so nothing moves it clear of the bars: it leaves the room itself (lib/tabs.ts).
+  const top = useTabScreenTop({ scrolls: false });
+  const bottom = useTabBarSpace();
   const desktop = useIsDesktop();
   const { active } = useActiveOrg();
   const { session } = useAuth();
@@ -43,15 +45,14 @@ export default function Decisiones() {
   return (
     <View className="flex-1 bg-surface">
       <View
-        className="flex-1 px-5 pb-6"
-        style={{ paddingTop: (desktop ? 40 : 12) + top, maxWidth: 480, width: '100%', alignSelf: 'center' }}
+        className="flex-1 px-5"
+        style={{ paddingTop: (desktop ? 40 : 12) + top, paddingBottom: 24 + bottom, maxWidth: 480, width: '100%', alignSelf: 'center' }}
       >
         {/* Where you are, on every tab (welcome-and-spaces.md); on a desktop the sidebar shows it. */}
         <SpaceSwitcher />
-        <View className="flex-row items-center justify-between">
-          <ScreenTitle>Decisiones</ScreenTitle>
-          {count > 0 ? <Text className="text-footnote text-muted">{count === 1 ? 'Queda 1' : `Quedan ${count}`}</Text> : null}
-        </View>
+        <ScreenTitle right={count > 0 ? <Text className="text-footnote text-muted">{count === 1 ? 'Queda 1' : `Quedan ${count}`}</Text> : null}>
+          Decisiones
+        </ScreenTitle>
         <ErrorText>{deck.error}</ErrorText>
         {count > 0 ? (
           <View className="mt-3 flex-1">

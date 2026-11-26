@@ -1,5 +1,5 @@
 import type { Decision } from '@ghostaff/shared';
-import { answeredLabel, asideCount, canSwipe, choicesOf, deckOf, pickLabel, tomorrowMorning } from '@/lib/deck';
+import { answeredLabel, asideCount, canSwipe, choicesOf, deckOf, FACE_FOLDS, nextFold, pickLabel, tomorrowMorning } from '@/lib/deck';
 import { askerOf } from '@/lib/team';
 
 const d = (id: string, more: Partial<Decision> = {}): Decision => ({
@@ -86,5 +86,21 @@ describe('the decision deck', () => {
     expect(askerOf(d('a', { agent: { id: 'x', name: 'Pepa', ghost: 'redes' } }))).toEqual({ name: 'Pepa', ghost: 'redes' });
     expect(askerOf(d('a', { agent: { id: 'x', name: 'Pepa', ghost: 'nope' } })).ghost).toBe('base');
     expect(askerOf(d('a'))).toEqual({ name: 'Finanzas', ghost: 'finanzas' });
+  });
+});
+
+describe('nextFold', () => {
+  it('folds one more step while the face needs more room than the card has', () => {
+    expect(nextFold(0, 480, 300)).toBe(1);
+    expect(nextFold(1, 400, 300)).toBe(2);
+  });
+
+  it('stays when the face fits', () => {
+    expect(nextFold(0, 300, 300)).toBe(0);
+    expect(nextFold(2, 250, 300)).toBe(2);
+  });
+
+  it('stops at the last fold, even if it still overflows', () => {
+    expect(nextFold(FACE_FOLDS, 900, 200)).toBe(FACE_FOLDS);
   });
 });
