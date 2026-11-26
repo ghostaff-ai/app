@@ -2,7 +2,7 @@
 
 **Priority:** high — Ghostaff uses Ghostaff: until Órdago's agents run through it, the platform is a chat with no work behind it
 **Gate:** none
-**Next:** Comercial, the next to move: it needs only BigQuery, so it waits on the runner's Google token ([customer-cloud-access.md](customer-cloud-access.md), «Runs» and «Runner»)
+**Next:** SEO, Producto and Dirección, the next to move: they need `ordago-apps` in their runs (What Ghostaff builds for it, item 2: the GitHub App on that repo, a read-only token per repo, a shallow clone) and Órdago's account granted `ordago_bi`; SEO also acts as `search-console-reader@ordago-prod`, and Dirección reads the other agents' transcripts
 
 Álvaro asked (2026-11-21) how close Ghostaff is to running all of Órdago's agents, then to build what is missing. Where we stood that day: the app (sign-in, organisations, decision inbox, team chat, connectors, vault) is on the beta; the agents still run entirely in `ghostaff-ai/agents` (Claude Code in a container on Cloud Run Jobs in `ordago-agents`, on a timetable, working in `ordago-app/business`, reporting by Telegram), and the engine here only answers in chat. He took my picks with four changes («go», 2026-11-21).
 
@@ -34,8 +34,8 @@ From the YAMLs in `ghostaff-ai/agents/proyectos/ordago/agentes/` (2026-11-24). O
 
 | Agent | Repos beyond the record | Google Cloud | Secrets | Other |
 |---|---|---|---|---|
-| Legal | — | — | — | Ready |
-| Comercial | — | BigQuery: `ordago-prod.agentes.organizadores` | — | |
+| Legal | — | — | — | Moved 2026-11-24 |
+| Comercial | — | BigQuery: `ordago-prod.agentes.organizadores` | — | Moved 2026-11-26 |
 | SEO | `ordago-apps` | BigQuery: `ordago_bi.mart_weekly_web_traffic`; act as `search-console-reader@ordago-prod` | — | |
 | Producto | `ordago-apps` | BigQuery: 19 `ordago_bi.mart_weekly_*` views | — | |
 | Dirección | `ordago-apps` | BigQuery: `ordago_bi`; reads the other agents' transcripts | — | Transcripts kept by Ghostaff |
@@ -93,4 +93,5 @@ Fewest needs first, each one moved with `org add-agents --runner ghostaff --only
   - **Known gap before any customer organisation uses the runner:** the organisation's Claude subscription token is in Claude Code's environment (`CLAUDE_CODE_OAUTH_TOKEN`), so the agent can read it with Bash, and anyone who can talk to the agent could get it printed. Acceptable while only Órdago's own agents run here; the fix is a local proxy that holds the token outside the agent's reach (`apps/runner/src/lib.ts`, `agentEnv`).
   - **2026-11-24, Legal's instructions in the record** (`feat/agent-instructions-in-record`): the tick reads each agent's `agentes/<slug>/AGENTS.md` into `agents.task` (`recordSync.ts` `projectInstructions`, `agents.task_in_record`), our runner's prompt points at the file instead of carrying the task, and `org add-agents` no longer overwrites instructions the record holds. Not yet: an edit from the app written back to the file, and a guard against an agent rewriting its own `AGENTS.md` on a GitHub record. **Legal moved for good, 2026-11-24 (Jaime):** the tick read its `AGENTS.md` into its row (`task_in_record`), `org add-agents --runner ghostaff --only legal` gave it its timetable (`0 9 15 1 *`) and kept those instructions, and Cloud Scheduler `ordago-legal` in `ordago-agents` is `PAUSED`; its README in the record says so (a55691d). A Telegram message to Legal still starts the old job until Telegram is off.
   - **2026-11-26, Legal answered from its `AGENTS.md` in Ghostaff** (beta, Jaime's chat with it): asked about a bar's mus tournament with a cash prize in Madrid, run `4ba6fc62` started at once, the `agent-runner` job fetched its spec about a minute later (cold start: image import) and ended `done` 22 s after; it read `agentes/legal/AGENTS.md` and its README first, answered in the chat from `juego/comunidades/madrid.md` with the law and articles, and wrote nothing to the record.
+  - **2026-11-26, Comercial moved (Jaime).** Órdago's Google Cloud account made on the beta (`POST /cloud-account` as an owner: `org-77026864c2194c55a7d71986@ghostaff-tenants-beta`), granted what `ordago-comercial@ordago-agents` holds: `roles/bigquery.jobUser` on `ordago-agents` and `roles/bigquery.dataViewer` on the view `ordago-prod.agentes.organizadores` only. Its `AGENTS.md` (Álvaro, 2026-11-25) already had queries billed to `ordago-agents` with `--project_id`; Jaime kept that, so **when `ordago-agents` is retired, move the job user grant to an Órdago project and change the `AGENTS.md` and the skill `descubrir-organizadores` with it**. `org add-agents --runner ghostaff --only comercial` (timetable `30 8 * * 2,5`, the record's instructions kept), Cloud Scheduler `ordago-comercial` `PAUSED`, its README in the record says so (83c66a2). Checked: asked in Jaime's chat how many organisers completed a tournament, run `6399d56c` answered in 24 s from `bq` (20 and 14 repeat), and BigQuery's job history in `ordago-agents` shows the query ran as Órdago's account. Its first sweep in Ghostaff is Friday 27 at 08:30: check it ended `done` and pushed. On 2026-11-24 its old job hit the subscription's weekly limit (item 6 below).
 - [ ] Step 6
