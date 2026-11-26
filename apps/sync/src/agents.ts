@@ -55,6 +55,11 @@ export interface ImportedRunnerAgent extends ImportedBase {
   max_turns: number;
   /** Its yaml's `repos` besides the record (the project's `cerebro`), read-only unless in `push_a_main`. */
   repos: AgentRepo[];
+  /**
+   * Whether its runs read the other agents' runs (Ghostaff's transcripts): when its yaml's `gcp` granted it the
+   * project's transcripts bucket, as Dirección's does for its weekly review.
+   */
+  reads_org_runs: boolean;
   job_project: null;
   job_region: null;
   job_name: null;
@@ -81,7 +86,10 @@ type AgentYaml = {
   max_turnos?: number;
   repos?: unknown;
   push_a_main?: unknown;
+  gcp?: unknown;
 };
+
+type ProjectYaml = { cerebro?: string; gcp?: { proyecto?: string; region?: string; bucket_transcripciones?: string } };
 
 const strings = (x: unknown): string[] => (Array.isArray(x) ? x.filter((t): t is string => typeof t === 'string') : []);
 
@@ -91,7 +99,14 @@ function otherRepos(a: AgentYaml, record: string): AgentRepo[] {
   return [...new Set(strings(a.repos))].filter((r) => r.toLowerCase() !== record.toLowerCase()).map((repo) => ({ repo, write: writes.has(repo.toLowerCase()) }));
 }
 
-function onOurRunner(slug: string, a: AgentYaml, record: string): Pick<ImportedRunnerAgent, 'task' | 'model' | 'tools' | 'max_turns' | 'repos'> {
+/** Whether the agent's yaml grants it the project's transcripts bucket: in the old system, reading the other agents' runs. */
+function readsTranscripts(a: AgentYaml, bucket: string | undefined): boolean {
+  if (!bucket || !Array.isArray(a.gcp)) return false;
+  return a.gcp.some((g: { recursos?: unknown }) => strings(g?.recursos).includes(`bucket:${bucket}`));
+}
+
+function onOurRunner(slug: string, a: AgentYaml, conf: ProjectYaml): Pick<ImportedRunnerAgent, 'task' | 'model' | 'tools' | 'max_turns' | 'repos' | 'reads_org_runs'> {
+  const record = conf.cerebro ?? '';
   const tools = Array.isArray(a.herramientas) ? a.herramientas.filter((t): t is string => typeof t === 'string') : [];
   if (typeof a.prompt !== 'string' || !a.prompt.trim()) throw new Error(`${slug}.yaml has no prompt`);
   if (typeof a.modelo !== 'string' || !a.modelo) throw new Error(`${slug}.yaml has no modelo`);
@@ -102,6 +117,7 @@ function onOurRunner(slug: string, a: AgentYaml, record: string): Pick<ImportedR
     tools,
     max_turns: Number.isInteger(a.max_turnos) && a.max_turnos! > 0 ? a.max_turnos! : 100,
     repos: otherRepos(a, record),
+    reads_org_runs: readsTranscripts(a, conf.gcp?.bucket_transcripciones),
   };
 }
 
@@ -115,7 +131,7 @@ function sentence(s: unknown): string | null {
 /** The agents of one project folder (`…/agents/proyectos/ordago`). */
 export function readProjectAgents(projectDir: string, opts: ImportOptions = {}): ImportedAgent[] {
   const project = basename(projectDir);
-  const conf = parse(readFileSync(join(projectDir, 'proyecto.yaml'), 'utf8')) as { cerebro?: string; gcp?: { proyecto?: string; region?: string } };
+  const conf = parse(readFileSync(join(projectDir, 'proyecto.yaml'), 'utf8')) as ProjectYaml;
   const gcp = conf.gcp?.proyecto;
   const region = conf.gcp?.region;
   if (!gcp || !region) throw new Error(`${projectDir}/proyecto.yaml has no gcp.proyecto and gcp.region`);
@@ -131,7 +147,7 @@ export function readProjectAgents(projectDir: string, opts: ImportOptions = {}):
       const place = PLACES[slug] ?? { name: slug.charAt(0).toUpperCase() + slug.slice(1), ghost: 'base', department: 'direccion' };
       const base = { slug, ...place, description: sentence(a.descripcion), schedule: !opts.onDemand && typeof a.horario === 'string' ? a.horario : null };
       if (opts.runner === 'ghostaff') {
-        return { ...base, runner: 'ghostaff', ...onOurRunner(slug, a, conf.cerebro ?? ''), job_project: null, job_region: null, job_name: null, job_identity: null };
+        return { ...base, runner: 'ghostaff', ...onOurRunner(slug, a, conf), job_project: null, job_region: null, job_name: null, job_identity: null };
       }
       const job = `${project}-${slug}`;
       return {

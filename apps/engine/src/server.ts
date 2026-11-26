@@ -37,6 +37,7 @@ import { decisionBriefs } from './decisionAsks';
 import { expireRuns } from './jobs';
 import type { ChatDeps } from './chat';
 import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
+import { supabaseTranscriptStore, sweepTranscripts } from './transcripts';
 import { drainSoon, pushFromEnv, pushTick, supabaseOutboxStore } from './notify';
 import { startRoutines, supabaseRoutineStore } from './routines';
 import { RECORD_STORE_TOKEN_HOURS, type RunnerDeps, startScheduled } from './runner';
@@ -201,6 +202,7 @@ const runner: RunnerDeps | undefined = runnerIdentity
         forgejo && forgejoAdminClient ? { admin: forgejoAdminClient, adminUser: forgejo.adminUser, agentsOf: (orgId) => recordAgentsOf(admin, orgId) } : null,
       freshToken: freshRepoToken(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
       commitEmail: process.env.RECORD_COMMIT_EMAIL ?? 'ghostaff-registro[bot]@users.noreply.github.com',
+      transcripts: supabaseTranscriptStore(admin),
       // A run gets its own token as the organisation's account, never the chat's cached one.
       ...(cloud ? { cloudToken: (orgId: string) => mintCloudToken(cloud, orgId) } : {}),
     }
@@ -286,6 +288,7 @@ const app = createApp({
         }
       }
       const expired = await expireRuns(chatDeps, jobs);
+      const transcriptsSwept = await sweepTranscripts(runner);
       const started = await startScheduled(chatDeps, jobs);
       // Routines (agent-routines.md): a failure here never hides what the rest of the tick did.
       const routines = await startRoutines(chatDeps, jobs, routineStore).catch((e) => {
@@ -294,7 +297,7 @@ const app = createApp({
       });
       // After the runs and routines, so what they just posted goes out in this tick. Never throws.
       const pushes = await pushTick(outbox, pushTransport);
-      return { records: made.length, synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, started, routines, pushes };
+      return { records: made.length, synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, transcriptsSwept, started, routines, pushes };
     },
   },
 });

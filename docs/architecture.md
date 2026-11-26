@@ -66,8 +66,16 @@ A run on our runner, end to end:
 1. A person writes to the agent, or the tick finds its timetable or one of its routines due.
 2. The engine records the run with the hash of a one-time nonce and starts an `agent-runner` execution with only the run id and the nonce.
 3. The runner calls `POST /runs/:id/spec` with its Google ID token and the nonce. The engine checks both and hands over, once: the prompt, model, tools, turns, a one-hour GitHub token for the record only, one for each other repo the agent may use (`agents.repos`, read-only unless it may write; through the record's GitHub App installation, so a record on GitHub only), the organisation's Google Cloud token when it has an account, and the organisation's Claude token from the vault. Each token is renewed at its own endpoint (`record-token`, `repo-token`, `google-token`).
-4. Claude Code works on the clones as the unprivileged user `agente`, under a read-only constitution and a push guard: the record in `~/registro`, the other repos in `~/repos/<name>` (shallow when read-only). git gets each repo's token from the runner on 127.0.0.1 through a credential helper that answers only for the run's own repos (`credential.useHttpPath`). The guard lets it push only from the record, to its default branch.
-5. The runner reports to `POST /runs/report`: the answer lands in the thread, or in each person's chat for a scheduled run with news; the decisions it opened reach the inbox through the sync; usage and limits go to the AI account's card.
+4. Claude Code works on the clones as the unprivileged user `agente`, under a read-only constitution and a push guard: the record in `~/registro`, the other repos in `~/repos/<name>` (shallow when read-only). git gets each repo's token from the runner on 127.0.0.1 through a credential helper that answers only for the run's own repos (`credential.useHttpPath`). The guard lets it push only from the record, to its default branch. The agent reads earlier runs with `ghostaff ejecuciones` / `ghostaff leer` ([Runs' transcripts](#runs-transcripts)).
+5. The runner sends the run's transcript to `POST /runs/:id/transcript`, then reports to `POST /runs/report`: the answer lands in the thread, or in each person's chat for a scheduled run with news; the decisions it opened reach the inbox through the sync; usage and limits go to the AI account's card.
+
+### Runs' transcripts
+
+Each run on our runner leaves its transcript, so an agent can see what it did before, and Órdago's Dirección what the others did for its weekly review (as `agente.py ejecuciones / leer` did in `ghostaff-ai/agents`). Decided with Jaime, 2026-11-26.
+
+- **What:** Claude Code's stream-json, each line passed through the same `redact` as the logs, so no secret the run held (Claude token, repo and Google tokens, renewed ones, the agent's own secrets) is kept. Root writes it to a folder the agent cannot read, up to 20 MB (then a `ghostaff_cut` line and the final `result` event), gzips it and sends it before the report; the engine takes it once per run, only while the run works, with its nonce. A run that crashes after Claude Code started still sends what it has.
+- **Where:** the private Supabase Storage bucket `run-transcripts` of each environment (EU, invariant 2), at `<org>/<agent>/<run>.jsonl.gz`; `agent_runs.transcript_path` says a run has one. No storage policy at all: only the engine, with the service role. Kept 90 days: the tick deletes older ones through the Storage API (`expired_run_transcripts`, which reads the bucket, so a deleted agent's go too).
+- **Reading:** the agent's `ghostaff` command asks the runner on 127.0.0.1 (`apps/runner/src/pastRuns.ts`), and root asks the engine with the run's nonce (`POST /runs/:id/past-runs`, `POST /runs/:id/past-runs/:other`), so the agent holds no credential. The engine answers only for a run that works, with runs of its own organisation (another organisation's agent or run reads as none), of its own agent always, and of its organisation's other agents only when `agents.reads_org_runs` is true. Only the service role sets it: `org add-agents` sets it for an agent whose YAML was granted the old transcripts bucket (Dirección).
 
 ### Target: the record
 
@@ -122,7 +130,7 @@ Invariant 1 of the product: an organisation's record, data, documents and keys n
 - **Database:** every table with an organisation's data has `org_id`, row-level security and a pgTAP test proving another organisation's member can neither see nor change it.
 - **Vault:** one secret per organisation and connection (`org-<org>-ai-<connection>`, `org-<org>-account-<provider>`), replicated only in the EU. The key itself never reaches the database or the app.
 - **Record:** the GitHub App «Ghostaff Registro» is installed by each organisation on its own repo; a token is minted per installation and limited to that repo. **Target:** a repo per organisation in our own Forgejo, each agent a user with write on its organisation's repo only ([Target: the record](#target-the-record)).
-- **Runs:** one runner identity serves every organisation, so the per-run nonce is what ties a call to its run. Without it, one organisation's run could fetch another's spec.
+- **Runs:** one runner identity serves every organisation, so the per-run nonce is what ties a call to its run. Without it, one organisation's run could fetch another's spec. A run reads earlier runs only of its own organisation, through the engine ([Runs' transcripts](#runs-transcripts)); their bucket has no policy, so no person and no other run reaches it.
 
 ## Identities
 

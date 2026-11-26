@@ -15,15 +15,18 @@
 // root renews), serves each repo's token to git on 127.0.0.1 through a credential
 // helper, for that repo only, clones the record and the other repos (shallow
 // when read-only) as the user `agente` and runs the unmodified Claude Code there as `agente`, with nothing
-// in its environment but its credential, HOME, PATH and LANG. At the end, or
-// on any crash before it, it reports to the engine (best effort).
+// in its environment but its credential, HOME, PATH and LANG. It keeps Claude Code's stream-json, redacted,
+// in a file of its own, and serves the agent its earlier runs on 127.0.0.1 (pastRuns.ts). At the end, or
+// on any crash before it, it sends the transcript and reports to the engine (best effort).
 
 import { spawn } from 'node:child_process';
-import { chmodSync, chownSync, existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, chownSync, closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { gzipSync } from 'node:zlib';
 import { run as runCommand } from './exec';
 import { recordDir } from './guard';
+import { servePastRuns } from './pastRuns';
 import { type RepoCredential, serveTokens } from './tokens';
 import {
   agentEnv,
@@ -45,6 +48,7 @@ import {
   type Report,
   resultOf,
   type RunSpec,
+  transcriptSink,
   usageOf,
   tokenNearExpiry,
 } from './lib';
@@ -58,9 +62,11 @@ const nonce = process.env.GHOSTAFF_NONCE ?? '';
 const engine = (process.env.ENGINE_URL ?? '').replace(/\/+$/, '');
 delete process.env.GHOSTAFF_NONCE;
 
-/** Every secret this run holds, so none is ever printed or reported. */
+/** Every secret this run holds, so none is ever printed, reported or kept in the transcript. */
 const secrets: string[] = [nonce];
 let reported = false;
+/** The run's transcript, root's alone until it is sent: set once Claude Code starts. */
+let transcript: string | null = null;
 
 async function idToken(): Promise<string> {
   const url = `${METADATA_IDENTITY}?${new URLSearchParams({ audience: engine, format: 'full' })}`;
@@ -78,9 +84,29 @@ async function callEngine(path: string, body: unknown, timeoutMs = 60_000): Prom
   });
 }
 
+/**
+ * Sends the run's transcript to the engine (transcripts.ts), gzipped, before the report: once the run has
+ * reported, the engine takes nothing more from it. Best effort: a run without one still reports.
+ */
+async function sendTranscript(): Promise<void> {
+  if (!transcript || !existsSync(transcript) || statSync(transcript).size === 0) return;
+  try {
+    const res = await fetch(`${engine}/runs/${run}/transcript`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${await idToken()}`, 'X-Ghostaff-Nonce': nonce, 'Content-Type': 'application/gzip' },
+      body: gzipSync(readFileSync(transcript)),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!res.ok) console.error(`the engine refused the transcript: ${res.status}`);
+  } catch (e) {
+    console.error('transcript not sent', crashText(e, secrets));
+  }
+}
+
 async function report(r: Omit<Report, 'run' | 'nonce'>): Promise<void> {
   if (reported || !engine || !run) return;
   reported = true;
+  await sendTranscript();
   const body: Report = { run, nonce, ...r, text: r.text === null ? null : redact(r.text, secrets) };
   // The engine answers once the reply is in its thread and the record is read: it gets time.
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -148,31 +174,47 @@ function asAgent(ids: { uid: number; gid: number }, env: Record<string, string>,
 
 const yamlNames = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.yaml')) : []);
 
-/** Runs Claude Code as the agent; its exit code (null when killed), its last stream-json line, and what it used. */
+/**
+ * Runs Claude Code as the agent; its exit code (null when killed), its last stream-json line, and what it used.
+ * Each line goes, redacted, to the logs and to the run's transcript (`transcriptFile`, root's alone).
+ */
 function runClaude(
   spec: RunSpec,
   ids: { uid: number; gid: number; home: string },
   cwd: string,
   google: { tokenFile: string; project: string | null } | null,
+  pastRuns: string,
+  transcriptFile: string,
 ): Promise<{ code: number | null; last: string; usage?: unknown; rateLimit?: unknown }> {
   return new Promise((resolve, reject) => {
+    const fd = openSync(transcriptFile, 'w', 0o600);
+    const sink = transcriptSink((text) => writeSync(fd, text));
     const child = spawn('claude', claudeArgs(spec), {
       uid: ids.uid,
       gid: ids.gid,
       cwd,
-      env: agentEnv(spec.claudeToken, ids.home, google),
+      env: agentEnv(spec.claudeToken, ids.home, google, pastRuns),
       stdio: ['pipe', 'pipe', 'inherit'],
     });
     let last = '';
     const used: { usage?: unknown; rateLimit?: unknown } = {};
-    child.on('error', reject);
+    child.on('error', (e) => {
+      closeSync(fd);
+      reject(e);
+    });
     createInterface({ input: child.stdout }).on('line', (line) => {
       if (!line.trim()) return;
       last = line;
       Object.assign(used, usageOf(line));
-      process.stdout.write(`${redact(line, secrets)}\n`);
+      const clean = redact(line, secrets);
+      process.stdout.write(`${clean}\n`);
+      sink.line(clean);
     });
-    child.on('close', (code) => resolve({ code, last, ...used }));
+    child.on('close', (code) => {
+      sink.end(redact(last, secrets));
+      closeSync(fd);
+      resolve({ code, last, ...used });
+    });
     child.stdin.end(spec.prompt);
   });
 }
@@ -203,6 +245,13 @@ async function main(): Promise<number> {
   ]);
   const tokens = await serveTokens(credentials, (token) => secrets.push(token), (e) => console.error('repo token not renewed', crashText(e, secrets)));
   const google = spec.google ? serveGoogleToken(spec.google, ids.gid) : null;
+  // Earlier runs for the agent's `ghostaff` command, asked of the engine with this run's nonce.
+  const past = await servePastRuns(
+    (path, body) => callEngine(`/runs/${run}${path}`, { ...body, nonce }),
+    (e) => console.error('earlier runs not read', crashText(e, secrets)),
+  );
+  // Root's folder (0700): the agent can neither read the transcript nor change what is sent.
+  const transcriptDir = mkdtempSync('/tmp/ghostaff-transcript-');
   try {
     const env = gitEnv(ids.home);
     const git = asAgent(ids, env);
@@ -226,7 +275,15 @@ async function main(): Promise<number> {
 
     const decisions = join(record, spec.decisionsDir);
     const before = new Set(yamlNames(decisions));
-    const { code, last, usage, rateLimit } = await runClaude(spec, ids, record, google && spec.google ? { tokenFile: google.file, project: spec.google.project } : null);
+    transcript = join(transcriptDir, 'run.jsonl');
+    const { code, last, usage, rateLimit } = await runClaude(
+      spec,
+      ids,
+      record,
+      google && spec.google ? { tokenFile: google.file, project: spec.google.project } : null,
+      past.url,
+      transcript,
+    );
     const result = resultOf(last);
     const ok = code === 0 && result.ok;
     const opened = newDecisions(decisionFiles(decisions), before, spec.slug, secrets);
@@ -243,6 +300,7 @@ async function main(): Promise<number> {
   } finally {
     tokens.close();
     google?.close();
+    past.close();
   }
 }
 

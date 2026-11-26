@@ -36,6 +36,9 @@ COPY apps/runner/src apps/runner/src
 
 # The constitution every agent reads and none can edit.
 COPY apps/runner/managed-settings.json /etc/claude-code/managed-settings.json
+# `ghostaff ejecuciones` / `ghostaff leer`: the agent's earlier runs, asked of the runner on 127.0.0.1 (src/cli.ts).
+RUN printf '#!/bin/sh\nexec /opt/runner/apps/runner/node_modules/.bin/tsx /opt/runner/apps/runner/src/cli.ts "$@"\n' > /usr/local/bin/ghostaff \
+ && chmod 755 /usr/local/bin/ghostaff
 RUN chmod -R a-w /etc/claude-code /opt/runner \
  && useradd --create-home --shell /bin/bash agente
 

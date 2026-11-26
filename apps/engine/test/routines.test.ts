@@ -243,6 +243,7 @@ describe("a routine's run on our runner", () => {
     maxTurns: 10,
     schedule: null,
     lastScheduledAt: null,
+    readsOrgRuns: false,
   };
 
   it('is told the routine, who gets the answer and how to say there is nothing', () => {

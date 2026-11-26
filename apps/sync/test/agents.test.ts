@@ -7,7 +7,7 @@ import { readProjectAgents } from '../src/agents';
 function project() {
   const dir = join(mkdtempSync(join(tmpdir(), 'agents-')), 'ordago');
   mkdirSync(join(dir, 'agentes'), { recursive: true });
-  writeFileSync(join(dir, 'proyecto.yaml'), 'cerebro: ordago-app/business\ngcp:\n  proyecto: ordago-agents\n  region: europe-west1\n');
+  writeFileSync(join(dir, 'proyecto.yaml'), 'cerebro: ordago-app/business\ngcp:\n  proyecto: ordago-agents\n  region: europe-west1\n  bucket_transcripciones: ordago-agents-transcripciones\n');
   writeFileSync(
     join(dir, 'agentes', 'legal.yaml'),
     'descripcion: >-\n  dice qué dice la ley\n  de lo que hace Órdago.\nhorario: "0 9 15 1 *"\nmodelo: claude-opus-5-5\n' +
@@ -18,6 +18,12 @@ function project() {
     'modelo: claude-opus-5-5\nherramientas: [Bash]\nprompt: Publica reels.\n' +
       'repos:\n  - ordago-app/business\n  - ordago-app/ordago-apps\n  - ordago-app/ordago-reels\n  - ordago-app/ordago-apps\npush_a_main:\n  - ordago-app/ordago-reels\n',
   );
+  writeFileSync(
+    join(dir, 'agentes', 'direccion.yaml'),
+    'modelo: claude-opus-5-5\nherramientas: [Bash]\nprompt: Coordina.\n' +
+      'gcp:\n  - recursos: [proyecto:ordago-agents]\n    roles: [roles/bigquery.jobUser]\n' +
+      '  - recursos: [bucket:ordago-agents-transcripciones]\n    roles: [roles/storage.objectViewer]\n',
+  );
   writeFileSync(join(dir, 'agentes', 'desarrollo.yaml'), 'descripcion: hace de noche el trabajo objetivo\n');
   writeFileSync(join(dir, 'agentes', 'prueba.yaml'), 'descripcion: x\n');
   writeFileSync(join(dir, 'agentes', 'nuevo.yaml'), 'descripcion: algo nuevo\n');
@@ -27,8 +33,8 @@ function project() {
 describe('readProjectAgents', () => {
   it('turns each agent file into a job agent, in the department Álvaro chose', () => {
     const agents = readProjectAgents(project());
-    expect(agents.map((a) => a.slug)).toEqual(['desarrollo', 'legal', 'nuevo', 'organico']);
-    expect(agents[1]).toEqual({
+    expect(agents.map((a) => a.slug)).toEqual(['desarrollo', 'direccion', 'legal', 'nuevo', 'organico']);
+    expect(agents[2]).toEqual({
       slug: 'legal',
       name: 'Legal',
       ghost: 'base',
@@ -42,7 +48,7 @@ describe('readProjectAgents', () => {
       job_identity: 'ordago-legal@ordago-agents.iam.gserviceaccount.com',
     });
     expect(agents[0]).toMatchObject({ department: 'producto', schedule: null });
-    expect(agents[2]).toMatchObject({ name: 'Nuevo', department: 'direccion', ghost: 'base' });
+    expect(agents[3]).toMatchObject({ name: 'Nuevo', department: 'direccion', ghost: 'base' });
   });
 
   it('with runner ghostaff and only legal, moves Legal onto our runner with its task, model, tools, turns and timetable', () => {
@@ -61,6 +67,7 @@ describe('readProjectAgents', () => {
         tools: ['Bash', 'Read', 'WebSearch'],
         max_turns: 200,
         repos: [],
+        reads_org_runs: false,
         job_project: null,
         job_region: null,
         job_name: null,
@@ -79,6 +86,14 @@ describe('readProjectAgents', () => {
         { repo: 'ordago-app/ordago-reels', write: true },
       ],
     });
+  });
+
+  it('lets an agent read the other agents’ runs only when its yaml granted it the transcripts bucket (Dirección)', () => {
+    const agents = readProjectAgents(project(), { runner: 'ghostaff', only: ['direccion', 'organico'] });
+    expect(agents.map((a) => [a.slug, 'reads_org_runs' in a && a.reads_org_runs])).toEqual([
+      ['direccion', true],
+      ['organico', false],
+    ]);
   });
 
   it('refuses to move an agent whose yaml lacks what our runner needs', () => {

@@ -7,6 +7,7 @@
 
 import { createNodeWebSocket } from '@hono/node-ws';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { type ClaudeSession, type ClaudeSessionDeps, claudeSession, MAX_MESSAGE } from './claudeSession';
 import { type AccountDeps, disconnectAccount, finishAccountConnect, returnFromProvider, startAccountConnect } from './accounts';
@@ -17,6 +18,7 @@ import { approveGuide, checkGuide, type GuideDeps, getGuide, guidedAccessUndo, g
 import { PHOTO_TOO_BIG } from './guideModel';
 import { reportRun } from './jobs';
 import { runGoogleToken, runRepoToken, runRecordToken, runSpec } from './runner';
+import { MAX_TRANSCRIPT_BYTES, pastRuns, pastTranscript, runTranscript } from './transcripts';
 import { clientMetadataDocument } from './mcp';
 import { connectAi, type Deps, disconnectAi, Refusal, requireOwner } from './connections';
 import { bearer, type CallerFromToken } from './googleCaller';
@@ -170,6 +172,42 @@ export function createApp(deps: AppDeps) {
     const body = await c.req.json().catch(() => null);
     c.header('Cache-Control', 'no-store');
     return c.json(await runGoogleToken(deps.chat.jobs, caller, c.req.param('id'), body));
+  });
+
+  // A run's own transcript, gzipped, before it reports; and an agent reading earlier runs of its organisation through
+  // its run (transcripts.ts). As our runner's account, with the run's nonce: in a header for the transcript, whose body
+  // is the gzip itself. What they answer is the organisation's: never cached.
+  app.post(
+    '/runs/:id/transcript',
+    bodyLimit({ maxSize: MAX_TRANSCRIPT_BYTES, onError: (c) => c.json({ error: 'too_big' }, 413) }),
+    async (c) => {
+      const reports = deps.reports;
+      const token = bearer(c.req.header('Authorization'));
+      const caller = reports && token ? await reports.callerFromToken(token, reports.audience) : null;
+      if (!reports || !caller || !deps.chat.jobs?.runner) return c.json({ error: 'unauthorized' }, 401);
+      const gz = new Uint8Array(await c.req.arrayBuffer());
+      return c.json(await runTranscript(deps.chat.jobs, caller, c.req.param('id'), c.req.header('X-Ghostaff-Nonce'), gz));
+    },
+  );
+
+  app.post('/runs/:id/past-runs', async (c) => {
+    const reports = deps.reports;
+    const token = bearer(c.req.header('Authorization'));
+    const caller = reports && token ? await reports.callerFromToken(token, reports.audience) : null;
+    if (!reports || !caller || !deps.chat.jobs?.runner) return c.json({ error: 'unauthorized' }, 401);
+    const body = await c.req.json().catch(() => null);
+    c.header('Cache-Control', 'no-store');
+    return c.json(await pastRuns(deps.chat.jobs, caller, c.req.param('id'), body));
+  });
+
+  app.post('/runs/:id/past-runs/:other', async (c) => {
+    const reports = deps.reports;
+    const token = bearer(c.req.header('Authorization'));
+    const caller = reports && token ? await reports.callerFromToken(token, reports.audience) : null;
+    if (!reports || !caller || !deps.chat.jobs?.runner) return c.json({ error: 'unauthorized' }, 401);
+    const body = await c.req.json().catch(() => null);
+    const gz = await pastTranscript(deps.chat.jobs, caller, c.req.param('id'), c.req.param('other'), body);
+    return c.body(gz as Uint8Array<ArrayBuffer>, 200, { 'Content-Type': 'application/gzip', 'Cache-Control': 'no-store' });
   });
 
   // Connecting a Claude subscription: one WebSocket for the whole sign-in. A
