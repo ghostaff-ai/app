@@ -284,7 +284,7 @@ export interface AgentRun {
   agentId: string;
   /** `routine`: one of the agent's routines started it (agent-routines.md). */
   origin: 'person' | 'schedule' | 'routine';
-  state: 'running' | 'done' | 'failed';
+  state: 'running' | 'done' | 'failed' | 'skipped';
   summary: string | null;
   noteworthy: boolean;
   decisionsOpened: number;

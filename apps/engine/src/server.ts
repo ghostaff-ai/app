@@ -27,7 +27,7 @@ import { microsoftOAuth, microsoftTools } from './microsoft';
 import { type CheckResult, checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { CloudAccountNotReady, type CloudAccountDeps, cloudTokens, ensureCloudAccount, type GoogleCall, mintCloudToken, supabaseCloudAccountStore } from './cloudAccounts';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
-import { freshRepoToken, repoTokens } from './githubApp';
+import { freshRepoToken, queuedRuns, repoTokens } from './githubApp';
 import { googleCaller } from './googleCaller';
 import { type ForgejoConfig, forgejoAdmin } from './forgejo';
 import { provisionRecords } from './recordProvision';
@@ -192,6 +192,7 @@ const runner: RunnerDeps | undefined = runnerIdentity
         name: process.env.RUNNER_JOB ?? 'agent-runner',
         identity: runnerIdentity,
       },
+      largeJobName: process.env.RUNNER_JOB_LARGE ?? 'agent-runner-large',
       engineUrl: publicUrl,
       vault,
       async record(orgId) {
@@ -201,6 +202,7 @@ const runner: RunnerDeps | undefined = runnerIdentity
       recordStore:
         forgejo && forgejoAdminClient ? { admin: forgejoAdminClient, adminUser: forgejo.adminUser, agentsOf: (orgId) => recordAgentsOf(admin, orgId) } : null,
       freshToken: freshRepoToken(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
+      ciQueued: queuedRuns(async () => (githubAppId && githubAppKey ? { appId: githubAppId, privateKey: githubAppKey } : null)),
       commitEmail: process.env.RECORD_COMMIT_EMAIL ?? 'ghostaff-registro[bot]@users.noreply.github.com',
       transcripts: supabaseTranscriptStore(admin),
       // A run gets its own token as the organisation's account, never the chat's cached one.

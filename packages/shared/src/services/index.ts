@@ -1376,7 +1376,7 @@ interface AgentRunRow {
   org_id: string;
   agent_id: string;
   origin: 'person' | 'schedule' | 'routine';
-  state: 'running' | 'done' | 'failed';
+  state: 'running' | 'done' | 'failed' | 'skipped';
   summary: string | null;
   noteworthy: boolean;
   decisions_opened: number;

@@ -48,15 +48,38 @@ export interface RunRecord {
   transcriptPath?: string | null;
 }
 
+/**
+ * Another run of this agent on our runner is still going: the database holds one at a time
+ * (agent_runs_one_running), whoever inserts second.
+ */
+export class RunBusy extends Error {
+  constructor() {
+    super('the agent already has a run going');
+  }
+}
+
+/** How a run ended, from Claude Code's `result` event: our runner only. */
+export interface RunEnding {
+  turns?: number | null;
+  /** Its subtype: success, error_max_turns, error_during_execution… */
+  ending?: string | null;
+}
+
 /** The database as jobs need it (service role). */
 export interface JobStore {
   job(agentId: string): Promise<AgentJob | null>;
   /** The agent whose job reports as this service account. */
   agentByIdentity(email: string): Promise<ChatAgent | null>;
-  startRun(r: Omit<RunRecord, 'id' | 'state' | 'nonceHash' | 'specFetched'> & { requestedBy: string | null; nonceHash?: string }): Promise<string>;
+  /**
+   * A new «running» run. With a nonce (our runner) it throws RunBusy while another of the agent's runs is
+   * going; `deadlineAt` is when the tick stops waiting for its report.
+   */
+  startRun(
+    r: Omit<RunRecord, 'id' | 'state' | 'nonceHash' | 'specFetched'> & { requestedBy: string | null; nonceHash?: string; deadlineAt?: string },
+  ): Promise<string>;
   run(id: string): Promise<RunRecord | null>;
   /** Closes a run still «running»; false when it was already closed (a report sent twice, or expired). */
-  finishRun(id: string, patch: { state: 'done' | 'failed'; summary: string | null; noteworthy: boolean; decisionsOpened: number }): Promise<boolean>;
+  finishRun(id: string, patch: { state: 'done' | 'failed'; summary: string | null; noteworthy: boolean; decisionsOpened: number } & RunEnding): Promise<boolean>;
   /**
    * A finished message from the agent in the chat of every person who may see
    * it, opening the chats that don't exist yet (three-tabs.md, decision 12).
@@ -69,12 +92,15 @@ export interface JobStore {
    * full); for «Solo para mí», nobody else. Returns how many chats it reached.
    */
   postRoutineCopies(routineId: string, text: string, except: string | null): Promise<number>;
-  /** Runs still «running» that started before `before`: their job died without reporting. */
-  staleRuns(before: Date): Promise<RunRecord[]>;
+  /**
+   * Runs still «running» whose job died without reporting: past their own deadline at `now`, or, without
+   * one (the legacy jobs), started before `before`.
+   */
+  staleRuns(before: Date, now: Date): Promise<RunRecord[]>;
 }
 
-/** Starts one execution of a job with these environment variables. */
-export type LaunchJob = (job: AgentJob, env: Record<string, string>) => Promise<void>;
+/** Starts one execution of a job with these environment variables, and for our runner the agent's own timeout. */
+export type LaunchJob = (job: AgentJob, env: Record<string, string>, opts?: { timeoutSeconds?: number }) => Promise<void>;
 
 export interface JobDeps {
   jobs: JobStore;
@@ -171,6 +197,9 @@ export interface RunReport {
   decisions: { id: string; question: string }[];
   /** Our runner only: what Claude Code used, and the subscription's limits it last reported. */
   usage: { model: string | null; tokens: TokenUsage; limits: Limits | null } | null;
+  /** Our runner only: its turns and how Claude Code ended. */
+  turns: number | null;
+  ending: string | null;
 }
 
 const isUuid = (s: unknown): s is string => typeof s === 'string' && /^[0-9a-f-]{36}$/i.test(s);
@@ -201,6 +230,8 @@ export function readReport(body: unknown): RunReport {
             limits: limitsFromEvent({ type: 'rate_limit_event', rate_limit_info: b.rateLimit }),
           }
         : null,
+    turns: Number.isInteger(b.turns) && (b.turns as number) >= 0 && (b.turns as number) <= 100_000 ? (b.turns as number) : null,
+    ending: typeof b.ending === 'string' && /^[a-z_]{1,40}$/.test(b.ending) ? b.ending : null,
   };
 }
 
@@ -256,6 +287,8 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
     summary: report.text,
     noteworthy,
     decisionsOpened: report.decisions.length,
+    turns: report.turns,
+    ending: report.ending,
   });
   if (!took) return { run: run.id, threadId: null }; // another copy of this report got there first
   if (reporter && deps.runner) {
@@ -302,9 +335,9 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
 }
 
 /**
- * How long a job may run before the engine stops waiting: the longest job's timeout (3 h, Desarrollo) times its
- * two attempts, with room. A job that fails on its own reports it (ghostaff-ai/agents' arranque); this is only for
- * one that was killed.
+ * How long a legacy job may run before the engine stops waiting: the longest job's timeout (3 h, Desarrollo) times
+ * its two attempts, with room. A job that fails on its own reports it (ghostaff-ai/agents' arranque); this is only
+ * for one that was killed. A run on our runner has its own deadline instead, from its agent's timeout (runner.ts).
  */
 export const RUN_DEADLINE_MS = 8 * 3600_000;
 
@@ -313,7 +346,7 @@ export const RUN_DEADLINE_MS = 8 * 3600_000;
  * the runner itself) are closed on the tick, so a thread does not wait forever.
  */
 export async function expireRuns(chat: ChatDeps, deps: JobDeps, now: Date = new Date()): Promise<number> {
-  const stale = await deps.jobs.staleRuns(new Date(now.getTime() - RUN_DEADLINE_MS));
+  const stale = await deps.jobs.staleRuns(new Date(now.getTime() - RUN_DEADLINE_MS), now);
   for (const r of stale) {
     if (!(await deps.jobs.finishRun(r.id, { state: 'failed', summary: null, noteworthy: true, decisionsOpened: 0 }))) continue;
     if (r.messageId) {

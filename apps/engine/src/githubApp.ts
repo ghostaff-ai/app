@@ -69,6 +69,31 @@ export function freshRepoToken(loadConfig: () => Promise<GithubAppConfig | null>
 }
 
 /**
+ * How many GitHub Actions runs wait queued in a repo, for a `ritmo` with a CI rule (runner.ts): read with a token
+ * that may only read that repo's Actions, minted for this call. Throws when it cannot tell, which skips the fire.
+ * The App needs the «Actions: read» permission, and the organisation's installation must have accepted it.
+ */
+export function queuedRuns(loadConfig: () => Promise<GithubAppConfig | null>, f: Fetch = fetch, now = () => Date.now()) {
+  return async (installation: number, repo: string): Promise<number> => {
+    const cfg = await loadConfig();
+    if (!cfg) throw new Error('the GitHub record connector is not configured (GITHUB_APP_ID and its key)');
+    if (!isRepo(repo)) throw new Error(`not a repo: ${repo}`);
+    const minted = await f(`${GITHUB_API}/app/installations/${installation}/access_tokens`, {
+      method: 'POST',
+      headers: { ...githubHeaders(appJwt(cfg, now())), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repositories: [repo.split('/')[1]], permissions: { actions: 'read', metadata: 'read' } }),
+    });
+    if (!minted.ok) throw new Error(`GitHub refused a token to read ${repo}'s Actions: ${minted.status}`);
+    const { token } = (await minted.json()) as { token: string };
+    const res = await f(`${GITHUB_API}/repos/${repo}/actions/runs?status=queued&per_page=1`, { headers: githubHeaders(token) });
+    if (!res.ok) throw new Error(`GitHub refused ${repo}'s Actions runs: ${res.status}`);
+    const body = (await res.json()) as { total_count?: unknown };
+    if (!Number.isInteger(body.total_count)) throw new Error(`no count of ${repo}'s queued runs`);
+    return body.total_count as number;
+  };
+}
+
+/**
  * Installation tokens for one repo each, cached until near expiry: for the
  * engine's own sync only. A token handed to an agent run is always fresh
  * (freshRepoToken), so no run holds the token the sync or another run uses.
