@@ -209,11 +209,12 @@ export function SearchField({
   );
 }
 
-/** One pill of a set of choices. */
-export function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+/** One pill of a set of choices; `multiple` when several may be on at once (a checkbox, not a radio). */
+export function Chip({ label, on, onPress, multiple, testID }: { label: string; on: boolean; onPress: () => void; multiple?: boolean; testID?: string }) {
   return (
     <Pressable
-      accessibilityRole="radio"
+      testID={testID}
+      accessibilityRole={multiple ? 'checkbox' : 'radio'}
       accessibilityState={{ checked: on }}
       onPress={() => {
         selection();

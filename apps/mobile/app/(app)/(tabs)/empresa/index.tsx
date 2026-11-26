@@ -1,12 +1,13 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Buildings, CaretDown, Icon, LinkSimple, SignOut, Tray, User, UserPlus } from '@/components/icons';
+import { Buildings, CaretDown, Handshake, Icon, LinkSimple, SignOut, Tray, User, UserPlus } from '@/components/icons';
 import { SpaceAvatar } from '@/components/SpaceAvatar';
 import { ListRow, ListSection, RowIcon } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useMembers } from '@/lib/hooks/useChat';
 import { useConnections } from '@/lib/hooks/useConnections';
+import { useExternalParties } from '@/lib/hooks/useExternalParties';
 import { DESKTOP_CONTENT_MAX_WIDTH, useIsDesktop } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useTabScreenTop } from '@/lib/tabs';
@@ -15,7 +16,8 @@ import { usePalette } from '@/lib/theme';
 // Empresa, the third tab (three-tabs.md, decision 11), called Perfil in a
 // personal space, which is otherwise the same page (spaces.ts): the organisation
 // itself. Its name on top opens the switcher; then Conexiones, first and one
-// tap away; the people in it and inviting more; Registro, what it decided;
+// tap away; the people in it and inviting more; who it works with outside
+// (external-parties.md, decision 5); Registro, what it decided;
 // and at the end, switching and signing out.
 
 export default function Empresa() {
@@ -27,6 +29,7 @@ export default function Empresa() {
   const orgId = active?.id ?? null;
   const connections = useConnections(orgId);
   const { members, reload: reloadMembers } = useMembers(orgId);
+  const externals = useExternalParties(orgId);
   const { reload: reloadConnections } = connections;
   useFocusEffect(
     useCallback(() => {
@@ -97,6 +100,18 @@ export default function Empresa() {
         ))}
         {/* Nobody is invited to a personal space (welcome-and-spaces.md): the database refuses it too. */}
         {owner && active.kind === 'company' ? <ListRow leading={<RowIcon icon={UserPlus} />} title="Invitar a alguien" chevron onPress={() => router.push('/invitar')} /> : null}
+      </ListSection>
+
+      <ListSection>
+        <ListRow
+          testID="open-externals"
+          leading={<RowIcon icon={Handshake} />}
+          title="Con quién trabajáis"
+          subtitle="Personas, empresas y servicios de fuera"
+          value={externals.loaded && externals.items.length ? String(externals.items.length) : undefined}
+          chevron
+          onPress={() => router.push('/empresa/externos')}
+        />
       </ListSection>
 
       <ListSection>

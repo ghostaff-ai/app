@@ -6,6 +6,7 @@ import { usePalette } from '@/lib/theme';
 // app carries only the ones it draws: add an export here before using a new one.
 // SF Symbols and Material Symbols stay inside the native tabs.
 
+export { AppWindowIcon as AppWindow } from 'phosphor-react-native/src/icons/AppWindow';
 export { ArrowDownIcon as ArrowDown } from 'phosphor-react-native/src/icons/ArrowDown';
 export { ArrowUpIcon as ArrowUp } from 'phosphor-react-native/src/icons/ArrowUp';
 export { ArrowsClockwiseIcon as ArrowsClockwise } from 'phosphor-react-native/src/icons/ArrowsClockwise';
@@ -19,12 +20,14 @@ export { CheckCircleIcon as CheckCircle } from 'phosphor-react-native/src/icons/
 export { ClockIcon as Clock } from 'phosphor-react-native/src/icons/Clock';
 export { EnvelopeSimpleIcon as EnvelopeSimple } from 'phosphor-react-native/src/icons/EnvelopeSimple';
 export { EyeIcon as Eye } from 'phosphor-react-native/src/icons/Eye';
+export { HandshakeIcon as Handshake } from 'phosphor-react-native/src/icons/Handshake';
 export { LinkSimpleIcon as LinkSimple } from 'phosphor-react-native/src/icons/LinkSimple';
 export { LockSimpleIcon as LockSimple } from 'phosphor-react-native/src/icons/LockSimple';
 export { MagnifyingGlassIcon as MagnifyingGlass } from 'phosphor-react-native/src/icons/MagnifyingGlass';
 export { MicrophoneIcon as Microphone } from 'phosphor-react-native/src/icons/Microphone';
 export { PauseIcon as Pause } from 'phosphor-react-native/src/icons/Pause';
 export { PencilSimpleIcon as PencilSimple } from 'phosphor-react-native/src/icons/PencilSimple';
+export { PhoneIcon as Phone } from 'phosphor-react-native/src/icons/Phone';
 export { PlayIcon as Play } from 'phosphor-react-native/src/icons/Play';
 export { PlusIcon as Plus } from 'phosphor-react-native/src/icons/Plus';
 export { ProhibitIcon as Prohibit } from 'phosphor-react-native/src/icons/Prohibit';

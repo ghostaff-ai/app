@@ -24,7 +24,8 @@ never touches another app's emulator or your phone.
   `scripts/connect-ai.js`, with the local service-role key), landing on Hoy, filling a
   vacancy in Equipo, opening Registro and Conexiones, moving the key below the
   subscription there, opening «Añadir conexión», and coming back to the company after a cold relaunch;
-  and an owner giving Secretaría a routine from the clock on her chat.
+  an owner giving Secretaría a routine from the clock on her chat; and an owner adding someone
+  the company works with outside in Empresa («Con quién trabajáis») and changing what they do.
 
   CI runs them on every pull request and push (`.github/workflows/ci.yml`, job
   `End-to-end (Android)`), and the beta app only gets a push once they pass
