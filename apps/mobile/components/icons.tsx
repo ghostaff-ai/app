@@ -38,6 +38,7 @@ export { MicrophoneIcon as Microphone } from 'phosphor-react-native/src/icons/Mi
 export { PaperclipIcon as Paperclip } from 'phosphor-react-native/src/icons/Paperclip';
 export { PaperPlaneRightIcon as PaperPlaneRight } from 'phosphor-react-native/src/icons/PaperPlaneRight';
 export { PauseIcon as Pause } from 'phosphor-react-native/src/icons/Pause';
+export { GearSixIcon as GearSix } from 'phosphor-react-native/src/icons/GearSix';
 export { PencilSimpleIcon as PencilSimple } from 'phosphor-react-native/src/icons/PencilSimple';
 export { PhoneIcon as Phone } from 'phosphor-react-native/src/icons/Phone';
 export { PlayIcon as Play } from 'phosphor-react-native/src/icons/Play';
