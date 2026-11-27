@@ -2,7 +2,7 @@
 
 **Priority:** high — La Mesa and Productor can't move off Telegram without it ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md), What Ghostaff builds for it, item 5)
 **Gate:** none
-**Next:** build on `feat/agent-audio`, stacked on `feat/group-chat-per-agent` (PR 84), and land it after that one
+**Next:** the beta check: a run of Legal (on demand) that leaves an mp3 in `~/outbox/`, played in the app; then La Mesa and Productor move with the `AGENTS.md` lines below
 
 Jaime took this design as proposed on 2026-11-26 («Sí, ambas»). An agent on our runner makes an audio in its run (La Mesa's weekly episode, a Productor draft) and the people who work with it hear it in Ghostaff, with the player the voice notes already have ([voice.md](voice.md)). It replaces what Telegram does for those two today.
 
@@ -32,7 +32,7 @@ Not done here: each moves with `org add-agents --runner ghostaff --only <agent>`
 
 ## Tasks
 
-1. **Database** (`supabase/migrations/<ts>_agent_audio.sql`): `agent_runs.audio jsonb not null default '[]'` (no grant to `authenticated`); `voice-notes`' `file_size_limit` to 25 MB. pgTAP `agent_audio.test.sql`: an agent's audio message in its chat is heard by a member with `read` and not by another organisation's member; `agent_runs.audio` is unreadable from the app.
+1. **Database** (`supabase/migrations/20261128800000_agent_audio.sql`): `agent_runs.audio jsonb not null default '[]'` (no grant to `authenticated`); `voice-notes`' `file_size_limit` to 25 MB. pgTAP `agent_audio.test.sql`: an agent's audio message in its chat is heard by a member with `read` and not by another organisation's member; `agent_runs.audio` is unreadable from the app.
 2. **Shared:** `AudioPart`, `isAudioPart`, `messageText` reading an audio as «(Audio: title)». Tests.
 3. **Engine:** `POST /runs/:id/audio` (`runAudio` in `runner.ts`: our runner's identity, the nonce in `X-Run-Nonce`, a run running with its spec, mp3/m4a, 25 MB, 4 per run; stored in the agent's chat folder, appended to the run); `reportRun` posts them after the text and makes the run noteworthy; `expireRuns` removes the audio of a run it closes; `composePrompt` tells the agent about `~/outbox/`. Vitest.
 4. **Runner:** make `~/outbox/` as the agent; after Claude Code, `outboxFiles` (pure, in `lib.ts`: what to take, what to skip and why) and the uploads in `main.ts`, skipped and failed files added to the report's text. Vitest.
@@ -42,4 +42,7 @@ Not done here: each moves with `org add-agents --runner ghostaff --only <agent>`
 
 ## Progress
 
-- [ ] Tasks 1–7
+- [x] Tasks 1–6, landed in PR 92 on 2026-11-27 after PR 84, and deployed to the beta by CI (engine, runner, migration). `agentAudio.ts` in the engine (with `POST /runs/:id/audio`), `outbox.ts` in the runner, `AudioPart` in shared, `AudioClip` and `AgentAudio` in the app; the agent reads its audio through `bodyOf` (`context.ts`). Vitest, Jest and pgTAP (`agent_audio.test.sql`).
+- [ ] Task 7, the beta check.
+- **The look will change:** the General's PR 99 (WhatsApp-style player: waveform, drag, 1×/1,5×/2×) moves its design into `AudioClip`, so `AgentAudio` takes it too (agreed between the two sessions, 2026-11-26).
+- **Migration versions:** `supabase db push` refuses a version older than the newest applied, so a migration renamed while waiting for a stacked PR must still land above develop's newest (this one went 900000 → 960000 → 2026112750… → 20261128800000).
