@@ -80,20 +80,20 @@ function DocumentCard({ part, mine }: { part: DocumentPart; mine: boolean }) {
         void open(part).finally(() => setBusy(false));
       }}
       className="mb-1 flex-row items-center overflow-hidden rounded-xl px-2 py-2"
-      style={{ minWidth: 220, backgroundColor: mine ? 'rgba(255,255,255,0.12)' : c.sunk }}
+      style={{ minWidth: 220, backgroundColor: mine ? c.mineSunk : c.sunk }}
     >
       <View className="h-11 w-9 items-center justify-center rounded-md" style={{ backgroundColor: ext === 'PDF' ? '#E24B4A' : ext.startsWith('XLS') || ext === 'CSV' ? '#1D9E75' : ext.startsWith('DOC') ? '#378ADD' : '#888780' }}>
         <Text className="text-[9px] font-bold text-white">{ext.slice(0, 4)}</Text>
       </View>
       <View className="ml-2.5 flex-1">
-        <Text className={`text-[15px] ${mine ? 'text-on-accent' : 'text-ink'}`} numberOfLines={2}>
+        <Text className={`text-[15px] text-ink`} numberOfLines={2}>
           {part.name}
         </Text>
-        <Text className={`text-caption ${mine ? 'text-on-accent' : 'text-muted'} opacity-80`}>
+        <Text className={`text-caption ${mine ? 'text-mine-muted' : 'text-muted opacity-80'}`}>
           {ext} · {sizeLabel(part.size)}
         </Text>
       </View>
-      {busy ? <ActivityIndicator color={mine ? c.onAccent : c.muted} /> : null}
+      {busy ? <ActivityIndicator color={mine ? c.mineMuted : c.muted} /> : null}
     </Pressable>
   );
 }

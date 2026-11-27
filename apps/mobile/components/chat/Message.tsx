@@ -299,7 +299,7 @@ export function changedTexts(fields: readonly EditableField[], draft: Record<str
 }
 
 /** What a reply quotes, or a forward carries: who said it and its words, with a bar in their colour. */
-function QuoteBlock({ part, onAccent, onPress }: { part: QuotePart | ForwardPart; onAccent: boolean; onPress?: () => void }) {
+function QuoteBlock({ part, mine, onPress }: { part: QuotePart | ForwardPart; mine: boolean; onPress?: () => void }) {
   const c = usePalette();
   const colour = personColour(part.authorName);
   const words = part.text || (part.kind === 'voice' ? 'Nota de voz' : '');
@@ -312,13 +312,13 @@ function QuoteBlock({ part, onAccent, onPress }: { part: QuotePart | ForwardPart
       className="mb-1 flex-row overflow-hidden rounded-lg"
     >
       <View style={{ width: 3, backgroundColor: colour }} />
-      <View className="flex-1 px-2 py-1" style={{ backgroundColor: onAccent ? 'rgba(255,255,255,0.14)' : c.sunk }}>
-        <Text className="text-caption font-semibold" style={{ color: onAccent ? c.onAccent : colour }} numberOfLines={1}>
+      <View className="flex-1 px-2 py-1" style={{ backgroundColor: mine ? c.mineSunk : c.sunk }}>
+        <Text className="text-caption font-semibold" style={{ color: colour }} numberOfLines={1}>
           {part.authorName}
         </Text>
         <View className="flex-row items-center">
-          {part.kind === 'voice' ? <Icon icon={Microphone} size={13} color={onAccent ? c.onAccent : c.muted} /> : null}
-          <Text className={`text-footnote ${onAccent ? 'text-on-accent' : 'text-muted'} ${part.kind === 'voice' ? 'ml-1' : ''}`} numberOfLines={2}>
+          {part.kind === 'voice' ? <Icon icon={Microphone} size={13} color={mine ? c.mineMuted : c.muted} /> : null}
+          <Text className={`text-footnote ${mine ? 'text-ink' : 'text-muted'} ${part.kind === 'voice' ? 'ml-1' : ''}`} numberOfLines={2}>
             {words}
           </Text>
         </View>
@@ -456,19 +456,19 @@ export function MessageView({
   const below = chips.length ? <ReactionChips chips={chips} onPress={onReact} /> : null;
   const quoteParts = message.parts.filter(isQuotePart);
   const forwards = message.parts.filter(isForwardPart);
-  const quoteBlocks = (onAccent: boolean) => (
+  const quoteBlocks = (mine: boolean) => (
     <>
       {forwards.map((f) => (
         <View key={`f-${f.messageId}`}>
           <View className="mb-1 flex-row items-center">
-            <Icon icon={ShareFat} size={13} color={onAccent ? c.onAccent : c.muted} />
-            <Text className={`ml-1 text-caption italic ${onAccent ? 'text-on-accent' : 'text-muted'} opacity-80`}>Reenviado desde {f.from}</Text>
+            <Icon icon={ShareFat} size={13} color={mine ? c.mineMuted : c.muted} />
+            <Text className={`ml-1 text-caption italic ${mine ? 'text-mine-muted' : 'text-muted opacity-80'}`}>Reenviado desde {f.from}</Text>
           </View>
-          <QuoteBlock part={f} onAccent={onAccent} />
+          <QuoteBlock part={f} mine={mine} />
         </View>
       ))}
       {quoteParts.map((q) => (
-        <QuoteBlock key={`q-${q.messageId}`} part={q} onAccent={onAccent} onPress={onQuotePress ? () => onQuotePress(q.messageId) : undefined} />
+        <QuoteBlock key={`q-${q.messageId}`} part={q} mine={mine} onPress={onQuotePress ? () => onQuotePress(q.messageId) : undefined} />
       ))}
     </>
   );
@@ -486,8 +486,8 @@ export function MessageView({
         stampInline
       >
         <View className="flex-row items-center" accessibilityLabel="Se eliminó este mensaje">
-          <Icon icon={Prohibit} size={15} color={mineDeleted ? c.onAccent : c.muted} />
-          <Text className={`ml-1.5 text-[15px] italic ${mineDeleted ? 'text-on-accent' : 'text-muted'} opacity-80`}>
+          <Icon icon={Prohibit} size={15} color={mineDeleted ? c.mineMuted : c.muted} />
+          <Text className={`ml-1.5 text-[15px] italic ${mineDeleted ? 'text-mine-muted' : 'text-muted opacity-80'}`}>
             {mineDeleted ? 'Eliminaste este mensaje' : 'Se eliminó este mensaje'}
           </Text>
         </View>
@@ -543,10 +543,9 @@ export function MessageView({
 
   const voice = voiceOf(message);
   const files = message.parts.filter(isDocumentPart);
-  const textTone = mine ? 'text-on-accent' : 'text-ink';
   const content = voice ? (
     <>
-      {voice.tags ? <Body text={voice.tags} names={names} className={`mb-1 text-footnote ${textTone}`} /> : null}
+      {voice.tags ? <Body text={voice.tags} names={names} className={`mb-1 text-footnote text-ink`} /> : null}
       <VoiceNote
         part={voice.part}
         messageId={message.id}
@@ -558,7 +557,7 @@ export function MessageView({
       />
     </>
   ) : (
-    text ? <Body text={text} names={names} className={`text-base leading-[22px] ${textTone}`} /> : null
+    text ? <Body text={text} names={names} className={`text-base leading-[22px] text-ink`} /> : null
   );
   const bubble = (
     <Bubble
@@ -573,7 +572,7 @@ export function MessageView({
       below={below}
       onLongPress={onMenu}
     >
-      {quote ? <DecisionQuote part={quote} onAccent={mine} /> : null}
+      {quote ? <DecisionQuote part={quote} mine={mine} /> : null}
       {quoteBlocks(mine)}
       {files.map((f) => (
         <FileBubble key={f.path} part={f} mine={mine} />
