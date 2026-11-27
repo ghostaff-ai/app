@@ -1083,6 +1083,62 @@ export async function listFiles(client: SupabaseClient, orgId: string, threadId?
   }));
 }
 
+/** A link's preview: title, description, site and image (chat-like-whatsapp.md, phase 4). */
+export interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  site: string;
+  image: string | null;
+}
+
+export async function linkPreview(engine: EngineAccess, url: string): Promise<LinkPreview> {
+  return callEngine<LinkPreview>(engine, 'GET', `/link-preview?url=${encodeURIComponent(url)}`);
+}
+
+/** Who is typing or recording in a chat right now, as the header says it. */
+export interface Typing {
+  userId: string;
+  name: string;
+  kind: 'typing' | 'recording';
+}
+
+/**
+ * Joins a chat's typing channel (a private Realtime broadcast, nothing
+ * stored): `onChange` hears who else is typing or recording, each forgotten 4
+ * s after their last word; `say` tells the others what you are doing.
+ */
+export function joinTyping(
+  client: SupabaseClient,
+  threadId: string,
+  me: { userId: string; name: string },
+  onChange: (others: Typing[]) => void,
+): { say: (kind: Typing['kind']) => void; leave: () => void } {
+  const heard = new Map<string, Typing & { at: number }>();
+  const emit = () => onChange([...heard.values()].map(({ at: _at, ...t }) => t));
+  const channel = client.channel(`typing:${threadId}`, { config: { private: true, broadcast: { self: false } } });
+  channel
+    .on('broadcast', { event: 'typing' }, ({ payload }) => {
+      const t = payload as Partial<Typing>;
+      if (!t.userId || t.userId === me.userId || (t.kind !== 'typing' && t.kind !== 'recording')) return;
+      heard.set(t.userId, { userId: t.userId, name: String(t.name ?? ''), kind: t.kind, at: Date.now() });
+      emit();
+    })
+    .subscribe();
+  const sweep = setInterval(() => {
+    let gone = false;
+    for (const [id, t] of heard) if (Date.now() - t.at > 4000) gone = heard.delete(id) || gone;
+    if (gone) emit();
+  }, 1000);
+  return {
+    say: (kind) => void channel.send({ type: 'broadcast', event: 'typing', payload: { userId: me.userId, name: me.name, kind } }),
+    leave: () => {
+      clearInterval(sweep);
+      void client.removeChannel(channel);
+    },
+  };
+}
+
 /** A voice note in a chat by its id: General, the people's chat (general-chat.md). */
 export async function sendVoiceNoteToThread(engine: EngineAccess, threadId: string, note: OutgoingNote): Promise<ChatMessage> {
   return postNote(engine, `/threads/${encodeURIComponent(threadId)}/voice-notes`, note);

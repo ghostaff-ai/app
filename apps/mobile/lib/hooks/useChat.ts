@@ -1,4 +1,5 @@
 import { type AgentLevel, type ChatMessage, type ChatThread, isVoicePart, messageText, type OrgMember, type Reaction } from '@ghostaff/shared';
+import type { Typing } from '@ghostaff/shared/services';
 import {
   askAgent,
   askAboutDecision,
@@ -6,6 +7,7 @@ import {
   deleteMessage,
   editMessage,
   forwardToAgent,
+  joinTyping,
   listReactions,
   pinMessage,
   reactTo,
@@ -431,6 +433,7 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
   );
 
   return {
+    chatId,
     loading: loading && threads.length === 0,
     messages: chat.messages,
     openedAt: chat.openedAt,
@@ -496,4 +499,30 @@ export function useGeneralChat(orgId: string | null) {
     sendVoice,
     retryTranscript,
   };
+}
+
+/**
+ * «Está escribiendo…» (chat-like-whatsapp.md, phase 4): who else is typing or
+ * recording in the chat, and `say` to tell them, at most every 2 s.
+ */
+export function useTyping(threadId: string | null, me: { userId: string; name: string } | null) {
+  const [others, setOthers] = useState<Typing[]>([]);
+  const channel = useRef<{ say: (k: Typing['kind']) => void; leave: () => void } | null>(null);
+  const last = useRef(0);
+  useEffect(() => {
+    if (!threadId || !me) return;
+    const joined = joinTyping(supabase, threadId, me, setOthers);
+    channel.current = joined;
+    return () => {
+      joined.leave();
+      channel.current = null;
+      setOthers([]);
+    };
+  }, [threadId, me?.userId, me?.name]);
+  const say = useCallback((kind: Typing['kind']) => {
+    if (Date.now() - last.current < 2000) return;
+    last.current = Date.now();
+    channel.current?.say(kind);
+  }, []);
+  return { others, say };
 }

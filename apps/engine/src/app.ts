@@ -25,6 +25,7 @@ import { bearer, type CallerFromToken } from './googleCaller';
 import type { PushDrain } from './notify';
 import { NoteLimiter, type Transcriber } from './transcribe';
 import { type FileStore, sendFile } from './files';
+import { linkPreview } from './linkPreview';
 import { deleteMessage, type IncomingNote, sendVoiceNote, sendVoiceNoteToThread, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
 import { receiveRunAudio } from './agentAudio';
 
@@ -413,6 +414,9 @@ export function createApp(deps: AppDeps) {
   app.post('/threads/:id/voice-notes', async (c) =>
     c.json({ message: await sendVoiceNoteToThread(voice, c.get('userId'), c.req.param('id'), incoming(c)) }, 201),
   );
+
+  // A link's preview (chat-like-whatsapp.md, phase 4): any signed-in person; only public pages.
+  app.get('/link-preview', async (c) => c.json(await linkPreview(c.req.query('url'))));
 
   // Deleting your own message for everyone, its audio too (chat-like-whatsapp.md, phase 2).
   app.delete('/messages/:id', async (c) => c.json(await deleteMessage(voice, c.get('userId'), c.req.param('id'))));

@@ -7,16 +7,17 @@ import { agentJob, decideAction } from '@ghostaff/shared/services';
 import { ChatList } from '@/components/chat/ChatList';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
-import { Clock, Icon } from '@/components/icons';
+import { Clock, Icon, MagnifyingGlass } from '@/components/icons';
 import { Button, Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { agentIdsNamed } from '@/lib/chat';
+import { ChatSearch } from '@/components/chat/ChatSearch';
+import { agentIdsNamed, typingLine } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useGuideCards } from '@/lib/hooks/useGuideCards';
 import { useMessageActions } from '@/lib/hooks/useMessageActions';
 import { useEngine } from '@/lib/hooks/useConnections';
-import { useAgentChat, useMembers, useMyLevels } from '@/lib/hooks/useChat';
+import { useAgentChat, useMembers, useMyLevels, useTyping } from '@/lib/hooks/useChat';
 import { useRoutines } from '@/lib/hooks/useRoutines';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -81,8 +82,9 @@ export default function Chat() {
   const { items: agents, loading: agentsLoading, reload: reloadAgents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels, loading: levelsLoading } = useMyLevels(orgId);
-  const { messages, openedAt, readByAll, reactions, actions, pinned, sendFile, loading, error, send: sendPlain, askAbout, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
+  const { chatId, messages, openedAt, readByAll, reactions, actions, pinned, sendFile, loading, error, send: sendPlain, askAbout, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
   const jump = useRef<((id: string) => void) | null>(null);
   const send = useCallback(
     async (body: string, quoted?: string | null) => {
@@ -144,6 +146,9 @@ export default function Chat() {
     [engine, reloadRoutines],
   );
   const routineTitles = useMemo(() => Object.fromEntries(routines.map((r) => [r.id, r.title])), [routines]);
+  const myName = members.find((m) => m.userId === me)?.displayName ?? '';
+  const typing = useTyping(chatId, me ? { userId: me, name: myName } : null);
+  const typingNow = typingLine(typing.others);
   // Forwarding goes to the other agents the person may talk to.
   const forwardTo = useMemo(() => agents.filter((a) => a.id !== agentId && levels[a.id] === 'talk'), [agents, agentId, levels]);
   const ma = useMessageActions({
@@ -191,13 +196,17 @@ export default function Chat() {
                   {agent.name}
                 </Text>
                 <Text className="text-caption text-muted" numberOfLines={1}>
-                  {agent.name === g.label ? 'Toca para ver su ficha' : g.label}
+                  {typingNow ?? (agent.name === g.label ? 'Toca para ver su ficha' : g.label)}
                 </Text>
               </View>
             </Pressable>
           ),
-          headerRight: showClock
-            ? () => (
+          headerRight: () => (
+            <View className="flex-row items-center">
+              <Pressable accessibilityRole="button" accessibilityLabel="Buscar en el chat" onPress={() => setSearching(true)} hitSlop={6} className="min-h-11 min-w-11 items-center justify-center active:opacity-60">
+                <Icon icon={MagnifyingGlass} size={22} color={palette.ink} />
+              </Pressable>
+              {showClock ? (
                 <Pressable
                   testID="chat-routines"
                   accessibilityRole="button"
@@ -210,13 +219,23 @@ export default function Chat() {
                   <Icon icon={Clock} size={22} color={nextLabel ? palette.ink : palette.muted} weight={nextLabel ? 'regular' : 'light'} />
                   {nextLabel ? <Text className="ml-1 text-footnote font-medium text-ink">{nextLabel}</Text> : null}
                 </Pressable>
-              )
-            : undefined,
+              ) : null}
+            </View>
+          ),
         }}
       />
       {ma.pinnedBar}
       <KeyboardColumn offset={headerHeight}>
-        {loading ? (
+        {searching ? (
+          <ChatSearch
+            messages={messages}
+            onClose={() => setSearching(false)}
+            onPick={(id) => {
+              setSearching(false);
+              setTimeout(() => jump.current?.(id), 300);
+            }}
+          />
+        ) : loading ? (
           <Loading />
         ) : messages.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
@@ -285,6 +304,7 @@ export default function Chat() {
             prefill={ma.prefill}
             onAttach={ma.attach ? (k) => void ma.attach!(k) : undefined}
             attaching={ma.sendingFiles}
+            onTyping={typing.say}
           />
         ) : (
           <ReadOnlyComposer note={owner ? `Pide acceso a ${owner}` : null} />

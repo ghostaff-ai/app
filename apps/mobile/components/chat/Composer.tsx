@@ -36,6 +36,7 @@ export function Composer({
   prefill,
   onAttach,
   attaching,
+  onTyping,
 }: {
   placeholder: string;
   /** What @ can complete to. */
@@ -56,6 +57,8 @@ export function Composer({
   onAttach?: (kind: AttachKind) => void;
   /** Files going out: the clip waits. */
   attaching?: boolean;
+  /** Tells the others you are typing or recording (phase 4). */
+  onTyping?: (kind: 'typing' | 'recording') => void;
 }) {
   const c = usePalette();
   const insets = useSafeAreaInsets();
@@ -186,6 +189,11 @@ export function Composer({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voice.state, voice.error]);
+  // While recording, the others read «está grabando un audio…».
+  useEffect(() => {
+    if (voice.state === 'recording') onTyping?.('recording');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice.state, voice.seconds]);
   const showLocked = mode === 'locked' && (recording || voice.state === 'idle');
   const showHolding = mode === 'holding';
 
@@ -312,6 +320,7 @@ export function Composer({
               value={text}
               onChangeText={(t) => {
                 setText(t);
+                if (t.trim()) onTyping?.('typing');
                 setHint(false);
                 voice.clearError();
               }}
