@@ -2,7 +2,7 @@
 
 **Priority:** high — the way Órdago's panel converges into Ghostaff (desktop-web.md), and what makes an agent's work readable at a glance
 **Gate:** none
-**Next:** PR 1 — the file, its projection and the blocks on the agent's page
+**Next:** PR 2 — a tool for chat agents (Secretaría and those hired in Equipo) to keep their photo. PR 1 landed in [ghostaff-ai/app#113](https://github.com/ghostaff-ai/app/pull/113) on 2026-11-27
 
 Jaime, 2026-11-27, after mockups of Redes and Comercial: «escríbelo y mételo en el código». Órdago's panel shows goals, retention, adoption, the Redes calendar, the organisers' funnel: «elementos que nos están dando los agentes para entender las acciones que están tomando, para entender la empresa». Ghostaff should show them too, for every customer, without a panel built per customer. The mockups are pictures, not in the repo: `~/Desktop/ghostaff/capturas/propuesta-graficos-agentes-2026-11-27.png` and `propuesta-bloques-redes-comercial-2026-11-27.png`.
 
@@ -55,12 +55,12 @@ Limits: 12 blocks, 200 points a series, 20 items a list, 200 characters a text, 
 ## Tasks
 
 **PR 1, the photo on the agent's page**
-- [ ] `packages/shared/src/record/photo.ts`: `readPhoto` (Spanish file → typed blocks, skipped ones with why), `goalVerdict`, limits; vitest.
-- [ ] Migration `agent_photos` (agent, org, blocks, skipped, sha, error, updated_at), read by whoever may see the agent, written only by the engine; pgTAP.
-- [ ] Engine: `projectPhotos` on the sync tick for every agent with a slug, both record hosts; the store's two methods; tests.
-- [ ] The record's hook: `agentes/<own>/foto.yaml` only its own agent.
-- [ ] Runner agents' prompt: where their photo is, its format, «no inventes datos», and decision 5.
-- [ ] App: `getAgentPhoto`, `components/photo/` (goal, figure, series, headlines, list), «Su foto» on `agente/[id].tsx`; jest.
+- [x] `packages/shared/src/record/photo.ts`: `readPhoto` (Spanish file → typed blocks, skipped ones with why), `goalVerdict`, limits; vitest.
+- [x] Migration `agent_photos` (agent, org, blocks, skipped, sha, error, updated_at), read by whoever may see the agent, written only by the engine; pgTAP.
+- [x] Engine: `projectPhotos` on the sync tick for every agent with a slug, both record hosts; the store's two methods; tests.
+- [x] The record's hook: `agentes/<own>/foto.yaml` only its own agent.
+- [x] Runner agents' prompt: where their photo is, its format, «no inventes datos», and decision 5.
+- [x] App: `getAgentPhoto`, `components/photo/` (goal, figure, series, headlines, list), «Su foto» on `agente/[id].tsx`; jest.
 
 **PR 2, chat agents keep a photo too**: a tool for them, as `memory_create` is for their memory.
 
