@@ -1,4 +1,4 @@
--- Typing channels (20261128150000_chat_presence.sql): which chat a topic names,
+-- Typing channels (20261128950000_chat_presence.sql): which chat a topic names,
 -- and that the policies stand on realtime.messages.
 begin;
 select plan(4);
