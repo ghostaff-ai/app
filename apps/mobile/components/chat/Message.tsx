@@ -15,7 +15,7 @@ import { tap } from '@/lib/haptics';
 import { Field } from '@/components/ui';
 import type { AskControls } from '@/lib/hooks/useAccountAsks';
 import { useAvatars, usePhotoUrl } from '@/lib/avatars';
-import { firstLink, personColour, timeOf } from '@/lib/chat';
+import { emojiOnly, firstLink, personColour, timeOf } from '@/lib/chat';
 import type { GuideControls } from '@/lib/hooks/useGuideCards';
 import { GHOSTS, type GhostId } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
@@ -299,7 +299,7 @@ export function changedTexts(fields: readonly EditableField[], draft: Record<str
 }
 
 /** What a reply quotes, or a forward carries: who said it and its words, with a bar in their colour. */
-function QuoteBlock({ part, onAccent, onPress }: { part: QuotePart | ForwardPart; onAccent: boolean; onPress?: () => void }) {
+function QuoteBlock({ part, mine, onPress }: { part: QuotePart | ForwardPart; mine: boolean; onPress?: () => void }) {
   const c = usePalette();
   const colour = personColour(part.authorName);
   const words = part.text || (part.kind === 'voice' ? 'Nota de voz' : '');
@@ -312,13 +312,13 @@ function QuoteBlock({ part, onAccent, onPress }: { part: QuotePart | ForwardPart
       className="mb-1 flex-row overflow-hidden rounded-lg"
     >
       <View style={{ width: 3, backgroundColor: colour }} />
-      <View className="flex-1 px-2 py-1" style={{ backgroundColor: onAccent ? 'rgba(255,255,255,0.14)' : c.sunk }}>
-        <Text className="text-caption font-semibold" style={{ color: onAccent ? c.onAccent : colour }} numberOfLines={1}>
+      <View className="flex-1 px-2 py-1" style={{ backgroundColor: mine ? c.mineSunk : c.sunk }}>
+        <Text className="text-caption font-semibold" style={{ color: colour }} numberOfLines={1}>
           {part.authorName}
         </Text>
         <View className="flex-row items-center">
-          {part.kind === 'voice' ? <Icon icon={Microphone} size={13} color={onAccent ? c.onAccent : c.muted} /> : null}
-          <Text className={`text-footnote ${onAccent ? 'text-on-accent' : 'text-muted'} ${part.kind === 'voice' ? 'ml-1' : ''}`} numberOfLines={2}>
+          {part.kind === 'voice' ? <Icon icon={Microphone} size={13} color={mine ? c.mineMuted : c.muted} /> : null}
+          <Text className={`text-footnote ${mine ? 'text-ink' : 'text-muted'} ${part.kind === 'voice' ? 'ml-1' : ''}`} numberOfLines={2}>
             {words}
           </Text>
         </View>
@@ -377,6 +377,62 @@ function SwipeToReply({ children, onReply }: { children: ReactNode; onReply: () 
       <Animated.View style={{ transform: [{ translateX: x }] }}>{children}</Animated.View>
     </View>
   );
+}
+
+/** A message of only emoji: big, with no bubble, its stamp in a small pill beside it (as WhatsApp does). */
+function EmojiMessage({
+  text,
+  mine,
+  tail,
+  name,
+  label,
+  nameColour,
+  avatar,
+  stamp,
+  below,
+  onLongPress,
+  onReply,
+}: {
+  text: string;
+  mine: boolean;
+  tail: boolean;
+  name: string | null;
+  /** Who wrote it, for the screen reader (the name above is shown only in groups). */
+  label: string;
+  nameColour: string;
+  avatar: ReactNode;
+  stamp: ReactNode;
+  below: ReactNode;
+  onLongPress?: () => void;
+  onReply?: () => void;
+}) {
+  const body = (
+    <View className={`flex-row px-3 ${mine ? 'justify-end' : 'justify-start'} ${tail ? 'mt-2' : 'mt-0.5'}`}>
+      {mine ? null : <View style={{ width: 30 }}>{tail ? avatar : null}</View>}
+      <View className={mine ? 'items-end' : 'ml-1 items-start'} style={{ maxWidth: '78%' }}>
+        {name && tail ? (
+          <Text className="mb-0.5 text-footnote font-semibold" style={{ color: nameColour }} numberOfLines={1}>
+            {name}
+          </Text>
+        ) : null}
+        <Pressable
+          testID="emoji-message"
+          onLongPress={onLongPress}
+          delayLongPress={350}
+          accessibilityLabel={`${label}: ${text}`}
+          accessibilityHint={onLongPress ? 'Mantén pulsado para reaccionar, responder y más' : undefined}
+          accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Opciones del mensaje' }] : undefined}
+          onAccessibilityAction={onLongPress ? () => onLongPress() : undefined}
+          className="flex-row items-end"
+        >
+          <Text className="text-ink" style={{ fontSize: 40, lineHeight: 46 }}>{text}</Text>
+          <View className="mb-1 ml-1.5 rounded-[9px] bg-chip px-[7px] py-[2px]">{stamp}</View>
+        </Pressable>
+        {below}
+      </View>
+    </View>
+  );
+  return onReply ? <SwipeToReply onReply={onReply}>{body}</SwipeToReply> : body;
 }
 
 export function MessageView({
@@ -456,19 +512,19 @@ export function MessageView({
   const below = chips.length ? <ReactionChips chips={chips} onPress={onReact} /> : null;
   const quoteParts = message.parts.filter(isQuotePart);
   const forwards = message.parts.filter(isForwardPart);
-  const quoteBlocks = (onAccent: boolean) => (
+  const quoteBlocks = (mine: boolean) => (
     <>
       {forwards.map((f) => (
         <View key={`f-${f.messageId}`}>
           <View className="mb-1 flex-row items-center">
-            <Icon icon={ShareFat} size={13} color={onAccent ? c.onAccent : c.muted} />
-            <Text className={`ml-1 text-caption italic ${onAccent ? 'text-on-accent' : 'text-muted'} opacity-80`}>Reenviado desde {f.from}</Text>
+            <Icon icon={ShareFat} size={13} color={mine ? c.mineMuted : c.muted} />
+            <Text className={`ml-1 text-caption italic ${mine ? 'text-mine-muted' : 'text-muted opacity-80'}`}>Reenviado desde {f.from}</Text>
           </View>
-          <QuoteBlock part={f} onAccent={onAccent} />
+          <QuoteBlock part={f} mine={mine} />
         </View>
       ))}
       {quoteParts.map((q) => (
-        <QuoteBlock key={`q-${q.messageId}`} part={q} onAccent={onAccent} onPress={onQuotePress ? () => onQuotePress(q.messageId) : undefined} />
+        <QuoteBlock key={`q-${q.messageId}`} part={q} mine={mine} onPress={onQuotePress ? () => onQuotePress(q.messageId) : undefined} />
       ))}
     </>
   );
@@ -486,8 +542,8 @@ export function MessageView({
         stampInline
       >
         <View className="flex-row items-center" accessibilityLabel="Se eliminó este mensaje">
-          <Icon icon={Prohibit} size={15} color={mineDeleted ? c.onAccent : c.muted} />
-          <Text className={`ml-1.5 text-[15px] italic ${mineDeleted ? 'text-on-accent' : 'text-muted'} opacity-80`}>
+          <Icon icon={Prohibit} size={15} color={mineDeleted ? c.mineMuted : c.muted} />
+          <Text className={`ml-1.5 text-[15px] italic ${mineDeleted ? 'text-mine-muted' : 'text-muted opacity-80'}`}>
             {mineDeleted ? 'Eliminaste este mensaje' : 'Se eliminó este mensaje'}
           </Text>
         </View>
@@ -543,10 +599,9 @@ export function MessageView({
 
   const voice = voiceOf(message);
   const files = message.parts.filter(isDocumentPart);
-  const textTone = mine ? 'text-on-accent' : 'text-ink';
   const content = voice ? (
     <>
-      {voice.tags ? <Body text={voice.tags} names={names} className={`mb-1 text-footnote ${textTone}`} /> : null}
+      {voice.tags ? <Body text={voice.tags} names={names} className={`mb-1 text-footnote text-ink`} /> : null}
       <VoiceNote
         part={voice.part}
         messageId={message.id}
@@ -555,11 +610,29 @@ export function MessageView({
         onRetry={mine && onRetryTranscript && (transcript === 'tap' || voice.tags) ? () => onRetryTranscript(message.id) : undefined}
         tone={mine ? 'mine' : 'theirs'}
         unplayed={unplayed}
+        stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}
       />
     </>
   ) : (
-    text ? <Body text={text} names={names} className={`text-base leading-[22px] ${textTone}`} /> : null
+    text ? <Body text={text} names={names} className={`text-base leading-[22px] text-ink`} /> : null
   );
+  if (!voice && !files.length && !quote && !quoteParts.length && !forwards.length && !firstLink(text) && emojiOnly(text)) {
+    return (
+      <EmojiMessage
+        text={text.trim()}
+        mine={mine}
+        tail={tail}
+        name={group && !mine ? message.authorName : null}
+        label={mine ? 'Tú' : message.authorName}
+        nameColour={colour}
+        avatar={<Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} />}
+        stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}
+        below={below}
+        onLongPress={onMenu}
+        onReply={onReply}
+      />
+    );
+  }
   const bubble = (
     <Bubble
       mine={mine}
@@ -567,13 +640,13 @@ export function MessageView({
       name={group && !mine ? message.authorName : null}
       nameColour={colour}
       avatar={<Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} />}
-      stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}
+      stamp={voice ? undefined : <Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}
       stampInline={!voice && !!text}
       accessibilityLabel={`${mine ? 'Tú' : message.authorName}: ${voice ? 'nota de voz' : files.length ? `${files.map((f) => f.name).join(', ')}${text ? `. ${text}` : ''}` : text}`}
       below={below}
       onLongPress={onMenu}
     >
-      {quote ? <DecisionQuote part={quote} onAccent={mine} /> : null}
+      {quote ? <DecisionQuote part={quote} mine={mine} /> : null}
       {quoteBlocks(mine)}
       {files.map((f) => (
         <FileBubble key={f.path} part={f} mine={mine} />

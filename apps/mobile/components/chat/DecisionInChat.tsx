@@ -75,16 +75,16 @@ export function DecisionInChat({ part, writing }: { part: DecisionPart; writing:
 }
 
 /** The decision a person asked their agent about, above their words. */
-export function DecisionQuote({ part, onAccent }: { part: DecisionQuotePart; onAccent?: boolean }) {
+export function DecisionQuote({ part, mine }: { part: DecisionQuotePart; mine?: boolean }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Sobre la decisión: ${part.question}`}
       onPress={() => router.push(`/decision/${part.decisionId}`)}
-      className={`mb-1.5 border-l-2 pl-2 ${onAccent ? 'border-on-accent' : 'border-line'}`}
+      className={`mb-1.5 border-l-2 pl-2 ${mine ? 'border-mine-muted' : 'border-line'}`}
     >
-      <Text className={`text-caption ${onAccent ? 'text-on-accent opacity-80' : 'text-muted'}`}>Sobre la decisión</Text>
-      <Text className={`text-footnote font-semibold ${onAccent ? 'text-on-accent' : 'text-ink'}`} numberOfLines={2}>
+      <Text className={`text-caption ${mine ? 'text-mine-muted' : 'text-muted'}`}>Sobre la decisión</Text>
+      <Text className="text-footnote font-semibold text-ink" numberOfLines={2}>
         {part.question}
       </Text>
     </Pressable>

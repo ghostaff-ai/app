@@ -180,8 +180,34 @@ export function firstLink(text: string): string | null {
   return text.match(/https?:\/\/[^\s<>"')]+/)?.[0]?.replace(/[.,;:!?]+$/, '') ?? null;
 }
 
+/** One emoji: a pictograph (with its modifiers and joiners) or a flag, i.e. a pair of regional indicators. */
+const EMOJI = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}{2})/u;
+const GRAPHEME = /\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*|\P{M}\p{M}*/gu;
+
+/** Splits a text into user-perceived characters; Hermes may lack Intl.Segmenter, so a regex stands in. */
+function graphemes(text: string): string[] {
+  const Segmenter = (Intl as { Segmenter?: new (locale?: string, options?: { granularity: 'grapheme' }) => { segment: (s: string) => Iterable<{ segment: string }> } }).Segmenter;
+  if (Segmenter) return Array.from(new Segmenter(undefined, { granularity: 'grapheme' }).segment(text), (s) => s.segment);
+  return text.match(GRAPHEME) ?? [];
+}
+
+/** A text of one to three emoji and nothing else but whitespace (even between them): WhatsApp draws it big, without a bubble. */
+export function emojiOnly(text: string): boolean {
+  const parts = graphemes(text.replace(/\s+/g, ''));
+  return parts.length >= 1 && parts.length <= 3 && parts.every((g) => EMOJI.test(g));
+}
+
 /** The team's jobs nobody does yet, in the order the team is drawn (team-chat.md, decision 8). */
 export function vacancies(agents: Agent[]): GhostId[] {
   const taken = new Set(agents.map((a) => a.ghost));
   return GHOST_ORDER.filter((g) => g !== 'base' && !taken.has(g));
+}
+
+/** General's header line: the other people by name, then «tú», then how many agents are in the group. */
+export function groupSubtitle(others: string[], agents: number): string {
+  const parts = [...others, 'tú'];
+  if (agents > 0) parts.push(`${agents} ${agents === 1 ? 'agente' : 'agentes'}`);
+  const last = parts.pop() as string;
+  const line = parts.length ? `${parts.join(', ')} y ${last}` : last;
+  return line.charAt(0).toUpperCase() + line.slice(1);
 }

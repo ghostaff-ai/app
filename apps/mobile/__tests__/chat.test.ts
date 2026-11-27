@@ -1,5 +1,5 @@
 import type { Agent, ChatMessage, ChatThread } from '@ghostaff/shared';
-import { agentLastLine, chatRows, dayLabel, generalChat, generalLastLine, noteLength, personColour, shortTime, showAuthors, teamRows, timeOf, vacancies } from '@/lib/chat';
+import { agentLastLine, chatRows, dayLabel, emojiOnly, generalChat, generalLastLine, groupSubtitle, noteLength, personColour, shortTime, showAuthors, teamRows, timeOf, vacancies } from '@/lib/chat';
 import { addMessage } from '@/lib/hooks/useChat';
 
 const agent = (id: string, ghost: Agent['ghost'], isMain = ghost === 'secretaria'): Agent => ({
@@ -157,4 +157,31 @@ describe('agentLastLine', () => {
     expect(agentLastLine('Secretaría', null)).toBeNull();
     expect(agentLastLine('Secretaría', { ...t, lastText: null })).toBeNull();
   });
+});
+
+describe('emojiOnly', () => {
+  const cases = () => {
+    it.each(['😆😁', '🫢', '👍🏽', '👨‍👩‍👧', '❤️', ' 🎉 ', '🇪🇸', '😂 😂'])('%s is only emoji', (t) => expect(emojiOnly(t)).toBe(true));
+    it.each(['', '123', '#', '😀 hola', '😀😀😀😀', 'ok'])('%s is not', (t) => expect(emojiOnly(t)).toBe(false));
+  };
+  cases();
+  describe('without Intl.Segmenter', () => {
+    const original = (Intl as { Segmenter?: unknown }).Segmenter;
+    beforeAll(() => {
+      (Intl as { Segmenter?: unknown }).Segmenter = undefined;
+    });
+    afterAll(() => {
+      (Intl as { Segmenter?: unknown }).Segmenter = original;
+    });
+    cases();
+  });
+});
+
+describe('groupSubtitle', () => {
+  it('names the others, then you, then the agents', () => expect(groupSubtitle(['Álvaro'], 3)).toBe('Álvaro, tú y 3 agentes'));
+  it('one agent', () => expect(groupSubtitle(['Álvaro', 'Marta'], 1)).toBe('Álvaro, Marta, tú y 1 agente'));
+  it('no agents', () => expect(groupSubtitle(['Álvaro'], 0)).toBe('Álvaro y tú'));
+  it('only you', () => expect(groupSubtitle([], 0)).toBe('Tú'));
+  it('only you and agents', () => expect(groupSubtitle([], 2)).toBe('Tú y 2 agentes'));
+  it('keeps two people with the same name', () => expect(groupSubtitle(['Álvaro', 'Álvaro'], 0)).toBe('Álvaro, Álvaro y tú'));
 });

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { shortNext, soonest } from '@ghostaff/shared';
 import { agentJob, decideAction } from '@ghostaff/shared/services';
+import { Wallpaper } from '@/components/chat/Wallpaper';
 import { ChatList } from '@/components/chat/ChatList';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
@@ -175,7 +176,8 @@ export default function Chat() {
   const nextLabel = next ? shortNext(next, new Date(), next.timezone) : null;
 
   return (
-    <View className="flex-1 bg-surface">
+    <View className="flex-1 bg-chat">
+      <Wallpaper />
       <Stack.Screen
         options={{
           title: agent.name,

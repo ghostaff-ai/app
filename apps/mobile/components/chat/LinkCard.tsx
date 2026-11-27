@@ -3,6 +3,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { Image, Platform, Pressable, Text, View } from 'react-native';
 import { useEngine } from '@/lib/hooks/useConnections';
+import { usePalette } from '@/lib/theme';
 
 // A link's preview in its bubble, as in WhatsApp (docs/plans/ready/
 // chat-like-whatsapp.md, phase 4): its image, title, a line and the site, read
@@ -12,6 +13,7 @@ const seen = new Map<string, LinkPreview | null>();
 
 export function LinkCard({ url, mine }: { url: string; mine: boolean }) {
   const engine = useEngine();
+  const c = usePalette();
   const [preview, setPreview] = useState<LinkPreview | null | undefined>(seen.get(url));
   useEffect(() => {
     if (!engine || seen.has(url)) return;
@@ -34,21 +36,21 @@ export function LinkCard({ url, mine }: { url: string; mine: boolean }) {
       accessibilityLabel={`${preview.title ?? preview.site}, ${preview.site}`}
       onPress={open}
       className="mb-1 overflow-hidden rounded-lg"
-      style={{ backgroundColor: mine ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.05)', maxWidth: 280 }}
+      style={{ backgroundColor: mine ? c.mineSunk : 'rgba(0,0,0,0.05)', maxWidth: 280 }}
     >
       {preview.image ? <Image source={{ uri: preview.image }} style={{ width: '100%', height: 140 }} resizeMode="cover" accessibilityIgnoresInvertColors /> : null}
       <View className="px-2.5 py-2">
         {preview.title ? (
-          <Text className={`text-footnote font-semibold ${mine ? 'text-on-accent' : 'text-ink'}`} numberOfLines={2}>
+          <Text className="text-footnote font-semibold text-ink" numberOfLines={2}>
             {preview.title}
           </Text>
         ) : null}
         {preview.description ? (
-          <Text className={`text-caption ${mine ? 'text-on-accent' : 'text-muted'} opacity-80`} numberOfLines={2}>
+          <Text className={`text-caption ${mine ? 'text-mine-muted' : 'text-muted opacity-80'}`} numberOfLines={2}>
             {preview.description}
           </Text>
         ) : null}
-        <Text className={`mt-0.5 text-caption ${mine ? 'text-on-accent' : 'text-muted'} opacity-70`} numberOfLines={1}>
+        <Text className={`mt-0.5 text-caption ${mine ? 'text-mine-muted' : 'text-muted opacity-70'}`} numberOfLines={1}>
           {preview.site}
         </Text>
       </View>

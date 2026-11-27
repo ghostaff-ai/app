@@ -83,12 +83,12 @@ export function ChatList({
         renderItem={({ item }) =>
           item.kind === 'day' ? (
             <View className="my-2 items-center" accessibilityRole="header">
-              <View className="rounded-lg border border-line bg-card px-3 py-1">
-                <Text className="text-footnote font-medium text-muted">{item.label}</Text>
+              <View className="rounded-lg bg-chip px-3 py-1">
+                <Text className="text-footnote font-semibold text-muted">{item.label}</Text>
               </View>
             </View>
           ) : item.kind === 'unread' ? (
-            <View testID="unread-divider" className="my-2 items-center bg-sunk py-1">
+            <View testID="unread-divider" className="my-2 items-center bg-chip py-1">
               <Text className="text-footnote font-medium text-muted">
                 {item.count === 1 ? '1 mensaje sin leer' : `${item.count} mensajes sin leer`}
               </Text>
@@ -123,8 +123,8 @@ export function ChatList({
         >
           <Icon icon={CaretDoubleDown} size={18} color={c.ink} weight="bold" />
           {missed > 0 ? (
-            <View className="absolute -top-1.5 -right-1 min-w-5 items-center rounded-full bg-ok px-1">
-              <Text className="text-[11px] font-semibold text-white">{missed}</Text>
+            <View className="absolute -top-1.5 -right-1 min-w-5 items-center rounded-full bg-chat-accent px-1">
+              <Text className="text-[11px] font-semibold" style={{ color: c.onChatAccent }}>{missed}</Text>
             </View>
           ) : null}
         </Pressable>
