@@ -72,7 +72,7 @@ From the YAMLs in `ghostaff-ai/agents/proyectos/ordago/agentes/` (2026-11-24). O
 5. **Audio from an agent** in a thread shared by the people who should hear it (La Mesa for both founders), with the player the voice notes already have. Designed in [agent-audio.md](agent-audio.md) (Jaime, 2026-11-26): the agent leaves the mp3 in `~/outbox/`, the runner uploads it with the run's nonce, and it lands in the agent's chat. Landed and on the beta 2026-11-27 (PR 92); La Mesa's and Productor's `AGENTS.md` must say what that plan says when they move.
 6. **A second Claude account** in Órdago's failover order: twelve agents on one subscription is exactly the weekly limit La Mesa hit.
 7. **The prompt is a file of Órdago's record.** Each agent's instructions become `agentes/<slug>/AGENTS.md` in `ordago-app/business`, written once from its YAML's `prompt` and from what its `agentes/<a>/README.md` says about how it works; its «Indicaciones» and «Aprendizajes» become recuerdos in `memoria/agentes/<slug>/` ([agent-memory.md](../ready/agent-memory.md#the-agents-instructions-live-beside-its-memory)). Our runner reads the file from its clone; `agents.task` becomes the file's projection, read by the record sync, and editing it in the app (an owner, or Secretaría after an owner's OK: a setting in `packages/shared/src/services/settings.ts`, rule 6) is a commit to the record. The timetable, tools, model and access stay on the agent row.
-8. **Órdago into production** with the first release: the organisation, its people, agents and connections made again in the production Supabase (the vault is per project, so the Claude sign-in, the GitHub App's installation and the Google Cloud grant are redone, not copied).
+8. **Órdago into production** with the first release: the organisation, its people, agents and connections made again in the production Supabase (the vault is per project, so the Claude sign-in, the GitHub App's installation and the Google Cloud grant are redone, not copied). Its record is born there in production's record store, with GitHub as a read-only copy; the beta's Órdago stays on GitHub and stops writing ([ordago-record-flip.md](../ready/ordago-record-flip.md), Jaime 2026-11-27).
 
 ### Order
 
@@ -131,7 +131,7 @@ Then in `ghostaff-ai/agents`: a last commit removing `telegram` and `lanzan` fro
 3. **Reports, «Avisos» and «Hecho sin ti».** Then Telegram off.
 4. **Claude subscription in Conexiones.** ChatGPT is not built (2026-11-21): OpenAI lets a person use Codex with their own plan, but a hosted service running it for others needs OpenAI's approval through the «Sign in with ChatGPT» waitlist. Revisit once OpenAI approves Ghostaff ([OpenAI help](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan), [Codex discussion](https://github.com/openai/codex/discussions/8338)).
 5. **Legal moves**: our runner, its timetable on its agent row and its instructions in `agentes/legal/AGENTS.md` (item 7), run on Órdago's subscription, the old job deleted.
-6. **Ghostaff's own record store** ([record-store.md](../ongoing/record-store.md)) with organisation Ghostaff in it; then the rest move one at a time, and Órdago's master flips last ([ordago-record-flip.md](../ideas/ordago-record-flip.md)).
+6. **Ghostaff's own record store** ([record-store.md](../ongoing/record-store.md)) with organisation Ghostaff in it; then the rest move one at a time, and Órdago's master flips last ([ordago-record-flip.md](../ready/ordago-record-flip.md)).
 
 ## What only Álvaro does
 

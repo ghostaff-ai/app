@@ -1,10 +1,10 @@
 # Órdago's record into our record store (the flip)
 
 **Priority:** medium — today there is one master, so nothing is at risk; but Órdago gets no memory tools while its record is on GitHub, and the migration of its agents does not end until it moves
-**Gate:** decision:where people write the record after the flip (question 1) and in which environment the flip happens (question 5)
-**Next:** answer questions 1 and 5, then split the preconditions into their own branches
+**Gate:** none
+**Next:** build A (the organisation's GitHub installation apart from its record) on its own branch
 
-**Goal:** Órdago's record moves from `ordago-app/business` on GitHub to its own repo in our record store (Forgejo on the VM `record-store`), keeping its whole history; GitHub becomes a read-only copy, and nothing that reads or writes the record today breaks.
+**Goal:** When Órdago is made again in production, its record is born in production's record store (Forgejo on the VM `record-store`) with the whole history of `ordago-app/business`; people push to it through an authenticated door, GitHub becomes a read-only copy, and nothing that reads or writes the record today breaks. On the beta nothing changes: Órdago keeps its GitHub record there.
 
 ## Context
 
@@ -33,30 +33,31 @@ As of `1b18480` (2026-11-27). Decision 2 of [ordago-agents-in-ghostaff.md](../on
 
 - **A. The organisation's GitHub installation, apart from its record.** A column `organizations.github_installation` (or a row in connections), filled from `record_installation` for Órdago by the migration; `agents.repos` tokens, `gh` and `ritmo`'s CI queue use it; `record_installation` keeps meaning only «the record is on GitHub». Useful beyond Órdago: any organisation whose agents touch its code on GitHub.
 - **B. The last three agents on our runner**, already planned in ordago-agents-in-ghostaff.md («Order»). Then `ordago-agentes[bot]` writes nothing.
-- **C. A way in for people** (question 1).
-- **D. The push mirror to GitHub.** Forgejo's push mirror of `main` (and the branches question 1 allows) to `ordago-app/business`, with a credential that does not expire in an hour (question 3). GitHub's `main` gets a rule that only the mirror pushes, so nobody writes the copy by mistake.
-- **E. The hook for people and for Órdago's perimeter.** A `person` case per member allowed to push (what they may touch: question 2), branches allowed for people if question 1 keeps cloud sessions' branches, and the perimeter rules of `.githooks/pre-commit` moved into the server's hook so they hold whoever pushes.
+- **C. A door for people** (decision 1): Forgejo reachable over HTTPS from outside the VPC, with a Forgejo user per member and a token for their Claude Code; cloud Claude sessions push their branches there too. Production's record store must exist first (`bash scripts/setup-record-store.sh prod`, record-store.md). The door is also what any customer needs to clone their record; built for every organisation, not only Órdago.
+- **D. The push mirror to GitHub.** Forgejo's push mirror of `main` to `ordago-app/business` with a deploy key (decision 3). GitHub's `main` gets a rule that only the mirror pushes, so nobody writes the copy by mistake.
+- **E. The hook for people and for Órdago's perimeter.** A `person` case per member who may push, allowed everything (decision 2), on `main` and on their own branches; the perimeter rules of `.githooks/pre-commit` run in the server's hook for this organisation (decision 4), so they hold whoever pushes.
 
-### The cut (one sitting, a few minutes of freeze)
+### The cut, inside «Órdago into production» (item 8 of ordago-agents-in-ghostaff.md)
 
-1. Pause Órdago's timetable fires and refuse new runs for the organisation (a flag the tick and `/runs` read), and wait for the running ones to report.
-2. Protect `main` on GitHub so nobody pushes; tell Álvaro and Jaime.
-3. As Forgejo's admin: create `records/<org id>`, `git push --mirror` from a fresh clone of GitHub (all of `main`'s history; the `claude/*` branches only if question 1 keeps them), create an `agent-<id>` user per agent, write the hook and the branch protection (`recordProvision.ts` does all but the history).
-4. Update the row: `record_host = 'ghostaff'`, `record_repo = 'records/<org id>'`, `record_installation = null`, the GitHub installation kept in its own column (A).
-5. Run a tick by hand and compare: the same `decisions`, `agents.task` and `externos` rows as before the cut, nothing written back.
-6. Switch the push mirror on and check one commit reaches GitHub.
-7. Lift the pause; check one run of a light agent (Legal) clones, pushes and reports. Turn on Órdago's memory tools (business-brain.md, «Only on our record store»).
-8. People re-point their clones (`git remote set-url origin …`) to the door from question 1.
+That item makes the organisation, its people, agents and connections again in production's Supabase. The record joins that same sitting; there is no flip of a row on the beta.
 
-**Going back** is the same row set back to GitHub and `main` unprotected there. While the mirror runs, GitHub holds every commit, so this costs nothing until the mirror is turned off.
+1. **Stop every writer of the old master.** Órdago's agents on the beta stop (their timetables off, new runs refused for the organisation); Álvaro and Jaime stop pushing; GitHub's `main` is protected so nobody pushes, until the mirror does.
+2. As production Forgejo's admin: create `records/<org id>` for production's Órdago and `git push --mirror` from a fresh clone of GitHub (`main` with all its history; the `claude/*` branches are left behind, finished or not). The organisation's row is made with `record_host = 'ghostaff'` and that `record_repo`, and its GitHub installation in its own column (A); the tick then makes the agents' users, the hook and the branch protection (`recordProvision.ts`).
+3. Run a tick by hand and compare with the beta's Órdago: the same `decisions`, `agents.task` and `externos` rows, nothing written back.
+4. Switch the push mirror on and check one commit reaches GitHub.
+5. Turn production's timetables on; check one run of a light agent (Legal) clones, pushes and reports. Turn on Órdago's memory tools (business-brain.md, «Only on our record store»).
+6. People make their Forgejo users and re-point their clones (`git remote set-url origin …`).
+7. **The beta's Órdago stays on GitHub but writes nothing**: its agents stay off, and its row loses `record_repo` and `record_installation` so its sync stops writing back to what is now a copy. It is kept to look at, not to work in.
 
-## Open questions
+**Going back**, while the mirror runs, is GitHub unprotected and the beta's Órdago turned on again: GitHub holds every commit up to then. Once people have pushed to Forgejo and the mirror has stopped, there is no cheap way back.
 
-1. **Where do people write after the flip?** (a) A public, authenticated door to Forgejo (HTTPS behind Identity-Aware Proxy or Forgejo's own login, a Forgejo user per member, tokens for Claude Code), with cloud Claude sessions pushing their branches there too: one master, more to build and to secure. (b) People keep working on GitHub and a sync carries their commits into Forgejo: no door to build, but two places accept writes, which is the second master the flip exists to remove. (c) People write the record only through Ghostaff (the app, the chat, Secretaría): what a non-technical customer will do, but Álvaro writes about 37 % of the commits by hand today. My pick is (a): the record-store plan already names the door as its own card, and any customer who wants to clone their record needs it.
-2. **What may a person push?** Everything (they own the record) or everything but `externos/` and the agents' `AGENTS.md`, which the app already edits with a commit in their name. Everything is simpler and matches today; the hook then guards agents only.
-3. **The mirror's credential.** The GitHub App's installation tokens last an hour and Forgejo's push mirror keeps one fixed credential. A deploy key with write on `business` only (my pick: it reaches one repo, and nothing else uses it), or a fine-grained token renewed by the tick.
-4. **The perimeter check:** move `.githooks/pre-commit` into the server's hook for this organisation (it then holds for every pusher), or leave it client-side as today.
-5. **Beta or production?** Órdago's real agents run on the beta today, and item 8 of ordago-agents-in-ghostaff.md makes Órdago again in production with the first release, where the record store does not exist yet. Flipping on the beta now and again in production is two cuts; flipping only in production means Órdago moves to production and to Forgejo in the same release. Which comes first decides whether the cut above runs once or twice.
+## Decisions
+
+1. **People write in Forgejo through an authenticated door** (Jaime, 2026-11-27: option a). Rejected: (b) people keep writing on GitHub and a sync carries their commits into Forgejo, two places taking writes, which is the second master the flip exists to remove; (c) people write the record only through Ghostaff, unrealistic while Álvaro and Jaime write about 70 % of its commits by hand.
+2. **A person may push anything** (my pick, Jaime may change it): they own the record, it matches today, and the hook then guards agents only. Rejected: everything but `externos/` and the agents' `AGENTS.md`, which the app already edits with a commit in their name.
+3. **The mirror pushes with a deploy key** with write on `ordago-app/business` only (my pick, Jaime may change it): Forgejo's push mirror keeps one fixed credential and the GitHub App's tokens last an hour. Rejected: a fine-grained token renewed by the tick, more moving parts for the same reach.
+4. **The perimeter check runs on the server** (my pick, Jaime may change it), in this organisation's pre-receive hook, so it holds for every pusher, agents and cloud sessions included, which today skip it unless their clone sets `core.hooksPath`. Rejected: leaving it client-side as today.
+5. **Only in production** (Jaime, 2026-11-27): the record moves when Órdago is made again in production with the first release, once. Rejected: flipping on the beta now and again in production, two cuts for the same result.
 
 ## Out of scope
 
