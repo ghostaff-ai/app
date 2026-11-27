@@ -74,6 +74,25 @@ describe('the run’s repo tokens for git', () => {
     }
   });
 
+  it('gives `gh` the token of a repo whose pull requests the agent handles, and of no other', async () => {
+    const now = Date.parse('2026-11-21T10:00:00Z');
+    const { map, renewed } = credentials(now);
+    map.get(credentialKeyOf('https://github.com/ordago-app/ordago-apps.git'))!.gh = 'ordago-app/ordago-apps';
+    const server = await serveTokens(map, () => {}, () => {}, () => now);
+    const gh = async (repo: string) => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/gh?${new URLSearchParams({ repo })}`);
+      return { status: res.status, body: await res.json() };
+    };
+    try {
+      expect(await gh('Ordago-App/ordago-apps')).toEqual({ status: 200, body: { token: 'ghs_apps-2' } });
+      expect(renewed).toEqual(['ghs_apps']);
+      expect(await gh('ordago-app/business')).toEqual({ status: 404, body: { repos: ['ordago-app/ordago-apps'] } });
+      expect(await gh('ordago-app/secreto')).toEqual({ status: 404, body: { repos: ['ordago-app/ordago-apps'] } });
+    } finally {
+      server.close();
+    }
+  });
+
   it('hands out the token it has when the engine does not renew it', async () => {
     const now = Date.parse('2026-11-21T10:00:00Z');
     const { map } = credentials(now);

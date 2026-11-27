@@ -70,6 +70,9 @@ describe('the spec', () => {
     expect(readSpec({ ...SPEC, repos: [{ ...apps, write: true, main: true }] }).repos![0]!.main).toBe(true);
     expect(() => readSpec({ ...SPEC, repos: [{ ...apps, write: false, main: true }] })).toThrow();
     expect(() => readSpec({ ...SPEC, repos: [{ ...apps, write: true, main: 'yes' }] })).toThrow();
+    expect(readSpec({ ...SPEC, repos: [{ ...apps, write: true, prs: true }] }).repos![0]!.prs).toBe(true);
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, write: false, prs: true }] })).toThrow();
+    expect(() => readSpec({ ...SPEC, repos: [{ ...apps, write: true, prs: 'yes' }] })).toThrow();
   });
 
   it('tells the guard which cloned repos the agent may push to, and whether main too', () => {
@@ -114,6 +117,9 @@ describe('the spec', () => {
     expect(env).toMatchObject({ CLOUDSDK_AUTH_ACCESS_TOKEN_FILE: '/tmp/ghostaff-gcloud-x/token', CLOUDSDK_CORE_PROJECT: 'ordago-prod', CLOUDSDK_CORE_DISABLE_PROMPTS: '1' });
     expect(Object.values(env).join(' ')).not.toContain('ya29');
     expect(agentEnv('tok', '/home/agente', { tokenFile: '/t', project: null }).CLOUDSDK_CORE_PROJECT).toBeUndefined();
+    // `gh` asks the runner for a repo's token (gh.mjs): only where it is, never a token.
+    expect(agentEnv('tok', '/home/agente', null, null, [], 'http://127.0.0.1:4100').GHOSTAFF_TOKENS).toBe('http://127.0.0.1:4100');
+    expect(agentEnv('tok', '/home/agente').GHOSTAFF_TOKENS).toBeUndefined();
   });
 
   it('reads the organisation’s Google Cloud, and refuses anything odd in it', () => {
@@ -308,6 +314,53 @@ describe('the guard', () => {
     expect(blocked('git -C /home/agente/repos/ordago-web push origin develop', ctx.record, c)).toMatch(/ordago-apps/);
     // The record keeps its own rule.
     expect(blocked('git push origin develop', ctx.record, c)).toMatch(/rama principal del registro/);
+  });
+
+  it('lets the agent push from a worktree of a repo it writes, under that repo’s rules', () => {
+    const apps = '/home/agente/repos/ordago-apps';
+    const wt = '/home/agente/repos/ordago-apps/.claude/worktrees/x';
+    const c: PushContext = {
+      ...ctx,
+      currentBranch: (d) => (d === wt ? 'desarrollo/x' : 'develop'),
+      commonDir: (d) => (d === wt || d === apps ? `${apps}/.git` : d === '/tmp/otro' ? '/tmp/otro/.git' : null),
+      writable: [{ repo: 'ordago-app/ordago-apps', dir: apps, main: false }],
+    };
+    expect(blocked(`git -C ${wt} push origin desarrollo/x`, ctx.record, c)).toBeNull();
+    expect(blocked('git push', wt, c)).toBeNull();
+    expect(blocked(`git -C ${wt} push origin HEAD:main`, ctx.record, c)).toMatch(/producción/);
+    expect(blocked(`git -C ${wt} push --force origin desarrollo/x`, ctx.record, c)).toMatch(/forzado/);
+    expect(blocked('git push origin develop', '/tmp/otro', c)).toMatch(/Solo se hace push/);
+  });
+
+  it('keeps pull requests to the repo’s own landing flow, and production’s branches out of reach through `gh`', () => {
+    const apps = '/home/agente/repos/ordago-apps';
+    const reels = '/home/agente/repos/ordago-reels';
+    const c: PushContext = {
+      ...ctx,
+      writable: [
+        { repo: 'ordago-app/ordago-apps', dir: apps, main: false },
+        { repo: 'ordago-app/ordago-reels', dir: reels, main: true },
+      ],
+    };
+    expect(blocked('gh pr list -R ordago-app/ordago-apps --state open --json number,files', ctx.record, c)).toBeNull();
+    expect(blocked('gh pr view 12 --json reviews', apps, c)).toBeNull();
+    expect(blocked('gh issue comment 7 -R ordago-app/ordago-apps --body x', ctx.record, c)).toBeNull();
+    expect(blocked('pnpm -C ~/repos/ordago-apps pr:land', ctx.record, c)).toBeNull();
+    expect(blocked('git commit -m "nunca gh pr merge"', ctx.record, c)).toBeNull();
+    expect(blocked('gh pr merge 12 --squash', apps, c)).toMatch(/pr:land/);
+    expect(blocked('gh -R ordago-app/ordago-apps pr merge 12', ctx.record, c)).toMatch(/pr:land/);
+    expect(blocked('gh pr create --base develop --title x --body y', apps, c)).toBeNull();
+    expect(blocked('gh pr create --base main --title x --body y', apps, c)).toMatch(/producción/);
+    expect(blocked('gh pr create -B beta -R ordago-app/ordago-apps --title x', ctx.record, c)).toMatch(/producción/);
+    expect(blocked('gh pr edit 12 --base=main', apps, c)).toMatch(/producción/);
+    expect(blocked('gh pr create --base main --title x', reels, c)).toBeNull();
+    expect(blocked('gh api repos/ordago-app/ordago-apps/pulls/12/reviews', ctx.record, c)).toBeNull();
+    expect(blocked('gh api -X PUT repos/ordago-app/ordago-apps/pulls/12/merge', ctx.record, c)).toMatch(/API/);
+    expect(blocked('gh api --method DELETE repos/{owner}/{repo}/git/refs/heads/x', apps, c)).toMatch(/API/);
+    expect(blocked('gh api repos/ordago-app/ordago-apps/merges -f base=main -f head=develop', ctx.record, c)).toMatch(/API/);
+    expect(blocked('gh api -X PATCH repos/ordago-app/ordago-apps/git/refs/heads/main -f sha=abc', ctx.record, c)).toMatch(/API/);
+    expect(blocked('gh api -XPUT repos/ordago-app/ordago-apps/pulls/12/merge', ctx.record, c)).toMatch(/API/);
+    expect(blocked('gh api -X GET repos/ordago-app/ordago-apps/git/refs/heads/develop', ctx.record, c)).toBeNull();
   });
 
   it('reads the push rules the runner wrote, and nothing it cannot trust', () => {

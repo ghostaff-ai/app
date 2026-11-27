@@ -519,6 +519,8 @@ describe('other repos in a run', () => {
     expect(s.prompt).toContain('Fuera del registro solo haces push en los repos de abajo que lo permiten');
     expect(s.repos.map((r: { main: boolean }) => r.main)).toEqual([false, false]);
     expect(s.prompt).not.toContain('ghs_');
+    expect(s.repos.map((r: { prs: boolean }) => r.prs)).toEqual([false, false]);
+    expect(s.prompt).not.toMatch(/`gh[` ]/);
   });
 
   it('a repo that lets it push to main says so, and one it only reads never gets main', async () => {
@@ -535,6 +537,30 @@ describe('other repos in a run', () => {
       ['ordago-app/ordago-apps', false],
     ]);
     expect(s.prompt).toContain('`ordago-app/ordago-reels` en `~/repos/ordago-reels`, con push a cualquier rama, `main` incluida');
+  });
+
+  it('a repo whose pull requests it handles gets a token for `gh` too, and the agent is told to land them with the repo’s own flow', async () => {
+    const t = setup();
+    t.agents.get(LEGAL)!.repos = [
+      { repo: 'ordago-app/ordago-apps', write: true, prs: true },
+      { repo: 'ordago-app/ordago-reels', write: false, prs: true },
+    ];
+    await t.ask();
+    const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
+    const s = await (await t.fetchSpec(run!, nonce!)).json();
+    expect(s.repos.map((r: { repo: string; prs: boolean }) => [r.repo, r.prs])).toEqual([
+      ['ordago-app/ordago-apps', true],
+      ['ordago-app/ordago-reels', false],
+    ]);
+    expect(t.tokenAccess).toEqual(['ordago-app/business:write', 'ordago-app/ordago-apps:prs', 'ordago-app/ordago-reels:read']);
+    expect(s.prompt).toContain(
+      '- `ordago-app/ordago-apps` en `~/repos/ordago-apps`, con push a cualquier rama menos `main` y `beta`, que son de producción, ' +
+        'y `gh` para sus PRs, issues y CI (`gh -R ordago-app/ordago-apps …`, o desde su clon)',
+    );
+    expect(s.prompt).toContain('Un PR se aterriza con el flujo del repo, nunca con `gh pr merge`.');
+    t.tokenAccess.length = 0;
+    expect((await t.post(`/runs/${run}/repo-token`, RUNNER, { nonce, repo: 'ordago-app/ordago-apps' })).status).toBe(200);
+    expect(t.tokenAccess).toEqual(['ordago-app/ordago-apps:prs']);
   });
 
   it('a repo GitHub refuses (not in the installation) is left out, and the agent is told, not stopped', async () => {

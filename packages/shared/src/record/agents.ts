@@ -17,6 +17,11 @@ export interface AgentRepo {
   write: boolean;
   /** May push to `main` and `beta` too (Órdago's `push_a_main`). Only with `write`. */
   main?: boolean;
+  /**
+   * Handles the repo's pull requests with `gh`: its token may also write PRs and issues and read its CI
+   * (Desarrollo lands its own with `pnpm pr:land`). Only with `write`; production's branches stay out of reach.
+   */
+  prs?: boolean;
 }
 
 /** Where a run clones a repo besides the record, under the agent's `~/repos/`: its name, or owner-name when two share one. */

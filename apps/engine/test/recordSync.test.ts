@@ -332,6 +332,19 @@ describe('the GitHub App', () => {
     expect(asked[0]).toEqual({ repositories: ['ordago-apps'], permissions: { contents: 'read', metadata: 'read' } });
   });
 
+  it('a token for a repo whose pull requests the agent handles may also run `gh` there: PRs, issues and reading CI', async () => {
+    const asked: unknown[] = [];
+    const f = (async (_url: string, init?: RequestInit) => {
+      asked.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ token: 't1', expires_at: '2026-11-21T11:00:00Z' }), { status: 201 });
+    }) as typeof fetch;
+    await freshRepoToken(async () => ({ appId: '42', privateKey: pem }), f)(7, 'ordago-app/ordago-apps', 'prs');
+    expect(asked[0]).toEqual({
+      repositories: ['ordago-apps'],
+      permissions: { contents: 'write', metadata: 'read', pull_requests: 'write', issues: 'write', checks: 'read', statuses: 'read', actions: 'read' },
+    });
+  });
+
   it('counts a repo’s queued Actions runs with a token that may only read its Actions, and throws when it cannot tell', async () => {
     const calls: Array<{ url: string; body?: unknown; auth?: string }> = [];
     const github = (runs: Response) =>
