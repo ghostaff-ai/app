@@ -1,5 +1,5 @@
 import type { Agent, ChatMessage, ChatThread } from '@ghostaff/shared';
-import { agentLastLine, chatRows, dayLabel, generalChat, generalLastLine, noteLength, personColour, shortTime, showAuthors, teamRows, timeOf, vacancies } from '@/lib/chat';
+import { agentLastLine, chatRows, dayLabel, emojiOnly, generalChat, generalLastLine, noteLength, personColour, shortTime, showAuthors, teamRows, timeOf, vacancies } from '@/lib/chat';
 import { addMessage } from '@/lib/hooks/useChat';
 
 const agent = (id: string, ghost: Agent['ghost'], isMain = ghost === 'secretaria'): Agent => ({
@@ -156,5 +156,23 @@ describe('agentLastLine', () => {
   it('has no line for a chat with nothing said', () => {
     expect(agentLastLine('Secretaría', null)).toBeNull();
     expect(agentLastLine('Secretaría', { ...t, lastText: null })).toBeNull();
+  });
+});
+
+describe('emojiOnly', () => {
+  const cases = () => {
+    it.each(['😆😁', '🫢', '👍🏽', '👨‍👩‍👧', '❤️', ' 🎉 ', '🇪🇸'])('%s is only emoji', (t) => expect(emojiOnly(t)).toBe(true));
+    it.each(['', '123', '#', '😀 hola', '😀😀😀😀', 'ok'])('%s is not', (t) => expect(emojiOnly(t)).toBe(false));
+  };
+  cases();
+  describe('without Intl.Segmenter', () => {
+    const original = (Intl as { Segmenter?: unknown }).Segmenter;
+    beforeAll(() => {
+      (Intl as { Segmenter?: unknown }).Segmenter = undefined;
+    });
+    afterAll(() => {
+      (Intl as { Segmenter?: unknown }).Segmenter = original;
+    });
+    cases();
   });
 });

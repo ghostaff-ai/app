@@ -15,7 +15,7 @@ import { tap } from '@/lib/haptics';
 import { Field } from '@/components/ui';
 import type { AskControls } from '@/lib/hooks/useAccountAsks';
 import { useAvatars, usePhotoUrl } from '@/lib/avatars';
-import { firstLink, personColour, timeOf } from '@/lib/chat';
+import { emojiOnly, firstLink, personColour, timeOf } from '@/lib/chat';
 import type { GuideControls } from '@/lib/hooks/useGuideCards';
 import { GHOSTS, type GhostId } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
@@ -379,6 +379,59 @@ function SwipeToReply({ children, onReply }: { children: ReactNode; onReply: () 
   );
 }
 
+/** A message of only emoji: big, with no bubble, its stamp in a small pill beside it (as WhatsApp does). */
+function EmojiMessage({
+  text,
+  mine,
+  tail,
+  name,
+  nameColour,
+  avatar,
+  stamp,
+  below,
+  onLongPress,
+  onReply,
+}: {
+  text: string;
+  mine: boolean;
+  tail: boolean;
+  name: string | null;
+  nameColour: string;
+  avatar: ReactNode;
+  stamp: ReactNode;
+  below: ReactNode;
+  onLongPress?: () => void;
+  onReply?: () => void;
+}) {
+  const body = (
+    <View className={`flex-row px-3 ${mine ? 'justify-end' : 'justify-start'} ${tail ? 'mt-2' : 'mt-0.5'}`}>
+      {mine ? null : <View style={{ width: 30 }}>{tail ? avatar : null}</View>}
+      <View className={mine ? 'items-end' : 'ml-1 items-start'} style={{ maxWidth: '78%' }}>
+        {name && tail ? (
+          <Text className="mb-0.5 text-footnote font-semibold" style={{ color: nameColour }} numberOfLines={1}>
+            {name}
+          </Text>
+        ) : null}
+        <Pressable
+          testID="emoji-message"
+          onLongPress={onLongPress}
+          delayLongPress={350}
+          accessibilityLabel={`${mine ? 'Tú' : name ?? ''}: ${text}`}
+          accessibilityHint={onLongPress ? 'Mantén pulsado para reaccionar, responder y más' : undefined}
+          accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Opciones del mensaje' }] : undefined}
+          onAccessibilityAction={onLongPress ? () => onLongPress() : undefined}
+          className="flex-row items-end"
+        >
+          <Text style={{ fontSize: 40, lineHeight: 46 }}>{text}</Text>
+          <View className="mb-1 ml-1.5 rounded-[9px] bg-chip px-[7px] py-[2px]">{stamp}</View>
+        </Pressable>
+        {below}
+      </View>
+    </View>
+  );
+  return onReply ? <SwipeToReply onReply={onReply}>{body}</SwipeToReply> : body;
+}
+
 export function MessageView({
   message,
   mine,
@@ -559,6 +612,22 @@ export function MessageView({
   ) : (
     text ? <Body text={text} names={names} className={`text-base leading-[22px] text-ink`} /> : null
   );
+  if (!voice && !files.length && !quote && !quoteParts.length && !forwards.length && !firstLink(text) && emojiOnly(text)) {
+    return (
+      <EmojiMessage
+        text={text.trim()}
+        mine={mine}
+        tail={tail}
+        name={group && !mine ? message.authorName : null}
+        nameColour={colour}
+        avatar={<Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} />}
+        stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}
+        below={below}
+        onLongPress={onMenu}
+        onReply={onReply}
+      />
+    );
+  }
   const bubble = (
     <Bubble
       mine={mine}

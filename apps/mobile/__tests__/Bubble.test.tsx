@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@ghostaff/shared';
-import { render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { MessageView } from '@/components/chat/Message';
 import { LIGHT } from '@/lib/palette';
 
@@ -70,5 +70,25 @@ describe('a message bubble', () => {
     const tree = JSON.stringify(screen.toJSON());
     expect(tree).not.toContain('on-accent');
     expect(tree).not.toContain(`"color":"${LIGHT.onAccent}"`);
+  });
+
+  it('draws a message of only emoji big, without a bubble, and holding it opens the menu', async () => {
+    const onMenu = jest.fn();
+    const message = { ...base, parts: [{ type: 'text', text: '😆😁' }] as ChatMessage['parts'] };
+    await render(<MessageView message={message} mine showAuthor names={[]} onMenu={onMenu} />);
+    const emoji = screen.getByTestId('emoji-message');
+    expect(String(emoji.props.className)).not.toContain('bg-mine');
+    expect(String(screen.getByText('😆😁').props.className)).not.toContain('bg-mine');
+    expect(JSON.stringify(screen.getByText('😆😁').props.style)).toMatch(/"fontSize":(4\d|[5-9]\d)/);
+    expect(screen.getByLabelText('Tú: 😆😁')).toBeTruthy();
+    expect(screen.queryByTestId('bubble-tail')).toBeNull();
+    await fireEvent(emoji, 'longPress');
+    expect(onMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a message with emoji and words in its bubble', async () => {
+    const message = { ...base, parts: [{ type: 'text', text: '😀 hola' }] as ChatMessage['parts'] };
+    await render(<MessageView message={message} mine showAuthor names={[]} />);
+    expect(screen.queryByTestId('emoji-message')).toBeNull();
   });
 });
