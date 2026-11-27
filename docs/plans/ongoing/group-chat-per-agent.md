@@ -2,7 +2,7 @@
 
 **Priority:** high — it changes how every conversation with an agent works, and the longer the private chats live, the more there is to fold in
 **Gate:** none
-**Next:** PR 1 (Tasks, below) on `feat/group-chat-per-agent`: the migration and its pgTAP tests first, then the engine, then the app; land it with `pnpm pr:land`
+**Next:** on the beta, two people write to one agent within seconds of each other: one chat, both signed, each answered in turn; then retire this plan to docs/decisions/
 
 Jaime's idea (2026-11-24): each agent has **one chat**, and **everyone with access to the agent talks in that same chat**, as in a WhatsApp group. «Yo creo que solo tiene que haber un chat con los agentes y que todas las personas con acceso hablen al mismo chat con ese agente». He answered the open questions on 2026-11-26 (Decisions, below): only the group, and everything that exists today folds into it.
 
@@ -78,6 +78,12 @@ Two pull requests. The first makes the group; until the second lands, a «Solo p
 
 12. Migration: every routine `team`, drop `audience`; `create_routine` for anyone who talks to the agent; `may_change_routine` its creator or an owner; runs' policy by agent level only.
 13. Shared, engine, settings tool and the routine screens lose the choice; tests follow.
+
+## Landed
+
+- PR 1, [#84](https://github.com/ghostaff-ai/app/pull/84) (2026-11-27): the fold (`20261128700000_group_chat_per_agent.sql`, which also empties `conversation_summaries`), `messages.reply_to` and the queue (`waitingRuns`, `answerWaiting`; a turn reads the conversation cut at the message it answers, `cutAt`), Equipo with one row per agent, old `/conversacion/<id>` links opening the agent's chat, Maestro `group-chat.yaml`.
+- PR 2, [#106](https://github.com/ghostaff-ai/app/pull/106) (2026-11-27): routines without «Solo para mí» (`20261128710000_routines_for_everyone.sql`).
+- Known limit: a queued message from someone other than the caller is answered without their session, so without the settings tools that turn.
 
 ## Still open
 
