@@ -21,8 +21,8 @@ export function titleFrom(instruction: string): string {
 
 export function routineRefusal(e: unknown): string {
   const code = (e as { code?: unknown } | null)?.code;
-  if (code === '54000') return `Ya tienes ${MAX_ROUTINES_PER_PERSON} rutinas, el máximo. Borra alguna para crear otra.`;
-  if (code === '42501') return 'No puedes cambiar esta rutina: la de todo el equipo solo la cambia quien es propietario.';
+  if (code === '54000') return `Ya tienes ${MAX_ROUTINES_PER_PERSON} tareas programadas, el máximo. Borra alguna para crear otra.`;
+  if (code === '42501') return 'No puedes cambiar esta tarea programada: la de todo el equipo solo la cambia quien es propietario.';
   if (code === '23514' || code === '22023') return 'Revisa los datos: algo no es válido.';
   return 'No se ha guardado. Vuelve a intentarlo en un momento.';
 }

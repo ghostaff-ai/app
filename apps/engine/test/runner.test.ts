@@ -826,7 +826,7 @@ describe('our runner’s report', () => {
     const { GHOSTAFF_RUN: run, GHOSTAFF_NONCE: nonce } = t.launched[0]!.env;
     expect(t.runs.get(run!)).toMatchObject({ origin: 'routine', routineId: ROUTINE, messageId: 'reply-r' });
     const spec = (await (await t.fetchSpec(run!, nonce!)).json()) as { prompt: string };
-    expect(spec.prompt).toContain('la rutina «Ley» de Ana');
+    expect(spec.prompt).toContain('la tarea programada «Ley» de Ana');
     await t.report({ run, nonce, ok: true, text: 'La ley no ha cambiado, pero hay consulta pública.', noteworthy: true, decisions: [] });
     expect(t.updates).toContainEqual(expect.objectContaining({ id: 'reply-r', state: 'done', text: 'La ley no ha cambiado, pero hay consulta pública.' }));
   });

@@ -68,14 +68,14 @@ async function fire(chat: ChatDeps, deps: JobDeps, store: RoutineStore, r: Routi
     await store.pause(r.id, 'creator_gone');
     await store.notifyOwners(
       r.orgId,
-      `He pausado la rutina «${r.title}» de ${agent.name}: quien la creó ya no está en la empresa o ya no puede hablar con ${agent.name}. ` +
-        'Quien sea propietario puede reanudarla desde la ficha del agente, en Rutinas.',
+      `He pausado la tarea programada «${r.title}» de ${agent.name}: quien la creó ya no está en la empresa o ya no puede hablar con ${agent.name}. ` +
+        'Quien sea propietario puede reanudarla desde la ficha del agente, en Tareas programadas.',
     );
     return false;
   }
   const threadId = await chat.chat.agentChat(agent.id);
   const thread: ChatThreadHead = { id: threadId, orgId: agent.orgId, agentId: agent.id, title: agent.name };
-  const replyId = await chat.chat.startReply(thread, agent, ['Con tu rutina'], { routineId: r.id });
+  const replyId = await chat.chat.startReply(thread, agent, ['Con tu tarea programada'], { routineId: r.id });
   if (!replyId) {
     // The agent is answering in its chat right now: the next tick tries this hour again.
     await store.claim(r.id, now.toISOString(), new Date(r.lastFiredAt));

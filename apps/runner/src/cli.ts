@@ -19,7 +19,7 @@ interface Listed {
   transcript: boolean;
 }
 
-const ORIGIN: Record<Listed['origin'], string> = { person: 'pedida', schedule: 'horario', routine: 'rutina' };
+const ORIGIN: Record<Listed['origin'], string> = { person: 'pedida', schedule: 'horario', routine: 'tarea programada' };
 const STATE: Record<Listed['state'], string> = { running: 'en curso', done: 'acabada', failed: 'falló' };
 const RUN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

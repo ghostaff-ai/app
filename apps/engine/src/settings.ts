@@ -39,7 +39,7 @@ const REFUSALS: Record<string, string> = {
   '22023': 'Ese cambio no es válido. Revisa los datos y vuelve a proponerlo.',
   '23505': 'Eso ya existe: por ejemplo, esa persona ya está en la empresa.',
   '23514': 'Ese valor no está permitido.',
-  '54000': 'Se ha llegado al límite para esto (por ejemplo, diez rutinas por persona).',
+  '54000': 'Se ha llegado al límite para esto (por ejemplo, diez tareas programadas por persona).',
 };
 
 /** What a refusal says to the model and on the card, always in Spanish: ours as written, the database's by its code. */

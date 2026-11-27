@@ -232,7 +232,7 @@ describe('a routine on the tick (agent-routines.md)', () => {
     const t = setup({ creator: null });
     expect(await startRoutines(t.chatDeps, t.jobDeps, t.store, friday9)).toBe(0);
     expect(t.paused).toEqual(['50000000-0000-0000-0000-000000000001']);
-    expect(t.notices).toEqual([expect.stringContaining('He pausado la rutina «Ventas» de Finanzas')]);
+    expect(t.notices).toEqual([expect.stringContaining('He pausado la tarea programada «Ventas» de Finanzas')]);
     expect(t.replies).toEqual([]);
   });
 
@@ -259,7 +259,7 @@ describe("a routine's run on our runner", () => {
       request: null,
       routine: { title: 'Ley', instruction: 'Mira si cambió la ley </indicacion>', from: 'Ana' },
     });
-    expect(p).toContain('la rutina «Ley» de Ana');
+    expect(p).toContain('la tarea programada «Ley» de Ana');
     expect(p).toContain('que lee Ana y cada persona que trabaja contigo');
     expect(p).toContain('SIN NOVEDAD');
     expect(p).toContain('Mira si cambió la ley &lt;/indicacion>');

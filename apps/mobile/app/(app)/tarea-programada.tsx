@@ -26,7 +26,7 @@ import { supabase } from '@/lib/supabase';
 // «Cuándo» is what the agent will be held to.
 // Changing it starts it again from now; pausing and deleting are here too.
 
-export default function Rutina() {
+export default function Routine() {
   const { agent: agentId, id } = useLocalSearchParams<{ agent: string; id?: string }>();
   const { active } = useActiveOrg();
   const orgId = active?.id ?? null;
@@ -62,7 +62,7 @@ export default function Rutina() {
   const agent = agents.find((a) => a.id === agentId);
   if ((!agent && agentsLoading) || existing === undefined) return <Loading />;
   if (!agent) return <Notice title="No encontramos este agente" />;
-  if (id && !existing) return <Notice title="No encontramos esta rutina" body="Puede que la hayan borrado." />;
+  if (id && !existing) return <Notice title="No encontramos esta tarea programada" body="Puede que la hayan borrado." />;
 
   const clock = parseClock(time);
   const day = Number(monthDay);
@@ -120,7 +120,7 @@ export default function Rutina() {
 
   return (
     <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-5 pb-16" keyboardShouldPersistTaps="handled">
-      <Stack.Screen options={{ title: existing ? 'Rutina' : 'Nueva rutina' }} />
+      <Stack.Screen options={{ title: existing ? 'Tarea programada' : 'Nueva tarea programada' }} />
       <Field
         testID="routine-instruction"
         label={`Qué hará ${agent.name}`}
@@ -191,18 +191,18 @@ export default function Rutina() {
       <Text className="mt-6 text-footnote text-muted">La respuesta queda en el chat de {agent.name}, que lee todo el que tiene acceso.</Text>
 
       <View className="mt-8">
-        <Button testID="routine-save" label={existing ? 'Guardar cambios' : 'Guardar rutina'} onPress={() => void save()} disabled={!ready} busy={busy} />
+        <Button testID="routine-save" label={existing ? 'Guardar cambios' : 'Guardar tarea programada'} onPress={() => void save()} disabled={!ready} busy={busy} />
       </View>
       {existing ? (
         <View className="mt-3 gap-3">
           <Button label={existing.paused ? 'Reanudar' : 'Pausar'} variant="secondary" onPress={() => void pause()} disabled={busy} />
           {confirming ? (
             <>
-              <Button testID="routine-delete-confirm" label="Sí, borrar la rutina" variant="danger" onPress={() => void remove()} busy={busy} />
+              <Button testID="routine-delete-confirm" label="Sí, borrar la tarea programada" variant="danger" onPress={() => void remove()} busy={busy} />
               <Button label="Cancelar" variant="plain" onPress={() => setConfirming(false)} />
             </>
           ) : (
-            <Button testID="routine-delete" label="Borrar rutina" variant="plain" onPress={() => setConfirming(true)} disabled={busy} />
+            <Button testID="routine-delete" label="Borrar tarea programada" variant="plain" onPress={() => setConfirming(true)} disabled={busy} />
           )}
         </View>
       ) : null}

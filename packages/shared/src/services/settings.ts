@@ -378,7 +378,7 @@ export const SETTING_TOOLS: SettingTool[] = [
       "Read the routines you can see: what an agent does on its own at an hour, for the person who asked ('me') or for the whole team ('team'). Read this before changing or pausing one, and use the ids it returns.",
     input_schema: { type: 'object', properties: {} },
     writes: false,
-    step: 'Mirando las rutinas',
+    step: 'Mirando las tareas programadas',
     async run(ctx) {
       const [agents, routines] = await Promise.all([listAgents(ctx.client, ctx.orgId), listRoutines(ctx.client, ctx.orgId)]);
       const mine = ctx.onlySelf ? routines.filter((r) => r.agentId === ctx.agentId) : routines;
@@ -403,11 +403,11 @@ export const SETTING_TOOLS: SettingTool[] = [
       required: ['agent_id', 'title', 'instruction', 'hour'],
     },
     writes: true,
-    step: 'Preparando la rutina',
+    step: 'Preparando la tarea programada',
     async describe(ctx, input) {
       const { agent, routine } = await newRoutine(ctx, input);
       return {
-        label: `Rutina de ${agent.name}: «${routine.title}»`,
+        label: `Tarea programada de ${agent.name}: «${routine.title}»`,
         preview: routinePreview(routine),
         decider: 'requester',
       };
@@ -415,7 +415,7 @@ export const SETTING_TOOLS: SettingTool[] = [
     async run(ctx, input) {
       const { agent, routine } = await newRoutine(ctx, input);
       const made = await createRoutine(ctx.client, agent.id, routine);
-      return `Rutina guardada: ${agent.name}, ${describeWhen(made).toLowerCase()}, «${made.title}».`;
+      return `Tarea programada guardada: ${agent.name}, ${describeWhen(made).toLowerCase()}, «${made.title}».`;
     },
   },
   {
@@ -436,12 +436,12 @@ export const SETTING_TOOLS: SettingTool[] = [
       required: ['routine_id', 'title', 'instruction', 'hour'],
     },
     writes: true,
-    step: 'Preparando el cambio de la rutina',
+    step: 'Preparando el cambio de la tarea programada',
     async describe(ctx, input) {
       const now = await routineOf(ctx, input);
       const next = routineFields(input);
       return {
-        label: `Cambiar la rutina «${now.title}»`,
+        label: `Cambiar la tarea programada «${now.title}»`,
         preview: `Ahora: ${describeWhen(now)}, «${now.title}»\nDespués: ${describeWhen(next)}, «${next.title}»\n${next.instruction}`,
         decider: deciderOf(ctx, now),
       };
@@ -449,7 +449,7 @@ export const SETTING_TOOLS: SettingTool[] = [
     async run(ctx, input) {
       const now = await routineOf(ctx, input);
       const r = await updateRoutine(ctx.client, now.id, routineFields(input));
-      return `Rutina cambiada: ${describeWhen(r).toLowerCase()}, «${r.title}».`;
+      return `Tarea programada cambiada: ${describeWhen(r).toLowerCase()}, «${r.title}».`;
     },
   },
   {
@@ -461,12 +461,12 @@ export const SETTING_TOOLS: SettingTool[] = [
       required: ['routine_id', 'paused'],
     },
     writes: true,
-    step: 'Preparando la pausa de la rutina',
+    step: 'Preparando la pausa de la tarea programada',
     async describe(ctx, input) {
       const r = await routineOf(ctx, input);
       const paused = pausedOf(input);
       return {
-        label: `${paused ? 'Pausar' : 'Reanudar'} la rutina «${r.title}»`,
+        label: `${paused ? 'Pausar' : 'Reanudar'} la tarea programada «${r.title}»`,
         preview: `Ahora: ${r.paused ? 'en pausa' : describeWhen(r)}\nDespués: ${paused ? 'en pausa' : describeWhen(r)}`,
         decider: deciderOf(ctx, r),
       };
@@ -475,7 +475,7 @@ export const SETTING_TOOLS: SettingTool[] = [
       const r = await routineOf(ctx, input);
       const paused = pausedOf(input);
       await setRoutinePaused(ctx.client, r.id, paused);
-      return paused ? `Rutina «${r.title}» en pausa.` : `Rutina «${r.title}» reanudada: ${describeWhen(r).toLowerCase()}.`;
+      return paused ? `Tarea programada «${r.title}» en pausa.` : `Tarea programada «${r.title}» reanudada: ${describeWhen(r).toLowerCase()}.`;
     },
   },
   {
@@ -657,12 +657,12 @@ function routineFields(input: Record<string, unknown>): RoutineInput {
 
 async function newRoutine(ctx: SettingsContext, input: Record<string, unknown>) {
   const agent = await agentOf(ctx, uuid(input, 'agent_id'));
-  if (ctx.onlySelf && agent.id !== ctx.agentId) throw new SettingError('Solo puedes proponer rutinas tuyas; las de otro agente se piden a Secretaría.');
-  if (agent.runner === 'ordago_job') throw new SettingError(`${agent.name} todavía no admite rutinas.`);
+  if (ctx.onlySelf && agent.id !== ctx.agentId) throw new SettingError('Solo puedes proponer tareas programadas tuyas; las de otro agente se piden a Secretaría.');
+  if (agent.runner === 'ordago_job') throw new SettingError(`${agent.name} todavía no admite tareas programadas.`);
   const routine = routineFields(input);
   const mine = ctx.userId ? (await listRoutines(ctx.client, ctx.orgId)).filter((r) => r.createdBy === ctx.userId).length : 0;
   if (mine >= MAX_ROUTINES_PER_PERSON) {
-    throw new SettingError(`Ya tiene ${MAX_ROUTINES_PER_PERSON} rutinas, el máximo: que pause o borre alguna en la app antes.`);
+    throw new SettingError(`Ya tiene ${MAX_ROUTINES_PER_PERSON} tareas programadas, el máximo: que pause o borre alguna en la app antes.`);
   }
   return { agent, routine };
 }
@@ -670,7 +670,7 @@ async function newRoutine(ctx: SettingsContext, input: Record<string, unknown>) 
 async function routineOf(ctx: SettingsContext, input: Record<string, unknown>): Promise<Routine> {
   const id = uuid(input, 'routine_id');
   const r = (await listRoutines(ctx.client, ctx.orgId)).find((x) => x.id === id);
-  if (!r || (ctx.onlySelf && r.agentId !== ctx.agentId)) throw new SettingError('No hay ninguna rutina con ese id que puedas ver.');
+  if (!r || (ctx.onlySelf && r.agentId !== ctx.agentId)) throw new SettingError('No hay ninguna tarea programada con ese id que puedas ver.');
   return r;
 }
 

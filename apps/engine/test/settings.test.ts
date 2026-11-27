@@ -153,7 +153,7 @@ describe('routines as settings (agent-routines.md)', () => {
     const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: secretaria, userId: 'u' };
     const input = { agent_id: finanzas, title: 'Ventas', instruction: 'Mándame el resumen de ventas', days: [5], hour: 9 };
     expect(await tool('settings_create_routine').describe!(ctx, input)).toEqual({
-      label: 'Rutina de Finanzas: «Ventas»',
+      label: 'Tarea programada de Finanzas: «Ventas»',
       preview: 'Cuándo: Cada viernes, 9:00\nQué: Mándame el resumen de ventas\nLo lee: todo el equipo que ve al agente',
       decider: 'requester',
     });
@@ -174,7 +174,7 @@ describe('routines as settings (agent-routines.md)', () => {
   it('lets an agent that is not the main one propose only its own', async () => {
     const ctx: SettingsContext = { client: client(), orgId: 'o', agentId: secretaria, onlySelf: true };
     const input = { agent_id: finanzas, title: 'Ventas', instruction: 'x', hour: 9 };
-    await expect(tool('settings_create_routine').describe!(ctx, input)).rejects.toThrow(/Solo puedes proponer rutinas tuyas/);
+    await expect(tool('settings_create_routine').describe!(ctx, input)).rejects.toThrow(/Solo puedes proponer tareas programadas tuyas/);
     await expect(tool('settings_pause_routine').describe!(ctx, { routine_id: routine, paused: true })).rejects.toBeInstanceOf(SettingError);
     const own: SettingsContext = { ...ctx, agentId: finanzas };
     expect(JSON.parse(await tool('settings_read_routines').run(own, {}))).toMatchObject([{ id: routine, when: 'Cada viernes, 9:00' }]);
@@ -184,7 +184,7 @@ describe('routines as settings (agent-routines.md)', () => {
     const calls: Array<[string, unknown]> = [];
     const ctx: SettingsContext = { client: client(calls), orgId: 'o', agentId: secretaria, userId: 'u' };
     expect(await tool('settings_pause_routine').describe!(ctx, { routine_id: routine, paused: true })).toEqual({
-      label: 'Pausar la rutina «Ventas»',
+      label: 'Pausar la tarea programada «Ventas»',
       preview: 'Ahora: Cada viernes, 9:00\nDespués: en pausa',
       decider: 'requester',
     });

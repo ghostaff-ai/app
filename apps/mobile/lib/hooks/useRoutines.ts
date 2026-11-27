@@ -24,7 +24,7 @@ export function useRoutines(orgId: string | null, agentId: string | null) {
       setItems(await listRoutines(supabase, orgId, agentId));
       setError(null);
     } catch {
-      setError('No hemos podido leer las rutinas. Vuelve a intentarlo en un momento.');
+      setError('No hemos podido leer las tareas programadas. Vuelve a intentarlo en un momento.');
     } finally {
       setLoading(false);
     }

@@ -79,8 +79,8 @@ export default function AppLayout() {
         <Stack.Screen name="chat/[agent]" options={{ ...beside, title: '' }} />
         <Stack.Screen name="general" options={{ ...beside, title: 'General' }} />
         <Stack.Screen name="archivos" options={{ title: 'Archivos' }} />
-        <Stack.Screen name="rutinas/[agent]" options={{ title: 'Rutinas' }} />
-        <Stack.Screen name="rutina" options={{ ...modal, title: 'Nueva rutina' }} />
+        <Stack.Screen name="tareas-programadas/[agent]" options={{ title: 'Tareas programadas' }} />
+        <Stack.Screen name="tarea-programada" options={{ ...modal, title: 'Nueva tarea programada' }} />
         <Stack.Screen name="guia/[id]" options={{ title: '' }} />
         <Stack.Screen name="anadir-agente" options={{ title: 'Añadir agente' }} />
         <Stack.Screen

@@ -19,7 +19,7 @@ describe('the routine form (agent-routines.md)', () => {
   });
 
   it('says why the database refused, in words', () => {
-    expect(routineRefusal({ code: '54000' })).toMatch(/10 rutinas/);
+    expect(routineRefusal({ code: '54000' })).toMatch(/10 tareas programadas/);
     expect(routineRefusal({ code: '42501' })).toMatch(/propietario/);
     expect(routineRefusal(new Error('fetch failed'))).toMatch(/Vuelve a intentarlo/);
   });

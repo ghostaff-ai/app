@@ -10,7 +10,7 @@ import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { supabase } from '@/lib/supabase';
 
 // An agent's settings, behind the gear on top of its page (Jaime, 2026-11-27:
-// what is set once shouldn't sit under what it does every day). «Rutinas» for
+// what is set once shouldn't sit under what it does every day). «Tareas programadas» for
 // whoever may talk to it and its «Memoria» for whoever may see it. Its chat is
 // the one everyone with access shares (group-chat-per-agent.md): who reads and
 // who writes there is «Quién puede». An owner sets that and which connected
@@ -66,10 +66,10 @@ export default function AjustesDelAgente() {
           <ListRow
             testID="agent-routines"
             leading={<RowIcon icon={Clock} />}
-            title="Rutinas"
+            title="Tareas programadas"
             subtitle={`Lo que ${agent.name} hace solo, a su hora`}
             chevron
-            onPress={() => router.push(`/rutinas/${agent.id}`)}
+            onPress={() => router.push(`/tareas-programadas/${agent.id}`)}
           />
         </ListSection>
       ) : null}
