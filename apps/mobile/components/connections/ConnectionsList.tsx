@@ -111,7 +111,7 @@ export function ConnectionsList() {
             <Icon icon={LockSimple} size={16} color={c.muted} weight="regular" />
           </View>
           <Text className="ml-2 flex-1 text-footnote text-muted">
-            Tus agentes trabajan con las cuentas que ya usas. Entras tú y aceptas; nunca nos das tu contraseña.
+            Tus agentes trabajan con las cuentas que ya usas: entras tú y aceptas. Lo que no tiene botón para entrar lo guardas como clave, cifrada.
           </Text>
         </View>
         <View className={`mt-4 ${desktop ? 'self-start' : ''}`}>

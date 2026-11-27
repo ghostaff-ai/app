@@ -60,7 +60,7 @@ Invariants: the value goes app → engine → vault and nowhere else; the model 
 ### File structure
 
 - `supabase/migrations/<after the newest on develop>_org_secrets.sql`, `supabase/tests/database/org_secrets.test.sql`
-- `packages/shared/src/record/agents.ts`: `pendingSecretName`, `secretValueProblem`, `secretNameFromLabel`, `secretLabelFromName`
+- `packages/shared/src/record/agents.ts`: `pendingSecretName`; `packages/shared/src/orgSecrets.ts`: `secretValueProblem`, `cleanSecretValue`, `secretNameFromLabel`, `secretLabelFromName` (the app imports them, and never `record`)
 - `packages/shared/src/models/`: `OrgSecret`; `Agent.secrets`
 - `packages/shared/src/services/index.ts`: `listOrgSecrets`, `storeOrgSecret`, `replaceOrgSecret`, `decideOrgSecret`, `removeOrgSecret`; `secrets` in the agent's columns
 - `packages/shared/src/orgSecrets.ts`: `keyRows` (the stored keys and the missing ones, each with the agents that use it)
@@ -68,17 +68,17 @@ Invariants: the value goes app → engine → vault and nowhere else; the model 
 - `apps/engine/src/app.ts`, `server.ts`: `POST /orgs/:org/secrets`, `POST /orgs/:org/secrets/:name`, `POST …/:name/approve|reject`, `DELETE …/:name`
 - `apps/engine/src/runner.ts`, `jobsStore.ts`: `RunnerStore.noteSecrets`
 - `apps/sync/src/cli.ts`, `secrets.ts` (+ test): `set-secret` writes the row (`--label`, `--maker`); `register-secrets`
-- `apps/mobile/components/connections/ConnectionsList.tsx`: the «Claves» section; `apps/mobile/app/(app)/(tabs)/empresa/conexiones/clave.tsx` (+ `components/connections/KeyPage.tsx`): add, replace, approve, remove; «Añadir conexión» gets a «Claves» group
+- `apps/mobile/components/connections/ConnectionsList.tsx`: the «Claves» section; `apps/mobile/app/(app)/(tabs)/empresa/conexiones/clave.tsx` (+ `components/connections/KeyPage.tsx`): add, replace, approve, remove; «Añadir conexión» gets a «Claves» group. Not in Maestro yet: the e2e stack would need the engine's key routes; Jest covers the screens
 - `docs/architecture.md`: the fourth kind of secret now has a row and a screen
 
 ### Tasks
 
-- [ ] pgTAP: the table, its checks and its RLS (members read, nobody writes from the app, another organisation sees nothing)
-- [ ] Shared helpers and models, with unit tests
-- [ ] Engine `orgSecrets.ts`, test first: owner stores, member's waits, approve, reject, replace, remove, refusals, the value never echoed or logged
-- [ ] Engine routes and the runner's `noteSecrets`
-- [ ] `org set-secret` writes the row; `org register-secrets`
-- [ ] App, Jest first: the Claves section (stored, pending, missing, agents that use each) and the key's page (add, replace, approve/reject, remove naming the agents)
+- [x] pgTAP: the table, its checks and its RLS (members read, nobody writes from the app, another organisation sees nothing)
+- [x] Shared helpers and models, with unit tests
+- [x] Engine `orgSecrets.ts`, test first: owner stores, member's waits, approve, reject, replace, remove, refusals, the value never echoed or logged
+- [x] Engine routes and the runner's `noteSecrets`
+- [x] `org set-secret` writes the row; `org register-secrets`
+- [x] App, Jest first: the Claves section (stored, pending, missing, agents that use each) and the key's page (add, replace, approve/reject, remove naming the agents)
 - [ ] Local web check, `pnpm check`, PR, `pnpm pr:land`
 - [ ] Beta: `org register-secrets --org ordago` with labels for the four; Claves shows them with their agents
 - [ ] Jaime replaces `elevenlabs` from his phone; Productor's next run uses it
@@ -89,6 +89,6 @@ Invariants: the value goes app → engine → vault and nowhere else; the model 
 |---|---|---|
 | Code merged and deployed | ⬜ | ⬜ |
 | Órdago's four rows backfilled | n/a | ⬜ |
-| A key replaced from the phone, next run uses it | ⬜ | ⬜ |
+| A key replaced from the phone, next run uses it | ✅ add, replace, approve, remove on the local web (2026-11-27; no run locally) | ⬜ |
 
 Legend: ⬜ pending · ⏳ in progress · ✅ done · ⚠️ blocked (note inline)
