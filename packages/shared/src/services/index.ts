@@ -1473,7 +1473,8 @@ export async function listAskedDecisions(client: SupabaseClient, orgId: string, 
     .select('parts')
     .eq('org_id', orgId)
     .eq('author_user', userId)
-    .contains('parts', [{ type: 'decision_quote' }])
+    // `parts` is jsonb: PostgREST wants JSON here. Given an array, supabase-js writes a Postgres array literal (`cs.{…}`), which is a 400.
+    .contains('parts', JSON.stringify([{ type: 'decision_quote' }]))
     .order('created_at', { ascending: false })
     .limit(200)
     .returns<{ parts: MessagePart[] }[]>();
