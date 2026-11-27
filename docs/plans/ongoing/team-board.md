@@ -2,7 +2,7 @@
 
 **Priority:** high — Equipo looked like a list of chats, so the product reads as «another ChatGPT» (Jaime and Álvaro, WhatsApp audios of 2026-11-26)
 **Gate:** none
-**Next:** Jaime looks at it on the branch `feat/team-board` (local stack, web at phone width) before it lands
+**Next:** a name for Secretaría (the founders'); then a more 3D stage for the ghosts, if Jaime still wants it. Landed in [ghostaff-ai/app#109](https://github.com/ghostaff-ai/app/pull/109) on 2026-11-27
 
 Jaime, 2026-11-27, after three rounds of mockups in a session: «tiene que quedar en la pantalla principal más claro los agentes que tienen, lo que están haciendo, en el medio las decisiones, igual que hasta ahora, y luego además cuando entras en los agentes, pues que también salgan las decisiones, si tienes que hacer algo, lo que ha hecho [...] y si le das a escribir, que te saliese ya un chat con él». It follows the founders' audios of 2026-11-26: Álvaro «quitamos la lista de chats y ponemos a los fantasmas en una oficina»; Jaime «no tiene que ser una lista de chats [...] tienen que ser más entidades [...] el fantasma que quiera decir algo, que tenga una notificación arriba». The approved mockup is a picture, not in the repo: `~/Desktop/ghostaff/capturas/propuesta-equipo-2026-11-27.png` (and its `.html`).
 
@@ -20,8 +20,8 @@ The ghosts' stage could be more 3D (Jaime: «me falta como algo más 3D, pero bu
 
 ## Tasks
 
-- [ ] `agentStatus` (pure, unit-tested): waiting decisions, working, unread → the tag.
-- [ ] Data: open decisions by agent (`useInbox`), working agents (`agent_runs` running, `messages` working), the agent's recent runs (new `listAgentRuns`, RLS already lets whoever sees the agent read them).
-- [ ] `components/team/`: `GhostStage`, `AgentTile`, `LeadCard`, `GeneralCard`; `TeamBoard` for the phone's Equipo, keeping the test IDs the end-to-end flows use (`general`, `agent-secretaria`, `add-agent`, `no-ai`).
-- [ ] The agent's page: the overview on top and «Escribir».
-- [ ] Jest for the status and the board; check on the web at phone width against the local stack.
+- [x] `agentStatus` (pure, unit-tested): waiting decisions, working, unread → the tag.
+- [x] Data: open decisions by agent (`useInbox`), working agents (`agent_runs` running, `messages` working), the agent's recent runs (new `listAgentRuns`, RLS already lets whoever sees the agent read them).
+- [x] `components/team/`: `GhostStage`, `AgentTile`, `LeadCard`, `GeneralCard`; `TeamBoard` for the phone's Equipo, keeping the test IDs the end-to-end flows use (`general`, `agent-secretaria`, `add-agent`, `no-ai`).
+- [x] The agent's page: the overview on top and «Escribir».
+- [x] Jest for the status and the board; check on the web at phone width against the local stack.
