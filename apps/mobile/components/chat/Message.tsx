@@ -610,6 +610,7 @@ export function MessageView({
         onRetry={mine && onRetryTranscript && (transcript === 'tap' || voice.tags) ? () => onRetryTranscript(message.id) : undefined}
         tone={mine ? 'mine' : 'theirs'}
         unplayed={unplayed}
+        stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}
       />
     </>
   ) : (
@@ -639,7 +640,7 @@ export function MessageView({
       name={group && !mine ? message.authorName : null}
       nameColour={colour}
       avatar={<Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} />}
-      stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}
+      stamp={voice ? undefined : <Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}
       stampInline={!voice && !!text}
       accessibilityLabel={`${mine ? 'Tú' : message.authorName}: ${voice ? 'nota de voz' : files.length ? `${files.map((f) => f.name).join(', ')}${text ? `. ${text}` : ''}` : text}`}
       below={below}

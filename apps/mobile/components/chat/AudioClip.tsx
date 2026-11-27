@@ -1,5 +1,5 @@
 import { type AudioPlayer, setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, type LayoutChangeEvent, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { clock } from '@/components/chat/RecordingBar';
 import { Icon, Pause, Play } from '@/components/icons';
@@ -23,12 +23,13 @@ const SPEEDS = [1, 1.5, 2];
 const played = new Set<string>();
 const BARS = 36;
 
-/** On the person's accent bubble, or on a card in the page's colours. */
-export type AudioTone = 'accent' | 'card';
+/** In your own bubble, or on a card in the page's colours. Both draw in the chat's violet. */
+export type AudioTone = 'mine' | 'card';
 
+/** The length's colour; the play button, bars and speed pill are the chat accent in both. */
 const TONES = {
-  accent: { text: 'text-on-accent', colour: 'onAccent', rest: 0.4 },
-  card: { text: 'text-ink', colour: 'ink', rest: 0.3 },
+  mine: { text: 'text-mine-muted' },
+  card: { text: 'text-muted' },
 } as const;
 
 /** The bars to draw: the audio's own levels, or, without them (an agent's, an older note), a steady shape from `seed`. */
@@ -50,9 +51,10 @@ export function AudioClip({
   path,
   durationMs,
   labels,
-  tone = 'accent',
+  tone = 'mine',
   waveform,
   unplayed = false,
+  stamp,
 }: {
   /** In the «voice-notes» bucket; also what the steady shape and «played» go by. */
   path: string;
@@ -65,6 +67,8 @@ export function AudioClip({
   waveform?: number[];
   /** Someone else's that arrived since the person last read the chat: a dot until played. */
   unplayed?: boolean;
+  /** The bubble's time and ticks: drawn at the right end of the length's row. */
+  stamp?: ReactNode;
 }) {
   const c = usePalette();
   const t = TONES[tone];
@@ -165,9 +169,9 @@ export function AudioClip({
         accessibilityLabel={status.playing ? labels.pause : labels.play}
         onPress={() => void toggle()}
         hitSlop={8}
-        className="h-10 w-10 items-center justify-center active:opacity-70"
+        className="h-[34px] w-[34px] items-center justify-center rounded-full bg-chat-accent active:opacity-70"
       >
-        {source === 'loading' ? <ActivityIndicator color={c[t.colour]} /> : <Icon icon={status.playing ? Pause : Play} size={26} color={c[t.colour]} weight="fill" />}
+        {source === 'loading' ? <ActivityIndicator color={c.onChatAccent} /> : <Icon icon={status.playing ? Pause : Play} size={15} color={c.onChatAccent} weight="fill" />}
       </Pressable>
       <View className="flex-1">
         <View
@@ -188,22 +192,23 @@ export function AudioClip({
             return (
               <View
                 key={i}
-                style={{ width: 2.5, height: Math.max(3, h * 26), borderRadius: 2, backgroundColor: showDot && !done ? c.ok : c[t.colour], opacity: done ? 1 : t.rest }}
+                style={{ width: 2.5, height: Math.max(3, h * 26), borderRadius: 2, backgroundColor: c.chatAccent, opacity: done ? 1 : 0.35 }}
               />
             );
           })}
         </View>
-        <View className="mt-0.5 flex-row items-center">
-          <Text className={`text-[11px] ${t.text} opacity-70`} style={{ fontVariant: ['tabular-nums'] }}>
+        <View testID="voice-meta" className="mt-0.5 flex-row items-center">
+          <Text className={`text-[11px] ${t.text}`} style={{ fontVariant: ['tabular-nums'] }}>
             {source === 'failed' ? 'No se puede reproducir aquí' : total > 0 ? clock(Math.round(started ? at : total)) : '–:––'}
           </Text>
-          {showDot ? <View testID="voice-unplayed" className="ml-1.5 h-2 w-2 rounded-full bg-ok" /> : null}
+          {showDot ? <View testID="voice-unplayed" className="ml-1.5 h-2 w-2 rounded-full bg-chat-accent" /> : null}
+          {stamp ? <View className="ml-auto pl-2">{stamp}</View> : null}
         </View>
       </View>
       {started ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`Velocidad ${rate}×, cambiar`} onPress={nextSpeed} hitSlop={8} className="min-w-9 items-center overflow-hidden rounded-full px-2 py-0.5 active:opacity-70">
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: c[t.colour], opacity: 0.15 }]} />
-          <Text className={`text-[12px] font-semibold ${t.text}`}>{rate === 1.5 ? '1,5×' : `${rate}×`}</Text>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: c.chatAccent, opacity: 0.15 }]} />
+          <Text className={`text-[12px] font-semibold text-chat-accent`}>{rate === 1.5 ? '1,5×' : `${rate}×`}</Text>
         </Pressable>
       ) : null}
     </View>

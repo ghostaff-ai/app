@@ -1,5 +1,5 @@
 import type { VoicePart } from '@ghostaff/shared';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AudioClip } from '@/components/chat/AudioClip';
 
@@ -13,7 +13,7 @@ const STALE_MS = 3 * 60_000;
 
 const LABELS = { play: 'Escuchar nota de voz', pause: 'Pausar nota de voz', position: 'Posición en la nota' };
 
-const TONES = { mine: { text: 'text-on-accent', clip: 'accent' }, theirs: { text: 'text-ink', clip: 'card' } } as const;
+const TONES = { mine: { clip: 'mine' }, theirs: { clip: 'card' } } as const;
 
 export function VoiceNote({
   part,
@@ -23,6 +23,7 @@ export function VoiceNote({
   onRetry,
   tone = 'mine',
   unplayed = false,
+  stamp,
 }: {
   part: VoicePart;
   messageId: string;
@@ -34,6 +35,8 @@ export function VoiceNote({
   tone?: keyof typeof TONES;
   /** Someone else's note that arrived since the person last read the chat: a dot until played. */
   unplayed?: boolean;
+  /** The bubble's time and ticks, beside the length. */
+  stamp?: ReactNode;
 }) {
   const t = TONES[tone];
   const [retrying, setRetrying] = useState(false);
@@ -55,29 +58,29 @@ export function VoiceNote({
 
   return (
     <View style={{ minWidth: 230 }}>
-      <AudioClip path={part.path} durationMs={part.durationMs} labels={LABELS} tone={t.clip} waveform={part.waveform} unplayed={unplayed} />
+      <AudioClip path={part.path} durationMs={part.durationMs} labels={LABELS} tone={t.clip} waveform={part.waveform} unplayed={unplayed} stamp={stamp} />
       {transcript !== null || failed ? (
         <View aria-live="polite">
           {failed ? (
             <View className="mt-1 flex-row flex-wrap items-center gap-x-3">
-              <Text className={`text-footnote ${t.text} opacity-80`}>No se ha podido transcribir.</Text>
+              <Text className={`text-footnote text-muted`}>No se ha podido transcribir.</Text>
               {onRetry ? (
                 <Pressable accessibilityRole="button" accessibilityLabel="Reintentar la transcripción" onPress={() => void retry()} hitSlop={8} className="active:opacity-70">
-                  <Text className={`text-footnote font-semibold ${t.text} underline`}>Reintentar</Text>
+                  <Text className={`text-footnote font-semibold text-chat-accent`}>Reintentar</Text>
                 </Pressable>
               ) : null}
             </View>
           ) : open ? (
             part.transcription === 'done' && transcript ? (
-              <Text className={`mt-1 text-[15px] leading-[21px] ${t.text}`} selectable>
+              <Text className={`mt-1 text-[15px] leading-[21px] text-ink`} selectable>
                 {transcript}
               </Text>
             ) : (
-              <Text className={`mt-1 text-footnote ${t.text} opacity-80`}>{part.transcription === 'empty' ? 'No se ha oído nada.' : 'Transcribiendo…'}</Text>
+              <Text className={`mt-1 text-footnote text-muted`}>{part.transcription === 'empty' ? 'No se ha oído nada.' : 'Transcribiendo…'}</Text>
             )
           ) : (
             <Pressable accessibilityRole="button" accessibilityLabel="Ver transcripción" onPress={() => setOpen(true)} hitSlop={8} className="mt-0.5 self-start active:opacity-70">
-              <Text className={`text-footnote ${t.text} opacity-70`}>Transcripción</Text>
+              <Text className={`text-footnote font-semibold text-chat-accent`}>Transcripción</Text>
             </Pressable>
           )}
         </View>

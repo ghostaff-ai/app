@@ -1,5 +1,5 @@
 import type { ChatMessage, VoicePart } from '@ghostaff/shared';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { MessageView } from '@/components/chat/Message';
 import { VoiceNote } from '@/components/chat/VoiceNote';
 
@@ -121,6 +121,19 @@ describe('a voice note', () => {
     await waitFor(() => expect(screen.queryByTestId('voice-unplayed')).toBeNull());
   });
 
+  it('draws a round violet play button', async () => {
+    await render(note());
+    const play = screen.getByLabelText('Escuchar nota de voz');
+    expect(play.props.className).toContain('bg-chat-accent');
+    expect(play.props.className).toContain('rounded-full');
+  });
+
+  it('marks an unplayed note in violet, not green', async () => {
+    await render(note({ part: part({ path: 'org/chat/violet.m4a' }), tone: 'theirs', unplayed: true }));
+    expect(screen.getByTestId('voice-unplayed').props.className).toContain('bg-chat-accent');
+    expect(screen.getByTestId('voice-unplayed').props.className).not.toContain('bg-ok');
+  });
+
   it('says so when the audio cannot be fetched', async () => {
     mockLink.mockRejectedValueOnce(new Error('not found'));
     await render(note({ messageId: 'm9' }));
@@ -150,6 +163,14 @@ describe('a voice note in the chat', () => {
     expect(screen.getByLabelText('Escuchar nota de voz')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Reintentar la transcripción'));
     expect(onRetry).toHaveBeenCalledWith('m1');
+  });
+
+  it('puts the time on the same line as the length', async () => {
+    const createdAt = '2026-11-27T10:42:00';
+    await render(<MessageView message={{ ...message, createdAt, parts: [part()] }} mine showAuthor names={[]} />);
+    const row = screen.getByTestId('voice-meta');
+    expect(within(row).getByText('1:24')).toBeTruthy();
+    expect(within(row).getByText('10:42')).toBeTruthy();
   });
 
   it('draws a colleague’s note as audio too, with their name', async () => {
