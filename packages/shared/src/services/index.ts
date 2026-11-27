@@ -1673,6 +1673,51 @@ export function agentRunFromRow(r: AgentRunRow): AgentRun {
   };
 }
 
+/** One agent's finished runs since `since`, newest first, those that say what they did: its page's «Últimamente» (team-board.md). */
+export async function listAgentRuns(client: SupabaseClient, agentId: string, since: Date, limit = 5): Promise<AgentRun[]> {
+  const { data, error } = await client
+    .from('agent_runs')
+    .select('id, org_id, agent_id, origin, state, summary, noteworthy, decisions_opened, started_at, finished_at')
+    .eq('agent_id', agentId)
+    .eq('state', 'done')
+    .not('summary', 'is', null)
+    .gte('started_at', since.toISOString())
+    .order('started_at', { ascending: false })
+    .limit(limit)
+    .returns<AgentRunRow[]>();
+  if (error) throw error;
+  return (data ?? []).map(agentRunFromRow);
+}
+
+/** How long a run or a reply may say it is under way before we stop believing it: one that died never closes its row. */
+export const WORKING_FRESH_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * The agents at work right now, by id: a run under way, or a reply in a chat
+ * still being written (team-board.md, decision 3). Each list is only what the
+ * person may see (row-level security).
+ */
+export async function listWorkingAgents(client: SupabaseClient, orgId: string, now = new Date()): Promise<Set<string>> {
+  const since = new Date(now.getTime() - WORKING_FRESH_MS).toISOString();
+  const [runs, replies] = await Promise.all([
+    client.from('agent_runs').select('agent_id').eq('org_id', orgId).eq('state', 'running').gte('started_at', since).returns<{ agent_id: string }[]>(),
+    client
+      .from('messages')
+      .select('author_agent')
+      .eq('org_id', orgId)
+      .eq('author_kind', 'agent')
+      .eq('state', 'working')
+      .gte('created_at', since)
+      .returns<{ author_agent: string | null }[]>(),
+  ]);
+  if (runs.error) throw runs.error;
+  if (replies.error) throw replies.error;
+  const ids = new Set<string>();
+  for (const r of runs.data ?? []) ids.add(r.agent_id);
+  for (const m of replies.data ?? []) if (m.author_agent) ids.add(m.author_agent);
+  return ids;
+}
+
 /** What the agents finished on their own since `since`, newest first: «Hecho sin ti» (app-design.md #11). */
 export async function listDoneWithoutYou(client: SupabaseClient, orgId: string, since: Date): Promise<AgentRun[]> {
   const { data, error } = await client

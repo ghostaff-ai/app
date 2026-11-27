@@ -4,7 +4,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Image, type LayoutChangeEvent, PanResponder, Platform, Pressable, Text, View } from 'react-native';
 import { Button } from '@/components/ui';
 import { StakesReveal } from '@/components/StakesReveal';
-import { answeredLabel, canSwipe, type Choice, choicesOf, nextFold, pickLabel, SWIPE_DISTANCE } from '@/lib/deck';
+import { answeredLabel, canSwipe, type Choice, choicesOf, decisionHref, nextFold, pickLabel, SWIPE_DISTANCE } from '@/lib/deck';
 import { dueLabel, shortDate } from '@/lib/format';
 import { selection, success } from '@/lib/haptics';
 import type { DeckMove } from '@/lib/hooks/useDecisions';
@@ -231,7 +231,7 @@ export function DecisionDeck({
             accessibilityRole="button"
             accessibilityLabel={`${askerOf(top).name} pregunta: ${top.question}`}
             accessibilityHint={top.action ? 'Abre la conversación' : 'Abre la decisión entera'}
-            onPress={() => router.push(top.action ? `/conversacion/${top.action.threadId}` : `/decision/${top.id}`)}
+            onPress={() => router.push(decisionHref(top))}
             className="flex-1 rounded-[28px] bg-card p-6"
             style={{ shadowColor: '#16151E', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 3 }}
           >

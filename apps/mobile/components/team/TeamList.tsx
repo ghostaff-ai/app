@@ -1,18 +1,13 @@
 import { agentJob } from '@ghostaff/shared/services';
-import { router, useFocusEffect, usePathname } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { router, usePathname } from 'expo-router';
+import { useEffect } from 'react';
 import { Image, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Icon, Plus, UsersThree, WarningCircle } from '@/components/icons';
 import { SpaceSwitcher } from '@/components/SpaceSwitcher';
 import { EmptyState, ErrorText, ListRow, ListSection, Loading, RowIcon, ScreenTitle } from '@/components/ui';
 import { generalChat, generalLastLine, shortTime, teamRows } from '@/lib/chat';
-import { canRunAgents } from '@/lib/connections';
-import { useAgents } from '@/lib/hooks/useAgents';
-import { useMembers, useThreads } from '@/lib/hooks/useChat';
-import { useConnections } from '@/lib/hooks/useConnections';
-import { useFirstHello } from '@/lib/hooks/useFirstHello';
+import { useTeam } from '@/lib/hooks/useTeam';
 import { DESKTOP_CONTENT_MAX_WIDTH, desktopSection, useIsDesktop, useReplacesBeside } from '@/lib/layout';
-import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { useTabScreenTop } from '@/lib/tabs';
 import { GHOSTS } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
@@ -23,53 +18,24 @@ import { usePalette } from '@/lib/theme';
 // with it (group-chat-per-agent.md). An owner adds agents from the last row
 // (decision 5). Above them all, once there are two people, General: the
 // people's chat, where they talk to each other by voice (general-chat.md).
-// On a phone it is the Equipo tab; on a desktop the column beside the open
-// chat (docs/plans/ongoing/desktop-web.md), with that chat's row marked.
+// On a desktop it is the column beside the open chat
+// (docs/plans/ongoing/desktop-web.md), with that chat's row marked; on a
+// phone Equipo is the board of ghosts instead (TeamBoard, team-board.md).
 
 export function TeamList() {
-  const { active } = useActiveOrg();
   const top = useTabScreenTop();
   const desktop = useIsDesktop();
   const path = usePathname();
   const replace = useReplacesBeside();
   const c = usePalette();
-  const orgId = active?.id ?? null;
-  const agents = useAgents(orgId);
-  const { threads, reload: reloadThreads } = useThreads(orgId);
-  const { members, reload: reloadMembers } = useMembers(orgId);
-  const connections = useConnections(orgId);
-  const { reload: reloadAgents } = agents;
-  const { reload: reloadConnections } = connections;
-  const [focused, setFocused] = useState(true);
-  useFocusEffect(
-    useCallback(() => {
-      setFocused(true);
-      void reloadAgents();
-      void reloadThreads();
-      void reloadConnections();
-      void reloadMembers();
-      return () => setFocused(false);
-    }, [reloadAgents, reloadThreads, reloadConnections, reloadMembers]),
-  );
+  const { active, agents, threads, members, noAi, owner, reload, reloadThreads } = useTeam();
   // Beside a chat the list stays mounted: read the last words and unread dots
   // again when another chat opens (reading one clears its dot).
   useEffect(() => {
     if (desktop) void reloadThreads();
   }, [desktop, path, reloadThreads]);
-  // Secretaría comes hired with a new space and says hello in her chat
-  // once its AI is there (welcome-and-spaces.md); her row then shows it, unread.
-  useFirstHello(
-    active,
-    agents.items,
-    connections.loaded && !connections.error && canRunAgents(connections.items),
-    focused,
-    reloadThreads,
-  );
   if (!active) return null;
   if (agents.loading && agents.items.length === 0) return <Loading />;
-  const owner = active.role === 'owner';
-  // An owner never gets here without an AI account (the layout's gate); a member can't connect one.
-  const noAi = connections.loaded && !connections.error && !canRunAgents(connections.items);
   const rows = teamRows(agents.items, threads);
   const general = generalChat(threads, members.length);
   const section = desktopSection(path);
@@ -84,15 +50,7 @@ export function TeamList() {
           : { paddingHorizontal: 20, paddingBottom: 64, paddingTop: 12 + top, maxWidth: DESKTOP_CONTENT_MAX_WIDTH, width: '100%', alignSelf: 'center' }
       }
       contentInsetAdjustmentBehavior="automatic"
-      refreshControl={
-        <RefreshControl
-          refreshing={false}
-          onRefresh={() => {
-            void reloadAgents();
-            void reloadThreads();
-          }}
-        />
-      }
+      refreshControl={<RefreshControl refreshing={false} onRefresh={reload} />}
     >
       {/* Where you are, on every tab (welcome-and-spaces.md); on a desktop the sidebar shows it. */}
       <SpaceSwitcher />

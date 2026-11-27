@@ -4,6 +4,11 @@ import { type Decision, RULE_KIND } from '@ghostaff/shared';
 // 7): which cards are in it, which may be swiped, and when «Más tarde» brings
 // a card back.
 
+/** Where a card opens: an agent's proposed action in the conversation it came from, a decision on its own screen. */
+export function decisionHref(d: Pick<Decision, 'id' | 'action'>): string {
+  return d.action ? `/conversacion/${d.action.threadId}` : `/decision/${d.id}`;
+}
+
 /** How far a card must travel, in px, for a swipe to count. */
 export const SWIPE_DISTANCE = 120;
 
