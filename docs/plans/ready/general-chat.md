@@ -1,8 +1,8 @@
 # General: the people's chat, by voice, that the agents learn from
 
 **Priority:** high — Órdago's founders talk about the business in a Telegram group the agents never read; moving that talk into Ghostaff is how the agents learn what the people decide
-**Gate:** blocked:ghostaff-ai/app#84 (one chat per agent) and ghostaff-ai/app#81 (agent context): both change `threads`, `chat.ts` and the voice notes this builds on
-**Next:** land PR 1 ([ghostaff-ai/app#94](https://github.com/ghostaff-ai/app/pull/94), stacked on #84) with `pnpm pr:land` once #84 is in `develop`; then PR 2, the daily summary
+**Gate:** none: #84 and #81 are in `develop`, and so are both PRs of this plan
+**Next:** on the beta app, a real voice note between two phones, its push, and the first day's summary reaching an agent; then «Later»
 
 **Goal:** Every organisation has one chat called **General** where its people talk to each other, mostly by voice notes, as in a WhatsApp group. Agents stay out of it unless someone @mentions one. What is said there reaches every agent once a day as a summary, and any agent can search it.
 
@@ -92,23 +92,25 @@ PR 2, the daily summary:
 
 ### PR 1: General ([ghostaff-ai/app#94](https://github.com/ghostaff-ai/app/pull/94), stacked on #84, 2026-11-26)
 
-1. [x] Migration `20261127000000_general_chat.sql` and pgTAP `general_chat.test.sql`; the older chat tests scoped to agent chats.
+1. [x] Migration `20261128900000_general_chat.sql` and pgTAP `general_chat.test.sql`; the older chat tests scoped to agent chats.
 2. [x] Engine: a thread without an agent in `answerWaiting`, `whoAnswers` over a person's whole burst; `POST /threads/:id/voice-notes` and `?mention=` on both voice-note routes.
 3. [x] Shared: `ChatThread.kind`, `lastVoiceMs`, `sendVoiceNoteToThread`, `onlyMentions`, with tests.
 4. [x] App: General pinned in Equipo and beside it on the desktop, `/general`, the folded transcript, a colleague's note drawn as audio in every chat (it was its transcript only), the tagged note from the composer; Jest.
 5. [x] Maestro flow `general-chat.yaml`. Not run locally (no Android SDK on this Mac): CI runs it.
 6. [x] Checked on the web against a local Supabase with two people: General pinned with its unread dot, a voice note played from the bucket and its transcript unfolded, texts live both ways, a plain message answered by nobody, @Secretaría answering in General (stand-in key, so «No he podido contestar»), phone width and dark mode. `pnpm check` and `pnpm db:test` green.
-7. [ ] `pnpm pr:land` once #84 is in `develop`; then on the beta app: a real voice note between two phones, its push.
+7. [x] Landed in `develop` (2026-11-27). Still to see on the beta app: a real voice note between two phones, its push.
 
 Not covered by tests or the local check: real recording and transcription of a note to General (the local engine has no Vertex), and pushes reaching a phone.
 
-### PR 2: the daily summary
+### PR 2: the daily summary ([ghostaff-ai/app#98](https://github.com/ghostaff-ai/app/pull/98), in `develop` 2026-11-27)
 
-1. [ ] Migration and pgTAP test.
-2. [ ] `generalDigest.ts`, test first.
-3. [ ] The tick, the chat agents' prompt and tool, the runner's prompt.
-4. [ ] Check against local Supabase with a stand-in writer: a day of messages summarised after midnight, the block in a chat agent's turn and in a runner spec, a search answered. `pnpm pr:land`.
-5. [ ] `docs/architecture.md` (General and what a turn reads) and agent-context.md («Today»).
+1. [x] Migration `20261128910000_general_digests.sql` (`general_digests`, `general_digests_due`) and its pgTAP test.
+2. [x] `generalDigest.ts`, test first: `digestDue`, `heardBlock`, the `general_search` tool.
+3. [x] The tick, the chat agents' prompt (`heard`, before their own memory) and tool, the runner's prompt.
+4. [x] Covered by the engine's unit tests with a stand-in writer and by pgTAP; CI green; landed with `pnpm pr:land`.
+5. [x] `docs/architecture.md` says what a turn reads from General. agent-context.md's «Today» is that plan's to refresh.
+
+Not seen yet: the first real night's summary on beta (it needs a day of real notes).
 
 ## Later
 
