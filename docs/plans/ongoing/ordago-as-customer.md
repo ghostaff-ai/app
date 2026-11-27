@@ -48,7 +48,7 @@ Moving Órdago's agents ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaf
 
 | Done by hand for Órdago | How a customer does it | Where |
 |---|---|---|
-| Mailbox passwords and API keys stored with `org set-secret` from a terminal (`correo-info`, `correo-gmail`, `elevenlabs`, `meta-token`) | A button in Conexiones (OAuth where the maker has it), or a secure field in the app for a key or an app password, or the agent asks for it in its chat | [connectors.md](connectors.md), [connector-in-chat.md](connector-in-chat.md), [guided-access.md](guided-access.md); **the gap:** [secrets-from-the-app.md](../ideas/secrets-from-the-app.md) |
+| Mailbox passwords and API keys stored with `org set-secret` from a terminal (`correo-info`, `correo-gmail`, `elevenlabs`, `meta-token`) | A button in Conexiones (OAuth where the maker has it), or a secure field in the app for a key or an app password, or the agent asks for it in its chat | [connectors.md](connectors.md), [connector-in-chat.md](connector-in-chat.md), [guided-access.md](guided-access.md); **the gap:** [secrets-from-the-app.md](../ready/secrets-from-the-app.md) |
 | Google Cloud roles granted with `gcloud`, copied from the old service accounts | The agent asks for the access it lacks; the person approves it in one tap, with a guide when it is not one tap | [customer-cloud-access.md](customer-cloud-access.md), [agent-access-requests.md](../ideas/agent-access-requests.md), [guided-access.md](guided-access.md) |
 | `ordago-reels` added to the GitHub App's installation; the record in GitHub | A non-technical customer has no GitHub: Ghostaff keeps the record | [record-store.md](record-store.md) |
 | Each YAML turned into `agentes/<slug>/AGENTS.md`, then `org add-agents` (timetable, tools, size, secrets, repos) | The person tells the main agent what they want done («alguien que lea el correo cada mañana y me avise de lo importante») and it creates the agent with its instructions, timetable and the accesses it will ask for | [agent-builder.md](agent-builder.md) |
@@ -57,7 +57,7 @@ Moving Órdago's agents ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaf
 
 Two gaps no plan covered, now tasks of this plan:
 
-- [ ] **Keys and passwords from the app** (high): an owner stores, replaces and removes a key or an app password in the app, and gives it to an agent, without a terminal; and an agent asks for one it lacks. [secrets-from-the-app.md](../ideas/secrets-from-the-app.md).
+- [ ] **Keys and passwords from the app** (high): an owner stores, replaces and removes a key or an app password in the app, and gives it to an agent, without a terminal; and an agent asks for one it lacks. [secrets-from-the-app.md](../ready/secrets-from-the-app.md).
 - [ ] **The whole way, tried with a non-technical person** (high): a new company ends with five or six agents working (mail, a social account, a calendar, a document store, a weekly report) and nobody opens a terminal. Every piece has its plan; nobody has checked they add up. Done when someone who has never used a terminal does it on the beta while we watch, and every step they get stuck on becomes a task in the plan it belongs to.
 
 ## Open decisions (either founder)

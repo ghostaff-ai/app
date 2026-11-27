@@ -1,8 +1,8 @@
 # Keys and passwords from the app, never from a terminal
 
 **Priority:** high — Jaime (2026-11-27): «estamos apuntando a usuarios no técnicos»; today any tool without a sign-in button (a mailbox by IMAP, ElevenLabs, a Meta token) only reaches an agent through `org set-secret` in a terminal
-**Gate:** decision:Jaime answers the open questions below
-**Next:** Jaime answers the open questions; then write the tasks of slice 1 against `develop`
+**Gate:** none
+**Next:** write the tasks of slice 1 against `develop` (the metadata table, Conexiones › Claves, `org set-secret` writing the same row) and build it test first
 
 Found moving Órdago's agents ([ordago-agents-in-ghostaff.md](../ongoing/ordago-agents-in-ghostaff.md)): Correo, Finanzas, Productor and Orgánico needed four secrets (`correo-info`, `correo-gmail`, `elevenlabs`, `meta-token`), and the only way in was a hidden prompt in `pnpm --filter @ghostaff/sync org set-secret`, run by someone with `gcloud` and the service-role key. The map of every manual step and its in-app equivalent is in [ordago-as-customer.md](../ongoing/ordago-as-customer.md#what-we-did-by-hand-for-órdago-and-how-a-customer-will-do-it-jaime-2026-11-27).
 
@@ -31,11 +31,11 @@ The vault (Secret Manager of the environment, `apps/engine/src/vault.ts`) alread
 
 Invariants: the value goes app → engine → vault and nowhere else; the model never reads it (a runner agent gets it as a variable, with the known gap in [architecture.md](../../architecture.md#known-gaps) until the proxy exists); a key pasted into a normal chat is taken out of the message and offered to the vault ([guided-access.md](../ongoing/guided-access.md)); only owners store, replace, remove or assign.
 
-## Open questions (Jaime)
+## Decisions (Jaime, 2026-11-27: «sí, las tres»)
 
-1. **Who stores a key:** only owners, or members too with an owner's approval before an agent uses it (as [guided-access.md](../ongoing/guided-access.md) decided for guides)? Recommendation: the same as guides, for one rule across the app.
-2. **One key, many agents:** a key is the organisation's and any agent can be given it (Órdago's `correo-gmail` is used by Correo and Finanzas), or one key per agent? Recommendation: the organisation's, given per agent.
-3. **Chat agents:** should a chat agent (answering with the model in the engine) be able to use a stored key, through a tool that calls the maker for it without the model seeing the value? Or only runner agents for now? Recommendation: runner agents first; chat agents when a maker needs it.
+1. **Who stores a key** (decided: as guides — owners directly; a member's key waits for an owner's approval before an agent uses it): only owners, or members too with an owner's approval before an agent uses it (as [guided-access.md](../ongoing/guided-access.md) decided for guides)? Recommendation: the same as guides, for one rule across the app.
+2. **One key, many agents** (decided: the organisation's key, given per agent): a key is the organisation's and any agent can be given it (Órdago's `correo-gmail` is used by Correo and Finanzas), or one key per agent? Recommendation: the organisation's, given per agent.
+3. **Chat agents** (decided: runner agents first; chat agents when a maker needs it): should a chat agent (answering with the model in the engine) be able to use a stored key, through a tool that calls the maker for it without the model seeing the value? Or only runner agents for now? Recommendation: runner agents first; chat agents when a maker needs it.
 
 ## Slices
 
