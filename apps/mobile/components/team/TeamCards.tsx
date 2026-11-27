@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { Avatar } from '@/components/chat/Message';
 import { CaretRight, Icon, Plus } from '@/components/icons';
 import { GhostStage } from '@/components/team/GhostStage';
-import { generalLastLine, shortTime } from '@/lib/chat';
+import { agentLastLine, generalLastLine, shortTime } from '@/lib/chat';
 import { DEPARTMENT_NAMES } from '@/lib/team';
 import type { AgentTag } from '@/lib/team/status';
 import { usePalette } from '@/lib/theme';
@@ -49,10 +49,15 @@ export function GeneralCard({ thread, members }: { thread: ChatThread; members: 
   );
 }
 
-/** The main agent, wide: the one you talk to about anything, so a tap opens her chat. */
-export function LeadCard({ agent, tag, waiting }: { agent: Agent; tag: AgentTag; waiting: number }) {
+/**
+ * The main agent, wide: the one you talk to about anything, so a tap opens her
+ * chat. Its line says what she has for you, else the last thing said in her
+ * chat, else her job.
+ */
+export function LeadCard({ agent, tag, waiting, last }: { agent: Agent; tag: AgentTag; waiting: number; last: ChatThread | null }) {
   const c = usePalette();
-  const line = waiting > 0 ? `Tiene ${waiting === 1 ? 'una cosa' : `${waiting} cosas`} para ti.` : (agent.description ?? agentJob(agent));
+  const line =
+    waiting > 0 ? `Tiene ${waiting === 1 ? 'una cosa' : `${waiting} cosas`} para ti.` : (agentLastLine(agent.name, last) ?? agent.description ?? agentJob(agent));
   return (
     <Pressable
       testID={`agent-${agent.ghost}`}

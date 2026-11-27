@@ -1,5 +1,5 @@
 import type { Agent, ChatMessage, ChatThread } from '@ghostaff/shared';
-import { chatRows, dayLabel, generalChat, generalLastLine, noteLength, personColour, shortTime, showAuthors, teamRows, timeOf, vacancies } from '@/lib/chat';
+import { agentLastLine, chatRows, dayLabel, generalChat, generalLastLine, noteLength, personColour, shortTime, showAuthors, teamRows, timeOf, vacancies } from '@/lib/chat';
 import { addMessage } from '@/lib/hooks/useChat';
 
 const agent = (id: string, ghost: Agent['ghost'], isMain = ghost === 'secretaria'): Agent => ({
@@ -144,5 +144,17 @@ describe('a chat drawn as WhatsApp does (chat-like-whatsapp.md)', () => {
 
   it('gives each person one colour', () => {
     expect(personColour('alvaro')).toBe(personColour('alvaro'));
+  });
+});
+
+describe('agentLastLine', () => {
+  const t = { lastText: 'Hoy la cierro yo', lastAuthor: 'Bea' } as ChatThread;
+  it('signs what someone else said, and leaves the agent’s own words unsigned', () => {
+    expect(agentLastLine('Secretaría', t)).toBe('Bea: Hoy la cierro yo');
+    expect(agentLastLine('Secretaría', { ...t, lastAuthor: 'Secretaría' })).toBe('Hoy la cierro yo');
+  });
+  it('has no line for a chat with nothing said', () => {
+    expect(agentLastLine('Secretaría', null)).toBeNull();
+    expect(agentLastLine('Secretaría', { ...t, lastText: null })).toBeNull();
   });
 });

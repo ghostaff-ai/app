@@ -5,7 +5,7 @@ import { Image, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Icon, Plus, UsersThree, WarningCircle } from '@/components/icons';
 import { SpaceSwitcher } from '@/components/SpaceSwitcher';
 import { EmptyState, ErrorText, ListRow, ListSection, Loading, RowIcon, ScreenTitle } from '@/components/ui';
-import { generalChat, generalLastLine, shortTime, teamRows } from '@/lib/chat';
+import { agentLastLine, generalChat, generalLastLine, shortTime, teamRows } from '@/lib/chat';
 import { useTeam } from '@/lib/hooks/useTeam';
 import { DESKTOP_CONTENT_MAX_WIDTH, desktopSection, useIsDesktop, useReplacesBeside } from '@/lib/layout';
 import { useTabScreenTop } from '@/lib/tabs';
@@ -106,7 +106,7 @@ export function TeamList() {
       ) : (
         <ListSection>
           {rows.map(({ agent: a, last, unread }) => {
-            const said = last?.lastText ? (last.lastAuthor && last.lastAuthor !== a.name ? `${last.lastAuthor}: ${last.lastText}` : last.lastText) : null;
+            const said = agentLastLine(a.name, last);
             const trailing = last ? (
               <View className="items-end">
                 <Text className="text-caption text-muted">{shortTime(last.lastMessageAt)}</Text>

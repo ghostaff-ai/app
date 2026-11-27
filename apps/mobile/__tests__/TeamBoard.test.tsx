@@ -89,6 +89,18 @@ describe('TeamBoard', () => {
     expect(router.push).toHaveBeenCalledWith('/agente/c');
   });
 
+  it('says on the main agent’s card the last thing said in her chat, signed', async () => {
+    mockTeam.threads = [general, { ...general, id: 't', kind: 'agent', agentId: 's', title: 'Secretaría', lastAuthor: 'Bea', lastText: 'Hoy la cierro yo', unread: false }];
+    await render(<TeamBoard />);
+    expect(screen.getByText('Bea: Hoy la cierro yo')).toBeOnTheScreen();
+  });
+
+  it('says first what the main agent has for you', async () => {
+    mockTeam.decisions = [{ id: 'd2', answer: null, agent: { id: 's', name: 'Secretaría', ghost: 'secretaria' } } as Decision];
+    await render(<TeamBoard />);
+    expect(screen.getByText('Tiene una cosa para ti.')).toBeOnTheScreen();
+  });
+
   it('leaves «Contratar» to an owner', async () => {
     mockTeam.owner = false;
     await render(<TeamBoard />);

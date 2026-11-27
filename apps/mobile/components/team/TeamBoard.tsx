@@ -72,7 +72,7 @@ export function TeamBoard() {
 
       <View className="mt-4 gap-3">
         {general ? <GeneralCard thread={general} members={members} /> : null}
-        {lead ? <LeadCard agent={lead.agent} tag={tagOf(lead.agent, lead.unread)} waiting={waiting[lead.agent.id] ?? 0} /> : null}
+        {lead ? <LeadCard agent={lead.agent} tag={tagOf(lead.agent, lead.unread)} waiting={waiting[lead.agent.id] ?? 0} last={lead.last} /> : null}
       </View>
 
       {rows.length === 0 && !owner ? (
