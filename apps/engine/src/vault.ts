@@ -51,6 +51,9 @@ export function guidedSecretName(orgId: string, guideId: string): string {
  */
 export { agentSecretName } from '@ghostaff/shared/record';
 
+/** A member's value for one of those secrets, waiting for an owner (orgSecrets.ts): a name no run reads. */
+export { pendingSecretName } from '@ghostaff/shared/record';
+
 export class MemoryVault implements Vault {
   readonly secrets = new Map<string, { value: string; labels: Record<string, string> }>();
   async put(name: string, value: string, labels: Record<string, string>) {

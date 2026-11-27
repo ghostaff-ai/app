@@ -169,6 +169,13 @@ const toRunnerAgent = (r: RunnerAgentRow): RunnerAgent => ({
 /** Our runner's database side (runner.ts), with the service role. */
 export function supabaseRunnerStore(admin: SupabaseClient): RunnerStore {
   return {
+    async noteSecrets(orgId, used, missing) {
+      const now = new Date().toISOString();
+      // Only rows with a stored value: a member's first value, still waiting, is not what the run missed.
+      if (used.length) check(await admin.from('org_secrets').update({ last_used_at: now, status: 'ok' }).eq('org_id', orgId).in('name', used).select('id'));
+      if (missing.length)
+        check(await admin.from('org_secrets').update({ status: 'missing' }).eq('org_id', orgId).in('name', missing).not('stored_at', 'is', null).select('id'));
+    },
     async runnerAgent(agentId) {
       const r = check(await admin.from('agents').select(RUNNER_AGENT).eq('id', agentId).eq('runner', 'ghostaff').maybeSingle<RunnerAgentRow>());
       return r ? toRunnerAgent(r) : null;

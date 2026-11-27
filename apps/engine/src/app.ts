@@ -29,6 +29,7 @@ import { type FileStore, sendFile } from './files';
 import { linkPreview } from './linkPreview';
 import { deleteMessage, type IncomingNote, sendVoiceNote, sendVoiceNoteToThread, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
 import { receiveRunAudio } from './agentAudio';
+import { approveSecret, type OrgSecretStore, rejectSecret, removeSecret, replaceSecret, storeSecret } from './orgSecrets';
 
 /** Calls from Google service accounts, not people: the scheduler's tick (ordago-agents-in-ghostaff.md). */
 export interface CronDeps {
@@ -76,6 +77,8 @@ export interface AppDeps extends Deps {
   guides?: GuideDeps;
   /** The drain of pushes the engine's own writes queued (notify.ts); off when push is. */
   pushes?: PushDrain;
+  /** The organisation's keys' rows (orgSecrets.ts); off when not configured. */
+  orgSecrets?: OrgSecretStore;
 }
 
 type Env = { Variables: { userId: string; accessToken: string } };
@@ -368,6 +371,29 @@ export function createApp(deps: AppDeps) {
   // A guided access (guides.ts), owners only: its undo text, then its removal (the credential and the row).
   app.get('/connections/guided/:id', async (c) => c.json(await guidedAccessUndo(guides(), c.get('userId'), c.req.param('id'))));
   app.delete('/connections/guided/:id', async (c) => c.json(await removeGuidedAccess(guides(), c.get('userId'), c.req.param('id'))));
+
+  // The organisation's keys (orgSecrets.ts): a value in, never back out. Members store (theirs waits for an
+  // owner); owners decide and remove. Values are never logged nor echoed, and no answer is cached.
+  const keys = () => {
+    if (!deps.orgSecrets) throw new Refusal(503, 'unavailable', 'keys are off here');
+    return { store: deps.orgSecrets, vault: deps.vault, now: deps.now };
+  };
+  const KEY_BODY = bodyLimit({ maxSize: 128 * 1024, onError: (c) => c.json({ error: 'value_too_long', message: 'the value is longer than 64 KB' }, 413) });
+  app.post('/orgs/:orgId/secrets', KEY_BODY, async (c) => {
+    const k = keys();
+    const body = await c.req.json().catch(() => null);
+    c.header('Cache-Control', 'no-store');
+    return c.json({ secret: await storeSecret(k, c.get('userId'), c.req.param('orgId'), body) }, 201);
+  });
+  app.post('/orgs/:orgId/secrets/:name', KEY_BODY, async (c) => {
+    const k = keys();
+    const body = await c.req.json().catch(() => null);
+    c.header('Cache-Control', 'no-store');
+    return c.json({ secret: await replaceSecret(k, c.get('userId'), c.req.param('orgId'), c.req.param('name'), body) });
+  });
+  app.post('/orgs/:orgId/secrets/:name/approve', async (c) => c.json(await approveSecret(keys(), c.get('userId'), c.req.param('orgId'), c.req.param('name'))));
+  app.post('/orgs/:orgId/secrets/:name/reject', async (c) => c.json(await rejectSecret(keys(), c.get('userId'), c.req.param('orgId'), c.req.param('name'))));
+  app.delete('/orgs/:orgId/secrets/:name', async (c) => c.json(await removeSecret(keys(), c.get('userId'), c.req.param('orgId'), c.req.param('name'))));
 
   // Voice notes (voiceNotes.ts): the note in, the message out at once; then its transcript and the agent's answer.
   const voice = { chat: deps.chat, voice: deps.voice, transcriber: deps.transcriber, limiter: deps.transcribeLimiter ?? new NoteLimiter(), files: deps.files };

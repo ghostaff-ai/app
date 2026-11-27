@@ -41,6 +41,7 @@ import { expireRuns } from './jobs';
 import type { ChatDeps } from './chat';
 import { linkTools } from './links';
 import { cloudRunLauncher, supabaseJobStore, supabaseRunnerStore } from './jobsStore';
+import { supabaseOrgSecretStore } from './orgSecrets';
 import { supabaseTranscriptStore, sweepTranscripts } from './transcripts';
 import { drainSoon, pushFromEnv, pushTick, supabaseOutboxStore } from './notify';
 import { startRoutines, supabaseRoutineStore } from './routines';
@@ -293,6 +294,7 @@ const app = createApp({
   accounts,
   actions: { actions: supabaseActionStore(admin), toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId), guidedToolsFor: guidedTools, asPerson },
   guides: { chat: chatDeps, store: guideStore, accesses: guided, vault },
+  orgSecrets: supabaseOrgSecretStore(admin),
   cron: {
     callerFromToken: caller,
     audience: publicUrl,

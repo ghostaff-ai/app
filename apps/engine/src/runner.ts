@@ -106,6 +106,11 @@ export interface RunnerStore {
   scheduledRunsSince(agentId: string, since: Date): Promise<number>;
   /** Keeps a fire of the timetable that did not run, with why. */
   skipFire(r: { orgId: string; agentId: string; reason: SkipReason }): Promise<void>;
+  /**
+   * Notes on the organisation's keys' rows (org_secrets) which a run got, now, and which it did not find in
+   * the vault, for Conexiones › Claves. A name with no row is left alone.
+   */
+  noteSecrets(orgId: string, used: string[], missing: string[]): Promise<void>;
 }
 
 export interface RunnerDeps {
@@ -189,6 +194,19 @@ async function secretsAccess(runner: RunnerDeps, orgId: string, secrets: AgentSe
     else missed.push({ env, name });
   }
   return { given, missed };
+}
+
+/** Notes the keys a run got and missed on their rows; best-effort, as a failure must never stop the run. */
+async function noteSecrets(runner: RunnerDeps, orgId: string, secrets: AgentSecrets, missed: { name: string }[]): Promise<void> {
+  const named = [...new Set(Object.values(secrets))];
+  if (!named.length) return;
+  const missing = [...new Set(missed.map((m) => m.name))].sort();
+  const used = named.filter((n) => !missing.includes(n)).sort();
+  try {
+    await runner.store.noteSecrets(orgId, used, missing);
+  } catch (e) {
+    console.error('keys of the run not noted', e instanceof Error ? e.name : typeof e);
+  }
 }
 
 /**
@@ -743,6 +761,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
   const cloud = await googleToken(runner, run.orgId);
   const google: RunGoogleAccess | null = cloud ? { ...cloud, project: await googleProject(chat, run.orgId) } : null;
   const secrets = await secretsAccess(runner, run.orgId, agent.secrets);
+  await noteSecrets(runner, run.orgId, agent.secrets, secrets.missed);
   const orgName = await chat.chat.orgName(run.orgId);
   // No search tool in a run (it has no engine tools): the summaries are what it gets of General.
   const heard = chat.general ? heardBlock(orgName, await chat.general.digests(run.orgId, DIGESTS_READ).catch(() => []), false) : '';
