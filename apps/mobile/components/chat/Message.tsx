@@ -385,6 +385,7 @@ function EmojiMessage({
   mine,
   tail,
   name,
+  label,
   nameColour,
   avatar,
   stamp,
@@ -396,6 +397,8 @@ function EmojiMessage({
   mine: boolean;
   tail: boolean;
   name: string | null;
+  /** Who wrote it, for the screen reader (the name above is shown only in groups). */
+  label: string;
   nameColour: string;
   avatar: ReactNode;
   stamp: ReactNode;
@@ -416,7 +419,7 @@ function EmojiMessage({
           testID="emoji-message"
           onLongPress={onLongPress}
           delayLongPress={350}
-          accessibilityLabel={`${mine ? 'Tú' : name ?? ''}: ${text}`}
+          accessibilityLabel={`${label}: ${text}`}
           accessibilityHint={onLongPress ? 'Mantén pulsado para reaccionar, responder y más' : undefined}
           accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Opciones del mensaje' }] : undefined}
           onAccessibilityAction={onLongPress ? () => onLongPress() : undefined}
@@ -619,6 +622,7 @@ export function MessageView({
         mine={mine}
         tail={tail}
         name={group && !mine ? message.authorName : null}
+        label={mine ? 'Tú' : message.authorName}
         nameColour={colour}
         avatar={<Avatar name={message.authorName} id={message.authorUserId ?? message.authorName} />}
         stamp={<Stamp time={time} ticks={mine ? ticks : null} mine={mine} edited={!!message.editedAt} />}

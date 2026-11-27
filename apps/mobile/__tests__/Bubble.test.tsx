@@ -91,4 +91,13 @@ describe('a message bubble', () => {
     await render(<MessageView message={message} mine showAuthor names={[]} />);
     expect(screen.queryByTestId('emoji-message')).toBeNull();
   });
+
+  it('labels someone else\'s emoji with its author, even when the chat is not a group, and keeps it on the left', async () => {
+    const message = { ...base, authorName: 'Álvaro', parts: [{ type: 'text', text: '😆' }] as ChatMessage['parts'] };
+    await render(<MessageView message={message} mine={false} showAuthor group={false} names={[]} />);
+    expect(screen.getByLabelText('Álvaro: 😆')).toBeTruthy();
+    expect(screen.queryByText('Álvaro')).toBeNull();
+    expect(screen.getByText('Á', { includeHiddenElements: true })).toBeTruthy();
+    expect(String(screen.getByTestId('emoji-message').parent?.props.className)).toContain('items-start');
+  });
 });
