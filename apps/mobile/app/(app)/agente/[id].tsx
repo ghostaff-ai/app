@@ -108,7 +108,7 @@ export default function Agente() {
 
         {overview.waiting.length > 0 ? (
           <View testID="agent-waiting" className="mt-7">
-            <Text className="mb-2 ml-1 text-footnote text-muted">Te espera</Text>
+            <Text className="mb-2 ml-1 text-footnote text-muted">{overview.waiting.length === 1 ? 'Te espera' : 'Te esperan'}</Text>
             {overview.waiting.map((d) => (
               <DecisionCard key={d.id} decision={d} onPress={() => router.push(decisionHref(d))} />
             ))}
