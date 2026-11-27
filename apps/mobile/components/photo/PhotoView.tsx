@@ -253,7 +253,7 @@ export function PhotoView({ photo, agentName }: { photo: AgentPhoto; agentName: 
         ),
       )}
       <Text className="ml-1 text-caption text-muted">
-        La actualizó {agentName} {shortTime(photo.updatedAt)}.
+        Actualizada por {agentName}, {shortTime(photo.updatedAt)}.
         {photo.skipped.length ? ` ${photo.skipped.length === 1 ? 'Un bloque no se puede' : `${photo.skipped.length} bloques no se pueden`} dibujar.` : ''}
       </Text>
       {photo.error ? <Text className="ml-1 mt-1 text-caption text-muted">No he podido leer su última versión: {photo.error}</Text> : null}
