@@ -1,4 +1,4 @@
--- Profile photos (20261128160000_profile_photos.sql): seen by whoever shares
+-- Profile photos (20261128960000_profile_photos.sql): seen by whoever shares
 -- an organisation with the person, nobody else; written only by the engine.
 begin;
 select plan(6);
