@@ -20,6 +20,26 @@ export type Palette = {
   ok: string;
   no: string;
   waiting: string;
+  /** The chat's background, behind the messages. */
+  chat: string;
+  /** The faint pattern drawn on the chat's background. */
+  chatPattern: string;
+  /** Your own message bubble. */
+  mine: string;
+  /** Secondary text inside your bubble. */
+  mineMuted: string;
+  /** A quote inside your bubble. */
+  mineSunk: string;
+  /** The other side's message bubble. */
+  theirs: string;
+  /** The chat's accent: links, the send button, the ghost's voice. */
+  chatAccent: string;
+  /** Text and icons on the chat's accent. */
+  onChatAccent: string;
+  /** Read receipts. */
+  read: string;
+  /** Floating pills: the day label, the unread divider. */
+  chip: string;
 };
 
 export const LIGHT: Palette = {
@@ -35,6 +55,16 @@ export const LIGHT: Palette = {
   ok: '#2F7D4F',
   no: '#A23B2C',
   waiting: '#D9622B',
+  chat: '#ECEAF3',
+  chatPattern: '#D6D2E6',
+  mine: '#E4DFFB',
+  mineMuted: '#6B6390',
+  mineSunk: '#D6CFF6',
+  theirs: '#FFFFFF',
+  chatAccent: '#4B3FC7',
+  onChatAccent: '#FFFFFF',
+  read: '#3D7BF0',
+  chip: 'rgba(255,255,255,0.78)',
 };
 
 export const DARK: Palette = {
@@ -50,6 +80,16 @@ export const DARK: Palette = {
   ok: '#3A9A62',
   no: '#C4503F',
   waiting: '#FF8A4C',
+  chat: '#0E0F16',
+  chatPattern: '#1C1E29',
+  mine: '#352F63',
+  mineMuted: '#A9A3D6',
+  mineSunk: '#2A2550',
+  theirs: '#1C1E29',
+  chatAccent: '#8F84FF',
+  onChatAccent: '#16151E',
+  read: '#6AA8FF',
+  chip: 'rgba(28,30,41,0.85)',
 };
 
 export type Scheme = 'light' | 'dark';
