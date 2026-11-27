@@ -1,14 +1,15 @@
 import { completeMention, mentionQuery, mentionSuggestions, onlyMentions } from '@ghostaff/shared';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, PanResponder, Platform, Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
+import { ActivityIndicator, Animated, Modal, PanResponder, Platform, Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { clock } from '@/components/chat/RecordingBar';
-import { ArrowUp, CaretLeft, CaretUp, Eye, Icon, LockSimple, Microphone, Pause, PaperPlaneRight, Smiley, Trash } from '@/components/icons';
+import { ArrowUp, Camera, CaretLeft, CaretUp, Eye, FileText, Icon, ImageSquare, LockSimple, Microphone, Paperclip, Pause, PaperPlaneRight, Smiley, Trash } from '@/components/icons';
+import type { AttachKind } from '@/lib/attach';
 import { tap } from '@/lib/haptics';
 import { holdMove, holdRelease } from '@/lib/hold';
 import { type RecordedNote, useVoiceNote } from '@/lib/hooks/useVoiceNote';
-import { usePalette } from '@/lib/theme';
+import { useColorVars, usePalette } from '@/lib/theme';
 
 // Where a person writes in a chat, as in WhatsApp (docs/plans/ready/
 // chat-like-whatsapp.md): a growing text box and one round button, the mic
@@ -33,6 +34,8 @@ export function Composer({
   onVoiceNote,
   above,
   prefill,
+  onAttach,
+  attaching,
 }: {
   placeholder: string;
   /** What @ can complete to. */
@@ -49,6 +52,10 @@ export function Composer({
   above?: ReactNode;
   /** Words to put in the box (editing a message); a new `key` puts them again. */
   prefill?: { key: string; text: string } | null;
+  /** The clip and the camera (chat-like-whatsapp.md, phase 3); without it there are none. */
+  onAttach?: (kind: AttachKind) => void;
+  /** Files going out: the clip waits. */
+  attaching?: boolean;
 }) {
   const c = usePalette();
   const insets = useSafeAreaInsets();
@@ -58,6 +65,8 @@ export function Composer({
   const [hint, setHint] = useState(false);
   const [mode, setMode] = useState<Mode>('idle');
   const [emoji, setEmoji] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const themed = useColorVars();
   useEffect(() => {
     if (prefill) {
       setText(prefill.text);
@@ -318,9 +327,27 @@ export function Composer({
                 }
               }}
               onFocus={() => setEmoji(false)}
-              className="max-h-36 min-h-11 flex-1 py-2.5 pr-4 text-base text-ink"
+              className={`max-h-36 min-h-11 flex-1 py-2.5 text-base text-ink ${onAttach ? 'pr-1' : 'pr-4'}`}
               textAlignVertical="center"
             />
+            {onAttach ? (
+              <View className="flex-row">
+                {attaching ? (
+                  <View className="h-11 w-10 items-center justify-center">
+                    <ActivityIndicator color={c.muted} />
+                  </View>
+                ) : (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Adjuntar" onPress={() => setSheet(true)} hitSlop={4} className="h-11 w-10 items-center justify-center active:opacity-60">
+                    <Icon icon={Paperclip} size={22} color={c.muted} />
+                  </Pressable>
+                )}
+                {text.trim() ? null : (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Hacer una foto" onPress={() => onAttach('camera')} hitSlop={4} className="mr-1 h-11 w-10 items-center justify-center active:opacity-60">
+                    <Icon icon={Camera} size={22} color={c.muted} />
+                  </Pressable>
+                )}
+              </View>
+            ) : null}
             </View>
           )}
 
@@ -361,6 +388,35 @@ export function Composer({
           )}
         </View>
       )}
+      <Modal visible={sheet} transparent animationType="fade" onRequestClose={() => setSheet(false)}>
+        <Pressable style={themed} accessibilityLabel="Cerrar" onPress={() => setSheet(false)} className="flex-1 justify-end bg-black/40 px-3 pb-24">
+          <View testID="attach-sheet" className="flex-row justify-around rounded-2xl bg-card px-2 py-4">
+            {(
+              [
+                ['document', 'Documento', FileText, '#7F77DD'],
+                ['photos', 'Fotos', ImageSquare, '#D4537E'],
+                ['camera', 'Cámara', Camera, '#D85A30'],
+              ] as const
+            ).map(([kind, label, icon, colour]) => (
+              <Pressable
+                key={kind}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                onPress={() => {
+                  setSheet(false);
+                  onAttach?.(kind);
+                }}
+                className="items-center active:opacity-60"
+              >
+                <View className="h-14 w-14 items-center justify-center rounded-full" style={{ backgroundColor: colour }}>
+                  <Icon icon={icon} size={26} color="#ffffff" weight="fill" />
+                </View>
+                <Text className="mt-1.5 text-footnote text-ink">{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
       {emoji && mode === 'idle' ? (
         <View className="-mx-2 mt-2">
           <EmojiPicker onPick={(e) => setText((t) => t + e)} />

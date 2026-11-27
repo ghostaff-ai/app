@@ -16,7 +16,7 @@
 // link it is given (links.ts). No mail yet: it says so when asked.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { type AgentGhost, type ChatMessage, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
+import { type AgentGhost, type ChatMessage, isDocumentPart, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
 import type { AccountAskPart, ActionPart, DecisionPart, EditableField, GuidePart } from '@ghostaff/shared';
 import { DECISION_TOOL, DECISION_TOOLS, type DecisionBrief, decisionIds, type DecisionOpener, proposeDecision } from './decisionAsks';
 import { ASK_TOOL, ASK_TOOLS, askResumable, type AskStore, proposeAsk } from './accountAsks';
@@ -243,6 +243,8 @@ export interface ChatDeps {
   links?: AgentTools;
   /** What the people said in General, summarised by day, and its search (generalDigest.ts); without it agents don't know. */
   general?: GeneralStore;
+  /** A photo sent in the chat, from the bucket (files.ts): the agent sees the ones it is asked about. */
+  photoOf?: (path: string) => Promise<Uint8Array>;
   /** How often the growing text is written to the database. */
   flushMs?: number;
   now?: () => number;
@@ -465,7 +467,39 @@ async function turnsOf(deps: ChatDeps, threadId: string, agentId: string, askedI
   const latest = windowOf(askedId ? cutAt(messages, askedId) : messages);
   const ids = decisionIds(latest.map((m) => m.parts));
   const briefs = ids.length && deps.decisions ? await deps.decisions.briefs(ids).catch(() => new Map<string, DecisionBrief>()) : new Map<string, DecisionBrief>();
-  return toTurns(latest, agentId, briefs, summary);
+  const turns = toTurns(latest, agentId, briefs, summary);
+  await withPhotos(deps, turns, latest);
+  return turns;
+}
+
+/** At most this many photos, of at most 5 MB each, go with a turn. */
+const PHOTOS_PER_TURN = 4;
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * The photos (JPEG) of the newest person messages, after the agent's last
+ * word, go with the last turn as pictures: what it is asked about it sees.
+ * Older ones read as a line naming them (bodyOf). A photo that can't be read
+ * stays a line.
+ */
+async function withPhotos(deps: ChatDeps, turns: ModelTurn[], latest: ChatMessage[]): Promise<void> {
+  const last = turns[turns.length - 1];
+  if (!deps.photoOf || !last || last.role !== 'user') return;
+  const since = latest.map((m) => m.authorKind).lastIndexOf('agent');
+  const photos = latest
+    .slice(since + 1)
+    .flatMap((m) => m.parts.filter(isDocumentPart))
+    .filter((p) => p.mediaType === 'image/jpeg' && p.size <= PHOTO_MAX_BYTES)
+    .slice(-PHOTOS_PER_TURN);
+  const images: NonNullable<ModelTurn['images']> = [];
+  for (const p of photos) {
+    try {
+      images.push({ mediaType: 'image/jpeg', data: Buffer.from(await deps.photoOf(p.path)).toString('base64') });
+    } catch {
+      // It stays the line that names it.
+    }
+  }
+  if (images.length) last.images = [...(last.images ?? []), ...images];
 }
 
 async function requireTalk(deps: ChatDeps, agentId: string, userId: string) {

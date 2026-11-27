@@ -33,7 +33,7 @@ import type {
   Profile,
 } from '../models';
 import { ACTION_KIND } from '../models';
-import { type ChatMessage, type ChatThread, isDecisionQuotePart, type MessagePart, type OrgMember, type Reaction, waveformToDigits } from '../chat';
+import { type ChatMessage, type ChatThread, type DocumentPart, isDecisionQuotePart, type MessagePart, type OrgMember, type Reaction, waveformToDigits } from '../chat';
 import type { Routine, RoutineWhen, Weekday } from '../routines';
 
 // The only place the app talks to the database. Screens, hooks and components
@@ -701,13 +701,13 @@ async function callEngine<T>(engine: EngineAccess, method: string, path: string,
 }
 
 /** A call to the engine with a body already encoded (JSON, or raw bytes such as a voice note). */
-async function sendToEngine<T>(engine: EngineAccess, method: string, path: string, body?: { type: string; data: BodyInit }): Promise<T> {
+async function sendToEngine<T>(engine: EngineAccess, method: string, path: string, body?: { type: string; data: BodyInit; headers?: Record<string, string> }): Promise<T> {
   if (!engine.url) throw new EngineError('not_configured', 0, 'engine URL not configured');
   let res: Response;
   try {
     res = await fetch(`${engine.url.replace(/\/$/, '')}${path}`, {
       method,
-      headers: { Authorization: `Bearer ${engine.token}`, ...(body ? { 'Content-Type': body.type } : {}) },
+      headers: { Authorization: `Bearer ${engine.token}`, ...(body ? { 'Content-Type': body.type, ...body.headers } : {}) },
       body: body?.data,
     });
   } catch (e) {
@@ -1017,6 +1017,70 @@ async function postNote(engine: EngineAccess, path: string, note: OutgoingNote):
 
 export async function sendVoiceNote(engine: EngineAccess, agentId: string, note: OutgoingNote): Promise<ChatMessage> {
   return postNote(engine, `/agents/${encodeURIComponent(agentId)}/voice-notes`, note);
+}
+
+/** A file to send in a chat: its bytes, type and name, with what goes with it (chat-like-whatsapp.md, phase 3). */
+export interface OutgoingFile {
+  data: Blob;
+  mediaType: string;
+  name: string;
+  /** The words with it (the box's text). */
+  caption?: string;
+  /** The message of the same chat it replies to. */
+  quote?: string | null;
+  /** A photo's size in pixels, for its bubble's shape before it loads. */
+  width?: number;
+  height?: number;
+}
+
+/** Sends a file to a chat by its id; the agent answers it as a message. */
+export async function sendFileToThread(engine: EngineAccess, threadId: string, file: OutgoingFile): Promise<ChatMessage> {
+  const q = new URLSearchParams();
+  if (file.quote) q.set('quote', file.quote);
+  if (file.width && file.height) {
+    q.set('width', String(Math.round(file.width)));
+    q.set('height', String(Math.round(file.height)));
+  }
+  const query = q.toString();
+  const { message } = await sendToEngine<{ message: ChatMessage }>(engine, 'POST', `/threads/${encodeURIComponent(threadId)}/files${query ? `?${query}` : ''}`, {
+    type: file.mediaType,
+    data: file.data,
+    headers: { 'X-File-Name': encodeURIComponent(file.name), ...(file.caption ? { 'X-Caption': encodeURIComponent(file.caption) } : {}) },
+  });
+  return message;
+}
+
+/** A short-lived link to open a file of a chat; the bucket's policy lets through only people who may read it. */
+export async function fileUrl(client: SupabaseClient, path: string, download?: string): Promise<string> {
+  const { data, error } = await client.storage.from('documents').createSignedUrl(path, 3600, download ? { download } : undefined);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/** A file as Archivos lists it. */
+export interface ChatFile {
+  messageId: string;
+  threadId: string;
+  threadTitle: string;
+  threadKind: 'agent' | 'general';
+  authorName: string;
+  createdAt: string;
+  part: DocumentPart;
+}
+
+/** The files of the chats the person may read, newest first; one chat's with `threadId`. */
+export async function listFiles(client: SupabaseClient, orgId: string, threadId?: string): Promise<ChatFile[]> {
+  const { data, error } = await client.rpc('list_files', { target_org: orgId, target_thread: threadId ?? null });
+  if (error) throw error;
+  return ((data ?? []) as Array<{ message_id: string; thread_id: string; thread_title: string; thread_kind: 'agent' | 'general'; author_name: string; created_at: string; part: DocumentPart }>).map((r) => ({
+    messageId: r.message_id,
+    threadId: r.thread_id,
+    threadTitle: r.thread_title,
+    threadKind: r.thread_kind,
+    authorName: r.author_name,
+    createdAt: r.created_at,
+    part: r.part,
+  }));
 }
 
 /** A voice note in a chat by its id: General, the people's chat (general-chat.md). */

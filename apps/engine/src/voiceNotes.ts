@@ -50,6 +50,8 @@ export interface VoiceNoteDeps {
   transcriber?: Transcriber;
   /** 30 notes an hour per person by default (transcribe.ts). */
   limiter: NoteLimiter;
+  /** Files sent in the chat (files.ts): a deleted message's file goes too. */
+  files?: { remove(path: string): Promise<void> };
 }
 
 const off = () => new Refusal(503, 'transcription_off', 'voice notes are not configured on this engine');
@@ -285,7 +287,10 @@ export function supabaseVoiceNoteStore(admin: SupabaseClient): VoiceNoteStore {
 export async function deleteMessage(deps: VoiceNoteDeps, userId: string, messageId: unknown): Promise<{ deleted: true }> {
   if (!isUuid(messageId)) throw new Refusal(400, 'bad_request', 'message must be a uuid');
   if (!deps.voice) throw off();
-  const path = await deps.voice.deleteMessageOf(messageId, userId);
-  if (path) await deps.voice.removeAudio(path).catch(() => {});
+  const stored = await deps.voice.deleteMessageOf(messageId, userId);
+  // «documents:<path>» or «voice-notes:<path>» (a bare path is a voice note's).
+  const [bucket, path] = stored?.includes(':') ? [stored.slice(0, stored.indexOf(':')), stored.slice(stored.indexOf(':') + 1)] : ['voice-notes', stored];
+  if (path && bucket === 'documents') await deps.files?.remove(path).catch(() => {});
+  else if (path) await deps.voice.removeAudio(path).catch(() => {});
   return { deleted: true };
 }

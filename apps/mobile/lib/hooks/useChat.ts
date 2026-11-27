@@ -20,7 +20,9 @@ import {
   myReadMark,
   readByAllUntil,
   postMessage,
+  type OutgoingFile,
   type OutgoingNote,
+  sendFileToThread,
   sendVoiceNote,
   sendVoiceNoteToThread,
   subscribeToThread,
@@ -207,6 +209,16 @@ export function useThread(threadId: string | null) {
     [threadId, engine],
   );
 
+  /** A photo or a document to this chat (files.ts); the agent answers it as a message. */
+  const sendFile = useCallback(
+    async (file: OutgoingFile) => {
+      if (!engine || !threadId) throw new Error('not signed in');
+      const m = await sendFileToThread(engine, threadId, file);
+      setMessages((list) => addMessage(list, m));
+    },
+    [engine, threadId],
+  );
+
   /** What a held message offers (MessageMenu): each one live for everyone through Realtime. */
   const actions = useMemo(
     () => ({
@@ -242,7 +254,7 @@ export function useThread(threadId: string | null) {
 
   const readByAll = useReadByAll(threadId, messages.length, onScreen);
 
-  return { head, messages, error, send, add, openedAt, readByAll, reactions, actions };
+  return { head, messages, error, send, add, openedAt, readByAll, reactions, actions, sendFile };
 }
 
 /**
@@ -426,6 +438,7 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
     reactions: chat.reactions,
     actions: chat.actions,
     pinned: chat.head?.pinnedMessage ?? null,
+    sendFile: chat.sendFile,
     error: error ?? chat.error,
     send,
     askAbout,
@@ -468,6 +481,7 @@ export function useGeneralChat(orgId: string | null) {
   );
 
   return {
+    chatId,
     loading: loading || (chatId !== null && chat.head === undefined),
     missing: !loading && general === null,
     messages: chat.messages,
@@ -476,6 +490,7 @@ export function useGeneralChat(orgId: string | null) {
     reactions: chat.reactions,
     actions: chat.actions,
     pinned: chat.head?.pinnedMessage ?? null,
+    sendFile: chat.sendFile,
     error: chat.error,
     send: chat.send,
     sendVoice,

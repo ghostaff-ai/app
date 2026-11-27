@@ -81,7 +81,7 @@ export default function Chat() {
   const { items: agents, loading: agentsLoading, reload: reloadAgents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels, loading: levelsLoading } = useMyLevels(orgId);
-  const { messages, openedAt, readByAll, reactions, actions, pinned, loading, error, send: sendPlain, askAbout, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
+  const { messages, openedAt, readByAll, reactions, actions, pinned, sendFile, loading, error, send: sendPlain, askAbout, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
   const [actionError, setActionError] = useState<string | null>(null);
   const jump = useRef<((id: string) => void) | null>(null);
   const send = useCallback(
@@ -158,6 +158,8 @@ export default function Chat() {
     sendVoice: engine ? (note, tagged, quoted) => sendVoice(note, agentIdsNamed(agents, tagged), quoted) : undefined,
     jumpTo: (id) => jump.current?.(id),
     onError: setActionError,
+    // Files go to a chat that exists: a new agent's opens with its hello.
+    sendFile: engine && messages.length > 0 ? sendFile : undefined,
   });
   const next = soonest(routines, new Date());
 
@@ -274,7 +276,16 @@ export default function Chat() {
           </View>
         ) : null}
         {canTalk ? (
-          <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={ma.send} onVoiceNote={ma.sendVoice} above={ma.above} prefill={ma.prefill} />
+          <Composer
+            placeholder={`Escribe a ${agent.name}`}
+            names={names}
+            onSend={ma.send}
+            onVoiceNote={ma.sendVoice}
+            above={ma.above}
+            prefill={ma.prefill}
+            onAttach={ma.attach ? (k) => void ma.attach!(k) : undefined}
+            attaching={ma.sendingFiles}
+          />
         ) : (
           <ReadOnlyComposer note={owner ? `Pide acceso a ${owner}` : null} />
         )}

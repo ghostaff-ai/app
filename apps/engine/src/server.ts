@@ -27,6 +27,7 @@ import { microsoftOAuth, microsoftTools } from './microsoft';
 import { type CheckResult, checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { CloudAccountNotReady, type CloudAccountDeps, cloudTokens, ensureCloudAccount, type GoogleCall, mintCloudToken, supabaseCloudAccountStore } from './cloudAccounts';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
+import { supabaseFileStore } from './files';
 import { digestDue, supabaseGeneralStore } from './generalDigest';
 import { freshRepoToken, queuedRuns, repoTokens } from './githubApp';
 import { googleCaller } from './googleCaller';
@@ -231,7 +232,10 @@ const guideStore = supabaseGuideStore(admin);
 const chatStore = supabaseChatStore(admin, { afterAgentWrite });
 // What the people said in General, summarised by day (generalDigest.ts).
 const generalStore = supabaseGeneralStore(admin, (threadId, q) => chatStore.searchMessages(threadId, q));
+// Files sent in the chat (files.ts): the agent sees the photos it is asked about.
+const fileStore = supabaseFileStore(admin);
 const chatDeps: ChatDeps = {
+  photoOf: (path) => fileStore.get(path),
   chat: chatStore,
   writerFor: writerFactory(vault, cloudToken),
   costOf,
@@ -281,6 +285,7 @@ const app = createApp({
   reports: { callerFromToken: caller, audience: publicUrl },
   claudeSignIn: { spawn: spawnSetupToken },
   voice: supabaseVoiceNoteStore(admin),
+  files: fileStore,
   transcriber,
   pushes: pushDrain,
   accounts,

@@ -1,12 +1,12 @@
-import { Stack, useFocusEffect } from 'expo-router';
+import { router, Stack, useFocusEffect } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { decideAction } from '@ghostaff/shared/services';
 import { ChatList } from '@/components/chat/ChatList';
 import { Composer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
-import { Icon, UsersThree } from '@/components/icons';
+import { FolderSimple, Icon, UsersThree } from '@/components/icons';
 import { Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { agentIdsNamed } from '@/lib/chat';
@@ -39,7 +39,7 @@ export default function General() {
   const { items: agents, reload: reloadAgents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels } = useMyLevels(orgId);
-  const { messages, openedAt, readByAll, reactions, actions, pinned, loading, missing, error, send, sendVoice, retryTranscript } = useGeneralChat(orgId);
+  const { chatId, messages, openedAt, readByAll, reactions, actions, pinned, sendFile, loading, missing, error, send, sendVoice, retryTranscript } = useGeneralChat(orgId);
   const [actionError, setActionError] = useState<string | null>(null);
   const jump = useRef<((id: string) => void) | null>(null);
 
@@ -87,6 +87,7 @@ export default function General() {
     sendVoice: engine ? (note, tagged, quoted) => sendVoice(note, agentIdsNamed(talkable, tagged), quoted) : undefined,
     jumpTo: (id) => jump.current?.(id),
     onError: setActionError,
+    sendFile: engine ? sendFile : undefined,
   });
 
   if (loading) return <Loading />;
@@ -97,6 +98,17 @@ export default function General() {
       <Stack.Screen
         options={{
           title: 'General',
+          headerRight: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Archivos del chat"
+              onPress={() => router.push(`/archivos?thread=${chatId}`)}
+              hitSlop={10}
+              className="min-h-11 min-w-11 items-center justify-center active:opacity-60"
+            >
+              <Icon icon={FolderSimple} size={22} color={c.ink} />
+            </Pressable>
+          ),
           headerTitle: () => (
             <View testID="general-header" className="flex-row items-center" style={{ maxWidth: 260 }}>
               <View className="h-7 w-7 items-center justify-center rounded-full bg-accent">
@@ -153,7 +165,16 @@ export default function General() {
           />
         )}
         {error || actionError ? <Text className="px-4 pb-1 text-footnote text-no">{error ?? actionError}</Text> : null}
-        <Composer placeholder="Mensaje" names={names} onSend={ma.send} onVoiceNote={ma.sendVoice} above={ma.above} prefill={ma.prefill} />
+        <Composer
+          placeholder="Mensaje"
+          names={names}
+          onSend={ma.send}
+          onVoiceNote={ma.sendVoice}
+          above={ma.above}
+          prefill={ma.prefill}
+          onAttach={ma.attach ? (k) => void ma.attach!(k) : undefined}
+          attaching={ma.sendingFiles}
+        />
       </KeyboardColumn>
       {ma.overlays}
     </View>
