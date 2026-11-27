@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { StyleSheet } from 'react-native';
 import Svg, { Circle, Defs, Path, Pattern, Rect } from 'react-native-svg';
 import { usePalette } from '@/lib/theme';
@@ -5,10 +6,12 @@ import { usePalette } from '@/lib/theme';
 /** The chat's backdrop: a tile of ghost doodles over the chat colour. It stays still while the list scrolls. */
 export function Wallpaper() {
   const c = usePalette();
+  // Per instance: on web, background screens stay mounted and a shared id could resolve to a hidden pattern.
+  const patternId = `chat-doodles-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   return (
-    <Svg testID="chat-wallpaper" pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <Svg testID="chat-wallpaper" width="100%" height="100%" pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Defs>
-        <Pattern id="chat-doodles" width={150} height={150} patternUnits="userSpaceOnUse">
+        <Pattern id={patternId} width={150} height={150} patternUnits="userSpaceOnUse">
           <Path
             d="M20 44V30a11 11 0 0 1 22 0v14l-3.7-3.2-3.6 3.2-3.7-3.2-3.7 3.2-3.6-3.2z"
             fill="none"
@@ -36,7 +39,7 @@ export function Wallpaper() {
         </Pattern>
       </Defs>
       <Rect width="100%" height="100%" fill={c.chat} />
-      <Rect width="100%" height="100%" fill="url(#chat-doodles)" />
+      <Rect width="100%" height="100%" fill={`url(#${patternId})`} />
     </Svg>
   );
 }

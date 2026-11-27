@@ -161,7 +161,7 @@ describe('agentLastLine', () => {
 
 describe('emojiOnly', () => {
   const cases = () => {
-    it.each(['😆😁', '🫢', '👍🏽', '👨‍👩‍👧', '❤️', ' 🎉 ', '🇪🇸'])('%s is only emoji', (t) => expect(emojiOnly(t)).toBe(true));
+    it.each(['😆😁', '🫢', '👍🏽', '👨‍👩‍👧', '❤️', ' 🎉 ', '🇪🇸', '😂 😂'])('%s is only emoji', (t) => expect(emojiOnly(t)).toBe(true));
     it.each(['', '123', '#', '😀 hola', '😀😀😀😀', 'ok'])('%s is not', (t) => expect(emojiOnly(t)).toBe(false));
   };
   cases();

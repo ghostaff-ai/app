@@ -191,9 +191,9 @@ function graphemes(text: string): string[] {
   return text.match(GRAPHEME) ?? [];
 }
 
-/** A text of one to three emoji and nothing else but whitespace: WhatsApp draws it big, without a bubble. */
+/** A text of one to three emoji and nothing else but whitespace (even between them): WhatsApp draws it big, without a bubble. */
 export function emojiOnly(text: string): boolean {
-  const parts = graphemes(text.trim());
+  const parts = graphemes(text.replace(/\s+/g, ''));
   return parts.length >= 1 && parts.length <= 3 && parts.every((g) => EMOJI.test(g));
 }
 

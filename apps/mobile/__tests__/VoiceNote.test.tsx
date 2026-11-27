@@ -70,6 +70,14 @@ describe('a voice note', () => {
     expect(screen.getByText('No se ha oído nada.')).toBeTruthy();
   });
 
+  it('keeps the status lines readable on its own bubble colour', async () => {
+    await render(note({ part: part({ transcription: 'failed' }), transcript: '' }));
+    expect(screen.getByText('No se ha podido transcribir.').props.className).toContain('text-mine-muted');
+    await screen.rerender(note({ tone: 'theirs', part: part({ transcription: 'failed' }), transcript: '' }));
+    expect(screen.getByText('No se ha podido transcribir.').props.className).toContain('text-muted');
+    expect(screen.getByText('No se ha podido transcribir.').props.className).not.toContain('mine');
+  });
+
   it('offers to transcribe again when it failed, and shows it working', async () => {
     let finish: () => void = () => {};
     const onRetry = jest.fn(() => new Promise<void>((r) => (finish = r)));

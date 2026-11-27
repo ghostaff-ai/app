@@ -210,7 +210,7 @@ export function Composer({
                 setText((t) => completeMention(t, n));
                 input.current?.focus();
               }}
-              className="rounded-full bg-sunk px-3 py-1.5 active:opacity-70"
+              className="rounded-full bg-theirs px-3 py-1.5 active:opacity-70"
             >
               <Text className="text-footnote text-ink">@{n}</Text>
             </Pressable>
@@ -325,6 +325,8 @@ export function Composer({
                 voice.clearError();
               }}
               multiline
+              // A web textarea defaults to two rows; start at one and let it grow. Native keeps its own sizing.
+              rows={Platform.OS === 'web' ? 1 : undefined}
               autoFocus={autoFocus}
               maxLength={MAX_LENGTH}
               onKeyPress={(e) => {
@@ -451,8 +453,8 @@ export function ReadOnlyComposer({ note }: { note: string | null }) {
   const insets = useSafeAreaInsets();
   const c = usePalette();
   return (
-    <View className="border-t border-line bg-surface px-4 pt-3" style={{ paddingBottom: Math.max(16, insets.bottom) }}>
-      <View className="flex-row items-center justify-center rounded-3xl bg-sunk px-4 py-3">
+    <View className="px-4 pt-3" style={{ paddingBottom: Math.max(16, insets.bottom) }}>
+      <View className="flex-row items-center justify-center rounded-3xl bg-theirs px-4 py-3">
         <Icon icon={Eye} size={18} color={c.muted} weight="regular" />
         <Text className="ml-2 text-center text-footnote text-muted">Solo lectura{note ? `. ${note}` : ''}</Text>
       </View>

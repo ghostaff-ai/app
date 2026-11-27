@@ -425,7 +425,7 @@ function EmojiMessage({
           onAccessibilityAction={onLongPress ? () => onLongPress() : undefined}
           className="flex-row items-end"
         >
-          <Text style={{ fontSize: 40, lineHeight: 46 }}>{text}</Text>
+          <Text className="text-ink" style={{ fontSize: 40, lineHeight: 46 }}>{text}</Text>
           <View className="mb-1 ml-1.5 rounded-[9px] bg-chip px-[7px] py-[2px]">{stamp}</View>
         </Pressable>
         {below}

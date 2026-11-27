@@ -39,6 +39,7 @@ export function VoiceNote({
   stamp?: ReactNode;
 }) {
   const t = TONES[tone];
+  const muted = tone === 'mine' ? 'text-mine-muted' : 'text-muted';
   const [retrying, setRetrying] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -63,7 +64,7 @@ export function VoiceNote({
         <View aria-live="polite">
           {failed ? (
             <View className="mt-1 flex-row flex-wrap items-center gap-x-3">
-              <Text className={`text-footnote text-muted`}>No se ha podido transcribir.</Text>
+              <Text className={`text-footnote ${muted}`}>No se ha podido transcribir.</Text>
               {onRetry ? (
                 <Pressable accessibilityRole="button" accessibilityLabel="Reintentar la transcripción" onPress={() => void retry()} hitSlop={8} className="active:opacity-70">
                   <Text className={`text-footnote font-semibold text-chat-accent`}>Reintentar</Text>
@@ -76,7 +77,7 @@ export function VoiceNote({
                 {transcript}
               </Text>
             ) : (
-              <Text className={`mt-1 text-footnote text-muted`}>{part.transcription === 'empty' ? 'No se ha oído nada.' : 'Transcribiendo…'}</Text>
+              <Text className={`mt-1 text-footnote ${muted}`}>{part.transcription === 'empty' ? 'No se ha oído nada.' : 'Transcribiendo…'}</Text>
             )
           ) : (
             <Pressable accessibilityRole="button" accessibilityLabel="Ver transcripción" onPress={() => setOpen(true)} hitSlop={8} className="mt-0.5 self-start active:opacity-70">

@@ -1,6 +1,6 @@
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Composer } from '@/components/chat/Composer';
+import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 
 // expo-audio is a native module: a recorder that records nothing and a permission we can flip.
 let mockRecording = false;
@@ -78,6 +78,40 @@ const backgroundOnDemand = () => {
   }) as never);
   return (s: string) => act(async () => onChange(s));
 };
+
+describe('Composer look', () => {
+  it('starts the box at one row on the web, where a textarea defaults to two', async () => {
+    const original = Platform.OS;
+    Platform.OS = 'web';
+    try {
+      await setup();
+      expect(screen.getByLabelText('Escribe aquí').props.rows).toBe(1);
+    } finally {
+      Platform.OS = original;
+    }
+  });
+
+  it('leaves the native box alone', async () => {
+    await setup();
+    expect(screen.getByLabelText('Escribe aquí').props.rows).toBeUndefined();
+  });
+
+  it('draws the @mention chips readable over the wallpaper', async () => {
+    await setup();
+    await fireEvent.changeText(screen.getByLabelText('Escribe aquí'), '@');
+    const chip = screen.getByLabelText('Mencionar a Ana');
+    expect(chip.props.className).toContain('bg-theirs');
+    expect(chip.props.className).not.toContain('bg-sunk');
+  });
+
+  it('floats the read-only composer without a top line', async () => {
+    await render(<ReadOnlyComposer note="Archivado" />);
+    const text = screen.getByText(/Solo lectura/);
+    const pill = text.parent;
+    expect(pill?.props.className).toContain('bg-theirs');
+    expect(pill?.parent?.props.className).not.toMatch(/border-t|bg-surface/);
+  });
+});
 
 describe('Composer voice notes', () => {
   beforeEach(() => {

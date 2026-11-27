@@ -36,6 +36,12 @@ describe('a message bubble', () => {
     expect(String(screen.getByText('Hola').props.className)).toContain('text-ink');
   });
 
+  it('gives a big emoji an ink colour, so text-presentation glyphs show in dark', async () => {
+    const msg = { ...base, parts: [{ type: 'text' as const, text: '©' }] };
+    await render(<MessageView message={msg} mine showAuthor names={[]} />);
+    expect(String(screen.getByText('©').props.className)).toContain('text-ink');
+  });
+
   it('draws theirs white without a border', async () => {
     await render(<MessageView message={base} mine={false} showAuthor names={[]} />);
     const bubble = classOf('Ana: Hola');
