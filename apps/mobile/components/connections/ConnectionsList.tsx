@@ -1,16 +1,18 @@
-import { type CatalogueConnector, type Connection, CONNECTORS, summarizeUsage } from '@ghostaff/shared';
+import { type CatalogueConnector, type Connection, CONNECTORS, type KeyRow, keyRows, secretLabelFromName, summarizeUsage } from '@ghostaff/shared';
 import { setAiOrder } from '@ghostaff/shared/services';
 import { router, useGlobalSearchParams, usePathname } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
+import { ConnectorLogo, KeyLogo } from '@/components/connections/ConnectorLogo';
 import { guidedRows } from '@/components/connections/GuidedAccesses';
 import { PendingGuides } from '@/components/connections/PendingGuides';
 import { ArrowDown, ArrowUp, LockSimple, Icon, Plus } from '@/components/icons';
 import { Button, ListRow, ListSection, ScreenTitle } from '@/components/ui';
 import { aiAccountName, aiUsageLine } from '@/lib/connections';
+import { namesList } from '@/lib/keys';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useAiUsage, useConnections, useEngine } from '@/lib/hooks/useConnections';
+import { useOrgSecrets } from '@/lib/hooks/useOrgSecrets';
 import { usePendingGuides } from '@/lib/hooks/usePendingGuides';
 import { desktopSection, useIsDesktop, useReplacesBeside } from '@/lib/layout';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
@@ -29,7 +31,9 @@ import { usePalette } from '@/lib/theme';
 // «Accesos de tus agentes» lists the guided accesses (an agent's own user or key in
 // an app, given through a guide) with «Quitar» for owners (guided-access.md), and
 // «Pendientes de aprobar», first and for owners only, the guides members did that
-// wait for an owner.
+// wait for an owner. «Claves» lists the organisation's keys and passwords, each with
+// the agents that get it, and the ones an agent needs that nobody stored
+// (secrets-from-the-app.md); a row opens the key's page (conexiones/clave?name=).
 // On a phone it is Empresa's Conexiones page; on a desktop the column beside
 // the open connection (docs/plans/ongoing/desktop-web.md), with its row marked.
 
@@ -52,6 +56,8 @@ export function ConnectionsList() {
   );
   const guided = useMemo(() => items.filter((i) => i.kind === 'guided'), [items]);
   const { items: agents, loading: agentsLoading } = useAgents(active?.id ?? null);
+  const secrets = useOrgSecrets(active?.id ?? null);
+  const keys = useMemo(() => keyRows(secrets.items, agents), [secrets.items, agents]);
   const engine = useEngine();
   const pending = usePendingGuides(active?.id ?? null, active?.role === 'owner');
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -59,8 +65,8 @@ export function ConnectionsList() {
   const top = useTabScreenTop();
   const replace = useReplacesBeside();
   const path = usePathname();
-  // `id` is the AI account's on its page (ia/[provider]?id=), the connector's on an account's.
-  const params = useGlobalSearchParams<{ id?: string }>();
+  // `id` is the AI account's on its page (ia/[provider]?id=), the connector's on an account's; `name` a key's.
+  const params = useGlobalSearchParams<{ id?: string; name?: string }>();
   if (!active) return null;
   const orgId = active.id;
   const owner = active.role === 'owner';
@@ -71,6 +77,11 @@ export function ConnectionsList() {
     const href = `/empresa/conexiones/ia/${conn.provider}?id=${conn.id}` as const;
     if (replace) router.replace(href);
     else router.push(href);
+  };
+  const openKey = (name: string | null) => {
+    const href = name ? `/empresa/conexiones/clave?name=${encodeURIComponent(name)}` : '/empresa/conexiones/clave';
+    if (replace) router.replace(href as never);
+    else router.push(href as never);
   };
   const move = async (from: number, to: number) => {
     const ids = aiAccounts.map((a) => a.id);
@@ -176,6 +187,21 @@ export function ConnectionsList() {
           </ListSection>
         ) : null}
 
+        {keys.length > 0 ? (
+          <ListSection header="Claves" footer="Claves y contraseñas de servicios sin botón para entrar. Se guardan cifradas y nadie puede volver a verlas.">
+            {keys.map((k) => (
+              <KeyListRow
+                key={k.name}
+                row={k}
+                selected={desktop ? open === 'clave' && params.name === k.name : undefined}
+                chevron={!desktop}
+                onPress={() => openKey(k.name)}
+              />
+            ))}
+            <ListRow testID="add-key" title="Añadir clave" leading={<Icon icon={Plus} size={20} color={c.accent} weight="bold" />} onPress={() => openKey(null)} />
+          </ListSection>
+        ) : null}
+
         {guided.length > 0 ? (
           <ListSection header="Accesos de tus agentes" footer="Cada uno es el usuario propio de un agente en una app tuya. Solo ese agente lo usa.">
             {guidedRows({ items: guided, agents, agentsLoading, owner, engine, onRemoved: () => void reload() })}
@@ -183,6 +209,25 @@ export function ConnectionsList() {
         ) : null}
       </View>
     </ScrollView>
+  );
+}
+
+/** One key in Claves: its label, the agents that get it, and whether it waits, failed or is missing. */
+function KeyListRow({ row, selected, chevron, onPress }: { row: KeyRow; selected?: boolean; chevron: boolean; onPress: () => void }) {
+  const label = row.secret?.label ?? secretLabelFromName(row.name);
+  const users = row.agents.map((a) => a.name);
+  const flag = !row.secret ? 'Falta' : row.secret.pendingAt ? 'Por aprobar' : row.secret.status === 'missing' ? 'Revisar' : null;
+  return (
+    <ListRow
+      testID={`key-${row.name}`}
+      leading={<KeyLogo maker={row.secret?.maker ?? null} name={label} size={36} />}
+      title={label}
+      subtitle={users.length ? namesList(users) : 'Ningún agente la usa'}
+      trailing={flag ? <Text className={`text-footnote font-medium ${flag === 'Por aprobar' ? 'text-muted' : 'text-no'}`}>{flag}</Text> : undefined}
+      chevron={chevron}
+      selected={selected}
+      onPress={onPress}
+    />
   );
 }
 

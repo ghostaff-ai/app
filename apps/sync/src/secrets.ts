@@ -6,7 +6,7 @@
 // from a hidden prompt or stdin and reaches gcloud on its stdin: never argv, never a file, never printed.
 
 import { execFileSync } from 'node:child_process';
-import { cleanSecretValue, secretLabelFromName, secretValueProblem } from '@ghostaff/shared/record';
+import { cleanSecretValue, secretLabelFromName, secretValueProblem } from '@ghostaff/shared';
 import { createInterface } from 'node:readline';
 import { Writable } from 'node:stream';
 

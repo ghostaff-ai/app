@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { keyRows, type OrgSecret } from '../src';
-import { agentSecretName, cleanSecretValue, pendingSecretName, secretLabelFromName, secretNameFromLabel, secretValueProblem } from '../src/record';
+import { cleanSecretValue, keyRows, type OrgSecret, secretLabelFromName, secretNameFromLabel, secretValueProblem } from '../src';
+import { agentSecretName, pendingSecretName } from '../src/record';
 
 const ORG = '10000000-0000-0000-0000-000000000001';
 

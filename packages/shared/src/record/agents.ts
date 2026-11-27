@@ -65,35 +65,3 @@ export function agentSecretName(orgId: string, name: string): string {
 export function pendingSecretName(orgId: string, name: string): string {
   return `org-${orgId}-pending-${name}`.replace(/[^A-Za-z0-9_-]/g, '-');
 }
-
-/** The value as pasted, typed or piped: the one trailing newline a paste or a pipe adds is dropped, nothing else. */
-export const cleanSecretValue = (raw: string): string => raw.replace(/\r?\n$/, '');
-
-/**
- * Why a value cannot be a key, or null: the runner hides each value from its logs only from 8 characters on,
- * and an environment variable holds neither a NUL nor more than 64 KB.
- */
-export function secretValueProblem(value: string): 'too_short' | 'too_long' | 'nul' | null {
-  if (value.length < 8) return 'too_short';
-  if (value.length > 65536) return 'too_long';
-  if (value.includes('\0')) return 'nul';
-  return null;
-}
-
-/** A key's name from what a person calls it: «Contraseña de info@ordago.club» → `contrasena-de-info-ordago-club`. '' when nothing is left. */
-export function secretNameFromLabel(label: string): string {
-  const slug = label
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  if (!slug) return '';
-  return (/^[a-z]/.test(slug) ? slug : `k-${slug}`).slice(0, 63).replace(/-+$/, '');
-}
-
-/** A label for a key nobody named: `correo-info` → «Correo info». */
-export function secretLabelFromName(name: string): string {
-  const words = name.replace(/-+/g, ' ').trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}

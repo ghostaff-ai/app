@@ -14,6 +14,7 @@ const agent = (id: string, ghost: Agent['ghost'], isMain = ghost === 'secretaria
   schedule: null,
   memberDefault: 'read',
   accounts: null,
+  secrets: {},
   createdAt: '2026-11-17T00:00:00Z',
 });
 

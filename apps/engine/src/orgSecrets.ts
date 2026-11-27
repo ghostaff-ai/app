@@ -7,7 +7,8 @@
 // no run reads (`org-<org>-pending-<name>`), as a guide's does (guided-access.md). Only owners decide a
 // member's value and remove a key. `org set-secret` (apps/sync) writes the same row and the same secret.
 
-import { cleanSecretValue, isSecretName, secretNameFromLabel, secretValueProblem } from '@ghostaff/shared/record';
+import { cleanSecretValue, secretNameFromLabel, secretValueProblem } from '@ghostaff/shared';
+import { isSecretName } from '@ghostaff/shared/record';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { type Membership, Refusal, requireMember, requireOwner } from './connections';
 import { agentSecretName, pendingSecretName, type Vault } from './vault';

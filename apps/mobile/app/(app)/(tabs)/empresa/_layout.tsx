@@ -23,6 +23,7 @@ export default function EmpresaLayout() {
       <Stack.Screen name="conexiones/anadir" options={{ title: '' }} />
       <Stack.Screen name="conexiones/[id]" options={{ ...beside, title: '' }} />
       <Stack.Screen name="conexiones/ia/[provider]" options={{ ...beside, title: '' }} />
+      <Stack.Screen name="conexiones/clave" options={{ ...beside, title: '' }} />
       <Stack.Screen name="registro" options={{ title: '' }} />
       <Stack.Screen name="externos/index" options={{ title: '' }} />
       <Stack.Screen name="externos/[id]" options={{ title: '' }} />
