@@ -20,7 +20,7 @@ import { readProjectAgents } from './agents';
 import { importHealth } from './healthImport';
 import { planSync, type RecordFile } from './plan';
 import { projectUrlFromKey } from './projectUrl';
-import { gcloud, putSecret, readSecretValue, vaultProjectFor } from './secrets';
+import { type ExistingKeyRow, gcloud, putSecret, readSecretValue, registeredRow, storedRow, vaultCreatedAt, vaultProjectFor } from './secrets';
 
 // The record → database job, run by hand until it moves to Cloud Run Jobs.
 //
@@ -40,10 +40,14 @@ import { gcloud, putSecret, readSecretValue, vaultProjectFor } from './secrets';
 //     the permissions, see docs/architecture.md, «Other repos»)
 //   … --runner ghostaff --only legal --on-demand
 //     (the same, without the timetable: it runs only when written to, and its old job keeps the timetable)
-//   pnpm --filter @ghostaff/sync org set-secret --org ordago --name elevenlabs
+//   pnpm --filter @ghostaff/sync org set-secret --org ordago --name elevenlabs [--label ElevenLabs] [--maker elevenlabs]
 //     (an organisation's secret into the vault of the environment the service-role key opens, for the agents
 //     whose `secrets` name it; the value at a hidden prompt, or piped on stdin, never as an argument; with
-//     gcloud signed in as someone who can write that project's Secret Manager)
+//     gcloud signed in as someone who can write that project's Secret Manager. It writes the key's row too,
+//     so it shows in Conexiones › Claves: the same an owner does from the app)
+//   pnpm --filter @ghostaff/sync org register-secrets --org ordago [--name elevenlabs --label ElevenLabs --maker elevenlabs]
+//     (the rows of secrets the vault already has, for each name the organisation's agents use, or the one
+//     named: stored before the rows existed; no value is read or typed)
 //   pnpm --filter @ghostaff/sync org import-health --org <personal slug> --provider whoop --dir ~/Desktop/whoop-export/data/<date>
 //     (a Whoop export into a personal space's kept health history; again with the same folder changes nothing)
 //
@@ -214,7 +218,7 @@ async function addAgents(opts: { org: string; from: string; runner?: 'ghostaff';
   }
 }
 
-async function setSecret(opts: { org: string; name: string }) {
+async function setSecret(opts: { org: string; name: string; label?: string; maker?: string }) {
   if (!isSecretName(opts.name)) throw new Error('--name is lower case, digits and hyphens (elevenlabs, correo-gmail…)');
   const { url } = supabaseTarget();
   const project = vaultProjectFor(url);
@@ -223,12 +227,61 @@ async function setSecret(opts: { org: string; name: string }) {
   const { data: agents, error } = await db.from('agents').select('name, secrets').eq('org_id', orgId).returns<{ name: string; secrets: AgentSecrets | null }[]>();
   if (error) throw error;
   const users = (agents ?? []).flatMap((a) => Object.entries(a.secrets ?? {}).filter(([, n]) => n === opts.name).map(([env]) => `${a.name} (${env})`));
+  const existing = await keyRow(db, orgId, opts.name);
+  // The row is checked before the value is asked for: a bad --label or --maker stops here, with nothing stored.
+  storedRow({ orgId, name: opts.name, existing, at: new Date().toISOString(), label: opts.label, maker: opts.maker });
   const value = await readSecretValue(opts.name);
   putSecret(gcloud, { project, id: agentSecretName(orgId, opts.name), value, labels: { org_id: orgId, kind: 'agent-secret' } });
+  const row = storedRow({ orgId, name: opts.name, existing, at: new Date().toISOString(), label: opts.label, maker: opts.maker });
+  const { error: rowError } = await db.from('org_secrets').upsert(row, { onConflict: 'org_id,name' });
+  if (rowError) throw new Error(`The value is stored, but not its row in Conexiones › Claves (${rowError.message}): run org register-secrets --org ${opts.org} --name ${opts.name}`);
   console.log(
     `${opts.org}'s secret «${opts.name}» stored in ${project}'s vault; ` +
       (users.length ? `the next run of ${users.join(', ')} gets it` : 'no agent names it yet (org add-agents takes them from each yaml)'),
   );
+}
+
+/** What the key's row already says, or null when it has none. */
+async function keyRow(db: SupabaseClient, orgId: string, name: string): Promise<ExistingKeyRow | null> {
+  const { data, error } = await db.from('org_secrets').select('label, maker, stored_at').eq('org_id', orgId).eq('name', name).maybeSingle<ExistingKeyRow>();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * The rows of secrets the vault already has (docs/plans/ongoing/secrets-from-the-app.md, the backfill): for each
+ * name the organisation's agents use, or the one named. Reads when the vault made each one, never a value.
+ */
+async function registerSecrets(opts: { org: string; name?: string; label?: string; maker?: string }) {
+  if ((opts.label || opts.maker) && !opts.name) throw new Error('--label and --maker go with --name');
+  if (opts.name && !isSecretName(opts.name)) throw new Error('--name is lower case, digits and hyphens (elevenlabs, correo-gmail…)');
+  const { url } = supabaseTarget();
+  const project = vaultProjectFor(url);
+  const db = admin();
+  const orgId = await orgBySlug(db, opts.org);
+  const { data: agents, error } = await db.from('agents').select('secrets').eq('org_id', orgId).returns<{ secrets: AgentSecrets | null }[]>();
+  if (error) throw error;
+  const names = opts.name ? [opts.name] : [...new Set((agents ?? []).flatMap((a) => Object.values(a.secrets ?? {})))].filter(isSecretName).sort();
+  if (!names.length) console.log(`No agent of ${opts.org} uses a secret.`);
+  for (const name of names) {
+    const createdAt = vaultCreatedAt(gcloud, project, agentSecretName(orgId, name));
+    if (!createdAt) {
+      console.log(`missing  ${name}: not in ${project}'s vault; store it from Conexiones › Claves or with org set-secret`);
+      continue;
+    }
+    const existing = await keyRow(db, orgId, name);
+    const row = registeredRow({ orgId, name, existing, createdAt, at: new Date().toISOString(), label: opts.label, maker: opts.maker });
+    if (!row) {
+      console.log(`listed   ${name}`);
+      continue;
+    }
+    // A listed one is only relabelled; a new one is inserted (an upsert would check the half row first).
+    const { error: writeError } = existing
+      ? await db.from('org_secrets').update({ label: row.label, maker: row.maker, updated_at: row.updated_at }).eq('org_id', orgId).eq('name', name)
+      : await db.from('org_secrets').insert(row);
+    if (writeError) throw writeError;
+    console.log(`${existing ? 'relabel' : 'added  '}  ${name} as «${row.label}»`);
+  }
 }
 
 async function addMember(opts: { org: string; email: string; name: string; role: string }) {
@@ -281,6 +334,8 @@ async function main() {
       'on-demand': { type: 'boolean', default: false },
       provider: { type: 'string' },
       dir: { type: 'string' },
+      label: { type: 'string' },
+      maker: { type: 'string' },
     },
   });
   const need = (k: keyof typeof values) => {
@@ -304,7 +359,9 @@ async function main() {
       return addAgents({ org: need('org'), from: need('from'), runner, only, writes, prs, onDemand: !!values['on-demand'] });
     }
     case 'set-secret':
-      return setSecret({ org: need('org'), name: need('name') });
+      return setSecret({ org: need('org'), name: need('name'), label: values.label, maker: values.maker });
+    case 'register-secrets':
+      return registerSecrets({ org: need('org'), name: values.name, label: values.label, maker: values.maker });
     case 'set-record':
       return setRecord({ org: need('org'), repo: need('repo'), installation: need('installation') });
     case 'add-member': {
@@ -319,7 +376,7 @@ async function main() {
       return;
     }
     default:
-      throw new Error('Commands: por-decidir, add-org, add-member, set-record, add-agents, set-secret, import-health');
+      throw new Error('Commands: por-decidir, add-org, add-member, set-record, add-agents, set-secret, register-secrets, import-health');
   }
 }
 

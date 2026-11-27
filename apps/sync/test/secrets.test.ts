@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type Gcloud, putSecret, secretValue, vaultProjectFor } from '../src/secrets';
+import { type Gcloud, putSecret, registeredRow, secretValue, storedRow, vaultCreatedAt, vaultProjectFor } from '../src/secrets';
 
 /** A fake gcloud: Secret Manager as a map of secrets to their enabled versions; every call recorded, with what came on stdin. */
 function fakeGcloud(existing: Record<string, string[]> = {}, opts: { addPrints?: string } = {}) {
@@ -74,5 +74,72 @@ describe('org set-secret', () => {
     const g = fakeGcloud({ [ID]: ['1'] }, { addPrints: '' });
     expect(() => put(g.run)).toThrow(/older versions kept/);
     expect(g.secrets.get(ID)).toEqual(['1', '2']);
+  });
+});
+
+describe('the key’s row, written with the value', () => {
+  const ORG = '10000000-0000-0000-0000-000000000001';
+  const AT = '2026-11-27T10:00:00.000Z';
+
+  it('says Ghostaff stored it, now, and is healthy again', () => {
+    expect(storedRow({ orgId: ORG, name: 'correo-info', existing: null, at: AT })).toEqual({
+      org_id: ORG,
+      name: 'correo-info',
+      label: 'Correo info',
+      maker: null,
+      stored_by: null,
+      stored_by_name: 'Ghostaff',
+      stored_at: AT,
+      status: 'ok',
+      updated_at: AT,
+    });
+  });
+
+  it('keeps the label and maker a person gave it, unless new ones are given', () => {
+    const existing = { label: 'Contraseña de info@ordago.club', maker: 'imap', stored_at: '2026-11-20T10:00:00Z' };
+    expect(storedRow({ orgId: ORG, name: 'correo-info', existing, at: AT })).toMatchObject({ label: 'Contraseña de info@ordago.club', maker: 'imap' });
+    expect(storedRow({ orgId: ORG, name: 'correo-info', existing, at: AT, label: ' Info ', maker: 'gmail' })).toMatchObject({ label: 'Info', maker: 'gmail' });
+  });
+
+  it('refuses a label or maker the table would', () => {
+    expect(() => storedRow({ orgId: ORG, name: 'x-y', existing: null, at: AT, label: 'x'.repeat(81) })).toThrow(/--label/);
+    expect(() => storedRow({ orgId: ORG, name: 'x-y', existing: null, at: AT, maker: 'Eleven Labs' })).toThrow(/--maker/);
+  });
+});
+
+describe('org register-secrets: the rows of secrets already in the vault', () => {
+  const ORG = '10000000-0000-0000-0000-000000000001';
+  const CREATED = '2026-11-25T18:03:11.123456Z';
+
+  it('lists one stored before rows existed, as Ghostaff on the day the vault made it', () => {
+    expect(registeredRow({ orgId: ORG, name: 'elevenlabs', existing: null, createdAt: CREATED, label: 'ElevenLabs', maker: 'elevenlabs', at: 'now' })).toEqual({
+      org_id: ORG,
+      name: 'elevenlabs',
+      label: 'ElevenLabs',
+      maker: 'elevenlabs',
+      stored_by: null,
+      stored_by_name: 'Ghostaff',
+      stored_at: CREATED,
+      updated_at: 'now',
+    });
+  });
+
+  it('only relabels one already listed, never who stored it', () => {
+    const existing = { label: 'Elevenlabs', maker: null, stored_at: '2026-11-26T10:00:00Z' };
+    expect(registeredRow({ orgId: ORG, name: 'elevenlabs', existing, createdAt: CREATED, label: 'ElevenLabs', at: 'now' })).toEqual({
+      org_id: ORG,
+      name: 'elevenlabs',
+      label: 'ElevenLabs',
+      maker: null,
+      updated_at: 'now',
+    });
+    expect(registeredRow({ orgId: ORG, name: 'elevenlabs', existing, createdAt: CREATED, at: 'now' })).toBeNull();
+  });
+
+  it('reads when the vault made the secret, or that it has none', () => {
+    const g = fakeGcloud({ [ID]: ['1'] });
+    const run: Gcloud = (args, input) => (args[1] === 'describe' && args.includes('value(createTime)') ? (g.secrets.has(args[2]!) ? `${CREATED}\n` : g.run(args, input)) : g.run(args, input));
+    expect(vaultCreatedAt(run, 'ghostaff-beta', ID)).toBe(CREATED);
+    expect(vaultCreatedAt(run, 'ghostaff-beta', `${ID}-none`)).toBeNull();
   });
 });
