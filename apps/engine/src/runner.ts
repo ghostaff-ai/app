@@ -21,7 +21,7 @@
 
 import { DIGESTS_READ, heardBlock } from './generalDigest';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { type ChatMessage } from '@ghostaff/shared';
+import { AGENT_SCHEDULE_TIMEZONE, type ChatMessage } from '@ghostaff/shared';
 import { agentInstructionsPath, type AgentRepo, type AgentSecrets, isSecretEnv, isSecretName, photoGuide, repoDirs } from '@ghostaff/shared/record';
 import { Cron } from 'croner';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
@@ -504,7 +504,7 @@ async function holdBack(runner: RunnerDeps, a: RunnerAgent, now: Date): Promise<
 /** Whether a timetable had a fire time in (`since`, `now`]. A bad cron never fires. */
 export function firedBetween(schedule: string, since: Date, now: Date): boolean {
   try {
-    const next = new Cron(schedule, { timezone: 'Europe/Madrid', paused: true }).nextRun(since);
+    const next = new Cron(schedule, { timezone: AGENT_SCHEDULE_TIMEZONE, paused: true }).nextRun(since);
     return next !== null && next.getTime() <= now.getTime();
   } catch {
     return false;

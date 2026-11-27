@@ -13,6 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ACCOUNT_PROVIDERS, type AccountProvider, connectorFor } from '../connectors';
 import {
   AGENT_GHOSTS,
+  AGENT_SCHEDULE_TIMEZONE,
   AGENT_JOBS,
   AGENT_LEVELS,
   type AgentGhost,
@@ -38,6 +39,7 @@ import {
   type RoutineInput,
   inviteMember,
   listAgentAccess,
+  listAgentRunnerSetup,
   listAgents,
   listConnections,
   listMembers,
@@ -149,13 +151,18 @@ export const SETTING_TOOLS: SettingTool[] = [
   {
     name: 'settings_read',
     description:
-      "Read the organisation's current settings in Ghostaff: its agents (with which connected accounts each may use), the connected accounts, the AI accounts in the order they are tried, the members, who may see or talk to each agent, and open invitations. Read this before proposing any settings change, and use the ids it returns.",
+      "Read the organisation's current settings in Ghostaff: its agents, the connected accounts, the AI accounts in the order they are tried, the members, who may see or talk to each agent, open invitations and routines. Read this before proposing any settings change, and use the ids it returns. " +
+      "For each agent: its job (what it does; a ghost is only how it is drawn, so two agents drawn alike may do different work), " +
+      "whether it only answers in chat or runs on its own runner, and its schedule (cron, Madrid time: it works on its own then, besides any routines). " +
+      "An agent reaches outside accounts not only through connected_accounts: an agent on a runner may also get keys (names of the organisation's stored keys or passwords, such as a mailbox's) and repos. " +
+      "So never say an agent cannot reach something because connected_accounts is empty.",
     input_schema: { type: 'object', properties: {} },
     writes: false,
     step: 'Mirando la configuración',
     async run(ctx) {
-      const [agents, connections, members, invitations, routines] = await Promise.all([
+      const [agents, setups, connections, members, invitations, routines] = await Promise.all([
         listAgents(ctx.client, ctx.orgId),
+        listAgentRunnerSetup(ctx.client, ctx.orgId),
         listConnections(ctx.client, ctx.orgId),
         listMembers(ctx.client, ctx.orgId),
         ownerOnly(listPendingInvitations(ctx.client, ctx.orgId)),
@@ -168,8 +175,13 @@ export const SETTING_TOOLS: SettingTool[] = [
           name: a.name,
           department: a.department,
           ghost: a.ghost,
+          job: a.description,
           you: a.id === ctx.agentId,
+          runs: a.runner === 'chat' ? 'chat_only' : 'own_runner',
+          schedule: a.schedule ? { cron: a.schedule, timezone: AGENT_SCHEDULE_TIMEZONE } : null,
           accounts: a.accounts ?? 'all',
+          keys: setups.find((x) => x.agentId === a.id)?.keys ?? [],
+          repos: setups.find((x) => x.agentId === a.id)?.repos ?? [],
           member_default: a.memberDefault,
           access: access[i]?.filter((p) => p.role !== 'owner').map((p) => ({ user_id: p.userId, name: p.displayName, level: p.level })) ?? undefined,
         })),

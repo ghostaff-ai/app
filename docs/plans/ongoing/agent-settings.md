@@ -38,6 +38,7 @@ Anything an owner can change in the app, the organisation's main agent (Secretar
 - [x] Per-agent accounts: migration, pgTAP test, screen, used in chat
 - [x] Secretaría's tools: read; add an agent; an agent's accounts; a member's access to an agent; the order and names of AI accounts; invite (as a member) and withdraw an invitation
 - [x] Approval runs as the approving owner
+- [x] `settings_read` tells the whole agent (2026-11-27, Jaime: Secretaría said Órdago had no routines, no connected accounts and agents that overlap): each agent's `job` (its description; a ghost is only its drawing), `runs` (`chat_only` or `own_runner`), its `schedule` (cron, `AGENT_SCHEDULE_TIMEZONE`), the `keys` it gets (names from `agents.secrets`, never values) and its `repos`. Not yet: the organisation's Google Cloud account (`cloud_accounts` is closed to people), and key names from the keys table once [secrets-from-the-app.md](secrets-from-the-app.md) slice 1 lands.
 
 ## Open
 
