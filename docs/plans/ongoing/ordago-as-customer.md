@@ -42,6 +42,24 @@ Front 3's walk still has to confirm it by using both. The panel does not read th
 - **Sources with no connector in Ghostaff:** Meta Ads API, BigQuery `ordago_bi`, Firestore and Auth of `ordago-prod`, Cloud Monitoring, the bucket `gs://ordago-prod-reels-publicacion`, Cloud Run's executions API (is an agent running?).
 - **Unverified:** the GitHub record connector exists in the engine (`githubApp.ts`) but seems set up by CLI only, not from Conexiones.
 
+## What we did by hand for Órdago, and how a customer will do it (Jaime, 2026-11-27)
+
+Moving Órdago's agents ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md)) took many steps in a terminal. Jaime: «estamos apuntando a usuarios no técnicos»: a new company that wants as many agents as Órdago has must get there without any of them. Órdago came in through the technical door (YAMLs, `org add-agents`, `gcloud`, a GitHub record) because it already had everything built; a customer's way is a conversation with the main agent, which creates each agent, and each agent asks in its chat for every access the first time it needs it, given with one button or a guide.
+
+| Done by hand for Órdago | How a customer does it | Where |
+|---|---|---|
+| Mailbox passwords and API keys stored with `org set-secret` from a terminal (`correo-info`, `correo-gmail`, `elevenlabs`, `meta-token`) | A button in Conexiones (OAuth where the maker has it), or a secure field in the app for a key or an app password, or the agent asks for it in its chat | [connectors.md](connectors.md), [connector-in-chat.md](connector-in-chat.md), [guided-access.md](guided-access.md); **the gap:** [secrets-from-the-app.md](../ideas/secrets-from-the-app.md) |
+| Google Cloud roles granted with `gcloud`, copied from the old service accounts | The agent asks for the access it lacks; the person approves it in one tap, with a guide when it is not one tap | [customer-cloud-access.md](customer-cloud-access.md), [agent-access-requests.md](../ideas/agent-access-requests.md), [guided-access.md](guided-access.md) |
+| `ordago-reels` added to the GitHub App's installation; the record in GitHub | A non-technical customer has no GitHub: Ghostaff keeps the record | [record-store.md](record-store.md) |
+| Each YAML turned into `agentes/<slug>/AGENTS.md`, then `org add-agents` (timetable, tools, size, secrets, repos) | The person tells the main agent what they want done («alguien que lea el correo cada mañana y me avise de lo importante») and it creates the agent with its instructions, timetable and the accesses it will ask for | [agent-builder.md](agent-builder.md) |
+| ffmpeg, chromium and uv added to the runner image | Nothing: the runner carries the usual tools | [ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md) |
+| Old Cloud Run schedules paused, Telegram off, `--writes` | Only for moving Órdago | — |
+
+Two gaps no plan covered, now tasks of this plan:
+
+- [ ] **Keys and passwords from the app** (high): an owner stores, replaces and removes a key or an app password in the app, and gives it to an agent, without a terminal; and an agent asks for one it lacks. [secrets-from-the-app.md](../ideas/secrets-from-the-app.md).
+- [ ] **The whole way, tried with a non-technical person** (high): a new company ends with five or six agents working (mail, a social account, a calendar, a document store, a weekly report) and nobody opens a terminal. Every piece has its plan; nobody has checked they add up. Done when someone who has never used a terminal does it on the beta while we watch, and every step they get stuck on becomes a task in the plan it belongs to.
+
 ## Open decisions (either founder)
 
 - Personalisation over departments (changes decision 13).
