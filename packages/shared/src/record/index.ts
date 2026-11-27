@@ -3,3 +3,4 @@ export * from './history';
 export * from './sync';
 export * from './agents';
 export * from './externos';
+export * from './photo';

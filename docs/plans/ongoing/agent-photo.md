@@ -13,6 +13,7 @@ Jaime, 2026-11-27, after mockups of Redes and Comercial: «escríbelo y mételo 
 3. **One file per agent in its record**, `agentes/<slug>/foto.yaml`, with history like any file. Each agent writes only its own (the record's hook). The sync projects it into `agent_photos`; the app reads that, never the record (invariant 4).
 4. **Who does what.** Ghostaff builds each block type once, for everyone. A person asks in the agent's chat («quiero ver cada semana cuánta gente vuelve»), or accepts what the agent proposes. The agent adds the block (the only time the structure changes) and refreshes its data on each run, from whatever its connections reach (BigQuery, Meta, the record). The app redraws it.
 5. **The agent proposes what to show.** An agent with no photo proposes, at the end of its next run, the two or three things it would keep on it, so a customer with nothing inventoried still gets one (Jaime: «si el usuario no tiene nada inventoriado, que el agente proponga qué mostrar»).
+7. **An agent's settings go behind a gear** on top of its page (Rutinas, Memoria, Quién puede, Herramientas, Quitar), and its 3D ghost scrolls away with the page (Jaime, 2026-11-27, trying PR 1: the page is now what it does, not how it is set up).
 6. **Where it shows**: on the agent's page, «Su foto», after what waits for you and before «Últimamente». Every agent's goal together in Empresa («Cómo va cada área») is PR 3.
 
 ## The file

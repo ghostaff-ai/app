@@ -22,7 +22,7 @@
 import { DIGESTS_READ, heardBlock } from './generalDigest';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { type ChatMessage } from '@ghostaff/shared';
-import { agentInstructionsPath, type AgentRepo, type AgentSecrets, isSecretEnv, isSecretName, repoDirs } from '@ghostaff/shared/record';
+import { agentInstructionsPath, type AgentRepo, type AgentSecrets, isSecretEnv, isSecretName, photoGuide, repoDirs } from '@ghostaff/shared/record';
 import { Cron } from 'croner';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
 import { madridNow } from './chat';
@@ -601,6 +601,7 @@ export function composePrompt(p: {
     `Si haces un audio para quien trabaja contigo (mp3 o m4a, hasta ${MAX_RUN_AUDIO_BYTES / 1024 / 1024} MB, como mucho ${MAX_RUN_AUDIO_FILES}), ` +
       'déjalo en `~/outbox/` con su título como nombre del archivo: al acabar sale en tu chat en Ghostaff, después de tu último mensaje, ' +
       'para que lo escuchen. No lo subas a otro sitio ni pongas enlaces a él.',
+    photoGuide(agent.slug),
   ];
   if (p.repos?.reached.length) {
     parts.push(

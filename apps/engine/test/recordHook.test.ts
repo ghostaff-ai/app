@@ -73,6 +73,12 @@ describe('the record’s pre-receive hook', () => {
     expect(push(FINANZAS, { 'memoria/agentes/secretaria/a.md': 'x\n' })).toContain('es de otro agente');
   });
 
+  it('lets an agent write its own photo, and no other agent’s (agent-photo.md)', () => {
+    expect(push(FINANZAS, { 'agentes/finanzas/foto.yaml': 'bloques: []\n' })).toBeNull();
+    expect(push(FINANZAS, { 'agentes/secretaria/foto.yaml': 'bloques: []\n' })).toContain('esa foto');
+    expect(push(ADMIN, { 'agentes/secretaria/foto.yaml': 'bloques: []\n' })).toBeNull();
+  });
+
   it('keeps who the organisation works with for people, even from the main agent (external-parties.md)', () => {
     expect(push(FINANZAS, { 'externos/gestoria.md': 'x\n' })).toContain('lo añade o confirma una persona desde Ghostaff');
     expect(push(SECRETARIA, { 'externos/gestoria.md': 'x\n' })).toContain('lo añade o confirma una persona desde Ghostaff');

@@ -104,6 +104,10 @@ function store(rows: DecisionRow[] = [], agents: InstructedAgent[] = [], externa
     markExternalWritten: async (w) => {
       externalWritten.push(...w);
     },
+    photoShas: async () => new Map(),
+    setPhoto: async () => {},
+    failPhoto: async () => {},
+    removePhoto: async () => {},
   };
   return { s, applied, written, states, instructions, appliedExternal, externalWritten };
 }

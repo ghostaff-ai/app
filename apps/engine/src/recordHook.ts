@@ -9,6 +9,7 @@
 // - `memoria/empresa/` only the main agent may push there, once it runs on our runner (today it is a
 //   chat agent, so no agent can: people change it from Ghostaff);
 // - in `memoria/agentes/`, each agent only its own folder;
+// - an agent's photo, `agentes/<slug>/foto.yaml`, only that agent (agent-photo.md);
 // - `externos/` no agent: who the organisation works with is added or confirmed by a person
 //   (external-parties.md, decision 1); an agent proposes one with a settings tool;
 // - only `main`, never deleted.
@@ -55,6 +56,8 @@ while read -r old new ref; do
       '') ;;
       AGENTS.md|*/AGENTS.md) deny "las instrucciones ($f) solo las cambia una persona desde Ghostaff. Propón el cambio en tu respuesta." ;;
       memoria/empresa/*) [ "$company" = yes ] || deny "la memoria de la empresa ($f) la cambian las personas desde Ghostaff." ;;
+      agentes/"$own"/foto.yaml) ;;
+      agentes/*/foto.yaml) deny "esa foto ($f) es de otro agente." ;;
       memoria/agentes/"$own"/*) ;;
       memoria/agentes/*) deny "esa memoria ($f) es de otro agente." ;;
       memoria/*) deny "en memoria/ solo escribes en memoria/agentes/$own/ ($f)." ;;

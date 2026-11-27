@@ -890,6 +890,12 @@ describe('the timetable', () => {
 });
 
 describe('composePrompt', () => {
+  it('tells the agent where its photo is and how to keep it (agent-photo.md)', () => {
+    const p = composePrompt({ agent: spec(legal), orgName: 'Órdago', repo: 'ordago-app/business', now: new Date('2027-01-15T08:00:00Z'), request: null });
+    expect(p).toContain(`agentes/${spec(legal).slug}/foto.yaml`);
+    expect(p).toContain('Nunca inventes una cifra');
+  });
+
   it('a scheduled run is told what its last message is for, and SIN NOVEDAD', () => {
     const p = composePrompt({ agent: spec(legal), orgName: 'Órdago', repo: 'ordago-app/business', now: new Date('2027-01-15T08:00:00Z'), request: null });
     expect(p).toContain('en su chat contigo');

@@ -88,6 +88,35 @@ export function supabaseRecordStore(db: SupabaseClient): RecordSyncStore {
         .eq('id', agentId);
       if (error) throw error;
     },
+    async photoShas(orgId) {
+      const { data, error } = await db.from('agent_photos').select('agent_id, sha').eq('org_id', orgId).returns<Array<{ agent_id: string; sha: string }>>();
+      if (error) throw error;
+      return new Map((data ?? []).map((r) => [r.agent_id, r.sha]));
+    },
+    async setPhoto(p) {
+      const { error } = await db.from('agent_photos').upsert({
+        agent_id: p.agentId,
+        org_id: p.orgId,
+        blocks: p.blocks,
+        skipped: p.skipped,
+        sha: p.sha,
+        error: null,
+        updated_at: p.updatedAt,
+      });
+      if (error) throw error;
+    },
+    async failPhoto(orgId, agentId, sha, why) {
+      // The last good blocks stay; a first file that can't be read leaves an empty photo with why.
+      const { data, error } = await db.from('agent_photos').update({ sha, error: why }).eq('agent_id', agentId).select('agent_id');
+      if (error) throw error;
+      if (data?.length) return;
+      const { error: e2 } = await db.from('agent_photos').insert({ agent_id: agentId, org_id: orgId, sha, error: why });
+      if (e2) throw e2;
+    },
+    async removePhoto(agentId) {
+      const { error } = await db.from('agent_photos').delete().eq('agent_id', agentId);
+      if (error) throw error;
+    },
     async externalParties(orgId) {
       const { data, error } = await db
         .from('external_parties')
