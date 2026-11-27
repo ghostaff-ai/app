@@ -1,8 +1,15 @@
-import { type AgentLevel, type ChatMessage, type ChatThread, isVoicePart, messageText, type OrgMember } from '@ghostaff/shared';
+import { type AgentLevel, type ChatMessage, type ChatThread, isVoicePart, messageText, type OrgMember, type Reaction } from '@ghostaff/shared';
 import {
   askAgent,
   askAboutDecision,
   chatWith,
+  deleteMessage,
+  editMessage,
+  forwardToAgent,
+  listReactions,
+  pinMessage,
+  reactTo,
+  subscribeToReactions,
   type EngineAccess,
   getThread,
   listMembers,
@@ -162,6 +169,7 @@ export function useThread(threadId: string | null) {
         markRead.now();
       },
       () => void load(),
+      (h) => alive && setHead((prev) => (prev ? { ...prev, pinnedMessage: h.pinnedMessage } : prev)),
     );
     void load();
     return () => {
@@ -170,15 +178,62 @@ export function useThread(threadId: string | null) {
     };
   }, [threadId, markRead]);
 
+  // Reactions, live (chat-like-whatsapp.md, phase 2): one per person and message.
+  const [reactions, setReactions] = useState<Reaction[]>([]);
+  useEffect(() => {
+    if (!threadId) return;
+    let alive = true;
+    const put = (r: Reaction, removed: boolean) =>
+      setReactions((list) => [...list.filter((x) => !(x.messageId === r.messageId && x.userId === r.userId)), ...(removed ? [] : [r])]);
+    const stop = subscribeToReactions(supabase, threadId, (r, removed) => alive && put(r, removed));
+    void listReactions(supabase, threadId)
+      .then((rs) => alive && setReactions(rs))
+      .catch(() => {});
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, [threadId]);
+
   const engine = useEngine();
   const send = useCallback(
-    async (body: string) => {
+    async (body: string, quoted?: string | null) => {
       if (!threadId) return;
-      const m = await postMessage(supabase, threadId, body);
+      const m = await postMessage(supabase, threadId, body, quoted);
       setMessages((list) => addMessage(list, m));
       // The agent's reply arrives through Realtime as it is written.
       if (engine) letAgentAnswer(engine, threadId, setError);
     },
+    [threadId, engine],
+  );
+
+  /** What a held message offers (MessageMenu): each one live for everyone through Realtime. */
+  const actions = useMemo(
+    () => ({
+      edit: async (messageId: string, body: string) => {
+        const m = await editMessage(supabase, messageId, body);
+        setMessages((list) => addMessage(list, m));
+      },
+      remove: async (messageId: string) => {
+        if (!engine) throw new Error('not signed in');
+        await deleteMessage(engine, messageId);
+      },
+      react: async (messageId: string, emoji: string | null, me: string) => {
+        // At once on screen; the database's answer comes back through Realtime.
+        setReactions((list) => [...list.filter((x) => !(x.messageId === messageId && x.userId === me)), ...(emoji ? [{ messageId, userId: me, emoji }] : [])]);
+        await reactTo(supabase, messageId, emoji);
+      },
+      pin: async (messageId: string | null) => {
+        if (!threadId) return;
+        await pinMessage(supabase, threadId, messageId);
+        setHead((h) => (h ? { ...h, pinnedMessage: messageId } : h));
+      },
+      forward: async (messageId: string, agentId: string) => {
+        const m = await forwardToAgent(supabase, messageId, agentId);
+        if (engine) letAgentAnswer(engine, m.threadId);
+        return m.threadId;
+      },
+    }),
     [threadId, engine],
   );
 
@@ -187,7 +242,7 @@ export function useThread(threadId: string | null) {
 
   const readByAll = useReadByAll(threadId, messages.length, onScreen);
 
-  return { head, messages, error, send, add, openedAt, readByAll };
+  return { head, messages, error, send, add, openedAt, readByAll, reactions, actions };
 }
 
 /**
@@ -318,8 +373,8 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
   const [error, setError] = useState<string | null>(null);
 
   const send = useCallback(
-    async (body: string) => {
-      if (chatId) return chat.send(body);
+    async (body: string, quoted?: string | null) => {
+      if (chatId) return chat.send(body, quoted);
       if (!agentId) return;
       const m = await chatWith(supabase, agentId, body);
       setOpened(m.threadId);
@@ -345,9 +400,9 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
    * answers, both arriving live. A failed transcript shows on the note itself.
    */
   const sendVoice = useCallback(
-    async (note: RecordedNote, mentions: string[] = []) => {
+    async (note: RecordedNote, mentions: string[] = [], quote?: string | null) => {
       if (!engine || !agentId) throw new Error('not signed in');
-      const m = await sendVoiceNote(engine, agentId, { ...note, mentions });
+      const m = await sendVoiceNote(engine, agentId, { ...note, mentions, quote });
       if (chatId) chat.add(m);
       else setOpened(m.threadId);
       void transcribeVoiceNote(engine, m.id).catch(() => {});
@@ -368,6 +423,9 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
     messages: chat.messages,
     openedAt: chat.openedAt,
     readByAll: chat.readByAll,
+    reactions: chat.reactions,
+    actions: chat.actions,
+    pinned: chat.head?.pinnedMessage ?? null,
     error: error ?? chat.error,
     send,
     askAbout,
@@ -391,9 +449,9 @@ export function useGeneralChat(orgId: string | null) {
   const engine = useEngine();
 
   const sendVoice = useCallback(
-    async (note: RecordedNote, mentions: string[]) => {
+    async (note: RecordedNote, mentions: string[], quote?: string | null) => {
       if (!engine || !chatId) throw new Error('not signed in');
-      const outgoing: OutgoingNote = { ...note, mentions };
+      const outgoing: OutgoingNote = { ...note, mentions, quote };
       const m = await sendVoiceNoteToThread(engine, chatId, outgoing);
       chat.add(m);
       void transcribeVoiceNote(engine, m.id).catch(() => {});
@@ -415,6 +473,9 @@ export function useGeneralChat(orgId: string | null) {
     messages: chat.messages,
     openedAt: chat.openedAt,
     readByAll: chat.readByAll,
+    reactions: chat.reactions,
+    actions: chat.actions,
+    pinned: chat.head?.pinnedMessage ?? null,
     error: chat.error,
     send: chat.send,
     sendVoice,

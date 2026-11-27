@@ -33,7 +33,7 @@ import type {
   Profile,
 } from '../models';
 import { ACTION_KIND } from '../models';
-import { type ChatMessage, type ChatThread, isDecisionQuotePart, type MessagePart, type OrgMember, waveformToDigits } from '../chat';
+import { type ChatMessage, type ChatThread, isDecisionQuotePart, type MessagePart, type OrgMember, type Reaction, waveformToDigits } from '../chat';
 import type { Routine, RoutineWhen, Weekday } from '../routines';
 
 // The only place the app talks to the database. Screens, hooks and components
@@ -996,6 +996,8 @@ export interface OutgoingNote {
   mentions?: string[];
   /** How loud it was, 0 to 1 (chat-like-whatsapp.md); the bubble draws it. */
   waveform?: number[];
+  /** The message of the same chat it replies to. */
+  quote?: string | null;
 }
 
 function noteQuery(note: OutgoingNote): string {
@@ -1003,6 +1005,7 @@ function noteQuery(note: OutgoingNote): string {
   if (note.durationMs !== null) q.set('durationMs', String(Math.round(note.durationMs)));
   for (const id of note.mentions ?? []) q.append('mention', id);
   if (note.waveform?.length) q.set('waveform', waveformToDigits(note.waveform));
+  if (note.quote) q.set('quote', note.quote);
   const s = q.toString();
   return s ? `?${s}` : '';
 }
@@ -1222,6 +1225,8 @@ export interface ThreadHead {
   /** Null in General, the people's chat (general-chat.md). */
   agentId: string | null;
   title: string;
+  /** The message pinned at the top, if any (chat-like-whatsapp.md, phase 2). */
+  pinnedMessage: string | null;
 }
 
 interface ThreadHeadRow {
@@ -1230,6 +1235,7 @@ interface ThreadHeadRow {
   kind: 'agent' | 'general';
   agent_id: string | null;
   title: string;
+  pinned_message: string | null;
 }
 
 const threadHead = (r: ThreadHeadRow): ThreadHead => ({
@@ -1238,9 +1244,10 @@ const threadHead = (r: ThreadHeadRow): ThreadHead => ({
   kind: r.kind,
   agentId: r.agent_id,
   title: r.title,
+  pinnedMessage: r.pinned_message ?? null,
 });
 
-const THREAD_HEAD_COLUMNS = 'id, org_id, kind, agent_id, title';
+const THREAD_HEAD_COLUMNS = 'id, org_id, kind, agent_id, title, pinned_message';
 
 export async function getThread(client: SupabaseClient, id: string): Promise<ThreadHead | null> {
   const { data, error } = await client.from('threads').select(THREAD_HEAD_COLUMNS).eq('id', id).maybeSingle<ThreadHeadRow>();
@@ -1260,6 +1267,8 @@ interface MessageRow {
   steps?: string[];
   routine_id?: string | null;
   reply_to?: string | null;
+  edited_at?: string | null;
+  deleted_at?: string | null;
   created_at: string;
 }
 
@@ -1276,11 +1285,13 @@ export function messageFromRow(r: MessageRow): ChatMessage {
     steps: Array.isArray(r.steps) ? r.steps : [],
     routineId: r.routine_id ?? null,
     replyTo: r.reply_to ?? null,
+    editedAt: r.edited_at ?? null,
+    deletedAt: r.deleted_at ?? null,
     createdAt: r.created_at,
   };
 }
 
-export const MESSAGE_COLUMNS = 'id, thread_id, author_kind, author_user, author_agent, author_name, parts, state, steps, routine_id, reply_to, created_at';
+export const MESSAGE_COLUMNS = 'id, thread_id, author_kind, author_user, author_agent, author_name, parts, state, steps, routine_id, reply_to, edited_at, deleted_at, created_at';
 
 /** A thread's latest messages, oldest first. */
 export async function listMessages(client: SupabaseClient, threadId: string, limit = 300): Promise<ChatMessage[]> {
@@ -1326,10 +1337,71 @@ export async function listAskedDecisions(client: SupabaseClient, orgId: string, 
   return ids;
 }
 
-export async function postMessage(client: SupabaseClient, threadId: string, body: string): Promise<ChatMessage> {
-  const { data, error } = await client.rpc('post_message', { target_thread: threadId, body }).single<MessageRow>();
+/** Writes in a chat as the signed-in person; with `quoted`, replying to that message of it. */
+export async function postMessage(client: SupabaseClient, threadId: string, body: string, quoted?: string | null): Promise<ChatMessage> {
+  const { data, error } = await client.rpc('post_message', { target_thread: threadId, body, quoted: quoted ?? null }).single<MessageRow>();
   if (error) throw error;
   return messageFromRow(data);
+}
+
+/** Changes the words of your own text message, within 15 minutes. */
+export async function editMessage(client: SupabaseClient, messageId: string, body: string): Promise<ChatMessage> {
+  const { data, error } = await client.rpc('edit_message', { target_message: messageId, body }).single<MessageRow>();
+  if (error) throw error;
+  return messageFromRow(data);
+}
+
+/** Deletes your own message for everyone, its audio too (the engine removes it). */
+export async function deleteMessage(engine: EngineAccess, messageId: string): Promise<void> {
+  await callEngine(engine, 'DELETE', `/messages/${encodeURIComponent(messageId)}`);
+}
+
+/** Pins a message at the top of its chat; null unpins. */
+export async function pinMessage(client: SupabaseClient, threadId: string, messageId: string | null): Promise<void> {
+  const { error } = await client.rpc('pin_message', { target_thread: threadId, target_message: messageId });
+  if (error) throw error;
+}
+
+/** Forwards a message to an agent, into its chat; the agent answers it once asked (askAgent). Returns the new message. */
+export async function forwardToAgent(client: SupabaseClient, messageId: string, agentId: string): Promise<ChatMessage> {
+  const { data, error } = await client.rpc('forward_to_agent', { target_message: messageId, target_agent: agentId }).single<MessageRow>();
+  if (error) throw error;
+  return messageFromRow(data);
+}
+
+/** Reacts with an emoji, replacing yours; null takes it away. */
+export async function reactTo(client: SupabaseClient, messageId: string, emoji: string | null): Promise<void> {
+  const { error } = await client.rpc('react', { target_message: messageId, emoji: emoji ?? '' });
+  if (error) throw error;
+}
+
+interface ReactionRow {
+  message_id: string;
+  user_id: string;
+  emoji: string;
+}
+
+const reactionFromRow = (r: ReactionRow): Reaction => ({ messageId: r.message_id, userId: r.user_id, emoji: r.emoji });
+
+/** Every reaction in a chat. */
+export async function listReactions(client: SupabaseClient, threadId: string): Promise<Reaction[]> {
+  const { data, error } = await client.from('message_reactions').select('message_id, user_id, emoji').eq('thread_id', threadId).limit(5000);
+  if (error) throw error;
+  return ((data ?? []) as ReactionRow[]).map(reactionFromRow);
+}
+
+/** Reactions as they change, live: `onChange(reaction, removed)`. */
+export function subscribeToReactions(client: SupabaseClient, threadId: string, onChange: (r: Reaction, removed: boolean) => void): () => void {
+  const channel = client
+    .channel(`reactions:${threadId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions', filter: `thread_id=eq.${threadId}` }, (payload) => {
+      if (payload.eventType === 'DELETE') onChange(reactionFromRow(payload.old as ReactionRow), true);
+      else onChange(reactionFromRow(payload.new as ReactionRow), false);
+    })
+    .subscribe();
+  return () => {
+    void client.removeChannel(channel);
+  };
 }
 
 export async function markThreadRead(client: SupabaseClient, threadId: string): Promise<void> {
@@ -1366,6 +1438,7 @@ export function subscribeToThread(
   threadId: string,
   onMessage: (m: ChatMessage) => void,
   onLive?: () => void,
+  onHead?: (h: { pinnedMessage: string | null }) => void,
 ): () => void {
   const channel = client
     .channel(`thread:${threadId}`)
@@ -1376,6 +1449,10 @@ export function subscribeToThread(
         if (payload.eventType !== 'DELETE') onMessage(messageFromRow(payload.new as MessageRow));
       },
     )
+    // The chat's own row: what is pinned at the top changes live.
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'threads', filter: `id=eq.${threadId}` }, (payload) => {
+      onHead?.({ pinnedMessage: (payload.new as { pinned_message?: string | null }).pinned_message ?? null });
+    })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') onLive?.();
     });

@@ -803,6 +803,12 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   thread_level: { reach: 'not_a_setting' },
   thread_level_for: { reach: 'not_a_setting' },
   thread_read_by_all: { reach: 'not_a_setting' },
+  delete_message_of: { reach: 'not_a_setting' },
+  edit_message: { reach: 'not_a_setting' },
+  forward_to_agent: { reach: 'not_a_setting' },
+  pin_message: { reach: 'not_a_setting' },
+  quote_part: { reach: 'not_a_setting' },
+  react: { reach: 'not_a_setting' },
 };
 
 /**

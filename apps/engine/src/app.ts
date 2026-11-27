@@ -24,7 +24,7 @@ import { connectAi, type Deps, disconnectAi, Refusal, requireOwner } from './con
 import { bearer, type CallerFromToken } from './googleCaller';
 import type { PushDrain } from './notify';
 import { NoteLimiter, type Transcriber } from './transcribe';
-import { type IncomingNote, sendVoiceNote, sendVoiceNoteToThread, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
+import { deleteMessage, type IncomingNote, sendVoiceNote, sendVoiceNoteToThread, transcribeVoiceNote, type VoiceNoteStore } from './voiceNotes';
 import { receiveRunAudio } from './agentAudio';
 
 /** Calls from Google service accounts, not people: the scheduler's tick (ordago-agents-in-ghostaff.md). */
@@ -371,6 +371,7 @@ export function createApp(deps: AppDeps) {
     durationMs: c.req.query('durationMs'),
     mentions: c.req.queries('mention') ?? [],
     waveform: c.req.query('waveform'),
+    quote: c.req.query('quote'),
   });
   app.post('/agents/:id/voice-notes', async (c) =>
     c.json({ message: await sendVoiceNote(voice, c.get('userId'), c.req.param('id'), incoming(c)) }, 201),
@@ -379,6 +380,9 @@ export function createApp(deps: AppDeps) {
   app.post('/threads/:id/voice-notes', async (c) =>
     c.json({ message: await sendVoiceNoteToThread(voice, c.get('userId'), c.req.param('id'), incoming(c)) }, 201),
   );
+
+  // Deleting your own message for everyone, its audio too (chat-like-whatsapp.md, phase 2).
+  app.delete('/messages/:id', async (c) => c.json(await deleteMessage(voice, c.get('userId'), c.req.param('id'))));
 
   // Answers when the agent has answered: Cloud Run keeps the CPU only while a request is open.
   app.post('/voice-notes/:id/transcribe', async (c) =>

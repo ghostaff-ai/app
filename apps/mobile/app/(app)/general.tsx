@@ -1,6 +1,6 @@
 import { Stack, useFocusEffect } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { decideAction } from '@ghostaff/shared/services';
 import { ChatList } from '@/components/chat/ChatList';
@@ -15,6 +15,7 @@ import { useAgents } from '@/lib/hooks/useAgents';
 import { useEngine } from '@/lib/hooks/useConnections';
 import { useGeneralChat, useMembers, useMyLevels } from '@/lib/hooks/useChat';
 import { useGuideCards } from '@/lib/hooks/useGuideCards';
+import { useMessageActions } from '@/lib/hooks/useMessageActions';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { usePush } from '@/lib/push/PushProvider';
@@ -38,7 +39,9 @@ export default function General() {
   const { items: agents, reload: reloadAgents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels } = useMyLevels(orgId);
-  const { messages, openedAt, readByAll, loading, missing, error, send, sendVoice, retryTranscript } = useGeneralChat(orgId);
+  const { messages, openedAt, readByAll, reactions, actions, pinned, loading, missing, error, send, sendVoice, retryTranscript } = useGeneralChat(orgId);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const jump = useRef<((id: string) => void) | null>(null);
 
   // While General is on screen, its pushes aren't shown.
   const { setOnScreen } = usePush();
@@ -72,6 +75,20 @@ export default function General() {
     [engine],
   );
 
+  const ma = useMessageActions({
+    messages,
+    reactions,
+    actions,
+    me,
+    canWrite: true,
+    pinned,
+    agents: talkable,
+    send,
+    sendVoice: engine ? (note, tagged, quoted) => sendVoice(note, agentIdsNamed(talkable, tagged), quoted) : undefined,
+    jumpTo: (id) => jump.current?.(id),
+    onError: setActionError,
+  });
+
   if (loading) return <Loading />;
   if (missing) return <Notice title="No encontramos el chat General" body="Vuelve a Equipo y ábrelo de nuevo." />;
 
@@ -97,6 +114,7 @@ export default function General() {
           ),
         }}
       />
+      {ma.pinnedBar}
       <KeyboardColumn offset={headerHeight}>
         {messages.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
@@ -111,7 +129,8 @@ export default function General() {
             me={me}
             openedAt={openedAt}
             readByAll={readByAll}
-            extraData={cardState}
+            extraData={[cardState, reactions]}
+            jumpRef={jump}
             renderMessage={(row, ticks) => (
               <MessageView
                 message={row.message}
@@ -128,18 +147,15 @@ export default function General() {
                 onRetryTranscript={retryTranscript}
                 me={me}
                 transcript="none"
+                {...ma.itemProps(row.message)}
               />
             )}
           />
         )}
-        {error ? <Text className="px-4 pb-1 text-footnote text-no">{error}</Text> : null}
-        <Composer
-          placeholder="Mensaje"
-          names={names}
-          onSend={send}
-          onVoiceNote={engine ? (note, tagged) => sendVoice(note, agentIdsNamed(talkable, tagged)) : undefined}
-        />
+        {error || actionError ? <Text className="px-4 pb-1 text-footnote text-no">{error ?? actionError}</Text> : null}
+        <Composer placeholder="Mensaje" names={names} onSend={ma.send} onVoiceNote={ma.sendVoice} above={ma.above} prefill={ma.prefill} />
       </KeyboardColumn>
+      {ma.overlays}
     </View>
   );
 }

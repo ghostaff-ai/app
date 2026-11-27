@@ -55,7 +55,7 @@ function setup(
         authorUserId: note.userId,
         authorAgentId: null,
         authorName: note.userId === 'ana' ? 'Ana' : 'Bea',
-        parts: [...(note.mentions ? [{ type: 'text', text: note.mentions }] : []), note.part],
+        parts: [...(note.quote ? [note.quote] : []), ...(note.mentions ? [{ type: 'text', text: note.mentions }] : []), note.part],
         state: 'done',
         steps: [],
         createdAt: new Date(2026, 10, 23, 10, messages.length).toISOString(),
@@ -69,6 +69,18 @@ function setup(
     async setParts(id, parts) {
       const m = messages.find((x) => x.id === id);
       if (m) m.parts = parts;
+    },
+    async quotePart(messageId, threadId) {
+      const m = messages.find((x) => x.id === messageId && x.threadId === threadId);
+      return m ? { type: 'quote', messageId: m.id, authorName: m.authorName, kind: 'voice', text: '' } : null;
+    },
+    async deleteMessageOf(messageId, userId) {
+      const m = messages.find((x) => x.id === messageId && x.authorUserId === userId && !x.deletedAt);
+      if (!m) throw new Refusal(404, 'not_found', 'message not found');
+      const path = (m.parts.find((p) => p.type === 'voice') as { path?: string } | undefined)?.path ?? null;
+      m.parts = [];
+      m.deletedAt = new Date().toISOString();
+      return path;
     },
   };
 
@@ -161,7 +173,7 @@ function setup(
       body: new Uint8Array([1, 2, 3]),
     });
   const voicePart = (m: ChatMessage) => m.parts.find((p) => p.type === 'voice') as unknown as VoicePart;
-  return { send, sent, sendTo, transcribe, messages, stored, heard, opened, asked, voicePart };
+  return { app, send, sent, sendTo, transcribe, messages, stored, heard, opened, asked, voicePart };
 }
 
 describe('POST /agents/:id/voice-notes', () => {
@@ -368,5 +380,26 @@ describe('POST /threads/:id/voice-notes (General, general-chat.md)', () => {
     expect((await sendTo(MISSING)).status).toBe(404);
     expect((await sendTo('nope')).status).toBe(400);
     expect(stored.size).toBe(0);
+  });
+});
+
+describe('DELETE /messages/:id (chat-like-whatsapp.md, phase 2)', () => {
+  it('deletes your own voice note for everyone, its audio too; not someone else’s', async () => {
+    const { sendTo, stored, messages, app } = setup();
+    const { message } = (await (await sendTo(GENERAL)).json()) as { message: ChatMessage };
+    expect(stored.size).toBe(1);
+    const del = (user: string) => app.request(`/messages/${message.id}`, { method: 'DELETE', headers: { Authorization: `Bearer token-${user}` } });
+    expect((await del('bea')).status).toBe(404);
+    expect(stored.size).toBe(1);
+    expect((await del('ana')).status).toBe(200);
+    expect(stored.size).toBe(0);
+    expect(messages.find((m) => m.id === message.id)?.parts).toEqual([]);
+  });
+
+  it('quotes the message of the same chat a note replies to', async () => {
+    const { sendTo } = setup();
+    const first = ((await (await sendTo(GENERAL)).json()) as { message: ChatMessage }).message;
+    const reply = ((await (await sendTo(GENERAL, `?durationMs=4200&quote=${first.id}`)).json()) as { message: ChatMessage }).message;
+    expect(reply.parts[0]).toMatchObject({ type: 'quote', messageId: first.id, authorName: 'Ana' });
   });
 });

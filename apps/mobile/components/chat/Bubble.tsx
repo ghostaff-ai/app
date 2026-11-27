@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Check, Checks, Icon } from '@/components/icons';
 import { usePalette } from '@/lib/theme';
 
@@ -47,6 +47,8 @@ export function Bubble({
   children,
   testID,
   accessibilityLabel,
+  below,
+  onLongPress,
 }: {
   mine: boolean;
   /** The first of a run: the sharper corner, the name and the avatar. */
@@ -69,28 +71,43 @@ export function Bubble({
   children: ReactNode;
   testID?: string;
   accessibilityLabel?: string;
+  /** Under the bubble, on its side: its reactions. */
+  below?: ReactNode;
+  /** Holding it: the message menu (MessageMenu). */
+  onLongPress?: () => void;
 }) {
   const shape = mine ? `rounded-2xl ${tail ? 'rounded-tr-[4px]' : ''} bg-accent` : `rounded-2xl ${tail ? 'rounded-tl-[4px]' : ''} border border-line bg-card`;
   return (
     <View testID={testID} className={`flex-row px-3 ${mine ? 'justify-end' : 'justify-start'} ${tail ? 'mt-2' : 'mt-0.5'}`}>
       {mine ? null : <View style={{ width: 30 }}>{tail ? avatar : null}</View>}
-      <View className={`${shape} px-2.5 pb-1.5 pt-1.5 ${mine ? '' : 'ml-1'}`} style={{ maxWidth: wide ? '88%' : '78%' }} accessibilityLabel={accessibilityLabel}>
-        {name && tail ? (
-          <Text className="mb-0.5 text-footnote font-semibold" style={{ color: nameColour }} numberOfLines={1}>
-            {name}
-          </Text>
-        ) : null}
-        {stampInline ? (
-          <View className="flex-row flex-wrap items-end justify-end">
-            <View className="shrink">{children}</View>
-            <View className="mb-[1px] ml-2">{stamp}</View>
-          </View>
-        ) : (
-          <>
-            {children}
-            <View className="mt-0.5 self-end">{stamp}</View>
-          </>
-        )}
+      <View className={`${mine ? 'items-end' : 'items-start ml-1'}`} style={{ maxWidth: wide ? '88%' : '78%' }}>
+        <Pressable
+          onLongPress={onLongPress}
+          delayLongPress={350}
+          accessibilityLabel={accessibilityLabel}
+          accessibilityHint={onLongPress ? 'Mantén pulsado para reaccionar, responder y más' : undefined}
+          accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Opciones del mensaje' }] : undefined}
+          onAccessibilityAction={onLongPress ? () => onLongPress() : undefined}
+          className={`${shape} px-2.5 pb-1.5 pt-1.5`}
+        >
+          {name && tail ? (
+            <Text className="mb-0.5 text-footnote font-semibold" style={{ color: nameColour }} numberOfLines={1}>
+              {name}
+            </Text>
+          ) : null}
+          {stampInline ? (
+            <View className="flex-row flex-wrap items-end justify-end">
+              <View className="shrink">{children}</View>
+              <View className="mb-[1px] ml-2">{stamp}</View>
+            </View>
+          ) : (
+            <>
+              {children}
+              <View className="mt-0.5 self-end">{stamp}</View>
+            </>
+          )}
+        </Pressable>
+        {below}
       </View>
     </View>
   );

@@ -23,6 +23,7 @@ export function ChatList({
   readByAll,
   renderMessage,
   extraData,
+  jumpRef,
 }: {
   messages: ChatMessage[];
   me?: string;
@@ -33,11 +34,23 @@ export function ChatList({
   renderMessage: (row: Extract<ChatRow, { kind: 'message' }>, ticks: Ticks | null) => ReactNode;
   /** What the rows also depend on (the cards' state). */
   extraData?: unknown;
+  /** Filled with a way to go to a message (a quote, the pinned one), which then flashes. */
+  jumpRef?: { current: ((messageId: string) => void) | null };
 }) {
   const c = usePalette();
   const list = useRef<LegendListRef>(null);
   const rows = useMemo(() => chatRows(messages, { me, readAt: openedAt }), [messages, me, openedAt]);
   const [away, setAway] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+  if (jumpRef) {
+    jumpRef.current = (id: string) => {
+      const index = rows.findIndex((r) => r.key === id);
+      if (index < 0) return;
+      void list.current?.scrollToIndex({ index, animated: true, viewPosition: 0.4 });
+      setFlash(id);
+      setTimeout(() => setFlash((f) => (f === id ? null : f)), 1400);
+    };
+  }
   const [missed, setMissed] = useState(0);
   const seen = useRef(messages.length);
 
@@ -81,11 +94,11 @@ export function ChatList({
               </Text>
             </View>
           ) : (
-            <>{renderMessage(item, ticksOf(item.message))}</>
+            <View className={item.key === flash ? 'bg-sunk' : ''}>{renderMessage(item, ticksOf(item.message))}</View>
           )
         }
         estimatedItemSize={64}
-        extraData={[extraData, readByAll]}
+        extraData={[extraData, readByAll, flash]}
         alignItemsAtEnd
         initialScrollAtEnd
         maintainScrollAtEnd
