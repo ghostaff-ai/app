@@ -152,7 +152,7 @@ function SeriesView({ b }: { b: SeriesBlock }) {
           <Svg width={w} height={h}>
             {b.shape === 'bars'
               ? b.points.map((p, i) => (
-                  <Rect key={i} x={pad + i * step + step * 0.15} y={y(p[1])} width={step * 0.7} height={Math.max(1, y(lo) - y(p[1]))} rx={3} fill={i === n - 1 ? c.ink : c.raised} />
+                  <Rect key={i} x={pad + i * step + step * 0.15} y={y(p[1])} width={step * 0.7} height={Math.max(1, y(lo) - y(p[1]))} rx={3} fill={i === n - 1 ? c.ink : c.muted} fillOpacity={i === n - 1 ? 1 : 0.35} />
                 ))
               : [
                   <Polyline key="l" points={b.points.map((p, i) => `${pad + i * step},${y(p[1])}`).join(' ')} fill="none" stroke={c.ink} strokeWidth={2.2} strokeLinejoin="round" />,

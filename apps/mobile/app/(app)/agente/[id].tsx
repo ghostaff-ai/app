@@ -81,16 +81,17 @@ export default function Agente() {
   return (
     <View className="flex-1 bg-surface">
       <Stack.Screen options={{ title: agent.name }} />
-      {/* The ghost stays out of the scroll view so dragging it never scrolls the page. */}
-      <View style={{ height: 210 }}>
-        <GhostViewer ghost={agent.ghost} active={focused} halo />
-        {tag ? (
-          <View pointerEvents="none" className="absolute left-0 right-0 top-2 items-center">
-            <StageTag tag={tag} />
-          </View>
-        ) : null}
-      </View>
       <ScrollView contentContainerClassName="px-5 pb-12">
+        {/* The ghost scrolls away with the page, so a long page isn't half ghost (Jaime, 2026-11-27).
+            Its viewer tells the drags apart: sideways spins it, up and down scrolls the page. */}
+        <View className="-mx-5" style={{ height: 210 }}>
+          <GhostViewer ghost={agent.ghost} active={focused} halo />
+          {tag ? (
+            <View pointerEvents="none" className="absolute left-0 right-0 top-2 items-center">
+              <StageTag tag={tag} />
+            </View>
+          ) : null}
+        </View>
         <Text className="text-center text-footnote font-medium text-muted">
           {DEPARTMENT_NAMES[agent.department]}, {g.label.toLowerCase()}
         </Text>
