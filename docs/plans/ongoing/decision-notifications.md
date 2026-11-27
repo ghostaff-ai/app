@@ -1,8 +1,8 @@
 # Notifications: an agent's reply and the decisions that wait reach a person without opening the app
 
 **Priority:** high — Telegram is today the only thing that reaches a person outside the app, and it goes off once Órdago's agents run on our runner ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md), decision 3)
-**Gate:** `blocked:founder — APNs key, Firebase and a re-run of setup-env.sh per environment (design part 6)`
-**Next:** `Jaime stores the APNs key with scripts/apns-key.mjs, adds Firebase to ghostaff-beta and ghostaff-prod, then re-runs bash scripts/setup-env.sh beta|prod (FCM's API and the engine's role); then check a real reply push on the beta`
+**Gate:** `blocked:founder — the APNs key (design part 6); Firebase and setup-env.sh done 2026-11-27`
+**Next:** `Jaime creates the APNs key on team 8HWS4483VD and it is stored with scripts/apns-key.mjs beta|prod; #114 (google-services.json) lands and the new beta build goes out; then check a real reply push on the beta. Done 2026-11-27: Firebase added to ghostaff-beta, Android apps registered (.dev and .beta in ghostaff-beta, ai.ghostaff.app in ghostaff-prod), setup-env.sh re-run for both (FCM on, engine holds roles/firebasecloudmessaging.admin)`
 
 **Goal:** When an agent finishes a message in a conversation a person can see and hasn't read, that person's phone says so («Legal · Te ha contestado») within seconds, and a tap opens that chat; once a day at 09:00 their time, if decisions wait for them, one notification says how many, and a tap opens Decisiones. Nothing from the record's words leaves for Apple or Google.
 
