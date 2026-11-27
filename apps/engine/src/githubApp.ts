@@ -47,10 +47,22 @@ export interface MintedToken {
   expiresAt: string;
 }
 
-/** What a token may do with a repo's contents. */
-export type RepoAccess = 'read' | 'write';
+/**
+ * What a token may do with a repo: read its contents, write them, or also handle its pull requests with `gh`
+ * (`prs`, agents.repos): PRs and issues, and reading its CI (checks, commit statuses, Actions), which is what a
+ * landing script like Órdago's `pnpm pr:land` asks. The App must have each permission, and the organisation's
+ * installation must have accepted it, or GitHub refuses the token.
+ */
+export type RepoAccess = 'read' | 'write' | 'prs';
 
-/** A new installation token for one repo, with contents write unless `access` says read; never cached. */
+/** The installation token's permissions for each RepoAccess. */
+export function repoPermissions(access: RepoAccess): Record<string, 'read' | 'write'> {
+  if (access === 'read') return { contents: 'read', metadata: 'read' };
+  if (access === 'write') return { contents: 'write', metadata: 'read' };
+  return { contents: 'write', metadata: 'read', pull_requests: 'write', issues: 'write', checks: 'read', statuses: 'read', actions: 'read' };
+}
+
+/** A new installation token for one repo, with contents write unless `access` says otherwise; never cached. */
 export type FreshRepoToken = (installation: number, repo: string, access?: RepoAccess) => Promise<MintedToken>;
 
 export function freshRepoToken(loadConfig: () => Promise<GithubAppConfig | null>, f: Fetch = fetch, now = () => Date.now()): FreshRepoToken {
@@ -60,7 +72,7 @@ export function freshRepoToken(loadConfig: () => Promise<GithubAppConfig | null>
     const res = await f(`${GITHUB_API}/app/installations/${installation}/access_tokens`, {
       method: 'POST',
       headers: { ...githubHeaders(appJwt(cfg, now())), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repositories: [repo.split('/')[1]], permissions: { contents: access, metadata: 'read' } }),
+      body: JSON.stringify({ repositories: [repo.split('/')[1]], permissions: repoPermissions(access) }),
     });
     if (!res.ok) throw new Error(`GitHub refused an installation token for ${repo}: ${res.status}`);
     const body = (await res.json()) as { token: string; expires_at: string };

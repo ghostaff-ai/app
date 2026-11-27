@@ -53,6 +53,8 @@ export interface RepoAccess {
   write: boolean;
   /** May push to `main` and `beta` too (guard.ts). Absent from an engine older than it: no. */
   main?: boolean;
+  /** Handles its pull requests with `gh` (gh.mjs), with this same token. Absent from an engine older than it: no. */
+  prs?: boolean;
   token: string;
   /** When to ask the engine for another (POST /runs/:id/repo-token). */
   expiresAt: string;
@@ -115,6 +117,7 @@ function isRepos(r: unknown): boolean {
       isDir(x.dir) && !dirs.has(x.dir.toLowerCase()) &&
       typeof x.write === 'boolean' &&
       (x.main === undefined || (typeof x.main === 'boolean' && (x.write || !x.main))) &&
+      (x.prs === undefined || (typeof x.prs === 'boolean' && (x.write || !x.prs))) &&
       typeof x.token === 'string' && x.token.length > 0 &&
       typeof x.expiresAt === 'string' && !Number.isNaN(Date.parse(x.expiresAt));
     if (ok) dirs.add((x.dir as string).toLowerCase());
@@ -222,6 +225,8 @@ export function agentEnv(
   /** Where `ghostaff ejecuciones` and `ghostaff leer` ask for earlier runs: the runner on 127.0.0.1 (pastRuns.ts). */
   pastRuns?: string | null,
   secrets: SecretVar[] = [],
+  /** Where `gh` asks for the token of a repo whose PRs the agent handles (gh.mjs): the runner on 127.0.0.1. Never a token. */
+  tokens?: string | null,
 ): Record<string, string> {
   return {
     ...Object.fromEntries(secrets.filter((s) => isSecretEnv(s.env)).map((s) => [s.env, s.value])),
@@ -230,6 +235,7 @@ export function agentEnv(
     PATH: '/usr/local/bin:/usr/bin:/bin',
     LANG: 'C.UTF-8',
     ...(pastRuns ? { GHOSTAFF_RUNS: pastRuns } : {}),
+    ...(tokens ? { GHOSTAFF_TOKENS: tokens } : {}),
     ...(google
       ? {
           CLOUDSDK_AUTH_ACCESS_TOKEN_FILE: google.tokenFile,

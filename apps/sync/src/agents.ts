@@ -102,6 +102,11 @@ export interface ImportOptions {
    * write every repo they cloned, so whoever moves them names it (SEO and Producto push to `ordago-apps`).
    */
   writes?: string[];
+  /**
+   * Repos whose pull requests these agents handle with `gh` (Desarrollo lands its own in `ordago-apps`): each one
+   * a repo of its yaml it writes, through `writes` or `push_a_main`. The old jobs had `gh` for every repo.
+   */
+  prs?: string[];
   /** No timetable: they run only when someone writes to them (while their old job keeps the timetable). */
   onDemand?: boolean;
 }
@@ -130,16 +135,27 @@ const DEFAULT_TIMEOUT_SECONDS = 3600;
 
 const strings = (x: unknown): string[] => (Array.isArray(x) ? x.filter((t): t is string => typeof t === 'string') : []);
 
-/** The repos it clones besides the record: read-only unless named in `writes`, or in its `push_a_main` (main too). */
-function otherRepos(a: AgentYaml, record: string, writes: string[]): AgentRepo[] {
+/**
+ * The repos it clones besides the record: read-only unless named in `writes`, or in its `push_a_main` (main too);
+ * with their pull requests if named in `prs`, which must be repos it writes.
+ */
+function otherRepos(slug: string, a: AgentYaml, record: string, writes: string[], prs: string[]): AgentRepo[] {
   const toMain = new Set(strings(a.push_a_main).map((r) => r.toLowerCase()));
   const write = new Set(writes.map((r) => r.toLowerCase()));
-  return [...new Set(strings(a.repos))]
+  const withPrs = new Set(prs.map((r) => r.toLowerCase()));
+  const repos = [...new Set(strings(a.repos))]
     .filter((r) => r.toLowerCase() !== record.toLowerCase())
-    .map((repo) => {
-      const main = toMain.has(repo.toLowerCase());
-      return main ? { repo, write: true, main: true } : { repo, write: write.has(repo.toLowerCase()) };
+    .map((repo): AgentRepo => {
+      const key = repo.toLowerCase();
+      const base = toMain.has(key) ? { repo, write: true, main: true } : { repo, write: write.has(key) };
+      return withPrs.has(key) ? { ...base, prs: true } : base;
     });
+  for (const r of withPrs) {
+    const found = repos.find((x) => x.repo.toLowerCase() === r);
+    if (!found) throw new Error(`${slug}.yaml: --prs ${r} is not one of its repos`);
+    if (!found.write) throw new Error(`${slug}.yaml: --prs ${r} needs it in --writes too`);
+  }
+  return repos;
 }
 
 /** Whether the agent's yaml grants it the project's transcripts bucket: in the old system, reading the other agents' runs. */
@@ -213,6 +229,7 @@ function onOurRunner(
   a: AgentYaml,
   conf: ProjectYaml,
   writes: string[],
+  prs: string[],
   project: string,
 ): Omit<ImportedRunnerAgent, keyof ImportedBase | 'runner' | 'job_project' | 'job_region' | 'job_name' | 'job_identity'> {
   const record = conf.cerebro ?? '';
@@ -225,7 +242,7 @@ function onOurRunner(
     model: a.modelo,
     tools,
     max_turns: Number.isInteger(a.max_turnos) && a.max_turnos! > 0 ? a.max_turnos! : 100,
-    repos: otherRepos(a, record, writes),
+    repos: otherRepos(slug, a, record, writes, prs),
     reads_org_runs: readsTranscripts(a, conf.gcp?.bucket_transcripciones),
     timeout_seconds: timeoutOf(slug, a.recursos),
     size: sizeOf(slug, a.recursos),
@@ -260,7 +277,7 @@ export function readProjectAgents(projectDir: string, opts: ImportOptions = {}):
       const place = PLACES[slug] ?? { name: slug.charAt(0).toUpperCase() + slug.slice(1), ghost: 'base', department: 'direccion' };
       const base = { slug, ...place, description: sentence(a.descripcion), schedule: !opts.onDemand && typeof a.horario === 'string' ? a.horario : null };
       if (opts.runner === 'ghostaff') {
-        return { ...base, runner: 'ghostaff', ...onOurRunner(slug, a, conf, opts.writes ?? [], project), job_project: null, job_region: null, job_name: null, job_identity: null };
+        return { ...base, runner: 'ghostaff', ...onOurRunner(slug, a, conf, opts.writes ?? [], opts.prs ?? [], project), job_project: null, job_region: null, job_name: null, job_identity: null };
       }
       const job = `${project}-${slug}`;
       return {

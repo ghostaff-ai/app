@@ -13,7 +13,8 @@
 // agent's other repos with a token each, the organisation's Claude subscription
 // and, when it has one, a token as its own Google Cloud account, kept in a file
 // root renews), serves each repo's token to git on 127.0.0.1 through a credential
-// helper, for that repo only, clones the record and the other repos (shallow
+// helper, for that repo only (and to `gh`, gh.mjs, for a repo whose pull requests
+// the agent handles), clones the record and the other repos (shallow
 // when read-only) as the user `agente` and runs the unmodified Claude Code there as `agente`, with nothing
 // in its environment but its credential, HOME, PATH and LANG, its Google Cloud and the organisation's
 // secrets its agent row names (every one of them hidden from what this process prints, keeps and reports).
@@ -221,6 +222,8 @@ function runClaude(
   cwd: string,
   google: { tokenFile: string; project: string | null } | null,
   pastRuns: string,
+  /** The token server, for `gh` (gh.mjs), when the agent handles some repo's pull requests. */
+  tokens: string | null,
   transcriptFile: string,
 ): Promise<{ code: number | null; last: string; usage?: unknown; rateLimit?: unknown }> {
   return new Promise((resolve, reject) => {
@@ -230,7 +233,7 @@ function runClaude(
       uid: ids.uid,
       gid: ids.gid,
       cwd,
-      env: agentEnv(spec.claudeToken, ids.home, google, pastRuns, spec.secrets),
+      env: agentEnv(spec.claudeToken, ids.home, google, pastRuns, spec.secrets, tokens),
       stdio: ['pipe', 'pipe', 'inherit'],
     });
     let last = '';
@@ -278,7 +281,13 @@ async function main(): Promise<number> {
     [credentialKeyOf(spec.record.cloneUrl), { ...spec.record, renew: () => callEngine(`/runs/${run}/record-token`, { nonce }) }],
     ...others.map((r): [string, RepoCredential] => [
       credentialKeyOf(r.cloneUrl),
-      { username: 'x-access-token', token: r.token, expiresAt: r.expiresAt, renew: () => callEngine(`/runs/${run}/repo-token`, { nonce, repo: r.repo }) },
+      {
+        username: 'x-access-token',
+        token: r.token,
+        expiresAt: r.expiresAt,
+        renew: () => callEngine(`/runs/${run}/repo-token`, { nonce, repo: r.repo }),
+        ...(r.write && r.prs ? { gh: r.repo } : {}),
+      },
     ]),
   ]);
   const tokens = await serveTokens(credentials, (token) => secrets.push(token), (e) => console.error('repo token not renewed', crashText(e, secrets)));
@@ -332,6 +341,7 @@ async function main(): Promise<number> {
       record,
       google && spec.google ? { tokenFile: google.file, project: spec.google.project } : null,
       past.url,
+      others.some((r) => r.write && r.prs && cloned.has(r.repo)) ? `http://127.0.0.1:${tokens.port}` : null,
       transcript,
     );
     const result = resultOf(last);

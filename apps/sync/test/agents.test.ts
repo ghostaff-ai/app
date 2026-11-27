@@ -121,6 +121,24 @@ describe('readProjectAgents', () => {
     expect((organico as { repos: { main?: boolean }[] }).repos[0]!.main).toBeUndefined();
   });
 
+  it('lets it handle pull requests, with `gh`, only in a repo it writes that whoever moves it names (Desarrollo)', () => {
+    const [organico] = readProjectAgents(project(), {
+      runner: 'ghostaff',
+      only: ['organico'],
+      writes: ['ordago-app/ordago-apps'],
+      prs: ['Ordago-App/ordago-apps'],
+    });
+    expect(organico).toMatchObject({
+      repos: [
+        { repo: 'ordago-app/ordago-apps', write: true, prs: true },
+        { repo: 'ordago-app/ordago-reels', write: true, main: true },
+      ],
+    });
+    expect((organico as { repos: { prs?: boolean }[] }).repos[1]!.prs).toBeUndefined();
+    expect(() => readProjectAgents(project(), { runner: 'ghostaff', only: ['organico'], prs: ['ordago-app/ordago-apps'] })).toThrow(/--writes/);
+    expect(() => readProjectAgents(project(), { runner: 'ghostaff', only: ['organico'], writes: ['ordago-app/x'], prs: ['ordago-app/x'] })).toThrow(/repos/);
+  });
+
   it('takes its secrets from its yaml, each the organisation’s secret named without the project’s prefix', () => {
     const [organico] = readProjectAgents(project(), { runner: 'ghostaff', only: ['organico'] });
     expect(organico).toMatchObject({ secrets: { META_TOKEN: 'meta-token', ELEVENLABS_API_KEY: 'elevenlabs' } });

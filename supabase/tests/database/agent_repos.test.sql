@@ -1,8 +1,8 @@
 -- The repos an agent may use besides its record (20261126700000_agent_repos.sql):
 -- a short list of {repo, write, main?}, each repo once, and no one but the service role sets it
--- (main: 20261127210000_agent_repos_main.sql).
+-- (main: 20261127210000_agent_repos_main.sql; prs: 20261128970000_agent_repos_prs.sql).
 begin;
-select plan(11);
+select plan(14);
 
 insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000000a', 'ana@example.com');
 insert into public.organizations (id, slug, name) values ('10000000-0000-0000-0000-000000000001', 'panaderia', 'Panadería');
@@ -51,6 +51,19 @@ select throws_ok(
 select throws_ok(
   $$ update public.agents set repos = '[{"repo": "panaderia/reels", "write": true, "main": "yes"}]' where id = '20000000-0000-0000-0000-000000000001' $$,
   '23514', null, 'main is yes or no');
+
+select lives_ok(
+  $$ update public.agents set repos = '[{"repo": "panaderia/app", "write": true, "prs": true}, {"repo": "panaderia/web", "write": false, "prs": false}]'
+     where id = '20000000-0000-0000-0000-000000000001' $$,
+  'a repo it writes may also take its pull requests, through gh');
+
+select throws_ok(
+  $$ update public.agents set repos = '[{"repo": "panaderia/app", "write": false, "prs": true}]' where id = '20000000-0000-0000-0000-000000000001' $$,
+  '23514', null, 'pull requests only on a repo it writes');
+
+select throws_ok(
+  $$ update public.agents set repos = '[{"repo": "panaderia/app", "write": true, "prs": "yes"}]' where id = '20000000-0000-0000-0000-000000000001' $$,
+  '23514', null, 'prs is yes or no');
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}';

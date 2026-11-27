@@ -245,6 +245,8 @@ export interface RunRepoAccess {
   write: boolean;
   /** May push to `main` and `beta` too; the runner's guard holds it to that. */
   main: boolean;
+  /** Handles its pull requests with `gh`: the token may too (githubApp.ts repoPermissions). */
+  prs: boolean;
   token: string;
   /** When to ask the engine for another (POST /runs/:id/repo-token). */
   expiresAt: string;
@@ -256,7 +258,7 @@ export interface RunRepoAccess {
  */
 async function repoToken(runner: RunnerDeps, org: RecordOrg, r: AgentRepo): Promise<{ token: string; expiresAt: string }> {
   if (org.host !== 'github') throw new Refusal(409, 'no_repos', 'only an organisation whose record is on GitHub reaches other repos');
-  return runner.freshToken(org.installation, r.repo, r.write ? 'write' : 'read');
+  return runner.freshToken(org.installation, r.repo, !r.write ? 'read' : r.prs ? 'prs' : 'write');
 }
 
 /** The agent's other repos for a run, and the ones it could not reach (not in the installation, GitHub down). */
@@ -267,7 +269,7 @@ async function reposAccess(runner: RunnerDeps, org: RecordOrg, repos: AgentRepo[
   for (const r of repos) {
     try {
       const t = await repoToken(runner, org, r);
-      reached.push({ repo: r.repo, dir: dirs.get(r.repo)!, cloneUrl: `https://github.com/${r.repo}.git`, write: r.write, main: r.write && r.main === true, ...t });
+      reached.push({ repo: r.repo, dir: dirs.get(r.repo)!, cloneUrl: `https://github.com/${r.repo}.git`, write: r.write, main: r.write && r.main === true, prs: r.write && r.prs === true, ...t });
     } catch (e) {
       console.error('no token for a repo of the run', r.repo, e instanceof Error ? e.message : typeof e);
       missed.push(r.repo);
@@ -574,7 +576,7 @@ export function composePrompt(p: {
   /** The organisation's Google Cloud account, when the run has a token for it. */
   google?: { account: string; project: string | null } | null;
   /** The other repos it has, and the ones it should have and could not get. */
-  repos?: { reached: { repo: string; dir: string; write: boolean; main: boolean }[]; missed: string[] };
+  repos?: { reached: { repo: string; dir: string; write: boolean; main: boolean; prs?: boolean }[]; missed: string[] };
   /** The variables it has from the organisation's secrets, and the ones its row names that the vault lacks. Never a value. */
   secrets?: { given: { env: string }[]; missed: { env: string; name: string }[] };
   /** What the people said in General lately (generalDigest.ts heardBlock), or empty. */
@@ -611,9 +613,11 @@ export function composePrompt(p: {
                 ? 'solo para leer (clon superficial: sin historial; `git fetch --deepen` si lo necesitas)'
                 : r.main
                   ? 'con push a cualquier rama, `main` incluida'
-                  : 'con push a cualquier rama menos `main` y `beta`, que son de producción'),
+                  : 'con push a cualquier rama menos `main` y `beta`, que son de producción') +
+              (r.prs ? `, y \`gh\` para sus PRs, issues y CI (\`gh -R ${r.repo} …\`, o desde su clon)` : ''),
           )
-          .join('\n'),
+          .join('\n') +
+        (p.repos.reached.some((r) => r.prs) ? '\nUn PR se aterriza con el flujo del repo, nunca con `gh pr merge`.' : ''),
     );
   }
   if (p.repos?.missed.length) {

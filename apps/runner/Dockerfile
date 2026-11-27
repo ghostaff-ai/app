@@ -39,6 +39,16 @@ COPY apps/runner/managed-settings.json /etc/claude-code/managed-settings.json
 # `ghostaff ejecuciones` / `ghostaff leer`: the agent's earlier runs, asked of the runner on 127.0.0.1 (src/cli.ts).
 RUN printf '#!/bin/sh\nexec /opt/runner/apps/runner/node_modules/.bin/tsx /opt/runner/apps/runner/src/cli.ts "$@"\n' > /usr/local/bin/ghostaff \
  && chmod 755 /usr/local/bin/ghostaff
+# GitHub's `gh`, for an agent that handles a repo's pull requests (agents.repos `prs`; Órdago's Desarrollo lands
+# its own with `pnpm pr:land`). The real one is /usr/bin/gh; /usr/local/bin/gh, first in the agent's PATH, asks
+# the runner for that repo's token on each call (src/gh.mjs), so no token is ever in the agent's environment.
+ARG GH_VERSION=2.103.3
+ARG GH_SHA256=e3bafef96328d1a67de3a968bdfe1cc2ffd58cf6aba8b5e201356897ed06bb3d
+RUN curl -fsSL -o /tmp/gh.deb "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.deb" \
+ && echo "${GH_SHA256}  /tmp/gh.deb" | sha256sum -c - \
+ && dpkg -i /tmp/gh.deb && rm /tmp/gh.deb \
+ && printf '#!/bin/sh\nexec node /opt/runner/apps/runner/src/gh.mjs /usr/bin/gh "$@"\n' > /usr/local/bin/gh \
+ && chmod 755 /usr/local/bin/gh
 RUN chmod -R a-w /etc/claude-code /opt/runner \
  && useradd --create-home --shell /bin/bash agente
 

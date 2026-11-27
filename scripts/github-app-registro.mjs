@@ -37,7 +37,18 @@ const manifest = {
   redirect_url: `${back}/creada`,
   // Installable by any account: each organisation installs it on its own record repo.
   public: true,
-  default_permissions: { contents: 'write', metadata: 'read' },
+  // contents for the record and the agents' repos; actions to read a repo's CI queue (an agent's `ritmo`); pull
+  // requests, issues, checks and statuses for an agent that handles a repo's PRs with `gh` (agents.repos `prs`).
+  // Each token asks only for what its use needs (apps/engine/src/githubApp.ts repoPermissions).
+  default_permissions: {
+    contents: 'write',
+    metadata: 'read',
+    actions: 'read',
+    pull_requests: 'write',
+    issues: 'write',
+    checks: 'read',
+    statuses: 'read',
+  },
   default_events: [],
 };
 
