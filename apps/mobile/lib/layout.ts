@@ -37,7 +37,7 @@ export const LIST_HOME: Record<DesktopList, string> = { team: '/', connections: 
 // list and keep it beside them. `conversacion` is an old link to a chat by its
 // thread, which opens the agent's (group-chat-per-agent.md). General, the
 // people's chat, opens beside the list too, marked as `general`.
-const TEAM_DETAILS = new Set(['chat', 'conversacion', 'agente', 'acceso', 'herramientas', 'rutinas', 'rutina']);
+const TEAM_DETAILS = new Set(['chat', 'conversacion', 'agente', 'acceso', 'herramientas', 'tareas-programadas', 'tarea-programada']);
 // Equipo's, but wide pages of their own: the jobs to hire for.
 const TEAM_PAGES = new Set(['anadir-agente', 'nuevo-agente', 'contratar']);
 

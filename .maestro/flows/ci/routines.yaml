@@ -52,7 +52,7 @@ name: An owner gives Secretaría a routine from the clock on her chat
 - tapOn:
     id: "chat-routines"
 - extendedWaitUntil:
-    visible: "Ninguna rutina todavía"
+    visible: "Ninguna tarea programada todavía"
     timeout: 20000
 - tapOn:
     id: "routine-new"

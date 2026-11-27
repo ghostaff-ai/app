@@ -29,7 +29,7 @@ import { usePalette } from '@/lib/theme';
 // sight in General, and the agents it was tagged for show above it.
 // An agent's reply carries one status line (decision 4): what it is doing
 // while it writes, then «Hecho · 3 s», which unfolds into its steps. One a
-// routine started says so above it, «Rutina · Resumen de ventas» (agent-routines.md).
+// routine started says so above it, «Tarea programada · Resumen de ventas» (agent-routines.md).
 
 export function initials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -62,10 +62,10 @@ export function Avatar({ name, id, size = 28, path }: { name: string; id: string
 function RoutineLine({ title }: { title: string | null }) {
   const c = usePalette();
   return (
-    <View className="mb-1 flex-row items-center" accessibilityLabel={title ? `Rutina: ${title}` : 'Rutina'}>
+    <View className="mb-1 flex-row items-center" accessibilityLabel={title ? `Tarea programada: ${title}` : 'Tarea programada'}>
       <Icon icon={Clock} size={14} color={c.muted} weight="regular" />
       <Text className="ml-1 text-caption text-muted" numberOfLines={1}>
-        {title ? `Rutina · ${title}` : 'Rutina'}
+        {title ? `Tarea programada · ${title}` : 'Tarea programada'}
       </Text>
     </View>
   );

@@ -212,9 +212,9 @@ export default function Chat() {
                 <Pressable
                   testID="chat-routines"
                   accessibilityRole="button"
-                  accessibilityLabel={nextLabel ? `Rutinas. La próxima: ${nextLabel}` : 'Rutinas'}
+                  accessibilityLabel={nextLabel ? `Tareas programadas. La próxima: ${nextLabel}` : 'Tareas programadas'}
                   accessibilityHint={`Lo que ${agent.name} hace solo, a su hora`}
-                  onPress={() => router.push(`/rutinas/${agent.id}`)}
+                  onPress={() => router.push(`/tareas-programadas/${agent.id}`)}
                   hitSlop={10}
                   className="min-h-11 flex-row items-center justify-center px-1 active:opacity-60"
                 >

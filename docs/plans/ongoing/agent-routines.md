@@ -8,6 +8,8 @@
 
 **Changed 2026-11-26 ([group-chat-per-agent.md](group-chat-per-agent.md), decision 6, Jaime):** there is no «Solo para mí» any more. An agent has one chat everyone with access reads, so every routine is the team's and answers there; anyone who talks to the agent makes one, and its creator or an owner changes, pauses or deletes it. What this plan says below about «Solo para mí», «para quién» and owners-only team routines is history.
 
+**Changed 2026-11-27 (Jaime):** «rutina» read as a technical word. Everything a person sees or reads, and what the agents are told, now says **«tarea programada»** («Tareas programadas», «Nueva tarea programada», «Tarea programada · Resumen de ventas» in the chat), and the screens moved to `/tareas-programadas/[agent]` and `/tarea-programada`. Code, database and tools keep `routine`. Where this plan quotes «Rutina» in the UI, read «Tarea programada».
+
 ## Context
 
 Jaime (2026-11-24) was worried that nothing tells a person whether an agent is «a chat or a job», nor how to make it run on its own. The decision already exists, without a plan: [agent-memory.md](../ready/agent-memory.md), decision 3, «Nobody picks chat or job when creating an agent», an agent is one thing you can always write to, and a timetable is an option shown as a clock on the agent. This is that plan.

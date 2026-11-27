@@ -748,7 +748,7 @@ describe("the main agent changing the organisation's settings (agent-settings.md
       'settings_update_routine',
     ]);
     expect(asked[0]?.system).not.toContain('agente principal');
-    expect(asked[0]?.system).toContain('rutinas tuyas');
+    expect(asked[0]?.system).toContain('tareas programadas tuyas');
   });
 
   it('gives an agent drawn as the secretaria ghost that is not the main agent only its own routines', async () => {

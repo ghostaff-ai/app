@@ -300,8 +300,8 @@ function reachLines(accounts: string[], canAsk: boolean, canGuide: boolean, memo
 
 /** What the main agent is told about changing the organisation's settings (agent-settings.md). */
 const SETTINGS_LINES = [
-  'Eres el agente principal: puedes cambiar la configuración de la organización en Ghostaff, lo mismo que una persona propietaria cambia en la app (qué agentes hay, qué cuentas conectadas usa cada uno, quién puede ver o hablar con cada agente, el orden de las cuentas de IA, las invitaciones, las rutinas de cada agente). Mira antes la configuración con settings_read.',
-  'Cada cambio queda como propuesta hasta que alguien propietario la aprueba (una rutina «solo para mí» la aprueba quien la pide). Propón un cambio solo cuando te lo pidan o cuando lo expliques y lo justifiques en la conversación.',
+  'Eres el agente principal: puedes cambiar la configuración de la organización en Ghostaff, lo mismo que una persona propietaria cambia en la app (qué agentes hay, qué cuentas conectadas usa cada uno, quién puede ver o hablar con cada agente, el orden de las cuentas de IA, las invitaciones, las tareas programadas de cada agente). Mira antes la configuración con settings_read.',
+  'Cada cambio queda como propuesta hasta que alguien propietario la aprueba (una tarea programada «solo para mí» la aprueba quien la pide). Propón un cambio solo cuando te lo pidan o cuando lo expliques y lo justifiques en la conversación.',
   'Nunca puedes: conectar o desconectar cuentas ni tocar claves, cambiar propietarios o quitar personas, borrar agentes o datos, ni darte más herramientas a ti. Si te lo piden, explica que eso se hace en la app.',
 ];
 
@@ -334,7 +334,7 @@ const OWN_MEMORY_LINES = [
 
 /** What every agent is told about routines it may propose for itself (agent-routines.md). */
 const ROUTINE_LINES = [
-  'Puedes proponer rutinas tuyas con settings_create_routine: algo que harás solo, a una hora, como si te lo escribieran entonces (un resumen cada viernes, revisar algo cada mañana). Propónla cuando te pidan algo que se repite, o ofrécela tú en una frase cuando lo veas claro; queda como propuesta hasta que la aprueban.',
+  'Puedes proponer tareas programadas tuyas con settings_create_routine: algo que harás solo, a una hora, como si te lo escribieran entonces (un resumen cada viernes, revisar algo cada mañana). Propónla cuando te pidan algo que se repite, o ofrécela tú en una frase cuando lo veas claro; queda como propuesta hasta que la aprueban.',
 ];
 
 /** The agent's standing instructions. Spanish, first person, «tú» (app-design.md #17). */
@@ -1096,12 +1096,12 @@ export async function answerRoutine(deps: ChatDeps, thread: ChatThreadHead, agen
   const now = new Date(deps.now ? deps.now() : Date.now());
   const line =
     `${ask.from} (${stampOf(now.toISOString())}): ${ask.instruction}\n\n` +
-    `(Es su rutina «${ask.title}»: te la ha lanzado su horario y nadie está esperando delante. ` +
+    `(Es su tarea programada «${ask.title}»: te la ha lanzado su horario y nadie está esperando delante. ` +
     `Hazla y contesta para esa persona, corto y con lo que importe. Si no hay nada que contarle, contesta exactamente ${NOTHING_NEW}, sin nada más, y no le llegará nada.)`;
   const last = turns[turns.length - 1];
   if (last?.role === 'user') last.content += `\n\n${line}`;
   else turns.push({ role: 'user', content: line });
-  const said = await writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId: ask.userId }, 'Con tu rutina');
+  const said = await writeReply(deps, replyId, agent, mine.system, turns, mine.tools, { threadId: thread.id, userId: ask.userId }, 'Con tu tarea programada');
   await summarizeIfLong(deps, thread, agent);
   return said;
 }

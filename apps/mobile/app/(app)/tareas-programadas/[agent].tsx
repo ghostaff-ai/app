@@ -15,7 +15,7 @@ import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 // decision 6). The person's own first, then the rest. A tap opens one to
 // change, pause or delete it: its creator or an owner (the database checks it too).
 
-export default function Rutinas() {
+export default function Routines() {
   const { agent: agentId } = useLocalSearchParams<{ agent: string }>();
   const { session } = useAuth();
   const { active } = useActiveOrg();
@@ -35,7 +35,7 @@ export default function Rutinas() {
   const mine = items.filter((r) => r.createdBy === me);
   const others = items.filter((r) => r.createdBy !== me);
   const mayChange = (r: Routine) => r.createdBy === me || owner;
-  const add = () => router.push({ pathname: '/rutina', params: { agent: agent.id } });
+  const add = () => router.push({ pathname: '/tarea-programada', params: { agent: agent.id } });
 
   const row = (r: Routine) => (
     <ListRow
@@ -44,23 +44,23 @@ export default function Rutinas() {
       title={r.title}
       subtitle={r.paused ? (r.pausedReason === 'creator_gone' ? 'En pausa: quien la creó ya no puede usarla' : 'En pausa') : describeWhen(r)}
       chevron={mayChange(r)}
-      onPress={mayChange(r) ? () => router.push({ pathname: '/rutina', params: { agent: agent.id, id: r.id } }) : undefined}
+      onPress={mayChange(r) ? () => router.push({ pathname: '/tarea-programada', params: { agent: agent.id, id: r.id } }) : undefined}
     />
   );
 
   return (
     <ScrollView className="flex-1 bg-surface" contentContainerClassName="px-5 pb-16" contentInsetAdjustmentBehavior="automatic">
-      <Stack.Screen options={{ title: 'Rutinas' }} />
+      <Stack.Screen options={{ title: 'Tareas programadas' }} />
       {items.length === 0 ? (
         <EmptyState
           icon={Clock}
-          title="Ninguna rutina todavía"
+          title="Ninguna tarea programada todavía"
           body={
             canTalk
               ? `${agent.name} puede hacer algo solo, a su hora, y contestar en su chat. Por ejemplo: «cada viernes a las 9, mándame el resumen de ventas».`
-              : `${agent.name} no tiene rutinas que puedas ver.`
+              : `${agent.name} no tiene tareas programadas que puedas ver.`
           }
-          action={canTalk ? <Button testID="routine-new" label="Nueva rutina" onPress={add} /> : undefined}
+          action={canTalk ? <Button testID="routine-new" label="Nueva tarea programada" onPress={add} /> : undefined}
         />
       ) : (
         <>
@@ -71,7 +71,7 @@ export default function Rutinas() {
           {others.length > 0 ? <ListSection header="Del resto del equipo">{others.map(row)}</ListSection> : null}
           {canTalk ? (
             <View className="mt-8">
-              <Button testID="routine-new" label="Nueva rutina" onPress={add} />
+              <Button testID="routine-new" label="Nueva tarea programada" onPress={add} />
             </View>
           ) : null}
         </>

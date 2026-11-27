@@ -659,7 +659,7 @@ export function composePrompt(p: {
   );
   if (p.routine) {
     parts.push(
-      `Esta ejecución la ha lanzado la rutina «${p.routine.title}» de ${p.routine.from}, a su hora: haz lo que pide. Tu tarea habitual (${usual}) es tu contexto; no la hagas entera salvo que la rutina lo pida.\n` +
+      `Esta ejecución la ha lanzado la tarea programada «${p.routine.title}» de ${p.routine.from}, a su hora: haz lo que pide. Tu tarea habitual (${usual}) es tu contexto; no la hagas entera salvo que la tarea programada lo pida.\n` +
         `Tu último mensaje queda en tu chat en Ghostaff, que lee ${p.routine.from} y cada persona que trabaja contigo: escríbelo para quien lo lee, corto y con las cifras que importen. ` +
         `Si no hay nada que contar, tu último mensaje es exactamente \`${NOTHING_NEW}\`, sin nada más, y no le llega nada.\n` +
         `<indicacion>\n${p.routine.instruction.replace(/</g, '&lt;')}\n</indicacion>`,

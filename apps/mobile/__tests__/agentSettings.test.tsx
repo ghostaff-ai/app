@@ -23,7 +23,7 @@ describe('an agent’s settings', () => {
     mockRole = 'owner';
     mockLevel = 'talk';
     await render(<AjustesDelAgente />);
-    expect(await screen.findByText('Rutinas')).toBeOnTheScreen();
+    expect(await screen.findByText('Tareas programadas')).toBeOnTheScreen();
     expect(screen.getByText('Memoria')).toBeOnTheScreen();
     expect(screen.getByText('Quién puede')).toBeOnTheScreen();
     expect(screen.getByText('Herramientas')).toBeOnTheScreen();
@@ -35,7 +35,7 @@ describe('an agent’s settings', () => {
     mockLevel = 'read';
     await render(<AjustesDelAgente />);
     expect(await screen.findByText('Memoria')).toBeOnTheScreen();
-    expect(screen.queryByText('Rutinas')).toBeNull();
+    expect(screen.queryByText('Tareas programadas')).toBeNull();
     expect(screen.queryByText('Quién puede')).toBeNull();
     expect(screen.getByText('Puedes ver a Cuentas.')).toBeOnTheScreen();
   });
