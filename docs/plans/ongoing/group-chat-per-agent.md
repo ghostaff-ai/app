@@ -82,7 +82,7 @@ Two pull requests. The first makes the group; until the second lands, a «Solo p
 ## Landed
 
 - PR 1, [#84](https://github.com/ghostaff-ai/app/pull/84) (2026-11-27): the fold (`20261128700000_group_chat_per_agent.sql`, which also empties `conversation_summaries`), `messages.reply_to` and the queue (`waitingRuns`, `answerWaiting`; a turn reads the conversation cut at the message it answers, `cutAt`), Equipo with one row per agent, old `/conversacion/<id>` links opening the agent's chat, Maestro `group-chat.yaml`.
-- PR 2, [#106](https://github.com/ghostaff-ai/app/pull/106) (2026-11-27): routines without «Solo para mí» (`20261128710000_routines_for_everyone.sql`).
+- PR 2, [#106](https://github.com/ghostaff-ai/app/pull/106) (2026-11-27): routines without «Solo para mí» (`20261128905000_routines_for_everyone.sql`).
 - Known limit: a queued message from someone other than the caller is answered without their session, so without the settings tools that turn.
 
 ## Still open
