@@ -202,3 +202,12 @@ export function vacancies(agents: Agent[]): GhostId[] {
   const taken = new Set(agents.map((a) => a.ghost));
   return GHOST_ORDER.filter((g) => g !== 'base' && !taken.has(g));
 }
+
+/** General's header line: the other people by name, then «tú», then how many agents are in the group. */
+export function groupSubtitle(others: string[], agents: number): string {
+  const parts = [...others, 'tú'];
+  if (agents > 0) parts.push(`${agents} ${agents === 1 ? 'agente' : 'agentes'}`);
+  const last = parts.pop() as string;
+  const line = parts.length ? `${parts.join(', ')} y ${last}` : last;
+  return line.charAt(0).toUpperCase() + line.slice(1);
+}

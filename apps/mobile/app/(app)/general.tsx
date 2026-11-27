@@ -2,16 +2,17 @@ import { router, Stack, useFocusEffect } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { decideAction } from '@ghostaff/shared/services';
+import { decideAction, isMainAgent } from '@ghostaff/shared/services';
+import { GroupFace } from '@/components/chat/GroupFace';
 import { Wallpaper } from '@/components/chat/Wallpaper';
 import { ChatList } from '@/components/chat/ChatList';
 import { Composer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
-import { FolderSimple, Icon, MagnifyingGlass, UsersThree } from '@/components/icons';
+import { FolderSimple, Icon, MagnifyingGlass } from '@/components/icons';
 import { Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { ChatSearch } from '@/components/chat/ChatSearch';
-import { agentIdsNamed, typingLine } from '@/lib/chat';
+import { agentIdsNamed, groupSubtitle, typingLine } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useEngine } from '@/lib/hooks/useConnections';
@@ -67,7 +68,9 @@ export default function General() {
   // Every agent's name is drawn bold in the messages, also one the viewer can't call.
   const shown = useMemo(() => [...agents.map((a) => a.name), ...members.map((m) => m.displayName)], [agents, members]);
   const ghostOf = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a.ghost])), [agents]);
-  const people = useMemo(() => members.map((m) => (m.userId === me ? 'Tú' : m.displayName)).join(', '), [members, me]);
+  const others = useMemo(() => members.filter((m) => m.userId !== me), [members, me]);
+  const people = useMemo(() => groupSubtitle(others.map((m) => m.displayName), talkable.length), [others, talkable]);
+  const mainGhost = useMemo(() => agents.find(isMainAgent)?.ghost ?? 'base', [agents]);
   const isOwner = active?.role === 'owner';
   const owners = useMemo(() => members.filter((m) => m.role === 'owner').map((m) => m.displayName), [members]);
   const asks = useAccountAsks({ orgId, messages, agents, reloadAgents, owners, isOwner, returnPath: 'general' });
@@ -123,14 +126,12 @@ export default function General() {
           ),
           headerTitle: () => (
             <View testID="general-header" className="flex-row items-center" style={{ maxWidth: 260 }}>
-              <View className="h-7 w-7 items-center justify-center rounded-full bg-accent">
-                <Icon icon={UsersThree} size={16} color={c.onAccent} weight="bold" />
-              </View>
+              <GroupFace person={others[0] ? { name: others[0].displayName, id: others[0].userId } : null} ghost={mainGhost} />
               <View className="ml-2 flex-shrink">
                 <Text className="font-display text-base text-ink" numberOfLines={1}>
                   General
                 </Text>
-                <Text className={`text-caption ${typingNow ? 'text-ok' : 'text-muted'}`} numberOfLines={1} accessibilityLiveRegion="polite">
+                <Text className={`text-caption ${typingNow ? 'text-chat-accent' : 'text-muted'}`} numberOfLines={1} accessibilityLiveRegion="polite">
                   {typingNow ?? people}
                 </Text>
               </View>
