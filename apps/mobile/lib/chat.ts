@@ -145,6 +145,12 @@ export function noteLength(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+/** An agent's chat's last line for Equipo: «Bea: hoy la cierro yo», or the agent's own words unsigned. */
+export function agentLastLine(agentName: string, t: ChatThread | null): string | null {
+  if (!t?.lastText) return null;
+  return t.lastAuthor && t.lastAuthor !== agentName ? `${t.lastAuthor}: ${t.lastText}` : t.lastText;
+}
+
 /** General's last line: «Ana: Nota de voz · 0:38» for a voice note (its transcript stays folded), else «Ana: hola». */
 export function generalLastLine(t: ChatThread): string | null {
   const said = t.lastVoiceMs !== null ? `Nota de voz · ${noteLength(t.lastVoiceMs)}` : t.lastText;
