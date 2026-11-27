@@ -131,7 +131,7 @@ Then in `ghostaff-ai/agents`: a last commit removing `telegram` and `lanzan` fro
 3. **Reports, «Avisos» and «Hecho sin ti».** Then Telegram off.
 4. **Claude subscription in Conexiones.** ChatGPT is not built (2026-11-21): OpenAI lets a person use Codex with their own plan, but a hosted service running it for others needs OpenAI's approval through the «Sign in with ChatGPT» waitlist. Revisit once OpenAI approves Ghostaff ([OpenAI help](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan), [Codex discussion](https://github.com/openai/codex/discussions/8338)).
 5. **Legal moves**: our runner, its timetable on its agent row and its instructions in `agentes/legal/AGENTS.md` (item 7), run on Órdago's subscription, the old job deleted.
-6. **Ghostaff's own record store** ([record-store.md](../ongoing/record-store.md)) with organisation Ghostaff in it; then the rest move one at a time, and Órdago's master flips last.
+6. **Ghostaff's own record store** ([record-store.md](../ongoing/record-store.md)) with organisation Ghostaff in it; then the rest move one at a time, and Órdago's master flips last ([ordago-record-flip.md](../ideas/ordago-record-flip.md)).
 
 ## What only Álvaro does
 

@@ -109,7 +109,7 @@ Stage 2, switched on in beta when this lands:
 
 - A person cloning the record (decision 2), and the live copy to the organisation's own GitHub or Drive.
 - High availability: one VM per environment, restarted by Compute Engine if it stops; a second one when an outage has cost something.
-- Moving Órdago's master from GitHub (ordago-agents-in-ghostaff.md decides when).
+- Moving Órdago's master from GitHub: [ordago-record-flip.md](../ideas/ordago-record-flip.md).
 
 ## Testing strategy
 
