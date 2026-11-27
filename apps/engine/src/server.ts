@@ -27,6 +27,7 @@ import { microsoftOAuth, microsoftTools } from './microsoft';
 import { type CheckResult, checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { CloudAccountNotReady, type CloudAccountDeps, cloudTokens, ensureCloudAccount, type GoogleCall, mintCloudToken, supabaseCloudAccountStore } from './cloudAccounts';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
+import { supabaseAvatarStore } from './avatars';
 import { supabaseFileStore } from './files';
 import { digestDue, supabaseGeneralStore } from './generalDigest';
 import { freshRepoToken, queuedRuns, repoTokens } from './githubApp';
@@ -286,6 +287,7 @@ const app = createApp({
   claudeSignIn: { spawn: spawnSetupToken },
   voice: supabaseVoiceNoteStore(admin),
   files: fileStore,
+  avatars: supabaseAvatarStore(admin),
   transcriber,
   pushes: pushDrain,
   accounts,

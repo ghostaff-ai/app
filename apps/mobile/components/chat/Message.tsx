@@ -14,6 +14,7 @@ import { ArrowUUpLeft, Clock, Icon, Microphone, Prohibit, ShareFat } from '@/com
 import { tap } from '@/lib/haptics';
 import { Field } from '@/components/ui';
 import type { AskControls } from '@/lib/hooks/useAccountAsks';
+import { useAvatars, usePhotoUrl } from '@/lib/avatars';
 import { firstLink, personColour, timeOf } from '@/lib/chat';
 import type { GuideControls } from '@/lib/hooks/useGuideCards';
 import { GHOSTS, type GhostId } from '@/lib/team';
@@ -35,17 +36,24 @@ export function initials(name: string): string {
   return ((words[0]?.[0] ?? '?') + (words.length > 1 ? (words[words.length - 1]?.[0] ?? '') : '')).toUpperCase();
 }
 
-export function Avatar({ name, id, size = 28 }: { name: string; id: string; size?: number }) {
+/** A person's face: their profile photo, or their initials on their colour until they set one. */
+export function Avatar({ name, id, size = 28, path }: { name: string; id: string; size?: number; path?: string | null }) {
+  const { pathOf } = useAvatars();
+  const url = usePhotoUrl(path ?? pathOf(id));
   return (
     <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: personColour(id) }}
-      className="items-center justify-center"
+      className="items-center justify-center overflow-hidden"
     >
-      <Text style={{ fontSize: size * 0.4 }} className="font-semibold text-white">
-        {initials(name)}
-      </Text>
+      {url ? (
+        <Image source={{ uri: url }} style={{ width: size, height: size }} resizeMode="cover" />
+      ) : (
+        <Text style={{ fontSize: size * 0.4 }} className="font-semibold text-white">
+          {initials(name)}
+        </Text>
+      )}
     </View>
   );
 }

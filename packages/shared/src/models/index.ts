@@ -27,6 +27,8 @@ export interface Profile {
   fullName: string;
   occupation: string | null;
   heardFrom: string | null;
+  /** Their photo in the bucket `avatars`; their initials while there is none. */
+  avatarPath?: string | null;
 }
 
 /** What a new organisation's creator tells us: the light first step of Incorporación. */
