@@ -78,6 +78,46 @@ From the YAMLs in `ghostaff-ai/agents/proyectos/ordago/agentes/` (2026-11-24). O
 
 Fewest needs first, each one moved with `org add-agents --runner ghostaff --only <agent>` and its Cloud Scheduler job paused in `ordago-agents` in the same sitting: Legal → Comercial → SEO, Producto, Dirección → Correo, Finanzas → La Mesa, Productor → Orgánico → Desarrollo. Before Telegram goes off, the app's notifications must be live, since Telegram is the only thing that reaches a person outside the app (Jaime, 2026-11-24: [decision-notifications.md](decision-notifications.md)). Then Telegram off: the webhook deleted, `telegram` removed from `proyecto.yaml`, the jobs in `ordago-agents` deleted, and `ghostaff-ai/agents` archived.
 
+### Telegram off, step by step (written 2026-11-27, to run the day push works)
+
+**Two Telegram roads, only one goes off.** (A) The agents' bot «Órdago Operativa» (`@Orago_operativa_bot`): the Cloud Run service `ordago-telegram` in `ordago-agents`, its webhook and the secrets `ordago-telegram-bot`/`ordago-telegram-webhook`; a message there starts an `ordago-<agente>` job. **This one goes off.** (B) Órdago's operations in the same group: CI, deploys, Monitoring, budgets and digests publish to `ordago-prod`'s Pub/Sub `notify`, and Álvaro's homelab `notify-gateway` posts them (`ordago-apps/docs/ops/telegram-alerts.md`), plus `business/scripts/telegram.py` on Álvaro's machine. **B stays**: it is Órdago's ops, not its agents, and nothing here touches it. That is also why the bot itself is not revoked with BotFather (the gateway may hold the same token): only its webhook goes.
+
+**Before the day** (each one checked, not assumed):
+
+1. Every agent of Órdago on our runner: `select slug, runner from agents where org_id = '77026864-c219-4c55-a7d7-1986769a50a1'` shows no `ordago_job` (today La Mesa, Productor, Orgánico and Desarrollo still are).
+2. Push checked on the beta: a real agent reply reaches Jaime's and Álvaro's phones ([decision-notifications.md](decision-notifications.md)), and the 09:00 decisions push once.
+3. The panel stops launching agents (decision 3 below): a PR in `ordago-apps` removes `components/mesa/Lanzar.tsx`, `lib/lanzar.ts`, `lib/ejecuciones.ts` and what calls them (`Mesa.tsx`, `app/sede/acciones.ts`, `app/api/agentes/[agente]/estado/route.ts`), merged and deployed **before** the jobs are deleted, or its buttons fail on a job that is gone.
+4. The record says Ghostaff, not Telegram, wherever an agent or a person reads how to talk to the agents (a commit in `ordago-app/business`): `.agents/skills/hablar-con-agente/SKILL.md` «Por Telegram» becomes «Por Ghostaff» (the agent's chat in the app; the panel no longer launches); `.agents/skills/producir-serie/SKILL.md` «Tu último mensaje es lo que llega a Telegram» → to the people's chat; `.agents/skills/iterar-seo/SKILL.md` line 102 (where the «La web no se ha publicado» notice lands: it is road B, check it stays true); `tablon/README.md` (no more `…-telegram.md` pending notes); `AGENTS.md` «their own Telegram road is in ghostaff-ai/agents» → in Ghostaff; `agentes/productor/README.md` «cada vez que un fundador le habla por Telegram»; and Dirección's `agentes/direccion/AGENTS.md` drops the lines on `gs://ordago-agents-transcripciones` for agents still in `ordago-agents` (none left).
+
+**On the day** (Jaime or Álvaro, `CLOUDSDK_ACTIVE_CONFIG_NAME=ordago` as `ordagoapp@`; the agents' classifier blocks Google Cloud tokens, so a person runs the `gcloud` lines):
+
+```bash
+P=ordago-agents; R=europe-west1
+# 1. The bot stops receiving: delete its webhook (token piped, never printed), then check it is empty.
+T=$(gcloud secrets versions access latest --secret ordago-telegram-bot --project $P)
+curl -s "https://api.telegram.org/bot$T/deleteWebhook?drop_pending_updates=true"
+curl -s "https://api.telegram.org/bot$T/getWebhookInfo"   # "url":"" expected
+curl -s "https://api.telegram.org/bot$T/setMyCommands" -H 'content-type: application/json' -d '{"commands":[]}'
+unset T
+# 2. The webhook's service.
+gcloud run services delete ordago-telegram --project $P --region $R --quiet
+# 3. The schedules and the jobs (all twelve, prueba included).
+for a in comercial correo desarrollo direccion finanzas lamesa legal organico producto productor seo; do
+  gcloud scheduler jobs delete ordago-$a --project $P --location $R --quiet
+done
+for a in comercial correo desarrollo direccion finanzas lamesa legal organico producto productor prueba seo; do
+  gcloud run jobs delete ordago-$a --project $P --region $R --quiet
+done
+# 4. Secrets only the old road used.
+gcloud secrets delete ordago-telegram-bot ordago-telegram-webhook ordago-claude-token --project $P --quiet
+```
+
+Then in `ghostaff-ai/agents`: a last commit removing `telegram` and `lanzan` from `proyectos/ordago/proyecto.yaml` and saying in the README that the agents run in Ghostaff, and `gh repo archive ghostaff-ai/agents`. In this repo, a cleanup PR: the `ordago_job` runner (`apps/engine/src/jobs.ts`, the `runner` value and its tests) goes, since no agent uses it.
+
+**What stays in `ordago-agents`, and why** (do not delete the project): BigQuery jobs billed there (Comercial's `--project_id`, item 4's note), the bucket `ordago-agents-transcripciones` (90 days of old transcripts), `ordago-agents-podcast` and `ordago-agents-reels` (La Mesa, Productor, Orgánico write there), the service account `ordago-productor@` (Productor acts as it), and the secrets `ordago-correo-*`, `ordago-elevenlabs`, `ordago-meta-token` until Órdago is made again in production (item 8) and they are stored there. `ordago-github-app-key` (the old App «ordago-agentes», not ours) goes once nothing else in Órdago uses that App: check before deleting it.
+
+**Checks after:** a message to the bot gets no run (no new execution in `gcloud run jobs executions list --project ordago-agents`); `gcloud scheduler jobs list --project ordago-agents --location europe-west1` is empty; one agent answers in Ghostaff's chat and its push arrives; road B still posts (the next CI notice or Monday's digest in the group).
+
 ### Decisions (2026-11-24)
 
 1. **Beta now, production with the first release** (Jaime left it to me). Órdago's organisation, its Claude sign-in and its record connection already live on the beta, and the production app is not on anyone's phone yet; waiting for production would hold the move on the first release. The cost: a broken beta stops Órdago's agents, and the organisation is made again in production later (item 8).
@@ -114,4 +154,5 @@ Fewest needs first, each one moved with `org add-agents --runner ghostaff --only
   - **2026-11-26, SEO, Producto and Dirección moved (Jaime: «migra todo lo que puedas»).** Their `AGENTS.md` written from their yamls' prompts into the record (59e69e1, d893e17): `~/repos/ordago-apps`, pushes to `develop` or their own branch, Órdago's Google Cloud account, SEO without `gh` (a person opens its code PRs), Dirección reading the others' runs with `ghostaff ejecuciones` / `leer` and the old bucket for agents still there, its summary in each person's chat. Órdago's account granted reader on the dataset `ordago-prod:ordago_bi`, token creator on `search-console-reader@ordago-prod`, and object viewer on `gs://ordago-agents-transcripciones` (as `ordago-direccion` had). `org add-agents --runner ghostaff --only seo,producto --writes ordago-app/ordago-apps` and `--only direccion` (it reads the org's runs: its yaml had the bucket); `ordago-seo`, `ordago-producto` and `ordago-direccion` `PAUSED`; their READMEs say so (c34bbf7). Checked in Jaime's chats: SEO read Search Console as the account (`sc-domain:ordago.club`, `siteFullUser`), a dry-run push to `seo/prueba-ghostaff` passed and one to `main` was blocked; Producto read the marts (`2026-11-25`) and reached `develop`; Dirección listed Comercial's runs and SEO's old transcripts. Found: the guard did not read `~` in `git -C ~/repos/…` (fixed in #105). Not checked: a real push (no dry run) to `ordago-apps`; their first scheduled runs are Monday 1 December (SEO and Producto at 08:00, Dirección at 10:00) and Thursday for SEO.
   - **2026-11-27, Correo and Finanzas moved (Jaime: «vamos a dejar todos operativos»).** Jaime stored the four secrets on the beta (`correo-info`, `correo-gmail`, `elevenlabs`, `meta-token`). Their `AGENTS.md` written from the yamls' prompts into the record (81de7bc; Telegram and «el grupo» become the people's chat), `org add-agents --runner ghostaff --only correo,finanzas` (secrets from the yamls), `ordago-correo` and `ordago-finanzas` `PAUSED`, READMEs say so. Checked in Jaime's chats, read-only: Correo's `leer_correo.py nuevos` read both mailboxes (no errors), Finanzas' `correo_finanzas.py adjuntos` read Gmail. Not checked: a scheduled run that advances `estado.json` and commits (Correo's first is 28/11 at 09:00, Finanzas' Monday 30/11 at 09:30).
   - **2026-11-27, grants for La Mesa, Productor and Orgánico** on Órdago's account, copied from their old service accounts: `ordago-media` (`aiplatform.user`, `serviceUsageConsumer`), `gs://ordago-podcast` and `gs://ordago-agents-podcast` (object creator and viewer), token creator on `ordago-productor@ordago-agents`, `ordago-prod` `datastore.viewer`, `gs://ordago-agents-reels` object admin, `gs://ordago-prod-reels-publicacion` object admin except `aprobaciones.json` (IAM condition) and viewer, `reels-publisher` executor with overrides and viewer, `ordago-prod:agentes.altas_diarias` data viewer. Not given, because La Mesa now posts its episode in the chat: Pub/Sub `ordago-prod/notify` and token creator on `podcast-publisher@ordago-prod`.
+  - **2026-11-27, Comercial's first scheduled run in Ghostaff** (`acf4e491`, origin `schedule`): fired 08:30 Madrid, `done` at 08:51, noteworthy; pushed `comercial: barrido del 2026-11-27, 5 nuevos` to `business` as «Comercial (Ghostaff)». Telegram off is written step by step above.
 - [ ] Step 6
