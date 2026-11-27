@@ -9,7 +9,9 @@
 // refuses the fast-forward and the next tick tries again on the new head.
 
 import { createHash } from 'node:crypto';
+import type { PhotoBlock, SkippedBlock } from '@ghostaff/shared';
 import {
+  AGENT_PHOTO_FILE,
   agentInstructionsPath,
   appendHistoryRow,
   DECISIONS_DIR,
@@ -25,6 +27,7 @@ import {
   MAX_INSTRUCTIONS,
   planSync,
   readDecision,
+  readPhoto,
   type RecordFile,
   recordIdFromPath,
   type SyncAgent,
@@ -53,6 +56,16 @@ export interface OrgWithoutRecord {
 }
 
 /** An agent as the sync projects its instructions (agentInstructionsPath). */
+/** An agent's photo as the sync writes it (`agent_photos`). */
+export interface PhotoRow {
+  orgId: string;
+  agentId: string;
+  blocks: PhotoBlock[];
+  skipped: SkippedBlock[];
+  sha: string;
+  updatedAt: string;
+}
+
 export interface InstructedAgent {
   id: string;
   slug: string;
@@ -79,6 +92,14 @@ export interface RecordSyncStore {
   instructedAgents(orgId: string): Promise<InstructedAgent[]>;
   /** The agent's instructions from its file (`task` set), or its file gone (`task` kept as it was). */
   setInstructions(agentId: string, change: { task: string; inRecord: true } | { inRecord: false }): Promise<void>;
+  /** The blob each agent's photo was last read from, by agent id (agent-photo.md). */
+  photoShas(orgId: string): Promise<Map<string, string>>;
+  /** An agent's photo read from its file, replacing the last. */
+  setPhoto(photo: PhotoRow): Promise<void>;
+  /** Its file could not be read: say why and keep the last good blocks (none when there were none). */
+  failPhoto(orgId: string, agentId: string, sha: string, error: string): Promise<void>;
+  /** Its file is gone from the record. */
+  removePhoto(agentId: string): Promise<void>;
   /** The organisation's rows of `external_parties`, pending ones included. */
   externalParties(orgId: string): Promise<ExternalSyncRow[]>;
   /** What the record holds of `externos/`, into the rows. */
@@ -269,6 +290,50 @@ export async function projectInstructions(store: RecordSyncStore, repo: RecordRe
   return notes;
 }
 
+/** Where the agents' folders are in a record: `agentes/<slug>/`. */
+const AGENTS_DIR = 'agentes';
+
+/**
+ * Each agent's `agentes/<slug>/foto.yaml` into `agent_photos` (agent-photo.md): read again only when
+ * its blob changed, a file that can't be read leaving the last good photo with why, a file gone
+ * removing it. Never throws: a photo is never worth failing the organisation's sync for, so a
+ * failure is one line of the tick's summary. Returns what changed.
+ */
+export async function projectPhotos(store: RecordSyncStore, repo: RecordRepo, orgId: string, ref: string, now: Date): Promise<string[]> {
+  try {
+    const agents = await store.instructedAgents(orgId);
+    if (!agents.length) return [];
+    const blobs = new Map((await repo.tree(AGENTS_DIR, ref)).map((f) => [f.path, f.sha]));
+    const known = await store.photoShas(orgId);
+    const notes: string[] = [];
+    for (const a of agents) {
+      const sha = blobs.get(`${a.slug}/${AGENT_PHOTO_FILE}`);
+      if (!sha) {
+        if (known.has(a.id)) {
+          await store.removePhoto(a.id);
+          notes.push(`${a.slug}: photo gone`);
+        }
+        continue;
+      }
+      if (known.get(a.id) === sha) continue;
+      const raw = await repo.file(`${AGENTS_DIR}/${a.slug}/${AGENT_PHOTO_FILE}`, ref);
+      if (raw === null) continue; // moved between the tree and the read: the next tick sees it
+      try {
+        const photo = readPhoto(raw);
+        await store.setPhoto({ orgId, agentId: a.id, blocks: photo.blocks, skipped: photo.skipped, sha, updatedAt: photo.updatedAt ?? now.toISOString() });
+        notes.push(`${a.slug}: photo, ${photo.blocks.length} blocks${photo.skipped.length ? `, ${photo.skipped.length} skipped` : ''}`);
+      } catch (e) {
+        const why = (e instanceof Error ? e.message : String(e)).slice(0, 500);
+        await store.failPhoto(orgId, a.id, sha, why);
+        notes.push(`${a.slug}: photo not read (${why})`);
+      }
+    }
+    return notes;
+  } catch (e) {
+    return [`photos not read: ${e instanceof Error ? e.message : String(e)}`];
+  }
+}
+
 const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 
 /**
@@ -309,6 +374,7 @@ export async function syncOrg(deps: RecordSyncDeps, org: RecordOrg): Promise<Org
     const instructions = await projectInstructions(deps.store, gh, org.id, head.sha);
     // Only a record in our record store has a memory the chat reads (memory.ts).
     if (org.host === 'ghostaff' && deps.memory) instructions.push(...(await projectMemory(deps.memory, gh, org.id, head.sha, agents)));
+    instructions.push(...(await projectPhotos(deps.store, gh, org.id, head.sha, now)));
 
     const written: string[] = [];
     let waits: string | null = null;

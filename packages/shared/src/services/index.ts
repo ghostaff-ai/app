@@ -35,6 +35,7 @@ import type {
 import { ACTION_KIND } from '../models';
 import { type ChatMessage, type ChatThread, type DocumentPart, isDecisionQuotePart, type MessagePart, type OrgMember, type Reaction, waveformToDigits } from '../chat';
 import type { Routine, RoutineWhen, Weekday } from '../routines';
+import type { AgentPhoto, PhotoBlock, SkippedBlock } from '../photo';
 
 // The only place the app talks to the database. Screens, hooks and components
 // call these functions, never `supabase.from(...)` (the same rule as
@@ -1671,6 +1672,18 @@ export function agentRunFromRow(r: AgentRunRow): AgentRun {
     startedAt: r.started_at,
     finishedAt: r.finished_at,
   };
+}
+
+/** An agent's photo, the blocks it keeps on its page (agent-photo.md); null when it has none. */
+export async function getAgentPhoto(client: SupabaseClient, agentId: string): Promise<AgentPhoto | null> {
+  const { data, error } = await client
+    .from('agent_photos')
+    .select('agent_id, blocks, skipped, updated_at, error')
+    .eq('agent_id', agentId)
+    .maybeSingle<{ agent_id: string; blocks: PhotoBlock[]; skipped: SkippedBlock[]; updated_at: string; error: string | null }>();
+  if (error) throw error;
+  if (!data) return null;
+  return { agentId: data.agent_id, blocks: data.blocks, skipped: data.skipped, updatedAt: data.updated_at, error: data.error };
 }
 
 /** One agent's finished runs since `since`, newest first, those that say what they did: its page's «Últimamente» (team-board.md). */

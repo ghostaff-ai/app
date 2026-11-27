@@ -6,6 +6,7 @@ import { ScrollView, Text, View } from 'react-native';
 import { DecisionCard } from '@/components/DecisionCard';
 import { GhostViewer } from '@/components/ghost/GhostViewer';
 import { Brain, ChatsCircle, Clock, Eye, LinkSimple, Prohibit } from '@/components/icons';
+import { PhotoView } from '@/components/photo/PhotoView';
 import { StageTag } from '@/components/team/GhostStage';
 import { Button, ErrorText, LEVEL_NAMES, ListRow, ListSection, Loading, Notice, RowIcon } from '@/components/ui';
 import { shortTime } from '@/lib/chat';
@@ -20,8 +21,8 @@ import { agentTag } from '@/lib/team/status';
 // One agent's page, opened from its tile on Equipo and from its name on top
 // of the chat (three-tabs.md, decision 6): live in 3D on top (drag to spin it,
 // tap to make it hop) with what it is doing, then what matters first
-// (team-board.md, decision 4): its decisions waiting for you, what it did
-// lately and «Escribir», its chat. Below, the settings: «Rutinas» for whoever
+// (team-board.md, decision 4): its decisions waiting for you, its photo
+// (agent-photo.md), what it did lately and «Escribir», its chat. Below, the settings: «Rutinas» for whoever
 // may talk to it and its «Memoria» for whoever may see it. Its chat is the one everyone with access shares
 // (group-chat-per-agent.md): who reads and who writes there is «Quién puede».
 // An owner sets that and which connected accounts it uses, and can remove it
@@ -112,6 +113,13 @@ export default function Agente() {
             {overview.waiting.map((d) => (
               <DecisionCard key={d.id} decision={d} onPress={() => router.push(decisionHref(d))} />
             ))}
+          </View>
+        ) : null}
+
+        {overview.photo && (overview.photo.blocks.length > 0 || overview.photo.error) ? (
+          <View className="mt-5">
+            <Text className="mb-2 ml-1 text-footnote text-muted">Su foto</Text>
+            <PhotoView photo={overview.photo} agentName={agent.name} />
           </View>
         ) : null}
 

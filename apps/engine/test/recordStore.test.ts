@@ -119,6 +119,10 @@ describe('which records this engine reaches', () => {
         externalParties: async () => [],
         applyExternal: async () => {},
         markExternalWritten: async () => {},
+        photoShas: async () => new Map(),
+        setPhoto: async () => {},
+        failPhoto: async () => {},
+        removePhoto: async () => {},
       },
     });
     expect(r).toEqual([]);
@@ -164,6 +168,10 @@ describe('the sync on a record in our record store', () => {
           externalParties: async () => [],
           applyExternal: async () => {},
           markExternalWritten: async () => {},
+        photoShas: async () => new Map(),
+        setPhoto: async () => {},
+        failPhoto: async () => {},
+        removePhoto: async () => {},
           setInstructions: async (id, change) => void instructed.push([id, change]),
         },
       },
