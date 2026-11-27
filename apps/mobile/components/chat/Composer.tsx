@@ -198,7 +198,7 @@ export function Composer({
   const showHolding = mode === 'holding';
 
   return (
-    <View className="border-t border-line bg-surface px-2 pt-2" style={{ paddingBottom: Math.max(10, insets.bottom) }}>
+    <View testID="composer" className="px-2 pt-2" style={{ paddingBottom: Math.max(10, insets.bottom) }}>
       {suggestions.length > 0 ? (
         <View className="mb-2 flex-row flex-wrap gap-2 px-1" accessibilityLabel="Mencionar a">
           {suggestions.map((n) => (
@@ -241,7 +241,7 @@ export function Composer({
       ) : null}
 
       {showLocked ? (
-        <View testID="recording-locked" className="rounded-3xl border border-line bg-card px-3 py-2">
+        <View testID="recording-locked" className="rounded-3xl bg-theirs px-3 py-2">
           <View className="flex-row items-center gap-2" accessibilityLabel={`${voice.state === 'paused' ? 'En pausa' : 'Grabando'}, ${clock(voice.seconds)}`}>
             <View className={`h-2.5 w-2.5 rounded-full ${voice.state === 'paused' ? 'bg-muted' : 'bg-no'}`} />
             <Text className="text-base text-ink" style={{ fontVariant: ['tabular-nums'] }}>
@@ -278,16 +278,16 @@ export function Composer({
                 void voice.finish();
                 end();
               }}
-              className="h-11 w-11 items-center justify-center rounded-full bg-accent active:opacity-80"
+              className="h-11 w-11 items-center justify-center rounded-full bg-chat-accent active:opacity-80"
             >
-              <Icon icon={PaperPlaneRight} size={20} color={c.onAccent} weight="fill" />
+              <Icon icon={PaperPlaneRight} size={20} color={c.onChatAccent} weight="fill" />
             </Pressable>
           </View>
         </View>
       ) : (
         <View className="flex-row items-end gap-2">
           {showHolding ? (
-            <View testID="recording-holding" className="min-h-11 flex-1 flex-row items-center rounded-3xl border border-line bg-card px-4">
+            <View testID="recording-holding" className="min-h-11 flex-1 flex-row items-center rounded-3xl bg-theirs px-4">
               <View className="h-2.5 w-2.5 rounded-full bg-no" />
               <Text className="ml-2 text-base text-ink" style={{ fontVariant: ['tabular-nums'] }} accessibilityLabel={`Grabando, ${clock(voice.seconds)}`}>
                 {clock(voice.seconds)}
@@ -298,11 +298,11 @@ export function Composer({
               </Animated.View>
             </View>
           ) : sending ? (
-            <View className="min-h-11 flex-1 flex-row items-center rounded-3xl border border-line bg-card px-4">
+            <View className="min-h-11 flex-1 flex-row items-center rounded-3xl bg-theirs px-4">
               <Text className="text-footnote text-muted">Enviando la nota…</Text>
             </View>
           ) : (
-            <View className="min-h-11 flex-1 flex-row items-end rounded-3xl border border-line bg-card">
+            <View className="min-h-11 flex-1 flex-row items-end rounded-3xl bg-theirs">
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={emoji ? 'Cerrar emojis' : 'Emojis'}
@@ -378,10 +378,10 @@ export function Composer({
                 accessibilityHint="Mantén pulsado para grabar y suelta para enviar"
                 accessibilityActions={[{ name: 'activate' }]}
                 onAccessibilityAction={() => begin(true)}
-                className={`items-center justify-center rounded-full bg-accent ${showHolding ? 'h-14 w-14' : 'h-11 w-11'}`}
+                className={`items-center justify-center rounded-full bg-chat-accent ${showHolding ? 'h-14 w-14' : 'h-11 w-11'}`}
                 style={Platform.OS === 'web' ? ({ cursor: 'pointer', userSelect: 'none', touchAction: 'none' } as object) : undefined}
               >
-                {sending ? <ActivityIndicator color={c.onAccent} /> : <Icon icon={Microphone} size={showHolding ? 26 : 20} color={c.onAccent} weight="fill" />}
+                {sending ? <ActivityIndicator color={c.onChatAccent} /> : <Icon icon={Microphone} size={showHolding ? 26 : 20} color={c.onChatAccent} weight="fill" />}
               </View>
             </View>
           ) : (
@@ -390,9 +390,9 @@ export function Composer({
               accessibilityLabel="Enviar"
               accessibilityState={{ disabled: !ready, busy }}
               onPress={ready ? () => void send() : undefined}
-              className={`h-11 w-11 items-center justify-center rounded-full bg-accent ${ready ? '' : 'opacity-30'}`}
+              className={`h-11 w-11 items-center justify-center rounded-full bg-chat-accent ${ready ? '' : 'opacity-30'}`}
             >
-              {busy ? <ActivityIndicator color={c.onAccent} /> : <Icon icon={ArrowUp} size={20} color={c.onAccent} weight="bold" />}
+              {busy ? <ActivityIndicator color={c.onChatAccent} /> : <Icon icon={ArrowUp} size={20} color={c.onChatAccent} weight="bold" />}
             </Pressable>
           )}
         </View>

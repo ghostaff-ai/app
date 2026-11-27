@@ -95,6 +95,14 @@ describe('Composer voice notes', () => {
     expect(screen.getByLabelText('Enviar')).toBeTruthy();
   });
 
+  it('draws the mic in the chat violet', async () => {
+    await setup(jest.fn());
+    const className = screen.getByLabelText('Grabar nota de voz').props.className as string;
+    expect(className).toContain('bg-chat-accent');
+    expect(className).not.toMatch(/bg-accent/);
+    expect(screen.getByTestId('composer').props.className).not.toContain('border-t');
+  });
+
   it('shows the mic while the box is empty and send once there is text, as in WhatsApp', async () => {
     await setup(jest.fn());
     expect(screen.getByLabelText('Grabar nota de voz')).toBeTruthy();

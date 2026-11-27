@@ -3,6 +3,7 @@ import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { decideAction } from '@ghostaff/shared/services';
+import { Wallpaper } from '@/components/chat/Wallpaper';
 import { ChatList } from '@/components/chat/ChatList';
 import { Composer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
@@ -99,7 +100,8 @@ export default function General() {
   if (missing) return <Notice title="No encontramos el chat General" body="Vuelve a Equipo y ábrelo de nuevo." />;
 
   return (
-    <View className="flex-1 bg-surface">
+    <View className="flex-1 bg-chat">
+      <Wallpaper />
       <Stack.Screen
         options={{
           title: 'General',
