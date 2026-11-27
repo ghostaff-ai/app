@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1002624835789",
+    "project_id": "ghostaff-beta",
+    "storage_bucket": "ghostaff-beta.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1002624835789:android:cd1cea8efe30e89094c984",
+        "android_client_info": {
+          "package_name": "ai.ghostaff.app.beta"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbfWMMsAusyJ1wEwbfJnVjXfexLlo0z4Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1002624835789:android:f045344ba809d40694c984",
+        "android_client_info": {
+          "package_name": "ai.ghostaff.app.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbfWMMsAusyJ1wEwbfJnVjXfexLlo0z4Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

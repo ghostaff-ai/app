@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "664656500315",
+    "project_id": "ghostaff-prod",
+    "storage_bucket": "ghostaff-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:664656500315:android:e1419157c6e5a741c4d17e",
+        "android_client_info": {
+          "package_name": "ai.ghostaff.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "664656500315-o45bt01ao6pb1s7oehv4n77c3k1uu76p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCU16Ep0XyagpfIjDklS5dJgvopTkLBoQY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "664656500315-o45bt01ao6pb1s7oehv4n77c3k1uu76p.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "664656500315-55k96qirco28jb9q0c4isaek7c05pqtv.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "ai.ghostaff.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
