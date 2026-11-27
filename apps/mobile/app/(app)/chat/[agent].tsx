@@ -10,7 +10,7 @@ import { MessageView } from '@/components/chat/Message';
 import { Clock, Icon } from '@/components/icons';
 import { Button, Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { showAuthors } from '@/lib/chat';
+import { agentIdsNamed, showAuthors } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useGuideCards } from '@/lib/hooks/useGuideCards';
@@ -259,7 +259,7 @@ export default function Chat() {
           </View>
         ) : null}
         {canTalk ? (
-          <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={sendAndNote} onVoiceNote={engine ? sendVoice : undefined} />
+          <Composer placeholder={`Escribe a ${agent.name}`} names={names} onSend={sendAndNote} onVoiceNote={engine ? (note, tagged) => sendVoice(note, agentIdsNamed(agents, tagged)) : undefined} />
         ) : (
           <ReadOnlyComposer note={owner ? `Pide acceso a ${owner}` : null} />
         )}

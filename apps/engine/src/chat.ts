@@ -54,8 +54,21 @@ export interface ChatAgent {
 export interface ChatThreadHead {
   id: string;
   orgId: string;
-  agentId: string;
+  /** The agent whose chat it is; null in General, the people's chat (general-chat.md). */
+  agentId: string | null;
   title: string;
+}
+
+/** Where an agent answers, when it isn't its own chat: brought into another agent's, or into General. */
+export interface Place {
+  broughtInto?: string;
+  general?: boolean;
+}
+
+/** Where `who` answers in `thread`, whose own agent is `threadAgent` (null in General). */
+function placeIn(thread: ChatThreadHead, who: ChatAgent, threadAgent: ChatAgent | null): Place | undefined {
+  if (!thread.agentId) return { general: true };
+  return threadAgent && who.id !== threadAgent.id ? { broughtInto: threadAgent.name } : undefined;
 }
 
 /** One of the organisation's AI accounts, as the engine uses it (its key or token stays in the vault). */
@@ -323,8 +336,7 @@ const ROUTINE_LINES = [
 export function systemPrompt(
   agent: ChatAgent,
   orgName: string,
-  opts: {
-    broughtInto?: string;
+  opts: Place & {
     accounts?: string[];
     settings?: boolean;
     routines?: boolean;
@@ -345,6 +357,9 @@ export function systemPrompt(
     broughtInto
       ? `Te han mencionado en una conversación con ${broughtInto}, otro agente del equipo; contesta a lo que te piden a ti, sin hacer su trabajo.`
       : '',
+    opts.general
+      ? 'Te han mencionado en General, el chat donde las personas de la organización hablan entre ellas, casi siempre con notas de voz (lees su transcripción). Lo lee todo el equipo: contesta solo a lo que te piden a ti, sabiendo que tu respuesta la verán todos.'
+      : '',
     'Hablas en una conversación compartida: pueden escribir varias personas de la organización; cada mensaje de una persona empieza con su nombre y cuándo lo escribió, hora de Madrid. Lo último que te escriben es lo de ahora.',
     `De la conversación ves un resumen de lo antiguo y los últimos mensajes; si necesitas el detalle exacto de algo anterior, búscalo con ${CONVERSATION_TOOL} antes de suponerlo.`,
     'Contesta en español, en primera persona y de tú, breve y concreto, sin fórmulas de cortesía. Usa listas solo si ayudan.',
@@ -364,20 +379,24 @@ export function systemPrompt(
 }
 
 /**
- * Which agents answer the thread's last message (team-chat.md, decision 9):
- * none unless a person wrote it; the agents it @mentions, if it mentions any
- * (that is how another agent is brought in); nobody if it mentions only
- * people; otherwise the thread's own agent.
+ * Which agents answer a run of one person's messages (team-chat.md, decision
+ * 9): the agents any of them @mentions, if they mention any (that is how
+ * another agent is brought in, also by a mention written before a voice note:
+ * general-chat.md, decision 6); nobody if they mention only people; otherwise
+ * the thread's own agent, and nobody in General, which has none.
  */
-export function whoAnswers(messages: ChatMessage[], threadAgent: ChatAgent, agents: ChatAgent[], memberNames: string[]): ChatAgent[] {
-  const last = messages[messages.length - 1];
-  if (!last || last.authorKind !== 'person') return [];
-  const all = agents.some((a) => a.id === threadAgent.id) ? agents : [threadAgent, ...agents];
+export function whoAnswers(run: ChatMessage[], threadAgent: ChatAgent | null, agents: ChatAgent[], memberNames: string[]): ChatAgent[] {
+  const said = run.filter((m) => m.authorKind === 'person');
+  if (said.length === 0 || run[run.length - 1]!.authorKind !== 'person') return [];
+  const all = !threadAgent || agents.some((a) => a.id === threadAgent.id) ? agents : [threadAgent, ...agents];
   const key = (n: string) => n.toLocaleLowerCase('es');
-  const mentioned = splitMentions(messageText(last.parts), [...all.map((a) => a.name), ...memberNames])
-    .filter((s) => s.mention)
-    .map((s) => key(s.text.slice(1)));
-  if (mentioned.length === 0) return [threadAgent];
+  const names = [...all.map((a) => a.name), ...memberNames];
+  const mentioned = said.flatMap((m) =>
+    splitMentions(messageText(m.parts), names)
+      .filter((s) => s.mention)
+      .map((s) => key(s.text.slice(1))),
+  );
+  if (mentioned.length === 0) return threadAgent ? [threadAgent] : [];
   const seen = new Set<string>();
   const out: ChatAgent[] = [];
   for (const name of mentioned) {
@@ -703,10 +722,11 @@ async function orgReach(deps: ChatDeps, orgId: string) {
       : null,
   ]);
   /**
-   * `asker` is whoever the reply answers: their session, when it is there
-   * (without it, no settings tools), and who they are, for the memory.
+   * `place` is where it answers when that isn't its own chat (brought in, or
+   * General); `asker` is whoever the reply answers: their session, when it is
+   * there (without it, no settings tools), and who they are, for the memory.
    */
-  const reachOf = async (who: ChatAgent, broughtInto?: string, asker?: { userId: string; accessToken?: string }): Promise<{ tools: AgentTools; system: string }> => {
+  const reachOf = async (who: ChatAgent, place?: Place, asker?: { userId: string; accessToken?: string }): Promise<{ tools: AgentTools; system: string }> => {
     const accessToken = asker?.accessToken;
     const userId = asker?.userId ?? null;
     let mine = restrictTo(tools, who.accounts);
@@ -746,7 +766,7 @@ async function orgReach(deps: ChatDeps, orgId: string) {
     }
     if (deps.memory && record && memory) mine = mergeTools(mine, memoryTools(deps.memory, record, { orgId, agentName: who.name, canWrite: memory === 'write', userId, own }));
     const system = systemPrompt(who, orgName, {
-      broughtInto,
+      ...place,
       accounts: mine.accounts,
       settings,
       routines: asked,
@@ -764,6 +784,8 @@ async function orgReach(deps: ChatDeps, orgId: string) {
 /** A run of one person's messages waiting for an answer: answered as them, with the history up to its last one. */
 export interface WaitingRun {
   authorId: string;
+  /** Index of the run's first message in the list it came from. */
+  from: number;
   /** Index of the run's last message in the list it came from. */
   upTo: number;
 }
@@ -794,7 +816,7 @@ export function waitingRuns(messages: ChatMessage[]): WaitingRun[] {
     if (m.authorKind !== 'person' || !m.authorUserId) continue;
     const last = runs[runs.length - 1];
     if (last && last.authorId === m.authorUserId && messages.slice(last.upTo + 1, i).every((x) => x.authorKind === 'agent')) last.upTo = i;
-    else runs.push({ authorId: m.authorUserId, upTo: i });
+    else runs.push({ authorId: m.authorUserId, from: i, upTo: i });
   }
   return runs;
 }
@@ -830,8 +852,9 @@ export async function answerWaiting(
   thread: ChatThreadHead,
   caller?: { userId: string; accessToken?: string },
 ): Promise<{ replied: boolean }> {
-  const agent = await deps.chat.agent(thread.agentId);
-  if (!agent) throw new Refusal(404, 'not_found', 'agent not found');
+  // General has no agent of its own: only those @mentioned answer there (general-chat.md).
+  const agent = thread.agentId ? await deps.chat.agent(thread.agentId) : null;
+  if (thread.agentId && !agent) throw new Refusal(404, 'not_found', 'agent not found');
 
   const { names, orgName, agents, reachOf } = await orgReach(deps, thread.orgId);
   const canTalk = new Map<string, boolean>();
@@ -844,7 +867,7 @@ export async function answerWaiting(
     const messages = await deps.chat.recentMessages(thread.id, 40);
     // An empty chat is a new agent's first one: it introduces itself to whoever opened it.
     if (messages.length === 0) {
-      if (!caller) break;
+      if (!caller || !agent) break;
       const replyId = await deps.chat.startReply(thread, agent, ['Presentándome']);
       if (!replyId) break;
       const mine = await reachOf(agent, undefined, caller);
@@ -854,13 +877,13 @@ export async function answerWaiting(
     }
     for (const run of waitingRuns(messages)) {
       const history = messages.slice(0, run.upTo + 1);
-      const responders = whoAnswers(history, agent, agents, names);
+      const responders = whoAnswers(messages.slice(run.from, run.upTo + 1), agent, agents, names);
       if (responders.length === 0 || !(await talks(run.authorId))) continue;
       const asked = history[history.length - 1]!;
       const token = caller && caller.userId === run.authorId ? caller.accessToken : undefined;
       for (const who of responders) {
         // An agent the asker may not talk to stays out of it.
-        if (who.id !== agent.id && (await deps.chat.levelFor(who.id, run.authorId)) !== 'talk') continue;
+        if (who.id !== agent?.id && (await deps.chat.levelFor(who.id, run.authorId)) !== 'talk') continue;
         const replyId = await deps.chat.startReply(thread, who, ['Leyendo la conversación'], { replyTo: asked.id });
         if (!replyId) break rounds; // a reply is being written; what waits is answered once it ends
         if (who.runner === 'ordago_job' && deps.jobs) {
@@ -876,7 +899,7 @@ export async function answerWaiting(
           break rounds;
         }
         // Read now, so a second agent reads the first one's answer too; never what was written after the message it answers.
-        const mine = await reachOf(who, who.id === agent.id ? undefined : agent.name, { userId: run.authorId, accessToken: token });
+        const mine = await reachOf(who, placeIn(thread, who, agent), { userId: run.authorId, accessToken: token });
         await writeReply(deps, replyId, who, mine.system, await turnsOf(deps, thread.id, who.id, asked.id), mine.tools, { threadId: thread.id, userId: run.authorId });
         await summarizeIfLong(deps, thread, who);
         replied = true;
@@ -978,9 +1001,9 @@ async function goOn(deps: ChatDeps, thread: ChatThreadHead, agent: ChatAgent, wa
   }
   const who = (await waited.memberName(actorId)) ?? 'Alguien';
   await waited.settle(who);
-  const threadAgent = agent.id === thread.agentId ? null : await deps.chat.agent(thread.agentId);
+  const threadAgent = thread.agentId && agent.id !== thread.agentId ? await deps.chat.agent(thread.agentId) : agent;
   const { reachOf } = await orgReach(deps, thread.orgId);
-  const mine = await reachOf(agent, threadAgent?.name, { userId: actorId, accessToken });
+  const mine = await reachOf(agent, placeIn(thread, agent, threadAgent), { userId: actorId, accessToken });
   const turns = await turnsOf(deps, thread.id, agent.id);
   const line = `${who}: Ya tienes acceso a ${waited.name}. Sigue con lo que se te pidió.`;
   const lastTurn = turns[turns.length - 1];

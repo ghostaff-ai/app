@@ -205,12 +205,16 @@ export interface ChatMessage {
 /** A thread as the lists show it: its last message and whether it waits for you. */
 export interface ChatThread {
   id: string;
-  agentId: string;
+  /** An agent's chat, or General: the people's chat, one per organisation, with no agent (general-chat.md). */
+  kind: 'agent' | 'general';
+  agentId: string | null;
   title: string;
   createdAt: string;
   lastMessageAt: string;
   lastAuthor: string | null;
   lastText: string | null;
+  /** When the newest message is a voice note, its length: General's row says «Nota de voz · 0:38», not its transcript. */
+  lastVoiceMs: number | null;
   unread: boolean;
   /** The person wrote, read or was @mentioned in it: a reply reaches their phone. */
   following: boolean;
@@ -264,6 +268,19 @@ export function mentionQuery(textBeforeCursor: string): string | null {
   if (q === undefined) return null;
   // Two spaces in a row end it; one could still be inside a two-word name.
   return q.includes('  ') ? null : q;
+}
+
+/**
+ * The names a text tags when it is nothing but @mentions («@Secretaría
+ * @Finanzas»): what a voice note recorded next carries (general-chat.md,
+ * decision 6). Null when the text says anything else; empty when it is empty.
+ */
+export function onlyMentions(text: string, names: string[]): string[] | null {
+  const segments = splitMentions(text.trim(), names);
+  if (segments.some((s) => !s.mention && s.text.trim() !== '')) return null;
+  const key = (n: string) => n.toLocaleLowerCase('es');
+  const tagged = segments.filter((s) => s.mention).map((s) => key(s.text.slice(1)));
+  return [...new Set(names)].filter((n) => tagged.includes(key(n)));
 }
 
 /** The names that start with what was typed after the @, at most `limit`. */

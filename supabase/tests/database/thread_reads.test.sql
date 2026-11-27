@@ -60,13 +60,13 @@ select is(
 select public.set_agent_access('20000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000b', 'none');
 
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
-select is((select count(*) from public.my_threads('10000000-0000-0000-0000-000000000001')), 1::bigint, 'with none, Finanzas'' chat leaves the list');
+select is((select count(*) from public.my_threads('10000000-0000-0000-0000-000000000001') where kind = 'agent'), 1::bigint, 'with none, Finanzas'' chat leaves the list');
 select throws_ok($$ select public.mark_thread_read((select id from ids where name = 'cierre')) $$, 'P0002', null, '... and cannot be marked');
 
 -- Carla: nothing of the bakery.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000c", "role": "authenticated"}';
 select is(
-  (select count(*) from public.my_threads('10000000-0000-0000-0000-000000000001')) + (select count(*) from public.thread_reads),
+  (select count(*) from public.my_threads('10000000-0000-0000-0000-000000000001') where kind = 'agent') + (select count(*) from public.thread_reads),
   0::bigint, 'another organisation sees neither the threads nor anyone''s marks');
 
 select * from finish();

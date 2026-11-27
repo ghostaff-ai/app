@@ -5,10 +5,10 @@ import { Image, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Icon, Plus, UsersThree, WarningCircle } from '@/components/icons';
 import { SpaceSwitcher } from '@/components/SpaceSwitcher';
 import { EmptyState, ErrorText, ListRow, ListSection, Loading, RowIcon, ScreenTitle } from '@/components/ui';
-import { shortTime, teamRows } from '@/lib/chat';
+import { generalChat, generalLastLine, shortTime, teamRows } from '@/lib/chat';
 import { canRunAgents } from '@/lib/connections';
 import { useAgents } from '@/lib/hooks/useAgents';
-import { useThreads } from '@/lib/hooks/useChat';
+import { useMembers, useThreads } from '@/lib/hooks/useChat';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useFirstHello } from '@/lib/hooks/useFirstHello';
 import { DESKTOP_CONTENT_MAX_WIDTH, desktopSection, useIsDesktop, useReplacesBeside } from '@/lib/layout';
@@ -21,7 +21,8 @@ import { usePalette } from '@/lib/theme';
 // WhatsApp, Secretaría first and then whoever spoke last, with its last word
 // and an orange dot while it waits unread. A tap opens its chat, everyone's
 // with it (group-chat-per-agent.md). An owner adds agents from the last row
-// (decision 5).
+// (decision 5). Above them all, once there are two people, General: the
+// people's chat, where they talk to each other by voice (general-chat.md).
 // On a phone it is the Equipo tab; on a desktop the column beside the open
 // chat (docs/plans/ongoing/desktop-web.md), with that chat's row marked.
 
@@ -35,6 +36,7 @@ export function TeamList() {
   const orgId = active?.id ?? null;
   const agents = useAgents(orgId);
   const { threads, reload: reloadThreads } = useThreads(orgId);
+  const { members, reload: reloadMembers } = useMembers(orgId);
   const connections = useConnections(orgId);
   const { reload: reloadAgents } = agents;
   const { reload: reloadConnections } = connections;
@@ -45,8 +47,9 @@ export function TeamList() {
       void reloadAgents();
       void reloadThreads();
       void reloadConnections();
+      void reloadMembers();
       return () => setFocused(false);
-    }, [reloadAgents, reloadThreads, reloadConnections]),
+    }, [reloadAgents, reloadThreads, reloadConnections, reloadMembers]),
   );
   // Beside a chat the list stays mounted: read the last words and unread dots
   // again when another chat opens (reading one clears its dot).
@@ -68,6 +71,7 @@ export function TeamList() {
   // An owner never gets here without an AI account (the layout's gate); a member can't connect one.
   const noAi = connections.loaded && !connections.error && !canRunAgents(connections.items);
   const rows = teamRows(agents.items, threads);
+  const general = generalChat(threads, members.length);
   const section = desktopSection(path);
   const open = desktop && section.list === 'team' ? section.open : null;
 
@@ -105,6 +109,34 @@ export function TeamList() {
             </Text>
           </View>
         </View>
+      ) : null}
+
+      {general ? (
+        <ListSection>
+          <ListRow
+            testID="general"
+            accessibilityLabel={`General${general.unread ? ', mensajes sin leer' : ''}`}
+            leading={
+              <View className="h-12 w-12 items-center justify-center rounded-full bg-accent">
+                <Icon icon={UsersThree} size={24} color={c.onAccent} weight="bold" />
+              </View>
+            }
+            title="General"
+            subtitle={generalLastLine(general) ?? 'Habla con tu equipo, por audios'}
+            emphasis={general.unread}
+            trailing={
+              general.lastText !== null || general.lastVoiceMs !== null ? (
+                <View className="items-end">
+                  <Text className="text-caption text-muted">{shortTime(general.lastMessageAt)}</Text>
+                  {general.unread ? <View testID="general-unread" className="mt-1.5 h-2.5 w-2.5 rounded-full bg-waiting" /> : null}
+                </View>
+              ) : undefined
+            }
+            selected={desktop ? open === 'general' : undefined}
+            href="/general"
+            replace={replace}
+          />
+        </ListSection>
       ) : null}
 
       {rows.length === 0 ? (

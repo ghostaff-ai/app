@@ -11,7 +11,9 @@ import {
   markThreadRead,
   myAgentLevels,
   postMessage,
+  type OutgoingNote,
   sendVoiceNote,
+  sendVoiceNoteToThread,
   subscribeToThread,
   type ThreadHead,
   transcribeVoiceNote,
@@ -228,23 +230,23 @@ function useMarkReadWhileSeen(threadId: string | null) {
 }
 
 /**
- * Which agent a thread is the chat of: for a link to a thread id (a push or a
- * card from before one chat per agent). Undefined while loading, null when the
- * person may not read it.
+ * Where a link to a thread id opens (a push or a card from before one chat per
+ * agent): its agent's chat, or General (general-chat.md). Undefined while
+ * loading, null when the person may not read it.
  */
-export function useThreadAgent(threadId: string | null) {
-  const [agentId, setAgentId] = useState<string | null | undefined>(undefined);
+export function useThreadRoute(threadId: string | null) {
+  const [route, setRoute] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     if (!threadId) return;
     let alive = true;
     getThread(supabase, threadId)
-      .then((h) => alive && setAgentId(h?.agentId ?? null))
-      .catch(() => alive && setAgentId(null));
+      .then((h) => alive && setRoute(!h ? null : h.kind === 'general' ? '/general' : `/chat/${h.agentId}`))
+      .catch(() => alive && setRoute(null));
     return () => {
       alive = false;
     };
   }, [threadId]);
-  return agentId;
+  return route;
 }
 
 /** A short-lived link to play a voice note. */
@@ -300,9 +302,9 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
    * answers, both arriving live. A failed transcript shows on the note itself.
    */
   const sendVoice = useCallback(
-    async (note: RecordedNote) => {
+    async (note: RecordedNote, mentions: string[] = []) => {
       if (!engine || !agentId) throw new Error('not signed in');
-      const m = await sendVoiceNote(engine, agentId, note);
+      const m = await sendVoiceNote(engine, agentId, { ...note, mentions });
       if (chatId) chat.add(m);
       else setOpened(m.threadId);
       void transcribeVoiceNote(engine, m.id).catch(() => {});
@@ -327,5 +329,48 @@ export function useAgentChat(orgId: string | null, agentId: string | null) {
     sendVoice,
     retryTranscript,
     reload,
+  };
+}
+
+/**
+ * General, the people's chat (general-chat.md), live: everyone in the
+ * organisation reads and writes it, mostly by voice notes. Nobody answers
+ * unless a message @mentions an agent: the engine decides, as in any chat.
+ * A voice note goes with the agents tagged before recording it (decision 6).
+ */
+export function useGeneralChat(orgId: string | null) {
+  const fetch = useCallback(async () => (await listThreads(supabase, orgId!)).find((t) => t.kind === 'general') ?? null, [orgId]);
+  const { data: general, loading } = useLoad<ChatThread | null>(orgId ? fetch : null, null);
+  const chatId = general?.id ?? null;
+  const chat = useThread(chatId);
+  const engine = useEngine();
+
+  const sendVoice = useCallback(
+    async (note: RecordedNote, mentions: string[]) => {
+      if (!engine || !chatId) throw new Error('not signed in');
+      const outgoing: OutgoingNote = { ...note, mentions };
+      const m = await sendVoiceNoteToThread(engine, chatId, outgoing);
+      chat.add(m);
+      void transcribeVoiceNote(engine, m.id).catch(() => {});
+    },
+    [engine, chatId, chat.add],
+  );
+
+  const retryTranscript = useCallback(
+    async (messageId: string) => {
+      if (!engine) throw new Error('not signed in');
+      await transcribeVoiceNote(engine, messageId);
+    },
+    [engine],
+  );
+
+  return {
+    loading: loading || (chatId !== null && chat.head === undefined),
+    missing: !loading && general === null,
+    messages: chat.messages,
+    error: chat.error,
+    send: chat.send,
+    sendVoice,
+    retryTranscript,
   };
 }

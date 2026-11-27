@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { audioLines, completeMention, isAudioPart, mentionQuery, mentionSuggestions, messageText, splitMentions } from '../src/chat';
+import { audioLines, completeMention, isAudioPart, mentionQuery, mentionSuggestions, messageText, onlyMentions, splitMentions } from '../src/chat';
 
 describe('messageText', () => {
   it('joins the text parts and skips the rest', () => {
@@ -51,5 +51,19 @@ describe('mentions while typing', () => {
   it('suggests names that start with it, and completes one', () => {
     expect(mentionSuggestions('an', ['Ana', 'Redes', 'Ana María'])).toEqual(['Ana', 'Ana María']);
     expect(completeMention('pregunta a @Fin', 'Finanzas')).toBe('pregunta a @Finanzas ');
+  });
+});
+
+describe('onlyMentions (general-chat.md, decision 6)', () => {
+  const names = ['Secretaría', 'Finanzas', 'Ana'];
+  it('gives the names a text tags when it is nothing but mentions', () => {
+    expect(onlyMentions('@Secretaría ', names)).toEqual(['Secretaría']);
+    expect(onlyMentions(' @finanzas  @Secretaría', names)).toEqual(['Secretaría', 'Finanzas']);
+    expect(onlyMentions('', names)).toEqual([]);
+  });
+  it('is null when the text says anything else', () => {
+    expect(onlyMentions('@Secretaría apunta esto', names)).toBeNull();
+    expect(onlyMentions('hola', names)).toBeNull();
+    expect(onlyMentions('@Nadie', names)).toBeNull();
   });
 });

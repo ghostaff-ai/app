@@ -53,7 +53,7 @@ select throws_ok(
   '42501', null, 'an owner cannot set levels on another organisation''s agent');
 insert into ids select 'hilo', thread_id from public.chat_with((select id from ids where name = 'finanzas'), '  ¿Cerramos   octubre? ');
 select isnt((select id from ids where name = 'hilo'), null, 'an owner writes to Finanzas, opening its chat');
-select is((select title from public.threads), 'Finanzas', '... titled with the agent''s name');
+select is((select title from public.threads where kind = 'agent'), 'Finanzas', '... titled with the agent''s name');
 select is(
   (select parts->0->>'text' from public.messages),
   '¿Cerramos   octubre?',
@@ -83,7 +83,7 @@ select throws_ok(
   '42501', null, '... nor list everyone''s');
 select throws_ok(
   $$ insert into public.messages (thread_id, org_id, author_kind, author_name, parts)
-     select id, org_id, 'agent', 'Finanzas', '[]' from public.threads limit 1 $$,
+     select id, org_id, 'agent', 'Finanzas', '[]' from public.threads where kind = 'agent' limit 1 $$,
   '42501', null, 'nobody writes messages directly');
 
 -- Ana lowers Bea to none on Finanzas and lets Dani talk to it.
@@ -98,11 +98,11 @@ select results_eq(
   $$ select display_name, level, is_default from public.list_agent_access((select id from ids where name = 'finanzas')) $$,
   $$ values ('Ana', 'talk', false), ('Bea', 'none', false), ('Dani', 'talk', false) $$,
   'the owner sees everyone''s level, owners first');
-select is((select count(*) from public.threads), 2::bigint, 'an owner reads every agent''s chat');
+select is((select count(*) from public.threads where kind = 'agent'), 2::bigint, 'an owner reads every agent''s chat');
 
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}';
 select is((select count(*) from public.agents), 1::bigint, 'with none, Bea no longer sees Finanzas');
-select is((select count(*) from public.threads), 1::bigint, '... nor its chat');
+select is((select count(*) from public.threads where kind = 'agent'), 1::bigint, '... nor its chat');
 select results_eq(
   $$ select level from public.my_agent_levels('10000000-0000-0000-0000-000000000001') $$,
   $$ values ('talk') $$,
@@ -115,7 +115,7 @@ select lives_ok(
 
 -- Carla, owner of the workshop: nothing of the bakery.
 set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000c", "role": "authenticated"}';
-select is((select count(*) from public.threads), 0::bigint, 'another organisation sees none of its threads');
+select is((select count(*) from public.threads where kind = 'agent'), 0::bigint, 'another organisation sees none of its threads');
 select is((select count(*) from public.messages), 0::bigint, '... nor its messages');
 select is((select count(*) from public.agent_access), 0::bigint, '... nor its levels');
 select throws_ok(
