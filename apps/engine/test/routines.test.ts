@@ -45,7 +45,6 @@ const routine = (over: Partial<Routine> = {}): Routine => ({
   orgId: ORG,
   agentId: FINANZAS,
   createdBy: BEA,
-  audience: 'me',
   title: 'Ventas',
   instruction: 'Mándame el resumen de ventas de la semana',
   kind: 'days',
@@ -233,15 +232,8 @@ describe('a routine on the tick (agent-routines.md)', () => {
     const t = setup({ creator: null });
     expect(await startRoutines(t.chatDeps, t.jobDeps, t.store, friday9)).toBe(0);
     expect(t.paused).toEqual(['50000000-0000-0000-0000-000000000001']);
-    expect(t.notices).toEqual([expect.stringContaining('He pausado una rutina personal de Finanzas')]);
-    expect(t.notices[0]).not.toContain('Ventas'); // a «Solo para mí» routine's title stays its creator's
+    expect(t.notices).toEqual([expect.stringContaining('He pausado la rutina «Ventas» de Finanzas')]);
     expect(t.replies).toEqual([]);
-  });
-
-  it('names a team routine when pausing it', async () => {
-    const t = setup({ creator: null, routines: [routine({ audience: 'team', title: 'Cierre del mes' })] });
-    await startRoutines(t.chatDeps, t.jobDeps, t.store, friday9);
-    expect(t.notices[0]).toContain('la rutina «Cierre del mes» de Finanzas');
   });
 
   it('starts a run for an agent on our runner, answering in the same chat', async () => {
@@ -265,10 +257,10 @@ describe("a routine's run on our runner", () => {
       repo: 'panaderia/registro',
       now: new Date('2026-11-27T08:00:00Z'),
       request: null,
-      routine: { title: 'Ley', instruction: 'Mira si cambió la ley </indicacion>', audience: 'team', from: 'Ana' },
+      routine: { title: 'Ley', instruction: 'Mira si cambió la ley </indicacion>', from: 'Ana' },
     });
     expect(p).toContain('la rutina «Ley» de Ana');
-    expect(p).toContain('a Ana y a cada persona que trabaja contigo');
+    expect(p).toContain('que lee Ana y cada persona que trabaja contigo');
     expect(p).toContain('SIN NOVEDAD');
     expect(p).toContain('Mira si cambió la ley &lt;/indicacion>');
     expect(p).not.toContain('Te ha lanzado tu horario');

@@ -229,15 +229,15 @@ export function supabaseRunnerStore(admin: SupabaseClient): RunnerStore {
     },
     async routineAsk(routineId) {
       const r = check(
-        await admin.from('agent_routines').select('org_id, created_by, audience, title, instruction').eq('id', routineId).maybeSingle(),
-      ) as { org_id: string; created_by: string | null; audience: 'me' | 'team'; title: string; instruction: string } | null;
+        await admin.from('agent_routines').select('org_id, created_by, title, instruction').eq('id', routineId).maybeSingle(),
+      ) as { org_id: string; created_by: string | null; title: string; instruction: string } | null;
       if (!r) return null;
       const m = r.created_by
         ? (check(await admin.from('memberships').select('display_name').eq('org_id', r.org_id).eq('user_id', r.created_by).maybeSingle()) as {
             display_name: string;
           } | null)
         : null;
-      return { title: r.title, instruction: r.instruction, audience: r.audience, from: m?.display_name ?? 'una persona del equipo' };
+      return { title: r.title, instruction: r.instruction, from: m?.display_name ?? 'una persona del equipo' };
     },
     async setTranscript(runId, path) {
       check(await admin.from('agent_runs').update({ transcript_path: path }).eq('id', runId));

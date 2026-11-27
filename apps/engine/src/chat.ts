@@ -163,7 +163,7 @@ export interface ChatStore extends ContextStore {
     input: Record<string, unknown>;
     label: string;
     requestedBy: string;
-    /** Who approves it: an owner, or the person who asked (their own «Solo para mí» routine). */
+    /** Who approves it: an owner, or the person who asked (a routine they make or made). */
     decider: 'owner' | 'requester';
   }): Promise<string>;
   touchThread(threadId: string): Promise<void>;
@@ -744,7 +744,7 @@ async function orgReach(deps: ChatDeps, orgId: string) {
     const settings = isMainAgent(who) && asked;
     if (asked && deps.asPerson && accessToken) {
       // Every agent may propose its own routines; the main agent every setting.
-      mine = mergeTools(mine, settingsTools({ client: deps.asPerson(accessToken), orgId: who.orgId, agentId: who.id, onlySelf: !settings }));
+      mine = mergeTools(mine, settingsTools({ client: deps.asPerson(accessToken), orgId: who.orgId, agentId: who.id, userId: asker?.userId, onlySelf: !settings }));
     } else if (deps.orgReader) {
       // A routine's turn: who the organisation works with, so an agent reading the morning's invoices can propose one.
       mine = mergeTools(mine, unaskedSettingsTools(deps.orgReader, who.orgId, who.id));
@@ -1020,7 +1020,7 @@ export interface RoutineAsk {
   instruction: string;
   /** Who made it, as they sign in the chat. */
   from: string;
-  /** Who made it: their «Solo para mí» routine's cards are theirs to decide. */
+  /** Who made it: their routine's cards are theirs to decide. */
   userId: string;
 }
 

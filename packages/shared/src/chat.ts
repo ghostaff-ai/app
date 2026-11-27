@@ -25,7 +25,7 @@ export interface ActionPart {
   result?: string;
   /** Who approved or rejected it. */
   decidedBy?: string;
-  /** Who decides it: an owner (absent), or the person who asked, for their own «Solo para mí» routine (agent-routines.md). */
+  /** Who decides it: an owner (absent), or the person who asked, for a routine they make or made (agent-routines.md). */
   decider?: 'owner' | 'requester';
   /** Who asked for it, when that person decides. */
   requestedBy?: string;

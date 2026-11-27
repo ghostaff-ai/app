@@ -5,7 +5,6 @@ import {
   describeWhen,
   invalidWhen,
   type Routine,
-  type RoutineAudience,
   type RoutineKind,
   type RoutineWhen,
   type Weekday,
@@ -22,8 +21,9 @@ import { parseClock, routineRefusal, titleFrom } from '@/lib/routines';
 import { supabase } from '@/lib/supabase';
 
 // A new routine, or one to change (agent-routines.md): what the agent will
-// do, when, and, for an owner, whether its answer reaches only them or the
-// whole team. What it says under «Cuándo» is what the agent will be held to.
+// do, and when. Its answer lands in the agent's chat, which everyone with
+// access reads (group-chat-per-agent.md, decision 6). What it says under
+// «Cuándo» is what the agent will be held to.
 // Changing it starts it again from now; pausing and deleting are here too.
 
 export default function Rutina() {
@@ -38,7 +38,6 @@ export default function Rutina() {
   const [weekdays, setWeekdays] = useState<Weekday[]>([1, 2, 3, 4, 5]);
   const [monthDay, setMonthDay] = useState('1');
   const [time, setTime] = useState('9:00');
-  const [audience, setAudience] = useState<RoutineAudience>('me');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -56,7 +55,6 @@ export default function Rutina() {
         setWeekdays(r.weekdays);
         setMonthDay(String(r.monthDay ?? 1));
         setTime(`${r.hour}:${String(r.minute).padStart(2, '0')}`);
-        setAudience(r.audience);
       })
       .catch(() => setExisting(null));
   }, [id, orgId, agentId]);
@@ -66,7 +64,6 @@ export default function Rutina() {
   if (!agent) return <Notice title="No encontramos este agente" />;
   if (id && !existing) return <Notice title="No encontramos esta rutina" body="Puede que la hayan borrado." />;
 
-  const owner = active?.role === 'owner';
   const clock = parseClock(time);
   const day = Number(monthDay);
   const when: RoutineWhen | null = clock
@@ -87,7 +84,7 @@ export default function Rutina() {
     const input = { ...when, title: title.trim() || titleFrom(instruction), instruction: instruction.trim() };
     try {
       if (existing) await updateRoutine(supabase, existing.id, input);
-      else await createRoutine(supabase, agent.id, audience, input);
+      else await createRoutine(supabase, agent.id, input);
       router.back();
     } catch (e) {
       setError(routineRefusal(e));
@@ -191,27 +188,7 @@ export default function Rutina() {
         {whenProblem ?? (when ? describeWhen(when) : '')}
       </Text>
 
-      {owner && !existing ? (
-        <>
-          <Text className="mt-6 text-footnote font-medium text-ink">Para quién</Text>
-          <View className="mt-2">
-            <Segmented<RoutineAudience>
-              label="Para quién"
-              value={audience}
-              onChange={setAudience}
-              options={[
-                { value: 'me', label: 'Solo para mí' },
-                { value: 'team', label: 'Todo el equipo' },
-              ]}
-            />
-          </View>
-          <Text className="mt-2 text-footnote text-muted">
-            {audience === 'me'
-              ? `La respuesta te llega solo a ti, en tu chat con ${agent.name}.`
-              : `La respuesta llega a todas las personas que ven a ${agent.name}.`}
-          </Text>
-        </>
-      ) : null}
+      <Text className="mt-6 text-footnote text-muted">La respuesta queda en el chat de {agent.name}, que lee todo el que tiene acceso.</Text>
 
       <View className="mt-8">
         <Button testID="routine-save" label={existing ? 'Guardar cambios' : 'Guardar rutina'} onPress={() => void save()} disabled={!ready} busy={busy} />

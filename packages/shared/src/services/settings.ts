@@ -27,7 +27,7 @@ import {
   type ExternalPartyInput,
   MAIN_AGENT_JOB,
 } from '../models';
-import { ALL_WEEKDAYS, describeWhen, invalidWhen, MAX_ROUTINES_PER_PERSON, type Routine, type RoutineAudience, type Weekday } from '../routines';
+import { ALL_WEEKDAYS, describeWhen, invalidWhen, MAX_ROUTINES_PER_PERSON, type Routine, type Weekday } from '../routines';
 import { cleanExternalParty, getExternalParty, invalidExternalParty, listExternalParties, removeExternalParty, saveExternalParty } from './externalParties';
 import {
   createAgent,
@@ -56,6 +56,8 @@ export interface SettingsContext {
   orgId: string;
   /** The agent proposing. It never changes its own reach. */
   agentId: string;
+  /** Who asked, when known: they decide a change to a routine they made (agent-routines.md, decision 1). */
+  userId?: string;
   /**
    * Set for every agent but the main one: it may only read and propose its
    * own routines (agent-routines.md, «By asking») and who the organisation
@@ -75,8 +77,8 @@ export interface SettingTool {
   step: string;
   /**
    * What the approval card says, in Spanish, with what is now and what it will
-   * be, and who decides it: an owner, or the person who asked (their own
-   * «Solo para mí» routine). Throws SettingError on bad input.
+   * be, and who decides it: an owner, or the person who asked (a routine they
+   * make, or one they made). Throws SettingError on bad input.
    */
   describe?(ctx: SettingsContext, input: Record<string, unknown>): Promise<{ label: string; preview: string; decider?: Decider }>;
   /** Makes the change, or reads; returns what the model reads back. Throws SettingError for a refusal it should hear. */
@@ -374,12 +376,11 @@ export const SETTING_TOOLS: SettingTool[] = [
   {
     name: 'settings_create_routine',
     description:
-      "Propose a routine: something an agent will do on its own at an hour, as if the person wrote it to it then; its answer lands in their chat with that agent. Turn what they say («los viernes a las 9») into days (1 Monday … 7 Sunday; all seven for every day) or month_day (1–28, once a month), and hour and minute in the organisation's time. audience 'me' is for the person who asked, and they approve it; 'team' sends the answer to everyone who can see the agent, and an owner approves it. Once a day at most. Propose it only when they ask for something to happen regularly, or say yes when you offer it.",
+      "Propose a routine: something an agent will do on its own at an hour, as if the person wrote it to it then; its answer lands in that agent's chat, which everyone who can see the agent reads. Turn what they say («los viernes a las 9») into days (1 Monday … 7 Sunday; all seven for every day) or month_day (1–28, once a month), and hour and minute in the organisation's time. The person who asked approves it. Once a day at most. Propose it only when they ask for something to happen regularly, or say yes when you offer it.",
     input_schema: {
       type: 'object',
       properties: {
         agent_id: { type: 'string', description: "The agent that will do it; you, unless they ask for another agent's." },
-        audience: { type: 'string', enum: ['me', 'team'] },
         title: { type: 'string', description: 'A few words, up to 80 characters: «Resumen de ventas».' },
         instruction: { type: 'string', description: 'What the agent is asked each time, as the person would write it, up to 2000 characters.' },
         days: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 7 } },
@@ -387,28 +388,28 @@ export const SETTING_TOOLS: SettingTool[] = [
         hour: { type: 'integer', minimum: 0, maximum: 23 },
         minute: { type: 'integer', minimum: 0, maximum: 59 },
       },
-      required: ['agent_id', 'audience', 'title', 'instruction', 'hour'],
+      required: ['agent_id', 'title', 'instruction', 'hour'],
     },
     writes: true,
     step: 'Preparando la rutina',
     async describe(ctx, input) {
-      const { agent, audience, routine } = await newRoutine(ctx, input);
+      const { agent, routine } = await newRoutine(ctx, input);
       return {
         label: `Rutina de ${agent.name}: «${routine.title}»`,
-        preview: routinePreview(routine, audience),
-        decider: audience === 'me' ? 'requester' : 'owner',
+        preview: routinePreview(routine),
+        decider: 'requester',
       };
     },
     async run(ctx, input) {
-      const { agent, audience, routine } = await newRoutine(ctx, input);
-      const made = await createRoutine(ctx.client, agent.id, audience, routine);
+      const { agent, routine } = await newRoutine(ctx, input);
+      const made = await createRoutine(ctx.client, agent.id, routine);
       return `Rutina guardada: ${agent.name}, ${describeWhen(made).toLowerCase()}, «${made.title}».`;
     },
   },
   {
     name: 'settings_update_routine',
     description:
-      'Propose changing what a routine does or when (its id from settings_read_routines): pass all of it as it should be, with the same fields as settings_create_routine but no agent_id or audience.',
+      'Propose changing what a routine does or when (its id from settings_read_routines): pass all of it as it should be, with the same fields as settings_create_routine but no agent_id.',
     input_schema: {
       type: 'object',
       properties: {
@@ -430,7 +431,7 @@ export const SETTING_TOOLS: SettingTool[] = [
       return {
         label: `Cambiar la rutina «${now.title}»`,
         preview: `Ahora: ${describeWhen(now)}, «${now.title}»\nDespués: ${describeWhen(next)}, «${next.title}»\n${next.instruction}`,
-        decider: now.audience === 'me' ? 'requester' : 'owner',
+        decider: deciderOf(ctx, now),
       };
     },
     async run(ctx, input) {
@@ -455,7 +456,7 @@ export const SETTING_TOOLS: SettingTool[] = [
       return {
         label: `${paused ? 'Pausar' : 'Reanudar'} la rutina «${r.title}»`,
         preview: `Ahora: ${r.paused ? 'en pausa' : describeWhen(r)}\nDespués: ${paused ? 'en pausa' : describeWhen(r)}`,
-        decider: r.audience === 'me' ? 'requester' : 'owner',
+        decider: deciderOf(ctx, r),
       };
     },
     async run(ctx, input) {
@@ -600,7 +601,6 @@ function routineForModel(r: Routine, agentName: string | undefined) {
     id: r.id,
     agent_id: r.agentId,
     agent: agentName ?? null,
-    audience: r.audience,
     title: r.title,
     instruction: r.instruction,
     when: describeWhen(r),
@@ -608,11 +608,12 @@ function routineForModel(r: Routine, agentName: string | undefined) {
   };
 }
 
-const AUDIENCE_WORDS: Record<RoutineAudience, string> = { me: 'solo para quien la pide', team: 'todo el equipo que ve al agente' };
-
-function routinePreview(r: RoutineInput, audience: RoutineAudience): string {
-  return `Cuándo: ${describeWhen(r)}\nQué: ${r.instruction}\nPara: ${AUDIENCE_WORDS[audience]}`;
+function routinePreview(r: RoutineInput): string {
+  return `Cuándo: ${describeWhen(r)}\nQué: ${r.instruction}\nLo lee: todo el equipo que ve al agente`;
 }
+
+/** A routine's change is decided by whoever made it, when they asked; else by an owner (may_change_routine). */
+const deciderOf = (ctx: SettingsContext, r: Routine): Decider => (ctx.userId && r.createdBy === ctx.userId ? 'requester' : 'owner');
 
 /** The timetable and words of a routine, from the model's fields. */
 function routineFields(input: Record<string, unknown>): RoutineInput {
@@ -646,13 +647,12 @@ async function newRoutine(ctx: SettingsContext, input: Record<string, unknown>) 
   const agent = await agentOf(ctx, uuid(input, 'agent_id'));
   if (ctx.onlySelf && agent.id !== ctx.agentId) throw new SettingError('Solo puedes proponer rutinas tuyas; las de otro agente se piden a Secretaría.');
   if (agent.runner === 'ordago_job') throw new SettingError(`${agent.name} todavía no admite rutinas.`);
-  const audience = oneOf<RoutineAudience>(input, 'audience', ['me', 'team']);
   const routine = routineFields(input);
-  const mine = (await listRoutines(ctx.client, ctx.orgId)).filter((r) => r.audience === 'me').length;
-  if (audience === 'me' && mine >= MAX_ROUTINES_PER_PERSON) {
+  const mine = ctx.userId ? (await listRoutines(ctx.client, ctx.orgId)).filter((r) => r.createdBy === ctx.userId).length : 0;
+  if (mine >= MAX_ROUTINES_PER_PERSON) {
     throw new SettingError(`Ya tiene ${MAX_ROUTINES_PER_PERSON} rutinas, el máximo: que pause o borre alguna en la app antes.`);
   }
-  return { agent, audience, routine };
+  return { agent, routine };
 }
 
 async function routineOf(ctx: SettingsContext, input: Record<string, unknown>): Promise<Routine> {
