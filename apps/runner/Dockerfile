@@ -21,6 +21,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # ~/outbox/ audio): ffmpeg and ffprobe to cut, mix and encode; chromium to render a page headless, with a
 # text font and the colour emoji one so neither comes out as boxes. chromium also brings the libraries the
 # headless Chrome that Remotion downloads for itself needs (ordago-reels).
+# Files with a backslash in their name go (chromium's dependencies bring systemd, whose unit names have one, as
+# `system-systemd\x2dcryptsetup.slice`): Cloud Run's image import reads the backslash as a path separator and
+# makes a directory of the first part, writable by everyone, `agente` included (seen on the beta, 2026-11-28).
+# systemd never runs in the container, so nothing misses them.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl gnupg git python3 python3-yaml jq ripgrep \
       ffmpeg chromium fonts-liberation fonts-noto-color-emoji \
@@ -30,6 +34,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends "google-cloud-cli=${GOOGLE_CLOUD_CLI_VERSION}" \
  && apt-get purge -y gnupg && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/* \
+ && find / -xdev -name '*\\*' -print -delete \
  && npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
  && npm cache clean --force
 
