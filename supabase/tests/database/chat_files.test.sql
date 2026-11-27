@@ -1,4 +1,4 @@
--- Files in the chat (20261128140000_chat_files.sql): whoever may read the chat
+-- Files in the chat (20261128940000_chat_files.sql): whoever may read the chat
 -- opens its files and sees them listed; nobody else; a deleted message's file
 -- is opened by nobody; only the engine writes the bucket.
 begin;
