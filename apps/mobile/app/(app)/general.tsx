@@ -1,15 +1,15 @@
-import { LegendList } from '@legendapp/list/react-native';
 import { Stack, useFocusEffect } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useCallback, useMemo } from 'react';
-import { Platform, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { decideAction } from '@ghostaff/shared/services';
+import { ChatList } from '@/components/chat/ChatList';
 import { Composer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
 import { Icon, UsersThree } from '@/components/icons';
 import { Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { agentIdsNamed, showAuthors } from '@/lib/chat';
+import { agentIdsNamed } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useEngine } from '@/lib/hooks/useConnections';
@@ -38,7 +38,7 @@ export default function General() {
   const { items: agents, reload: reloadAgents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels } = useMyLevels(orgId);
-  const { messages, loading, missing, error, send, sendVoice, retryTranscript } = useGeneralChat(orgId);
+  const { messages, openedAt, readByAll, loading, missing, error, send, sendVoice, retryTranscript } = useGeneralChat(orgId);
 
   // While General is on screen, its pushes aren't shown.
   const { setOnScreen } = usePush();
@@ -57,7 +57,6 @@ export default function General() {
   );
   // Every agent's name is drawn bold in the messages, also one the viewer can't call.
   const shown = useMemo(() => [...agents.map((a) => a.name), ...members.map((m) => m.displayName)], [agents, members]);
-  const authors = useMemo(() => showAuthors(messages), [messages]);
   const ghostOf = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a.ghost])), [agents]);
   const people = useMemo(() => members.map((m) => (m.userId === me ? 'Tú' : m.displayName)).join(', '), [members, me]);
   const isOwner = active?.role === 'owner';
@@ -107,15 +106,20 @@ export default function General() {
             </Text>
           </View>
         ) : (
-          <LegendList
-            data={messages}
-            keyExtractor={(m) => m.id}
-            renderItem={({ item, index }) => (
+          <ChatList
+            messages={messages}
+            me={me}
+            openedAt={openedAt}
+            readByAll={readByAll}
+            extraData={cardState}
+            renderMessage={(row, ticks) => (
               <MessageView
-                message={item}
-                mine={item.authorKind === 'person' && item.authorUserId === me}
-                ghost={item.authorAgentId ? ghostOf[item.authorAgentId] : undefined}
-                showAuthor={authors[index] ?? true}
+                message={row.message}
+                mine={row.message.authorKind === 'person' && row.message.authorUserId === me}
+                ghost={row.message.authorAgentId ? ghostOf[row.message.authorAgentId] : undefined}
+                showAuthor={row.first}
+                ticks={ticks}
+                unplayed={row.unread}
                 names={shown}
                 canDecide={isOwner}
                 onDecide={decide}
@@ -123,19 +127,9 @@ export default function General() {
                 guides={guides}
                 onRetryTranscript={retryTranscript}
                 me={me}
-                foldTranscripts
+                transcript="none"
               />
             )}
-            estimatedItemSize={64}
-            extraData={cardState}
-            alignItemsAtEnd
-            initialScrollAtEnd
-            maintainScrollAtEnd
-            maintainVisibleContentPosition
-            // The web's list is a plain element that would print these as attributes.
-            {...(Platform.OS === 'web' ? {} : { keyboardDismissMode: 'interactive' as const, keyboardShouldPersistTaps: 'handled' as const })}
-            contentContainerStyle={{ paddingBottom: 16 }}
-            style={{ flex: 1 }}
           />
         )}
         {error ? <Text className="px-4 pb-1 text-footnote text-no">{error}</Text> : null}

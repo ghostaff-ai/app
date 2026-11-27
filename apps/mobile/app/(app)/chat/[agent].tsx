@@ -1,16 +1,16 @@
-import { LegendList } from '@legendapp/list/react-native';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, Platform, Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { shortNext, soonest } from '@ghostaff/shared';
 import { agentJob, decideAction } from '@ghostaff/shared/services';
+import { ChatList } from '@/components/chat/ChatList';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
 import { MessageView } from '@/components/chat/Message';
 import { Clock, Icon } from '@/components/icons';
 import { Button, Loading, Notice } from '@/components/ui';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { agentIdsNamed, showAuthors } from '@/lib/chat';
+import { agentIdsNamed } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useGuideCards } from '@/lib/hooks/useGuideCards';
@@ -80,7 +80,7 @@ export default function Chat() {
   const { items: agents, loading: agentsLoading, reload: reloadAgents } = useAgents(orgId);
   const { members } = useMembers(orgId);
   const { levels, loading: levelsLoading } = useMyLevels(orgId);
-  const { messages, loading, error, send: sendPlain, askAbout, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
+  const { messages, openedAt, readByAll, loading, error, send: sendPlain, askAbout, sendVoice, retryTranscript } = useAgentChat(orgId, agentId ?? null);
   const send = useCallback(
     async (body: string) => {
       if (!aboutId) return sendPlain(body);
@@ -121,7 +121,6 @@ export default function Chat() {
   const me = session?.user.id;
   const agent = agents.find((a) => a.id === agentId);
   const names = useMemo(() => [...agents.map((a) => a.name), ...members.filter((m) => m.userId !== me).map((m) => m.displayName)], [agents, members, me]);
-  const authors = useMemo(() => showAuthors(messages), [messages]);
   const ghostOf = useMemo(() => Object.fromEntries(agents.map((a) => [a.id, a.ghost])), [agents]);
   const owner = members.find((m) => m.role === 'owner' && m.userId !== me)?.displayName ?? null;
   const isOwner = active?.role === 'owner';
@@ -206,35 +205,30 @@ export default function Chat() {
             <Text className="mt-6 text-center text-footnote text-muted">La ve todo el que tiene acceso a {agent.name}.</Text>
           </View>
         ) : (
-          <LegendList
-            data={messages}
-            keyExtractor={(m) => m.id}
-            renderItem={({ item, index }) => (
+          <ChatList
+            messages={messages}
+            me={me}
+            openedAt={openedAt}
+            readByAll={readByAll}
+            extraData={cardState}
+            renderMessage={(row, ticks) => (
               <MessageView
-                message={item}
-                mine={item.authorKind === 'person' && item.authorUserId === me}
-                ghost={item.authorAgentId ? ghostOf[item.authorAgentId] : undefined}
-                showAuthor={authors[index] ?? true}
+                message={row.message}
+                mine={row.message.authorKind === 'person' && row.message.authorUserId === me}
+                ghost={row.message.authorAgentId ? ghostOf[row.message.authorAgentId] : undefined}
+                showAuthor={row.first}
+                ticks={ticks}
+                unplayed={row.unread}
                 names={names}
                 canDecide={isOwner}
                 onDecide={decide}
                 asks={asks}
                 guides={guides}
                 onRetryTranscript={retryTranscript}
-                routineTitle={item.routineId ? routineTitles[item.routineId] : null}
+                routineTitle={row.message.routineId ? routineTitles[row.message.routineId] : null}
                 me={me}
               />
             )}
-            estimatedItemSize={64}
-            extraData={cardState}
-            alignItemsAtEnd
-            initialScrollAtEnd
-            maintainScrollAtEnd
-            maintainVisibleContentPosition
-            // The web's list is a plain element that would print these as attributes.
-            {...(Platform.OS === 'web' ? {} : { keyboardDismissMode: 'interactive' as const, keyboardShouldPersistTaps: 'handled' as const })}
-            contentContainerStyle={{ paddingBottom: 16 }}
-            style={{ flex: 1 }}
           />
         )}
         {error ? <Text className="px-4 pb-1 text-footnote text-no">{error}</Text> : null}

@@ -33,7 +33,7 @@ import type {
   Profile,
 } from '../models';
 import { ACTION_KIND } from '../models';
-import { type ChatMessage, type ChatThread, isDecisionQuotePart, type MessagePart, type OrgMember } from '../chat';
+import { type ChatMessage, type ChatThread, isDecisionQuotePart, type MessagePart, type OrgMember, waveformToDigits } from '../chat';
 import type { Routine, RoutineWhen, Weekday } from '../routines';
 
 // The only place the app talks to the database. Screens, hooks and components
@@ -994,12 +994,15 @@ export interface OutgoingNote {
   durationMs: number | null;
   /** Agent ids: the note goes out with «@Name» before it, and they answer it. */
   mentions?: string[];
+  /** How loud it was, 0 to 1 (chat-like-whatsapp.md); the bubble draws it. */
+  waveform?: number[];
 }
 
 function noteQuery(note: OutgoingNote): string {
   const q = new URLSearchParams();
   if (note.durationMs !== null) q.set('durationMs', String(Math.round(note.durationMs)));
   for (const id of note.mentions ?? []) q.append('mention', id);
+  if (note.waveform?.length) q.set('waveform', waveformToDigits(note.waveform));
   const s = q.toString();
   return s ? `?${s}` : '';
 }
@@ -1332,6 +1335,24 @@ export async function postMessage(client: SupabaseClient, threadId: string, body
 export async function markThreadRead(client: SupabaseClient, threadId: string): Promise<void> {
   const { error } = await client.rpc('mark_thread_read', { target_thread: threadId });
   if (error) throw error;
+}
+
+/** When the signed-in person last read the chat; null if never. Read before marking it, it is where «sin leer» begins. */
+export async function myReadMark(client: SupabaseClient, threadId: string): Promise<string | null> {
+  const { data, error } = await client.from('thread_reads').select('read_at').eq('thread_id', threadId).maybeSingle<{ read_at: string }>();
+  if (error) throw error;
+  return data?.read_at ?? null;
+}
+
+/**
+ * Up to when everyone else in the chat has read it (two blue ticks,
+ * chat-like-whatsapp.md): an instant, '-infinity' while someone hasn't opened
+ * it, null when nobody else reads it. Never who.
+ */
+export async function readByAllUntil(client: SupabaseClient, threadId: string): Promise<string | null> {
+  const { data, error } = await client.rpc('thread_read_by_all', { target_thread: threadId });
+  if (error) throw error;
+  return (data as string | null) ?? null;
 }
 
 /**

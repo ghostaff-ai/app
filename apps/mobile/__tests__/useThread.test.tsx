@@ -16,6 +16,8 @@ jest.mock('@ghostaff/shared/services', () => ({
   getThread: async () => ({ id: 't1', agentId: 'a1' }),
   listMessages: async () => [],
   markThreadRead: (...a: unknown[]) => mockMark(...a),
+  myReadMark: async () => null,
+  readByAllUntil: async () => null,
   subscribeToThread: (_c: unknown, _t: string, onMessage: (m: ChatMessage) => void) => {
     mockOnMessage = onMessage;
     return () => {};

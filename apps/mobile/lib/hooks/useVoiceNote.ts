@@ -2,11 +2,14 @@ import { AudioQuality, IOSOutputFormat, requestRecordingPermissionsAsync, setAud
 import { File } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import { foldLevels } from '@ghostaff/shared';
 
-// Voice notes (voice.md), as in WhatsApp: tap the mic, speak, send. The note
-// goes to the engine as audio, which keeps it and transcribes it. The file on
-// the phone is deleted once read; a note that couldn't go yet stays in memory
-// until it is sent or discarded.
+// Voice notes (voice.md), as in WhatsApp (chat-like-whatsapp.md): hold the
+// mic, speak, let go; or lock it and record hands-free, with pause. The note
+// goes to the engine as audio, which keeps it and transcribes it, with how loud
+// it was (the bubble's waveform, from the recorder's metering). The file on the
+// phone is deleted once read; a note that couldn't go yet stays in memory until
+// it is sent or discarded.
 
 /** A note stops by itself at 10:00 and is sent. */
 export const MAX_SECONDS = 600;
@@ -22,6 +25,7 @@ const MIN_MILLIS = 1000;
  */
 export const SPEECH: RecordingOptions = {
   extension: '.m4a',
+  isMeteringEnabled: true,
   sampleRate: 16000,
   numberOfChannels: 1,
   bitRate: 32000,
@@ -36,7 +40,7 @@ export const SPEECH: RecordingOptions = {
   web: { mimeType: 'audio/mp4;codecs=mp4a.40.2', bitsPerSecond: 32000 },
 };
 
-export type VoiceNoteState = 'idle' | 'recording' | 'sending';
+export type VoiceNoteState = 'idle' | 'recording' | 'paused' | 'sending';
 
 /** Between the press and the first sound: permission, audio session, prepare. Internal; the screen sees it as idle. */
 type Phase = VoiceNoteState | 'starting';
@@ -45,7 +49,18 @@ export interface RecordedNote {
   audio: Blob;
   mimeType: string;
   durationMs: number;
+  /** How loud it was, folded to the bubble's bars; empty where the recorder gives no metering. */
+  waveform: number[];
 }
+
+/** The recorder's metering (dBFS, -160 to 0) as a level from 0 to 1: speech sits between -50 and 0. */
+export function levelOf(db: number | undefined): number | null {
+  if (typeof db !== 'number' || !Number.isFinite(db)) return null;
+  return Math.max(0, Math.min(1, (db + 50) / 50));
+}
+
+/** How many of the latest levels the recording bar draws. */
+const LIVE_BARS = 32;
 
 export const DENIED = 'Ghostaff no tiene permiso para usar el micrófono. Actívalo en los ajustes.';
 const NOT_RECORDED = 'No he podido grabar. Inténtalo otra vez.';
@@ -72,6 +87,12 @@ export function useVoiceNote({ send }: { send: (note: RecordedNote) => Promise<v
   const [error, setError] = useState<string | null>(null);
   /** Whether a note waits to be sent again or discarded. */
   const [held, setHeld] = useState(false);
+  /** The latest levels, for the recording bar. */
+  const [live, setLive] = useState<number[]>([]);
+  /** Every level of this note, for its waveform. */
+  const levels = useRef<number[]>([]);
+  /** Let go before the recorder had started: drop it once it does. */
+  const dropWhenStarted = useRef(false);
 
   // What the callbacks below need to see now, not as of the render that made them.
   const phase = useRef<Phase>('idle');
@@ -138,7 +159,7 @@ export function useVoiceNote({ send }: { send: (note: RecordedNote) => Promise<v
         if (alive.current) setError(TOO_SHORT);
         return null;
       }
-      return { ...(await readRecording(uri)), durationMs };
+      return { ...(await readRecording(uri)), durationMs, waveform: foldLevels(levels.current) };
     } catch {
       if (alive.current) setError(NOT_RECORDED);
       return null;
@@ -147,9 +168,14 @@ export function useVoiceNote({ send }: { send: (note: RecordedNote) => Promise<v
     }
   };
 
-  /** «Enviar» while recording, and the 10:00 limit. */
+  /** Letting go of the mic, «Enviar» while locked, and the 10:00 limit. */
   const finish = useCallback(async () => {
-    if (phase.current !== 'recording') return;
+    if (phase.current === 'starting') {
+      // Let go before it started: a tap, not a note.
+      dropWhenStarted.current = true;
+      return;
+    }
+    if (phase.current !== 'recording' && phase.current !== 'paused') return;
     go('sending');
     try {
       const note = await finishRecording();
@@ -165,7 +191,7 @@ export function useVoiceNote({ send }: { send: (note: RecordedNote) => Promise<v
    * to the background): keep what there is, unsent, for the person to decide.
    */
   const interrupt = useCallback(async () => {
-    if (phase.current !== 'recording') return;
+    if (phase.current !== 'recording' && phase.current !== 'paused') return;
     go('sending');
     try {
       const note = await finishRecording();
@@ -207,6 +233,9 @@ export function useVoiceNote({ send }: { send: (note: RecordedNote) => Promise<v
     if (phase.current !== 'idle') return;
     setError(null);
     hold(null);
+    dropWhenStarted.current = false;
+    levels.current = [];
+    setLive([]);
     // Claimed now so a second press can't start another, and so that the
     // background event Android's permission dialog causes finds nothing to stop.
     phase.current = 'starting';
@@ -226,7 +255,7 @@ export function useVoiceNote({ send }: { send: (note: RecordedNote) => Promise<v
       if (alive.current) setError(NOT_RECORDED);
       return;
     }
-    if (!alive.current || phase.current !== 'starting') {
+    if (!alive.current || phase.current !== 'starting' || dropWhenStarted.current) {
       // Left the screen while asking: nothing is listening to this recording.
       phase.current = 'idle';
       recorder.stop().catch(() => {}).finally(() => discardFile(recorder.uri));
@@ -240,19 +269,45 @@ export function useVoiceNote({ send }: { send: (note: RecordedNote) => Promise<v
     // The recorder's own clock and state, not JS time: a call or another app
     // taking the microphone stops it, and what it has is kept unsent.
     clock.current = setInterval(() => {
+      // Paused on purpose: no clock, no levels, and not an interruption.
+      if (phase.current === 'paused') return;
       const status = recorder.getStatus();
       const stopped = !status.isRecording && Date.now() - began > 1000;
       if (status.durationMillis) lastMillis.current = status.durationMillis;
+      const level = levelOf(status.metering);
+      if (level !== null && status.isRecording) {
+        levels.current.push(level);
+        setLive((l) => [...l.slice(-(LIVE_BARS - 1)), level]);
+      }
       const s = Math.min(MAX_SECONDS, Math.floor(lastMillis.current / 1000));
       setSeconds(s);
       if (s >= MAX_SECONDS) void finish();
       else if (stopped) void interrupt();
-    }, 250);
+    }, 100);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorder, finish, interrupt]);
 
-  const cancel = useCallback(async () => {
+  /** Locked and recording: stops for a moment, and goes on where it left off. */
+  const pause = useCallback(() => {
     if (phase.current !== 'recording') return;
+    recorder.pause();
+    go('paused');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recorder]);
+
+  const resume = useCallback(() => {
+    if (phase.current !== 'paused') return;
+    recorder.record();
+    go('recording');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recorder]);
+
+  const cancel = useCallback(async () => {
+    if (phase.current === 'starting') {
+      dropWhenStarted.current = true;
+      return;
+    }
+    if (phase.current !== 'recording' && phase.current !== 'paused') return;
     stopClock();
     go('idle');
     setSeconds(0);
@@ -283,7 +338,7 @@ export function useVoiceNote({ send }: { send: (note: RecordedNote) => Promise<v
       alive.current = false;
       stopClock();
       kept.current = null;
-      if (phase.current === 'recording') {
+      if (phase.current === 'recording' || phase.current === 'paused') {
         phase.current = 'idle';
         recorder.stop().catch(() => {}).finally(() => discardFile(recorder.uri));
         void release();
@@ -291,5 +346,5 @@ export function useVoiceNote({ send }: { send: (note: RecordedNote) => Promise<v
     };
   }, [recorder]);
 
-  return { state, seconds, error, held, start, finish, cancel, resend, discard, clearError };
+  return { state, seconds, live, error, held, start, finish, cancel, pause, resume, resend, discard, clearError };
 }

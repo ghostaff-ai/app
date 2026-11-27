@@ -802,6 +802,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   take_refresh_lease: { reach: 'not_a_setting' },
   thread_level: { reach: 'not_a_setting' },
   thread_level_for: { reach: 'not_a_setting' },
+  thread_read_by_all: { reach: 'not_a_setting' },
 };
 
 /**
