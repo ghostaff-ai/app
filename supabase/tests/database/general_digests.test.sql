@@ -1,4 +1,4 @@
--- General's daily summaries (20261128110000_general_digests.sql): only the
+-- General's daily summaries (20261128900000_general_digests.sql): only the
 -- engine reads and writes them; the days due are each organisation's finished
 -- Madrid days with messages in General and no summary yet.
 begin;
