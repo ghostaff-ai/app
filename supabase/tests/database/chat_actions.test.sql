@@ -1,4 +1,4 @@
--- What you do with a message (20261128130000_chat_actions.sql): reply quoting
+-- What you do with a message (20261128930000_chat_actions.sql): reply quoting
 -- it, react, edit within 15 minutes, delete for everyone, pin, forward to an
 -- agent; nothing across organisations, nothing in someone else's name.
 begin;
