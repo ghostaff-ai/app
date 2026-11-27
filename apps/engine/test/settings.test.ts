@@ -62,6 +62,62 @@ describe('what the main agent may change (agent-settings.md)', () => {
   });
 });
 
+describe('what settings_read tells the main agent about each agent', () => {
+  const secretaria = '20000000-0000-0000-0000-000000000001';
+  const correo = '20000000-0000-0000-0000-000000000002';
+  const rows = [
+    {
+      id: secretaria, org_id: 'o', name: 'Secretaría', ghost: 'secretaria', is_main: true, department: 'direccion', member_default: 'talk',
+      runner: 'chat', description: null, schedule: null, accounts: null, repos: [], secrets: {}, created_at: '',
+    },
+    {
+      id: correo, org_id: 'o', name: 'Correo', ghost: 'secretaria', is_main: false, department: 'direccion', member_default: 'read',
+      runner: 'ghostaff', description: 'Lee cada día los buzones de Órdago', schedule: '0 9 * * *', accounts: null,
+      repos: [{ repo: 'ordago-app/ordago-apps', write: true }], secrets: { CORREO_INFO_PASSWORD: 'correo-info', CORREO_GMAIL_PASSWORD: 'correo-gmail' },
+      created_at: '',
+    },
+  ];
+  function client() {
+    const query = (data: unknown[]) => {
+      const q = { select: () => q, eq: () => q, order: () => q, returns: async () => ({ data, error: null }) };
+      return q;
+    };
+    return {
+      from: (t: string) => query(t === 'agents' ? rows : []),
+      rpc: () => ({ returns: async () => ({ data: [], error: null }) }),
+    } as unknown as SupabaseClient;
+  }
+  const read = async () => {
+    const tool = SETTING_TOOLS.find((t) => t.name === 'settings_read')!;
+    return JSON.parse(await tool.run({ client: client(), orgId: 'o', agentId: secretaria }, {}));
+  };
+
+  it('gives its job, so two agents drawn alike are not taken for the same work', async () => {
+    const { agents } = await read();
+    expect(agents[1]).toMatchObject({ name: 'Correo', job: 'Lee cada día los buzones de Órdago' });
+    expect(agents[0].job).toBeNull();
+  });
+
+  it('gives its own timetable, which is not a routine', async () => {
+    const { agents } = await read();
+    expect(agents[1]).toMatchObject({ runs: 'own_runner', schedule: { cron: '0 9 * * *', timezone: 'Europe/Madrid' } });
+    expect(agents[0]).toMatchObject({ runs: 'chat_only', schedule: null });
+  });
+
+  it('names the keys and repos it is given, never a value', async () => {
+    const { agents } = await read();
+    expect(agents[1]).toMatchObject({ keys: ['correo-info', 'correo-gmail'], repos: [{ repo: 'ordago-app/ordago-apps', write: true }] });
+    expect(agents[0]).toMatchObject({ keys: [], repos: [] });
+  });
+
+  it('says a ghost is only how an agent is drawn, and that keys are access too', () => {
+    const tool = SETTING_TOOLS.find((t) => t.name === 'settings_read')!;
+    expect(tool.description).toMatch(/ghost is only how/i);
+    expect(tool.description).toMatch(/keys/i);
+    expect(tool.description).toMatch(/schedule/i);
+  });
+});
+
 describe('routines as settings (agent-routines.md)', () => {
   const secretaria = '20000000-0000-0000-0000-000000000001';
   const finanzas = '20000000-0000-0000-0000-000000000002';

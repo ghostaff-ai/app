@@ -274,6 +274,9 @@ export interface Agent {
   createdAt: string;
 }
 
+/** The time zone an agent's `schedule` is read in: the engine's tick fires it by this clock. */
+export const AGENT_SCHEDULE_TIMEZONE = 'Europe/Madrid';
+
 export const AGENT_RUNNERS = ['chat', 'ordago_job', 'ghostaff'] as const;
 export type AgentRunner = (typeof AGENT_RUNNERS)[number];
 

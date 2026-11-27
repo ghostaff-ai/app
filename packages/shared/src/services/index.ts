@@ -1244,6 +1244,32 @@ export async function listAgents(client: SupabaseClient, orgId: string): Promise
   return (data ?? []).map(agentFromRow);
 }
 
+/**
+ * What each agent on a runner is given beyond connected accounts: the repos it clones (agents.repos) and the
+ * names of the organisation's keys it gets (agents.secrets, `{VARIABLE: name}`). Names only: a key's value is
+ * in the vault and never read here.
+ */
+export interface AgentRunnerSetup {
+  agentId: string;
+  repos: Array<{ repo: string; write: boolean }>;
+  keys: string[];
+}
+
+export async function listAgentRunnerSetup(client: SupabaseClient, orgId: string): Promise<AgentRunnerSetup[]> {
+  const { data, error } = await client
+    .from('agents')
+    .select('id, repos, secrets')
+    .eq('org_id', orgId)
+    .order('created_at')
+    .returns<Array<{ id: string; repos: Array<{ repo: string; write?: boolean }> | null; secrets: Record<string, string> | null }>>();
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    agentId: r.id,
+    repos: (r.repos ?? []).map((x) => ({ repo: x.repo, write: x.write === true })),
+    keys: Object.values(r.secrets ?? {}),
+  }));
+}
+
 export async function getAgent(client: SupabaseClient, id: string): Promise<Agent | null> {
   const { data, error } = await client.from('agents').select(AGENT_COLUMNS).eq('id', id).maybeSingle<AgentRow>();
   if (error) throw error;
