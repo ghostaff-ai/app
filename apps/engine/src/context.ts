@@ -199,7 +199,7 @@ export async function summarizeIfLong(deps: SummaryDeps, thread: ChatThreadHead,
     if (!fold) return;
     const last = fold[fold.length - 1]!;
     const prompt = summaryPrompt(conversation.summary, fold, agent.id);
-    const text = await writeSummary(deps, agent, prompt);
+    const text = await writeOnce(deps, { orgId: agent.orgId, agentId: agent.id }, SUMMARY_SYSTEM, prompt);
     if (!text) return;
     await deps.chat.saveSummary({ threadId: thread.id, agentId: agent.id, text, throughAt: last.createdAt, throughMessage: last.id });
   } catch (e) {
@@ -207,16 +207,25 @@ export async function summarizeIfLong(deps: SummaryDeps, thread: ChatThreadHead,
   }
 }
 
-/** The summary's text, from the first account that writes it; empty when none could. */
-async function writeSummary(deps: SummaryDeps, agent: ChatAgent, prompt: string): Promise<string> {
-  const accounts = await deps.chat.aiAccounts(agent.orgId);
+/**
+ * One text the engine writes for itself (a summary), with the organisation's
+ * AI accounts in their order, no tools: from the first account that writes it;
+ * empty when none could. Each try is recorded against `who`.
+ */
+export async function writeOnce(
+  deps: Pick<SummaryDeps, 'writerFor' | 'costOf'> & { chat: Pick<ContextStore, 'aiAccounts' | 'recordAiUse'> },
+  who: { orgId: string; agentId: string | null },
+  system: string,
+  prompt: string,
+): Promise<string> {
+  const accounts = await deps.chat.aiAccounts(who.orgId);
   for (const [i, account] of accounts.entries()) {
     let text = '';
     const got: { usage: { model: string; tokens: TokenUsage; limits: Limits | null } | null } = { usage: null };
     try {
-      const write = await deps.writerFor(agent.orgId, account, { busyFails: i < accounts.length - 1 });
+      const write = await deps.writerFor(who.orgId, account, { busyFails: i < accounts.length - 1 });
       await write({
-        system: SUMMARY_SYSTEM,
+        system,
         messages: [{ role: 'user', content: prompt }],
         tools: NO_TOOLS,
         onText: (t) => {
@@ -227,12 +236,12 @@ async function writeSummary(deps: SummaryDeps, agent: ChatAgent, prompt: string)
           got.usage = u;
         },
       });
-      await recordUse(deps.chat, deps.costOf, { orgId: agent.orgId, agentId: agent.id }, account, 'ok', got.usage);
+      await recordUse(deps.chat, deps.costOf, who, account, 'ok', got.usage);
       return text.trim();
     } catch (e) {
       const kind = failureKind(e);
       console.warn('summary account failed', account.provider, kind, e instanceof Error ? e.message.slice(0, 200) : typeof e);
-      if (kind !== 'busy') await recordUse(deps.chat, deps.costOf, { orgId: agent.orgId, agentId: agent.id }, account, kind, got.usage, e instanceof AiFailure ? e.limits : null);
+      if (kind !== 'busy') await recordUse(deps.chat, deps.costOf, who, account, kind, got.usage, e instanceof AiFailure ? e.limits : null);
     }
   }
   return '';
@@ -256,20 +265,39 @@ export function madridDayStart(day: string): string {
 
 const nextDay = (day: string) => new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 
+/** How a search tool over one chat presents itself to the model. */
+interface SearchFace {
+  name: string;
+  description: string;
+  step: string;
+  /** What it says when nothing matches. */
+  none: string;
+}
+
 /**
  * The search over the conversation the agent answers in, and nothing else: by
  * words, by Madrid days, or both. It reads Ghostaff's own messages, so it
  * writes nothing and needs no approval.
  */
 export function conversationTools(store: Pick<ContextStore, 'searchMessages'>, threadId: string, agentId: string): AgentTools {
+  return searchTools(store, threadId, agentId, {
+    name: CONVERSATION_TOOL,
+    description:
+      'Busca en los mensajes anteriores de esta conversación (lo que ya no ves: solo ves un resumen y los últimos mensajes). ' +
+      'Úsalo cuando necesites el detalle exacto de algo que se dijo antes: una cifra, un nombre, una instrucción, quién pidió qué. ' +
+      'Busca por palabras (todas deben aparecer, sin importar mayúsculas ni tildes), por días, o por ambas. Devuelve hasta 20 mensajes, del más antiguo al más reciente.',
+    step: 'Buscando en la conversación',
+    none: 'Nada en esta conversación con eso.',
+  });
+}
+
+/** A search over one chat's messages (`threadId`), by words, by Madrid days, or both. */
+export function searchTools(store: Pick<ContextStore, 'searchMessages'>, threadId: string, agentId: string, face: SearchFace): AgentTools {
   return {
     specs: [
       {
-        name: CONVERSATION_TOOL,
-        description:
-          'Busca en los mensajes anteriores de esta conversación (lo que ya no ves: solo ves un resumen y los últimos mensajes). ' +
-          'Úsalo cuando necesites el detalle exacto de algo que se dijo antes: una cifra, un nombre, una instrucción, quién pidió qué. ' +
-          'Busca por palabras (todas deben aparecer, sin importar mayúsculas ni tildes), por días, o por ambas. Devuelve hasta 20 mensajes, del más antiguo al más reciente.',
+        name: face.name,
+        description: face.description,
         input_schema: {
           type: 'object',
           properties: {
@@ -281,11 +309,11 @@ export function conversationTools(store: Pick<ContextStore, 'searchMessages'>, t
       },
     ],
     accounts: [],
-    stepFor: () => 'Buscando en la conversación',
+    stepFor: () => face.step,
     writes: () => false,
     actionFor: (name) => name,
     run: async (name, input): Promise<ToolOutcome> => {
-      if (name !== CONVERSATION_TOOL) return NO_TOOLS.run(name, input);
+      if (name !== face.name) return NO_TOOLS.run(name, input);
       const i = (typeof input === 'object' && input !== null ? input : {}) as { query?: unknown; from?: unknown; to?: unknown };
       const words = typeof i.query === 'string' ? i.query.split(/\s+/).filter(Boolean).slice(0, 8) : [];
       const from = typeof i.from === 'string' && i.from ? i.from : null;
@@ -298,7 +326,7 @@ export function conversationTools(store: Pick<ContextStore, 'searchMessages'>, t
         until: to ? madridDayStart(nextDay(to)) : null,
         max: MAX_FOUND,
       });
-      if (found.length === 0) return { content: 'Nada en esta conversación con eso.', isError: false };
+      if (found.length === 0) return { content: face.none, isError: false };
       const lines = [...found]
         .reverse()
         .map((m) => `[${stampOf(m.createdAt)}] ${m.authorKind === 'agent' && m.authorAgentId === agentId ? 'Tú' : m.authorName}: ${m.text.length > 1500 ? `${m.text.slice(0, 1500)}…` : m.text}`);

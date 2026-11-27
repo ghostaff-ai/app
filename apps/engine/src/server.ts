@@ -27,6 +27,7 @@ import { microsoftOAuth, microsoftTools } from './microsoft';
 import { type CheckResult, checkAnthropicKey, checkOpenAiKey, checkVertexProject } from './providers';
 import { CloudAccountNotReady, type CloudAccountDeps, cloudTokens, ensureCloudAccount, type GoogleCall, mintCloudToken, supabaseCloudAccountStore } from './cloudAccounts';
 import { MemoryVault, SecretManagerVault, type Vault } from './vault';
+import { digestDue, supabaseGeneralStore } from './generalDigest';
 import { freshRepoToken, queuedRuns, repoTokens } from './githubApp';
 import { googleCaller } from './googleCaller';
 import { type ForgejoConfig, forgejoAdmin } from './forgejo';
@@ -227,8 +228,11 @@ const guided = supabaseGuidedStore(admin);
 const guidedTools = (orgId: string, agentId: string) => guidedToolsFor(guided, vault, orgId, agentId);
 // The guides that give them (guides.ts): started from a reply, driven by the app through the engine.
 const guideStore = supabaseGuideStore(admin);
+const chatStore = supabaseChatStore(admin, { afterAgentWrite });
+// What the people said in General, summarised by day (generalDigest.ts).
+const generalStore = supabaseGeneralStore(admin, (threadId, q) => chatStore.searchMessages(threadId, q));
 const chatDeps: ChatDeps = {
-  chat: supabaseChatStore(admin, { afterAgentWrite }),
+  chat: chatStore,
   writerFor: writerFactory(vault, cloudToken),
   costOf,
   toolsFor: (orgId) => toolsFor(accounts, tokenFor, orgId),
@@ -249,6 +253,7 @@ const chatDeps: ChatDeps = {
     },
   },
   links: linkTools(),
+  general: generalStore,
 };
 // Voice notes' transcripts: Gemini on Vertex AI in the EU, billed to Ghostaff's own project (transcribe.ts).
 const gcpProject = process.env.GCP_PROJECT;
@@ -312,9 +317,11 @@ const app = createApp({
         console.error('routines not started', e instanceof Error ? e.message : e);
         return 0;
       });
+      // Yesterday's General, summarised for the agents once the day is over (general-chat.md). Never throws.
+      const digests = await digestDue({ chat: chatStore, writerFor: chatDeps.writerFor, costOf, general: generalStore });
       // After the runs and routines, so what they just posted goes out in this tick. Never throws.
       const pushes = await pushTick(outbox, pushTransport);
-      return { records: made.length, synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, transcriptsSwept, started, routines, pushes };
+      return { records: made.length, synced: synced.map((s) => ({ org: s.org, ok: s.ok })), expired, transcriptsSwept, started, routines, digests, pushes };
     },
   },
 });

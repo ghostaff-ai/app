@@ -20,6 +20,7 @@ import { type AgentGhost, type ChatMessage, type Limits, messageText, splitMenti
 import type { AccountAskPart, ActionPart, DecisionPart, EditableField, GuidePart } from '@ghostaff/shared';
 import { DECISION_TOOL, DECISION_TOOLS, type DecisionBrief, decisionIds, type DecisionOpener, proposeDecision } from './decisionAsks';
 import { ASK_TOOL, ASK_TOOLS, askResumable, type AskStore, proposeAsk } from './accountAsks';
+import { DIGESTS_READ, type GeneralDigest, type GeneralStore, generalTools, heardBlock } from './generalDigest';
 import { bodyOf, type ContextStore, CONVERSATION_TOOL, conversationTools, type ConversationSummary, personOf, stampOf, summarizeIfLong, summaryTurn, windowOf } from './context';
 import { GUIDE_TOOL, GUIDE_TOOLS, guideResumable, type GuideStore, proposeGuide } from './guides';
 import { editableOf, previewOf } from './actions';
@@ -240,6 +241,8 @@ export interface ChatDeps {
   memory?: MemoryDeps;
   /** Reading a link someone pastes (links.ts); without it agents cannot. */
   links?: AgentTools;
+  /** What the people said in General, summarised by day, and its search (generalDigest.ts); without it agents don't know. */
+  general?: GeneralStore;
   /** How often the growing text is written to the database. */
   flushMs?: number;
   now?: () => number;
@@ -343,6 +346,8 @@ export function systemPrompt(
     canAsk?: boolean;
     canGuide?: boolean;
     canDecide?: boolean;
+    /** What the people said in General lately (heardBlock), last: it changes once a day. */
+    heard?: string;
     /** The organisation's memory: read by every agent, written by Secretaría (memory.ts). */
     memory?: 'read' | 'write';
     /** The agent's own store as `ownMemoryLines` gives it (memory.ts); last, so the rest stays the same when it changes. */
@@ -372,6 +377,7 @@ export function systemPrompt(
     opts.canDecide
       ? `Cuando algo sea de una persona decidirlo (dinero, algo que se publica, un cliente, un cambio de plan), pídeselo con ${DECISION_TOOL} en vez de preguntarlo en el texto, y no actúes hasta que conteste. Lo que ya respondió no lo vuelvas a preguntar.`
       : 'Cuando algo necesite la decisión de una persona, dilo de forma explícita.',
+    opts.heard ?? '',
     ...(opts.ownMemory ? [...OWN_MEMORY_LINES, ...opts.ownMemory] : []),
   ]
     .filter(Boolean)
@@ -707,8 +713,20 @@ export async function recordUse(
  * settings, read as whoever asked; every agent the tool to ask for an account
  * it lacks.
  */
+/** The organisation's General and its latest daily summaries; nothing when they can't be read (a reply never waits on them). */
+async function generalOf(deps: ChatDeps, orgId: string): Promise<{ chatId: string | null; digests: GeneralDigest[] }> {
+  if (!deps.general) return { chatId: null, digests: [] };
+  try {
+    const [chatId, digests] = await Promise.all([deps.general.chatOf(orgId), deps.general.digests(orgId, DIGESTS_READ)]);
+    return { chatId, digests };
+  } catch (e) {
+    console.error('general not read', e instanceof Error ? e.message.slice(0, 200) : typeof e);
+    return { chatId: null, digests: [] };
+  }
+}
+
 async function orgReach(deps: ChatDeps, orgId: string) {
-  const [names, orgName, agents, tools, record] = await Promise.all([
+  const [names, orgName, agents, tools, record, general] = await Promise.all([
     deps.chat.memberNames(orgId),
     deps.chat.orgName(orgId),
     deps.chat.orgAgents(orgId),
@@ -720,6 +738,7 @@ async function orgReach(deps: ChatDeps, orgId: string) {
           return null;
         })
       : null,
+    generalOf(deps, orgId),
   ]);
   /**
    * `place` is where it answers when that isn't its own chat (brought in, or
@@ -765,6 +784,10 @@ async function orgReach(deps: ChatDeps, orgId: string) {
       ownMemory = ownMemoryLines(own, files && files.slice(0, OWN_MEMORY_FILES), !!files && files.length > OWN_MEMORY_FILES);
     }
     if (deps.memory && record && memory) mine = mergeTools(mine, memoryTools(deps.memory, record, { orgId, agentName: who.name, canWrite: memory === 'write', userId, own }));
+    // What the people said in General (general-chat.md, decision 2); answering there, the agent reads General itself.
+    const inGeneral = place?.general === true;
+    if (general.chatId && deps.general && !inGeneral) mine = mergeTools(mine, generalTools(deps.general, general.chatId, who.id));
+    const heard = inGeneral ? '' : heardBlock(orgName, general.digests, !!general.chatId);
     const system = systemPrompt(who, orgName, {
       ...place,
       accounts: mine.accounts,
@@ -774,6 +797,7 @@ async function orgReach(deps: ChatDeps, orgId: string) {
       canGuide: !!deps.guides,
       canDecide: !!deps.decisions,
       memory,
+      heard,
       ownMemory,
     });
     return { tools: mine, system };

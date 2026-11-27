@@ -771,6 +771,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   expired_run_transcripts: { reach: 'not_a_setting' },
   follows_thread: { reach: 'not_a_setting' },
   general_chat: { reach: 'not_a_setting' },
+  general_digests_due: { reach: 'not_a_setting' },
   general_push_body: { reach: 'not_a_setting' },
   organizations_general_chat: { reach: 'not_a_setting' },
   hire_main_agent: { reach: 'not_a_setting' },
