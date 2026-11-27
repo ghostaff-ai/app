@@ -1,8 +1,8 @@
 # The chat's look: lavender, a wallpaper, real tails
 
 **Priority:** high — next to WhatsApp and Telegram our chat still looks worse, and people compare
-**Gate:** Jaime approves this design
-**Next:** the implementation plan, then one pull request
+**Gate:** none: Jaime approved it (2026-11-27)
+**Next:** build it, one pull request: [chat-look-plan.md](chat-look-plan.md)
 
 Jaime (2026-11-27), with screenshots of General, WhatsApp and Telegram side by side: «la UI del chat la sigo viendo regular, primero el color negro de mis mensajes no me convence nada … es mucho más feo el nuestro». The mockup he approved: `ghostaff/capturas/propuesta-chat-2026-11-27.html` (and `.png`): today's General, the proposal in light and dark, and a chat with an agent. He picked **lavender** for his own bubbles over ink grey and WhatsApp green.
 
