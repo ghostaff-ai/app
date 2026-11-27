@@ -2,7 +2,7 @@
 
 **Priority:** high — La Mesa and Productor can't move off Telegram without it ([ordago-agents-in-ghostaff.md](ordago-agents-in-ghostaff.md), What Ghostaff builds for it, item 5)
 **Gate:** none
-**Next:** the beta check: a run of Legal (on demand) that leaves an mp3 in `~/outbox/`, played in the app; then La Mesa and Productor move with the `AGENTS.md` lines below
+**Next:** Jaime plays the beta check's audio («Prueba de audio» in Legal's chat) on his phone; then La Mesa and Productor move with the `AGENTS.md` lines below
 
 Jaime took this design as proposed on 2026-11-26 («Sí, ambas»). An agent on our runner makes an audio in its run (La Mesa's weekly episode, a Productor draft) and the people who work with it hear it in Ghostaff, with the player the voice notes already have ([voice.md](voice.md)). It replaces what Telegram does for those two today.
 
@@ -43,6 +43,7 @@ Not done here: each moves with `org add-agents --runner ghostaff --only <agent>`
 ## Progress
 
 - [x] Tasks 1–6, landed in PR 92 on 2026-11-27 after PR 84, and deployed to the beta by CI (engine, runner, migration). `agentAudio.ts` in the engine (with `POST /runs/:id/audio`), `outbox.ts` in the runner, `AudioPart` in shared, `AudioClip` and `AgentAudio` in the app; the agent reads its audio through `bodyOf` (`context.ts`). Vitest, Jest and pgTAP (`agent_audio.test.sql`).
-- [ ] Task 7, the beta check.
+- [ ] Task 7, the beta check. **2026-11-27, 00:38, on the beta:** asked in Jaime's chat with Legal (run `83ae3272`) to `curl` a 8.9 MB demo mp3 into `~/outbox/` as «Prueba de audio.mp3»; it answered «hecho» and the agent's chat (thread `9534b9b1`) got the agent's message with `{ type: 'audio', title: 'Prueba de audio', mediaType: 'audio/mpeg', durationMs: null }`, stored in the agent chat's folder. Left: hearing it on a phone.
+- **`durationMs` is null on purpose** (design, point 6): the runner doesn't decode audio, and the player takes the length from the file once it loads («–:––» until then). If a player should show the length before the first play (the General's waveform does not need it), the engine can read it at upload: the `mvhd` box of an m4a, and an mp3's Xing/VBRI header or its bitrate. Not built until someone misses it.
 - **The look will change:** the General's PR 99 (WhatsApp-style player: waveform, drag, 1×/1,5×/2×) moves its design into `AudioClip`, so `AgentAudio` takes it too (agreed between the two sessions, 2026-11-26).
-- **Migration versions:** `supabase db push` refuses a version older than the newest applied, so a migration renamed while waiting for a stacked PR must still land above develop's newest (this one went 900000 → 960000 → 2026112750… → 20261128800000).
+- **Migration versions:** `supabase db push` refuses a version older than the newest applied, so a migration renamed while waiting for a stacked PR must still land above develop's newest (this one went 20261126900000 → 960000 → 20261127500000 → 550000 → 20261128800000).
