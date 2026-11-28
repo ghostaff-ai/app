@@ -9,6 +9,7 @@ import type { AttachKind } from '@/lib/attach';
 import { tap } from '@/lib/haptics';
 import { holdMove, holdRelease } from '@/lib/hold';
 import { type RecordedNote, useVoiceNote } from '@/lib/hooks/useVoiceNote';
+import { loadDraft, peekDraft, saveDraft } from '@/lib/drafts';
 import { useColorVars, usePalette } from '@/lib/theme';
 
 // Where a person writes in a chat, as in WhatsApp (docs/plans/ready/
@@ -20,6 +21,8 @@ import { useColorVars, usePalette } from '@/lib/theme';
 // chat.md, decision 6). A screen reader's «activate» starts a locked note.
 // Typing @ offers the agents and people that can be mentioned. With «Ver», or
 // in a conversation its opener keeps to reading, it turns into a quiet line.
+// What is typed and not sent stays as the chat's draft (drafts.ts): leave and
+// come back, even after closing the app, and it is still in the box.
 
 /** What the database takes in one message (post_message). */
 const MAX_LENGTH = 8000;
@@ -37,6 +40,7 @@ export function Composer({
   onAttach,
   attaching,
   onTyping,
+  draftKey,
 }: {
   placeholder: string;
   /** What @ can complete to. */
@@ -59,10 +63,20 @@ export function Composer({
   attaching?: boolean;
   /** Tells the others you are typing or recording (phase 4). */
   onTyping?: (kind: 'typing' | 'recording') => void;
+  /** Where what is typed and not sent is kept (drafts.ts); without it, nothing is. */
+  draftKey?: string | null;
 }) {
   const c = usePalette();
   const insets = useSafeAreaInsets();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => (draftKey ? (peekDraft(draftKey) ?? '') : ''));
+  /** Editing a message: its words are in the box, and they aren't the draft. */
+  const editing = useRef(false);
+  const draftNow = () => (draftKey ? (peekDraft(draftKey) ?? '') : '');
+  /** What the person puts in the box, kept as the draft unless it is an edit. */
+  const change = (t: string) => {
+    setText(t);
+    if (draftKey && !editing.current) saveDraft(draftKey, t);
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState(false);
@@ -72,11 +86,34 @@ export function Composer({
   const themed = useColorVars();
   useEffect(() => {
     if (prefill) {
+      editing.current = true;
       setText(prefill.text);
       input.current?.focus();
+    } else if (editing.current) {
+      // The edit is over (sent or put away): the draft comes back.
+      editing.current = false;
+      setText(draftNow());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill?.key]);
+  // Another chat, or this one opened again: its draft, read from the phone the first time.
+  const typed = useRef(false);
+  useEffect(() => {
+    if (!draftKey) return;
+    typed.current = false;
+    const known = peekDraft(draftKey);
+    if (known !== undefined) {
+      if (!editing.current) setText(known);
+      return;
+    }
+    let alive = true;
+    void loadDraft(draftKey).then((t) => {
+      if (alive && t && !typed.current && !editing.current) setText(t);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [draftKey]);
   const modeRef = useRef<Mode>('idle');
   const slide = useRef(new Animated.Value(0)).current;
   const input = useRef<TextInputInstance>(null);
@@ -88,7 +125,7 @@ export function Composer({
     send: async (note) => {
       if (!onVoiceNote) throw new Error('voice notes are off');
       await onVoiceNote(note, tagged.current);
-      if (tagged.current.length > 0) setText('');
+      if (tagged.current.length > 0) change('');
       tagged.current = [];
     },
   });
@@ -108,9 +145,12 @@ export function Composer({
     if (!ready) return;
     setBusy(true);
     setError(null);
+    const wasEditing = editing.current;
     try {
       await onSend(text.trim());
-      setText('');
+      // After an edit the draft comes back; a message sent was the draft.
+      if (wasEditing) setText(draftNow());
+      else change('');
       voice.clearError();
       tap();
     } catch (e) {
@@ -207,7 +247,7 @@ export function Composer({
               accessibilityRole="button"
               accessibilityLabel={`Mencionar a ${n}`}
               onPress={() => {
-                setText((t) => completeMention(t, n));
+                change(completeMention(text, n));
                 input.current?.focus();
               }}
               className="rounded-full bg-theirs px-3 py-1.5 active:opacity-70"
@@ -319,7 +359,8 @@ export function Composer({
               placeholderTextColor={c.muted}
               value={text}
               onChangeText={(t) => {
-                setText(t);
+                typed.current = true;
+                change(t);
                 if (t.trim()) onTyping?.('typing');
                 setHint(false);
                 voice.clearError();
@@ -430,7 +471,7 @@ export function Composer({
       </Modal>
       {emoji && mode === 'idle' ? (
         <View className="-mx-2 mt-2">
-          <EmojiPicker onPick={(e) => setText((t) => t + e)} />
+          <EmojiPicker onPick={(e) => change(text + e)} />
         </View>
       ) : null}
     </View>

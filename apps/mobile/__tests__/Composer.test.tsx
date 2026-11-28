@@ -1,6 +1,8 @@
 import { AppState, Platform } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
+import { saveDraft } from '@/lib/drafts';
 
 // expo-audio is a native module: a recorder that records nothing and a permission we can flip.
 let mockRecording = false;
@@ -411,5 +413,79 @@ describe('holding the mic (lib/hold.ts)', () => {
   it('a press shorter than a moment is a tap, not a note', () => {
     expect(holdRelease(TAP_MS - 1)).toBe('tap');
     expect(holdRelease(TAP_MS + 1)).toBe('send');
+  });
+});
+
+describe('Composer drafts (lib/drafts.ts)', () => {
+  const box = () => screen.getByLabelText('Escribe aquí');
+  const withDraft = (draftKey: string, extra: Partial<Parameters<typeof Composer>[0]> = {}) => (
+    <Composer placeholder="Escribe aquí" names={names} onSend={onSend} draftKey={draftKey} {...extra} />
+  );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('keeps what was typed and not sent when the chat is left and opened again', async () => {
+    const first = await render(withDraft('u:o:agent:a'));
+    await fireEvent.changeText(box(), 'Mañana te paso');
+    await first.unmount();
+    await render(withDraft('u:o:agent:a'));
+    expect(box().props.value).toBe('Mañana te paso');
+  });
+
+  it('keeps each chat’s draft apart', async () => {
+    const first = await render(withDraft('u:o:agent:b'));
+    await fireEvent.changeText(box(), 'Para B');
+    await first.unmount();
+    await render(withDraft('u:o:agent:c'));
+    expect(box().props.value).toBe('');
+  });
+
+  it('forgets the draft once it is sent', async () => {
+    const first = await render(withDraft('u:o:agent:d'));
+    await fireEvent.changeText(box(), 'Hola');
+    await press('Enviar');
+    await settle();
+    expect(onSend).toHaveBeenCalledWith('Hola');
+    await first.unmount();
+    await render(withDraft('u:o:agent:d'));
+    expect(box().props.value).toBe('');
+  });
+
+  it('keeps the draft when sending fails', async () => {
+    const first = await render(withDraft('u:o:agent:e', { onSend: jest.fn(() => Promise.reject(new Error('sin red'))) }));
+    await fireEvent.changeText(box(), 'No se fue');
+    await press('Enviar');
+    await settle();
+    await first.unmount();
+    await render(withDraft('u:o:agent:e'));
+    expect(box().props.value).toBe('No se fue');
+  });
+
+  it('survives closing the app: read back from the phone', async () => {
+    jest.useFakeTimers();
+    try {
+      saveDraft('u:o:agent:f', 'Guardado');
+      jest.advanceTimersByTime(1000);
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(await AsyncStorage.getItem('ghostaff.draft.u:o:agent:f')).toBe('Guardado');
+    // A fresh start knows nothing in memory: only the phone has it.
+    await AsyncStorage.setItem('ghostaff.draft.u:o:agent:g', 'De ayer');
+    await render(withDraft('u:o:agent:g'));
+    await settle();
+    expect(box().props.value).toBe('De ayer');
+  });
+
+  it('editing a message doesn’t touch the draft, which comes back after', async () => {
+    const view = await render(withDraft('u:o:agent:h'));
+    await fireEvent.changeText(box(), 'Mi borrador');
+    await view.rerender(withDraft('u:o:agent:h', { prefill: { key: 'm1', text: 'Mensaje viejo' } }));
+    expect(box().props.value).toBe('Mensaje viejo');
+    await fireEvent.changeText(box(), 'Mensaje corregido');
+    await view.rerender(withDraft('u:o:agent:h', { prefill: null }));
+    expect(box().props.value).toBe('Mi borrador');
   });
 });

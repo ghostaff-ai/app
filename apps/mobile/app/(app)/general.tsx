@@ -19,6 +19,7 @@ import { useEngine } from '@/lib/hooks/useConnections';
 import { useGeneralChat, useMembers, useMyLevels, useTyping } from '@/lib/hooks/useChat';
 import { useGuideCards } from '@/lib/hooks/useGuideCards';
 import { useMessageActions } from '@/lib/hooks/useMessageActions';
+import { draftKey } from '@/lib/drafts';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { usePush } from '@/lib/push/PushProvider';
@@ -197,6 +198,7 @@ export default function General() {
           onAttach={ma.attach ? (k) => void ma.attach!(k) : undefined}
           attaching={ma.sendingFiles}
           onTyping={typing.say}
+          draftKey={me && orgId ? draftKey(me, orgId, 'general') : null}
         />
       </KeyboardColumn>
       {ma.overlays}
