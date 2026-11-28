@@ -2,7 +2,7 @@
 
 **Priority:** high — the way Órdago's panel converges into Ghostaff (desktop-web.md), and what makes an agent's work readable at a glance
 **Gate:** none
-**Next:** land PR 2 (branch `feat/chat-photo`), then ask a chat agent on the beta for its photo; then PR 3, Empresa's «Cómo va cada área». PR 1 landed in [ghostaff-ai/app#113](https://github.com/ghostaff-ai/app/pull/113) on 2026-11-27
+**Next:** ask a chat agent on the beta for its photo (PR 2 landed in [ghostaff-ai/app#123](https://github.com/ghostaff-ai/app/pull/123) on 2026-11-28); then PR 3, Empresa's «Cómo va cada área». PR 1 landed in [ghostaff-ai/app#113](https://github.com/ghostaff-ai/app/pull/113) on 2026-11-27
 
 Jaime, 2026-11-27, after mockups of Redes and Comercial: «escríbelo y mételo en el código». Órdago's panel shows goals, retention, adoption, the Redes calendar, the organisers' funnel: «elementos que nos están dando los agentes para entender las acciones que están tomando, para entender la empresa». Ghostaff should show them too, for every customer, without a panel built per customer. The mockups are pictures, not in the repo: `~/Desktop/ghostaff/capturas/propuesta-graficos-agentes-2026-11-27.png` and `propuesta-bloques-redes-comercial-2026-11-27.png`.
 
