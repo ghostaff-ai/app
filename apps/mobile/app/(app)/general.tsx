@@ -18,6 +18,7 @@ import { useAgents } from '@/lib/hooks/useAgents';
 import { useEngine } from '@/lib/hooks/useConnections';
 import { useGeneralChat, useMembers, useMyLevels, useTyping } from '@/lib/hooks/useChat';
 import { useGuideCards } from '@/lib/hooks/useGuideCards';
+import { ChatError } from '@/components/chat/ChatError';
 import { useMessageActions } from '@/lib/hooks/useMessageActions';
 import { draftKey } from '@/lib/drafts';
 import { KeyboardColumn } from '@/lib/keyboard';
@@ -187,7 +188,7 @@ export default function General() {
             )}
           />
         )}
-        {error || actionError ? <Text className="px-4 pb-1 text-footnote text-no">{error ?? actionError}</Text> : null}
+        <ChatError text={error ?? actionError} />
         <Composer
           placeholder="Mensaje"
           names={names}

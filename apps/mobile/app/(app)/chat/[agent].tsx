@@ -16,6 +16,7 @@ import { agentIdsNamed, typingLine } from '@/lib/chat';
 import { useAccountAsks } from '@/lib/hooks/useAccountAsks';
 import { useAgents } from '@/lib/hooks/useAgents';
 import { useGuideCards } from '@/lib/hooks/useGuideCards';
+import { ChatError } from '@/components/chat/ChatError';
 import { useMessageActions } from '@/lib/hooks/useMessageActions';
 import { useEngine } from '@/lib/hooks/useConnections';
 import { useAgentChat, useMembers, useMyLevels, useTyping } from '@/lib/hooks/useChat';
@@ -276,7 +277,7 @@ export default function Chat() {
             )}
           />
         )}
-        {error || actionError ? <Text className="px-4 pb-1 text-footnote text-no">{error ?? actionError}</Text> : null}
+        <ChatError text={error ?? actionError} />
         {showPushAsk ? <PushAsk onAnswered={() => setAsked(true)} /> : null}
         {canTalk && aboutId ? (
           <View testID="asking-about" className="mx-4 mb-1 flex-row items-center rounded-2xl bg-card py-1 pl-3 pr-1">
