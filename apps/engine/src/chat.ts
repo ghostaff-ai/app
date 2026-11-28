@@ -32,6 +32,7 @@ import { NOTHING_NEW } from './runner';
 import { type AsPerson, settingsTools, unaskedSettingsTools } from './settings';
 import { type AgentTools, mergeTools, NO_TOOLS, restrictTo } from './tools';
 import { type MemoryDeps, type MemoryPlace, memoryTools, OWN_MEMORY_FILES, ownMemoryLines } from './memory';
+import { type PhotoDeps, photoLines, photoTools } from './photo';
 import { givenByPerson, READ_LINK } from './links';
 
 export type Level = 'none' | 'read' | 'talk';
@@ -239,6 +240,8 @@ export interface ChatDeps {
   decisions?: DecisionOpener;
   /** The organisation's memory in the record (memory.ts); without it, or without a record in our store, agents have none. */
   memory?: MemoryDeps;
+  /** Each agent's photo, kept in the record like its memory (photo.ts, agent-photo.md); needs `memory`'s record. */
+  photos?: PhotoDeps;
   /** Reading a link someone pastes (links.ts); without it agents cannot. */
   links?: AgentTools;
   /** What the people said in General, summarised by day, and its search (generalDigest.ts); without it agents don't know. */
@@ -352,6 +355,8 @@ export function systemPrompt(
     heard?: string;
     /** The organisation's memory: read by every agent, written by Secretaría (memory.ts). */
     memory?: 'read' | 'write';
+    /** It keeps a photo with its tools (photo.ts). */
+    photo?: boolean;
     /** The agent's own store as `ownMemoryLines` gives it (memory.ts); last, so the rest stays the same when it changes. */
     ownMemory?: string[];
   } = {},
@@ -375,6 +380,7 @@ export function systemPrompt(
     ...(opts.memory === 'read' ? MEMORY_READER_LINES : opts.memory === 'write' ? MEMORY_KEEPER_LINES : []),
     ...(opts.settings ? SETTINGS_LINES : []),
     ...(opts.routines ? ROUTINE_LINES : []),
+    ...(opts.photo ? photoLines() : []),
     'No inventes datos de la organización. Si no sabes algo, pregúntalo.',
     opts.canDecide
       ? `Cuando algo sea de una persona decidirlo (dinero, algo que se publica, un cliente, un cambio de plan), pídeselo con ${DECISION_TOOL} en vez de preguntarlo en el texto, y no actúes hasta que conteste. Lo que ya respondió no lo vuelvas a preguntar.`
@@ -818,6 +824,9 @@ async function orgReach(deps: ChatDeps, orgId: string) {
       ownMemory = ownMemoryLines(own, files && files.slice(0, OWN_MEMORY_FILES), !!files && files.length > OWN_MEMORY_FILES);
     }
     if (deps.memory && record && memory) mine = mergeTools(mine, memoryTools(deps.memory, record, { orgId, agentName: who.name, canWrite: memory === 'write', userId, own }));
+    // Its photo, in the same record (agent-photo.md PR 2).
+    const photo = !!deps.photos && !!record && !!who.slug;
+    if (deps.photos && record && who.slug) mine = mergeTools(mine, photoTools(deps.photos, record, { orgId, agentId: who.id, agentName: who.name, slug: who.slug, userId }));
     // What the people said in General (general-chat.md, decision 2); answering there, the agent reads General itself.
     const inGeneral = place?.general === true;
     if (general.chatId && deps.general && !inGeneral) mine = mergeTools(mine, generalTools(deps.general, general.chatId, who.id));
@@ -831,6 +840,7 @@ async function orgReach(deps: ChatDeps, orgId: string) {
       canGuide: !!deps.guides,
       canDecide: !!deps.decisions,
       memory,
+      photo,
       heard,
       ownMemory,
     });

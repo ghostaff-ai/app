@@ -178,6 +178,11 @@ const recordSync: RecordSyncDeps = {
   forgejo,
   memory: supabaseMemoryStore(admin),
 };
+/** How a member signs an agent's commit in the record («Secretaría (por Ana)»): their name in the organisation. */
+async function memberName(orgId: string, userId: string): Promise<string | null> {
+  const { data } = await admin.from('memberships').select('display_name').eq('org_id', orgId).eq('user_id', userId).maybeSingle<{ display_name: string }>();
+  return data?.display_name ?? null;
+}
 const caller = googleCaller();
 // Push notifications (docs/plans/ongoing/decision-notifications.md): straight to APNs and FCM, off until
 // configured. A database trigger fills the outbox; the engine drains it after its own writes of agent
@@ -253,10 +258,12 @@ const chatDeps: ChatDeps = {
   memory: {
     store: supabaseMemoryStore(admin),
     repoFor: (orgId) => ownRecordRepo(recordSync, orgId),
-    async memberName(orgId, userId) {
-      const { data } = await admin.from('memberships').select('display_name').eq('org_id', orgId).eq('user_id', userId).maybeSingle<{ display_name: string }>();
-      return data?.display_name ?? null;
-    },
+    memberName,
+  },
+  // Each agent's photo (photo.ts, agent-photo.md): written into the record and projected at once, as the sync does.
+  photos: {
+    setPhoto: (p) => recordSync.store.setPhoto(p),
+    memberName,
   },
   links: linkTools(),
   general: generalStore,

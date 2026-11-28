@@ -2,7 +2,7 @@
 
 **Priority:** high — the way Órdago's panel converges into Ghostaff (desktop-web.md), and what makes an agent's work readable at a glance
 **Gate:** none
-**Next:** PR 2 — a tool for chat agents (Secretaría and those hired in Equipo) to keep their photo. PR 1 landed in [ghostaff-ai/app#113](https://github.com/ghostaff-ai/app/pull/113) on 2026-11-27
+**Next:** land PR 2 (branch `feat/chat-photo`), then ask a chat agent on the beta for its photo; then PR 3, Empresa's «Cómo va cada área». PR 1 landed in [ghostaff-ai/app#113](https://github.com/ghostaff-ai/app/pull/113) on 2026-11-27
 
 Jaime, 2026-11-27, after mockups of Redes and Comercial: «escríbelo y mételo en el código». Órdago's panel shows goals, retention, adoption, the Redes calendar, the organisers' funnel: «elementos que nos están dando los agentes para entender las acciones que están tomando, para entender la empresa». Ghostaff should show them too, for every customer, without a panel built per customer. The mockups are pictures, not in the repo: `~/Desktop/ghostaff/capturas/propuesta-graficos-agentes-2026-11-27.png` and `propuesta-bloques-redes-comercial-2026-11-27.png`.
 
@@ -62,7 +62,10 @@ Limits: 12 blocks, 200 points a series, 20 items a list, 200 characters a text, 
 - [x] Runner agents' prompt: where their photo is, its format, «no inventes datos», and decision 5.
 - [x] App: `getAgentPhoto`, `components/photo/` (goal, figure, series, headlines, list), «Su foto» on `agente/[id].tsx`; jest.
 
-**PR 2, chat agents keep a photo too**: a tool for them, as `memory_create` is for their memory.
+**PR 2, chat agents keep a photo too**
+- [x] `apps/engine/src/photo.ts`: `photo_view` and `photo_write` (the whole YAML file, checked with `readPhoto`, a wrong block refusing the write and naming it), committed signed «Cuentas (por Ana)» and projected at once; no approval card, as the memory.
+- [x] Every chat agent with a slug and a record in our record store gets them, and the format in its system prompt (`photoFormat`, shared with the runner's `photoGuide`); it proposes a photo before making one.
+- [ ] Tried with a real model: nothing in CI or on this machine runs one.
 
 **PR 3, Empresa: «Cómo va cada área»**, every agent's goal in one list.
 

@@ -10,6 +10,7 @@ import type { AsPerson } from '../src/settings';
 import { type GuidedStore, guidedToolsFor } from '../src/guidedAccounts';
 import { type AgentTools, NO_TOOLS } from '../src/tools';
 import type { MemoryDeps } from '../src/memory';
+import type { PhotoDeps } from '../src/photo';
 import type { RecordRepo } from '../src/recordSync';
 import { linkTools } from '../src/links';
 import { fakeSupabase } from './fixtures/fakeSupabase';
@@ -65,6 +66,7 @@ function setup(
     /** What the agent already summarised of the thread. */
     summary?: ConversationSummary;
     memory?: MemoryDeps;
+    photos?: PhotoDeps;
     links?: AgentTools;
   } = {},
 ) {
@@ -165,6 +167,7 @@ function setup(
       guidedToolsFor: opts.guidedToolsFor,
       decisions: opts.decisions,
       memory: opts.memory,
+      photos: opts.photos,
       links: opts.links,
       general: opts.heard,
     },
@@ -1183,6 +1186,19 @@ describe("the organisation's memory in the chat (business-brain.md)", () => {
     await call('ana', `/threads/${THREAD}/reply`);
     expect(outcomes[0]).toMatchObject({ isError: false });
     expect(outcomes[1]).toEqual({ content: expect.stringContaining('Solo leo enlaces que una persona ha escrito'), isError: true });
+  });
+
+  it("gives an agent with a slug its photo tools when its record is reached, and none otherwise (agent-photo.md PR 2)", async () => {
+    const photos = { setPhoto: async () => {}, memberName: async () => 'Ana' };
+    const withSlug: ChatAgent = { ...finanzas, slug: 'finanzas' };
+    const reached = setup({ agent: withSlug, memory: memory(true), photos });
+    await reached.call('ana', `/threads/${THREAD}/reply`);
+    expect(toolNames(reached.asked)).toEqual(expect.arrayContaining(['photo_view', 'photo_write']));
+    expect(reached.asked[0]?.system).toContain('Tienes una foto');
+    const unreached = setup({ agent: withSlug, memory: memory(false), photos });
+    await unreached.call('ana', `/threads/${THREAD}/reply`);
+    expect(toolNames(unreached.asked)).not.toContain('photo_write');
+    expect(unreached.asked[0]?.system).not.toContain('Tienes una foto');
   });
 
   describe("each agent's own memory (agent-context.md PR 2)", () => {
