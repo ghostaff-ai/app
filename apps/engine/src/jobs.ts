@@ -47,6 +47,11 @@ export interface RunRecord {
   connectionId?: string | null;
   /** Where its transcript is kept, when it has one: runs on our runner only (transcripts.ts). */
   transcriptPath?: string | null;
+  /**
+   * What the main agent asked this run to do (delegation.ts): its own deep work, or another agent it
+   * brought in. Runs on our runner only.
+   */
+  brief?: string | null;
 }
 
 /**
@@ -83,6 +88,8 @@ export interface JobStore {
   finishRun(id: string, patch: { state: 'done' | 'failed'; summary: string | null; noteworthy: boolean; decisionsOpened: number } & RunEnding): Promise<boolean>;
   /** A finished message from the agent in its chat, once for everyone who sees it (group-chat-per-agent.md). */
   postToAgentChat(agent: ChatAgent, text: string): Promise<void>;
+  /** A finished message from the agent in the chat a run was launched from without holding a message (delegation.ts). */
+  postInThread(threadId: string, agent: ChatAgent, text: string): Promise<void>;
   /**
    * Runs still «running» whose job died without reporting: past their own deadline at `now`, or, without
    * one (the legacy jobs), started before `before`.
@@ -324,6 +331,12 @@ export async function reportRun(chat: ChatDeps, deps: JobDeps, caller: string, b
     await chat.chat.touchThread(run.threadId).catch(() => {});
     return { run: run.id, threadId: run.threadId };
   }
+  if (run.brief && run.threadId) {
+    // Launched by the main agent from a chat it left free (delegation.ts): the answer is a new message there.
+    await deps.jobs.postInThread(run.threadId, agent, text);
+    await postAudio();
+    return { run: run.id, threadId: run.threadId };
+  }
   if (told) await deps.jobs.postToAgentChat(agent, text);
   await postAudio();
   return { run: run.id, threadId: null };
@@ -340,6 +353,9 @@ export const RUN_DEADLINE_MS = 8 * 3600_000;
  * Runs whose job died without reporting (killed, out of memory, a crash in
  * the runner itself) are closed on the tick, so a thread does not wait forever.
  */
+/** What a run launched from a chat says there when its job died without reporting. */
+export const CUT_SHORT_BRIEF = 'No he podido acabar el encargo: el trabajo se cortó sin terminar. Vuelve a pedírmelo.';
+
 export async function expireRuns(chat: ChatDeps, deps: JobDeps, now: Date = new Date()): Promise<number> {
   const stale = await deps.jobs.staleRuns(new Date(now.getTime() - RUN_DEADLINE_MS), now);
   for (const r of stale) {
@@ -349,6 +365,9 @@ export async function expireRuns(chat: ChatDeps, deps: JobDeps, now: Date = new 
       await chat.chat
         .updateReply(r.messageId, { text: 'No he podido acabar: el trabajo se cortó sin terminar. Vuelve a pedírmelo.', state: 'failed' })
         .catch(() => {});
+    } else if (r.brief && r.threadId) {
+      const agent = await chat.chat.agent(r.agentId).catch(() => null);
+      if (agent) await deps.jobs.postInThread(r.threadId, agent, CUT_SHORT_BRIEF).catch(() => {});
     }
   }
   return stale.length;

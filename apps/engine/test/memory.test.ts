@@ -140,7 +140,7 @@ describe('memoryTools', () => {
     const reader = tools({ canWrite: false }).t;
     expect(reader.specs.map((s) => s.name)).toEqual(['memory_view', 'memory_search']);
     const refused = await reader.run('memory_create', { path: 'a.md', content: 'x' });
-    expect(refused).toEqual({ content: expect.stringContaining('Solo Secretaría'), isError: true });
+    expect(refused).toEqual({ content: expect.stringContaining('Solo Dirección'), isError: true });
     const keeper = tools({ canWrite: true }).t;
     expect(keeper.specs.map((s) => s.name)).toEqual(['memory_view', 'memory_search', 'memory_create', 'memory_str_replace']);
     // No approval card: nothing outside Ghostaff changes.
@@ -250,7 +250,7 @@ describe("each agent's own memory (agent-context.md PR 2)", () => {
 
   it('still keeps Empresa for Secretaría', async () => {
     const reader = tools({ canWrite: false, own });
-    expect(await reader.t.run('memory_create', { store: 'empresa', path: 'a.md', content: 'x' })).toEqual({ content: expect.stringContaining('Solo Secretaría'), isError: true });
+    expect(await reader.t.run('memory_create', { store: 'empresa', path: 'a.md', content: 'x' })).toEqual({ content: expect.stringContaining('Solo Dirección'), isError: true });
     const keeper = tools({ canWrite: true, own: { agentId: 'secretaria-id', slug: 'secretaria' } });
     await keeper.t.run('memory_create', { path: 'a.md', content: 'x' });
     await keeper.t.run('memory_create', { store: 'propia', path: 'b.md', content: 'y' });

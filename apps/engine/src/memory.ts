@@ -3,7 +3,7 @@
 // keeps its projection (`memories`, supabase/migrations/20261127900000_memories.sql) so a turn reads
 // it without a clone and the app shows it.
 //
-// Every chat agent reads it; only Secretaría, the main agent, writes it (agent-memory.md decision 4).
+// Every chat agent reads it; only the main agent writes it (agent-memory.md decision 4).
 // A write is one commit on the record's head, then the projection, so the record stays the master;
 // the tick's sync (`projectMemory`) brings in what changed in the record any other way. No owner
 // approval: nothing outside Ghostaff changes, and git keeps every version.
@@ -23,6 +23,7 @@ import {
   agentMemoryLink,
   agentMemoryPath,
   COMPANY_MEMORY_DIR,
+  MAIN_AGENT_NAME,
   MAX_MEMORY_CHARS,
   MAX_MEMORY_FILES,
   MEMORY_LINK_PREFIX,
@@ -277,7 +278,7 @@ const STEPS: Record<string, string> = {
 /** A failure the model hears, in words it can act on. */
 class MemoryRefusal extends Error {}
 
-const ONLY_SECRETARIA = 'Solo Secretaría escribe en la memoria de la empresa: díselo a la persona para que se lo pase.';
+const ONLY_SECRETARIA = `Solo ${MAIN_AGENT_NAME} escribe en la memoria de la empresa: díselo a la persona para que se lo pase.`;
 
 const madridDay = (iso: string) =>
   new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));

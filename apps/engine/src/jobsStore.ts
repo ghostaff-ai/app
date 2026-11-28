@@ -7,7 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GoogleAuth } from 'google-auth-library';
 import type { ChatAgent } from './chat';
 import { type JobStore, type LaunchJob, RunBusy, type RunRecord } from './jobs';
-import type { RunnerAgent, RunnerStore } from './runner';
+import { MAIN_AGENT_RUN, type RunnerAgent, type RunnerStore } from './runner';
 
 function check<T>(r: { data: T; error: unknown }): T {
   if (r.error) throw r.error;
@@ -24,7 +24,7 @@ const toAgent = (r: Record<string, string>): ChatAgent => ({
   runner: r.runner as ChatAgent['runner'],
 });
 
-const RUN = 'id, org_id, agent_id, origin, state, thread_id, message_id, requested_by, nonce_hash, spec_fetched_at, connection_id, routine_id, transcript_path';
+const RUN = 'id, org_id, agent_id, origin, state, thread_id, message_id, requested_by, nonce_hash, spec_fetched_at, connection_id, routine_id, transcript_path, brief';
 const toRun = (r: Record<string, string | null>): RunRecord => ({
   id: r.id!,
   orgId: r.org_id!,
@@ -39,6 +39,7 @@ const toRun = (r: Record<string, string | null>): RunRecord => ({
   connectionId: r.connection_id ?? null,
   routineId: r.routine_id ?? null,
   transcriptPath: r.transcript_path ?? null,
+  brief: r.brief ?? null,
 });
 
 /** `afterAgentWrite` runs after each post of agent messages, as in `supabaseChatStore`. */
@@ -69,6 +70,7 @@ export function supabaseJobStore(admin: SupabaseClient, opts: { afterAgentWrite?
           nonce_hash: x.nonceHash ?? null,
           routine_id: x.routineId ?? null,
           deadline_at: x.deadlineAt ?? null,
+          brief: x.brief ?? null,
         })
         .select('id')
         .single();
@@ -105,15 +107,28 @@ export function supabaseJobStore(admin: SupabaseClient, opts: { afterAgentWrite?
       const rows = check(
         await admin
           .from('agent_runs')
-          .select('id, org_id, agent_id, origin, state, thread_id, message_id')
+          .select('id, org_id, agent_id, origin, state, thread_id, message_id, brief')
           .eq('state', 'running')
           .or(`deadline_at.lt.${now.toISOString()},and(deadline_at.is.null,started_at.lt.${before.toISOString()})`)
           .limit(100),
       ) ?? [];
-      return rows.map((r) => ({ id: r.id, orgId: r.org_id, agentId: r.agent_id, origin: r.origin, state: r.state, threadId: r.thread_id, messageId: r.message_id }));
+      return rows.map((r) => ({
+        id: r.id,
+        orgId: r.org_id,
+        agentId: r.agent_id,
+        origin: r.origin,
+        state: r.state,
+        threadId: r.thread_id,
+        messageId: r.message_id,
+        brief: r.brief,
+      }));
     },
     async postToAgentChat(agent, text) {
       check(await admin.rpc('post_to_agent_chat', { target_agent: agent.id, body: text }));
+      opts.afterAgentWrite?.();
+    },
+    async postInThread(threadId, agent, text) {
+      check(await admin.rpc('post_in_thread', { target_thread: threadId, target_agent: agent.id, body: text }));
       opts.afterAgentWrite?.();
     },
   };
@@ -121,20 +136,22 @@ export function supabaseJobStore(admin: SupabaseClient, opts: { afterAgentWrite?
 
 const RUNNER_AGENT =
   'id, org_id, slug, name, description, task, task_in_record, repos, secrets, model, tools, max_turns, schedule, last_scheduled_at, reads_org_runs, ' +
-  'timeout_seconds, size, max_runs_per_day, ci_repo, max_ci_queued';
+  'timeout_seconds, size, max_runs_per_day, ci_repo, max_ci_queued, is_main';
+/** Who runs on our runner: its own agents, and the organisation's main agent whatever its runner (direccion-main-agent.md). */
+const ON_RUNNER = 'runner.eq.ghostaff,is_main.eq.true';
 type RunnerAgentRow = {
   id: string;
   org_id: string;
   slug: string | null;
   name: string;
   description: string | null;
-  task: string;
+  task: string | null;
   task_in_record: boolean;
   repos: AgentRepo[] | null;
   secrets: AgentSecrets | null;
-  model: string;
-  tools: string[];
-  max_turns: number;
+  model: string | null;
+  tools: string[] | null;
+  max_turns: number | null;
   schedule: string | null;
   last_scheduled_at: string | null;
   reads_org_runs: boolean | null;
@@ -143,23 +160,27 @@ type RunnerAgentRow = {
   max_runs_per_day: number | null;
   ci_repo: string | null;
   max_ci_queued: number | null;
+  is_main: boolean | null;
 };
+// A main agent that only answered in chat has no runner fields: it runs with MAIN_AGENT_RUN's.
 const toRunnerAgent = (r: RunnerAgentRow): RunnerAgent => ({
   id: r.id,
   orgId: r.org_id,
   slug: r.slug ?? r.id,
   name: r.name,
   description: r.description,
-  task: r.task,
+  task: r.task ?? (r.is_main ? MAIN_AGENT_RUN.task : ''),
   taskInRecord: r.task_in_record ?? false,
   repos: r.repos ?? [],
   secrets: r.secrets ?? {},
-  model: r.model,
-  tools: r.tools ?? [],
-  maxTurns: r.max_turns,
+  model: r.model ?? MAIN_AGENT_RUN.model,
+  tools: r.tools ?? (r.is_main ? [...MAIN_AGENT_RUN.tools] : []),
+  maxTurns: r.max_turns ?? MAIN_AGENT_RUN.maxTurns,
   schedule: r.schedule,
   lastScheduledAt: r.last_scheduled_at,
-  readsOrgRuns: r.reads_org_runs ?? false,
+  // The main agent reads every run of its organisation (direccion-main-agent.md).
+  readsOrgRuns: (r.reads_org_runs ?? false) || !!r.is_main,
+  isMain: !!r.is_main,
   timeoutSeconds: r.timeout_seconds,
   size: r.size,
   maxRunsPerDay: r.max_runs_per_day,
@@ -177,18 +198,18 @@ export function supabaseRunnerStore(admin: SupabaseClient): RunnerStore {
         check(await admin.from('org_secrets').update({ status: 'missing' }).eq('org_id', orgId).in('name', missing).not('stored_at', 'is', null).select('id'));
     },
     async runnerAgent(agentId) {
-      const r = check(await admin.from('agents').select(RUNNER_AGENT).eq('id', agentId).eq('runner', 'ghostaff').maybeSingle<RunnerAgentRow>());
+      const r = check(await admin.from('agents').select(RUNNER_AGENT).eq('id', agentId).or(ON_RUNNER).maybeSingle<RunnerAgentRow>());
       return r ? toRunnerAgent(r) : null;
     },
     async scheduledAgents() {
       const rows = check(
-        await admin.from('agents').select(RUNNER_AGENT).eq('runner', 'ghostaff').not('schedule', 'is', null).returns<RunnerAgentRow[]>(),
+        await admin.from('agents').select(RUNNER_AGENT).or(ON_RUNNER).not('schedule', 'is', null).returns<RunnerAgentRow[]>(),
       );
       return (rows ?? []).map(toRunnerAgent);
     },
     async claimSchedule(agentId, prev, to) {
       // Compare-and-set: only the tick that still sees `prev` moves it.
-      const q = admin.from('agents').update({ last_scheduled_at: to.toISOString() }).eq('id', agentId).eq('runner', 'ghostaff');
+      const q = admin.from('agents').update({ last_scheduled_at: to.toISOString() }).eq('id', agentId).or(ON_RUNNER);
       const rows = check(await (prev === null ? q.is('last_scheduled_at', null) : q.eq('last_scheduled_at', prev)).select('id'));
       return (rows ?? []).length > 0;
     },
@@ -248,6 +269,10 @@ export function supabaseRunnerStore(admin: SupabaseClient): RunnerStore {
     },
     async setTranscript(runId, path) {
       check(await admin.from('agent_runs').update({ transcript_path: path }).eq('id', runId));
+    },
+    async teamRepos(orgId, exceptAgentId) {
+      const rows = check(await admin.from('agents').select('repos').eq('org_id', orgId).neq('id', exceptAgentId)) as { repos: AgentRepo[] | null }[] | null;
+      return (rows ?? []).flatMap((r) => r.repos ?? []);
     },
     async agentBySlug(orgId, slug) {
       const r = check(await admin.from('agents').select('id, slug').eq('org_id', orgId).eq('slug', slug).maybeSingle()) as { id: string; slug: string } | null;

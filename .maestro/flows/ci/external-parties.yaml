@@ -40,7 +40,7 @@ name: An owner adds who the company works with outside, and changes it
 - stopApp
 - launchApp
 - extendedWaitUntil:
-    visible: "Secretaría"
+    visible: "Dirección"
     timeout: 60000
 - tapOn: "Empresa"
 - extendedWaitUntil:

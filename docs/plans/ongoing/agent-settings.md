@@ -17,10 +17,11 @@ Anything an owner can change in the app, the organisation's main agent (Secretar
 5. **Hard limits, never allowed even with an OK:**
    - connecting or disconnecting accounts, or touching keys;
    - changing owners or roles, or removing people;
-   - deleting the organisation, an agent or any data;
+   - deleting the organisation or any data;
    - widening its own reach;
    - changing this list.
    It can prepare an invitation, as a member only.
+   **Changed 2026-11-28 (Jaime, [direccion-main-agent.md](direccion-main-agent.md) decision 2):** removing an agent left this list. The main agent proposes it (`settings_remove_agent`) and an owner approves it, like any other change; the main agent itself is never removed.
 6. **A rule, not a feature.** Every setting is defined once, and both the screen and the agent use that definition. A test fails when a setting has not been classified. AGENTS.md says so.
 7. **First slice:** which connected accounts each agent may use (new, with its own screen), plus the settings that already exist.
 

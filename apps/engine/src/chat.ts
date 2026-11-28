@@ -12,11 +12,11 @@
 // in its message, and goes on once it has it (accountAsks.ts); access to an app
 // with no connect button, it gets through a guide the person follows
 // (guides.ts). Every agent reads the organisation's memory in the record and
-// Secretaría files into it (memory.ts, business-brain.md); any agent reads a
+// The main agent files into it (memory.ts, business-brain.md); any agent reads a
 // link it is given (links.ts). No mail yet: it says so when asked.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { type AgentGhost, type ChatMessage, isDocumentPart, type Limits, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
+import { type AgentGhost, type ChatMessage, isDocumentPart, type Limits, MAIN_AGENT_NAME, messageText, splitMentions, type TokenUsage } from '@ghostaff/shared';
 import type { AccountAskPart, ActionPart, DecisionPart, EditableField, GuidePart } from '@ghostaff/shared';
 import { DECISION_TOOL, DECISION_TOOLS, type DecisionBrief, decisionIds, type DecisionOpener, proposeDecision } from './decisionAsks';
 import { ASK_TOOL, ASK_TOOLS, askResumable, type AskStore, proposeAsk } from './accountAsks';
@@ -26,7 +26,8 @@ import { GUIDE_TOOL, GUIDE_TOOLS, guideResumable, type GuideStore, proposeGuide 
 import { editableOf, previewOf } from './actions';
 import { Refusal } from './connections';
 import { askJob, type JobDeps } from './jobs';
-import { askRunner } from './runner';
+import { askRunner, delegateRun } from './runner';
+import { BRING_TOOL, type Bring, broughtWithBrief, DEEP_TOOL, delegationTools, RUNS_TOOL } from './delegation';
 import { agentJob, isMainAgent } from '@ghostaff/shared/services';
 import { NOTHING_NEW } from './runner';
 import { type AsPerson, settingsTools, unaskedSettingsTools } from './settings';
@@ -305,7 +306,16 @@ function reachLines(accounts: string[], canAsk: boolean, canGuide: boolean, memo
 const SETTINGS_LINES = [
   'Eres el agente principal: puedes cambiar la configuración de la organización en Ghostaff, lo mismo que una persona propietaria cambia en la app (qué agentes hay, qué cuentas conectadas usa cada uno, quién puede ver o hablar con cada agente, el orden de las cuentas de IA, las invitaciones, las tareas programadas de cada agente). Mira antes la configuración con settings_read.',
   'Cada cambio queda como propuesta hasta que alguien propietario la aprueba (una tarea programada «solo para mí» la aprueba quien la pide). Propón un cambio solo cuando te lo pidan o cuando lo expliques y lo justifiques en la conversación.',
-  'Nunca puedes: conectar o desconectar cuentas ni tocar claves, cambiar propietarios o quitar personas, borrar agentes o datos, ni darte más herramientas a ti. Si te lo piden, explica que eso se hace en la app.',
+  'Puedes proponer quitar un agente del equipo (settings_remove_agent); a ti no te puede quitar nadie.',
+  'Nunca puedes: conectar o desconectar cuentas ni tocar claves, cambiar propietarios o quitar personas, borrar datos, ni darte más herramientas a ti. Si te lo piden, explica que eso se hace en la app.',
+];
+
+/** What the main agent is told about leading the team from its chat (delegation.ts, direccion-main-agent.md decision 4). */
+const DIRECTION_LINES = [
+  'Llevas el equipo de agentes de la organización y le rindes cuentas a quien es propietario: sabes lo que hace cada agente, les encargas trabajo y propones cambios en el equipo.',
+  `En este chat tienes la memoria de la empresa, la configuración (settings_read) y lo que ha hecho cada agente (${RUNS_TOOL}). Si con eso basta, contesta ya.`,
+  `Si para contestar de verdad necesitas algo que aquí no tienes (el código o los ficheros de un repo, una consulta a BigQuery u otra fuente de datos, la transcripción entera de una ejecución, cambiar ficheros del registro), usa ${DEEP_TOOL}: no lo supongas ni contestes a medias. Si te piden que lo mires a fondo, úsala siempre. Puedes adelantar lo que ya sepas y decir que lo compruebas.`,
+  `Para que otro agente haga algo, o te cuente algo de su área que no está en sus ejecuciones, usa ${BRING_TOOL}. Un encargo por mensaje.`,
 ];
 
 /** What every agent with the organisation's memory is told (memory.ts, business-brain.md). */
@@ -314,10 +324,12 @@ const MEMORY_LINES = [
   'Di de dónde sale cada dato con un enlace a su fichero, en Markdown y con la ruta que te dan las herramientas, por ejemplo [la gestoría](/memoria/proveedores/gestoria.md).',
 ];
 
-/** Only Secretaría writes the memory (agent-memory.md decision 4); the others pass things on to her. */
-const MEMORY_READER_LINES = ['Solo Secretaría escribe en la memoria de la empresa. Si te cuentan algo que la organización debería recordar, sugiere pasárselo a Secretaría.'];
+/** Only the main agent writes the memory (agent-memory.md decision 4); the others pass things on to it. */
+const MEMORY_READER_LINES = [
+  `Solo ${MAIN_AGENT_NAME} escribe en la memoria de la empresa. Si te cuentan algo que la organización debería recordar, sugiere pasárselo a ${MAIN_AGENT_NAME}.`,
+];
 
-/** What Secretaría is told about filing what people drop in (business-brain.md, decisions 3 and 4). */
+/** What the main agent is told about filing what people drop in (business-brain.md, decisions 3 and 4). */
 const MEMORY_KEEPER_LINES = [
   'Tú guardas la memoria de la empresa. Cuando te pasen algo que la organización deba recordar (un texto, una nota de voz, un enlace, un dato suelto), archívalo sin esperar a que te lo pidan: busca antes si ya hay un fichero de ese tema y añádelo ahí con memory_str_replace; si no, créalo con memory_create, un tema por fichero, en la carpeta de su área. Un enlace, léelo antes con read_link.',
   'Empieza lo que archives con de dónde sale: quién te lo pasó y cuándo, y el enlace si era uno. Guarda los datos tal cual, sin inventar ni adornar.',
@@ -353,12 +365,14 @@ export function systemPrompt(
     canDecide?: boolean;
     /** What the people said in General lately (heardBlock), last: it changes once a day. */
     heard?: string;
-    /** The organisation's memory: read by every agent, written by Secretaría (memory.ts). */
+    /** The organisation's memory: read by every agent, written by the main agent (memory.ts). */
     memory?: 'read' | 'write';
     /** It keeps a photo with its tools (photo.ts). */
     photo?: boolean;
     /** The agent's own store as `ownMemoryLines` gives it (memory.ts); last, so the rest stays the same when it changes. */
     ownMemory?: string[];
+    /** The main agent leading the team from its chat, with delegation.ts's tools. */
+    leads?: boolean;
   } = {},
 ): string {
   const job = agentJob(agent);
@@ -378,6 +392,7 @@ export function systemPrompt(
     ...reachLines(opts.accounts ?? [], opts.canAsk ?? false, opts.canGuide ?? false, !!opts.memory),
     ...(opts.memory ? MEMORY_LINES : []),
     ...(opts.memory === 'read' ? MEMORY_READER_LINES : opts.memory === 'write' ? MEMORY_KEEPER_LINES : []),
+    ...(opts.leads ? DIRECTION_LINES : []),
     ...(opts.settings ? SETTINGS_LINES : []),
     ...(opts.routines ? ROUTINE_LINES : []),
     ...(opts.photo ? photoLines() : []),
@@ -785,7 +800,16 @@ async function orgReach(deps: ChatDeps, orgId: string) {
    * General); `asker` is whoever the reply answers: their session, when it is
    * there (without it, no settings tools), and who they are, for the memory.
    */
-  const reachOf = async (who: ChatAgent, place?: Place, asker?: { userId: string; accessToken?: string }): Promise<{ tools: AgentTools; system: string }> => {
+  /**
+   * `thread`, when given, is the chat the reply is written in: there the main agent leads the team with
+   * delegation.ts's tools, and `pending` holds a chat agent it brought in, to answer once its reply is done.
+   */
+  const reachOf = async (
+    who: ChatAgent,
+    place?: Place,
+    asker?: { userId: string; accessToken?: string },
+    thread?: ChatThreadHead,
+  ): Promise<{ tools: AgentTools; system: string; pending: { bring: Bring | null } }> => {
     const accessToken = asker?.accessToken;
     const userId = asker?.userId ?? null;
     let mine = restrictTo(tools, who.accounts);
@@ -801,9 +825,26 @@ async function orgReach(deps: ChatDeps, orgId: string) {
     // Settings read as whoever asked: none in a turn nobody asked for (a routine's, agent-routines.md decision 3).
     const asked = !!deps.asPerson && !!accessToken;
     const settings = isMainAgent(who) && asked;
+    const pending: { bring: Bring | null } = { bring: null };
+    // The main agent leads from the chat a person asked in: what each agent did, its own deep work, another agent brought in.
+    const leads = settings && !!thread && !!deps.jobs && !!userId;
     if (asked && deps.asPerson && accessToken) {
       // Every agent may propose its own routines; the main agent every setting.
       mine = mergeTools(mine, settingsTools({ client: deps.asPerson(accessToken), orgId: who.orgId, agentId: who.id, userId: asker?.userId, onlySelf: !settings }));
+      if (leads && thread && deps.jobs && userId) {
+        const jobs = deps.jobs;
+        mine = mergeTools(
+          mine,
+          delegationTools({
+            lead: who,
+            agents,
+            client: deps.asPerson(accessToken),
+            canTalk: async (agentId) => (await deps.chat.levelFor(agentId, userId)) === 'talk',
+            launch: (agent, brief) => delegateRun(deps, jobs, thread, agent, userId, brief),
+            pending,
+          }),
+        );
+      }
     } else if (deps.orgReader) {
       // A routine's turn: who the organisation works with, so an agent reading the morning's invoices can propose one.
       mine = mergeTools(mine, unaskedSettingsTools(deps.orgReader, who.orgId, who.id));
@@ -835,6 +876,7 @@ async function orgReach(deps: ChatDeps, orgId: string) {
       ...place,
       accounts: mine.accounts,
       settings,
+      leads,
       routines: asked,
       canAsk: !!deps.asks,
       canGuide: !!deps.guides,
@@ -844,7 +886,7 @@ async function orgReach(deps: ChatDeps, orgId: string) {
       heard,
       ownMemory,
     });
-    return { tools: mine, system };
+    return { tools: mine, system, pending };
   };
   return { names, orgName, agents, reachOf };
 }
@@ -967,10 +1009,28 @@ export async function answerWaiting(
           break rounds;
         }
         // Read now, so a second agent reads the first one's answer too; never what was written after the message it answers.
-        const mine = await reachOf(who, placeIn(thread, who, agent), { userId: run.authorId, accessToken: token });
+        const mine = await reachOf(who, placeIn(thread, who, agent), { userId: run.authorId, accessToken: token }, thread);
         await writeReply(deps, replyId, who, mine.system, await turnsOf(deps, thread.id, who.id, asked.id), mine.tools, { threadId: thread.id, userId: run.authorId });
         await summarizeIfLong(deps, thread, who);
         replied = true;
+        // A chat agent the main agent brought in answers now, in the same chat (delegation.ts).
+        const bring = mine.pending.bring;
+        if (bring) {
+          const broughtId = await deps.chat.startReply(thread, bring.agent, ['Leyendo el encargo'], { replyTo: asked.id });
+          if (broughtId) {
+            const theirs = await reachOf(bring.agent, placeIn(thread, bring.agent, agent) ?? { broughtInto: who.name }, { userId: run.authorId, accessToken: token });
+            await writeReply(
+              deps,
+              broughtId,
+              bring.agent,
+              `${theirs.system}\n${broughtWithBrief(who.name, bring.brief)}`,
+              await turnsOf(deps, thread.id, bring.agent.id, asked.id),
+              theirs.tools,
+              { threadId: thread.id, userId: run.authorId },
+              'Leyendo el encargo',
+            );
+          }
+        }
       }
       // Answered: read the chat again, with this reply in it.
       continue rounds;

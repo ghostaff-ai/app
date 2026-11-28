@@ -56,6 +56,34 @@ describe('what the main agent may change (agent-settings.md)', () => {
     await expect(tool.describe!(ctx, { agent_id: self, providers: null })).rejects.toBeInstanceOf(SettingError);
   });
 
+  it('proposes removing another agent, which an owner approves, and never the main agent (direccion-main-agent.md)', async () => {
+    const main = '20000000-0000-0000-0000-000000000001';
+    const seo = '20000000-0000-0000-0000-000000000002';
+    const rows = [
+      { id: main, org_id: 'o', name: 'Dirección', ghost: 'secretaria', is_main: true, department: 'direccion', member_default: 'talk', runner: 'chat', accounts: null, created_at: '' },
+      { id: seo, org_id: 'o', name: 'SEO', ghost: 'base', is_main: false, department: 'marketing', member_default: 'read', runner: 'ghostaff', accounts: null, created_at: '' },
+    ];
+    const removed: unknown[] = [];
+    const query = { select: () => query, eq: () => query, order: () => query, returns: async () => ({ data: rows, error: null }) };
+    const client = {
+      from: () => query,
+      rpc: async (fn: string, args: unknown) => {
+        removed.push([fn, args]);
+        return { error: null };
+      },
+    } as unknown as SupabaseClient;
+    const tool = SETTING_TOOLS.find((t) => t.name === 'settings_remove_agent')!;
+    expect(tool.writes).toBe(true);
+    expect(DATABASE_FUNCTIONS.delete_agent).toEqual({ reach: 'agent', tool: 'settings_remove_agent' });
+    const ctx: SettingsContext = { client, orgId: 'o', agentId: main };
+    expect(await tool.describe!(ctx, { agent_id: seo })).toEqual({ label: 'Quitar a SEO del equipo', preview: expect.stringContaining('No se puede deshacer') });
+    await expect(tool.describe!(ctx, { agent_id: main })).rejects.toBeInstanceOf(SettingError);
+    // Even proposed by another agent, the main agent stays.
+    await expect(tool.describe!({ ...ctx, agentId: seo }, { agent_id: main })).rejects.toBeInstanceOf(SettingError);
+    expect(await tool.run(ctx, { agent_id: seo })).toBe('SEO ya no está en el equipo.');
+    expect(removed).toEqual([['delete_agent', { agent_id: seo }]]);
+  });
+
   it('has no visibility to set: the level on the agent is the only rule (group-chat-per-agent.md)', () => {
     expect(SETTING_TOOLS.some((t) => t.name === 'settings_agent_chat_default')).toBe(false);
     expect(DATABASE_FUNCTIONS.set_agent_chat_default).toBeUndefined();

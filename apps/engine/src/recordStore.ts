@@ -161,13 +161,13 @@ export function supabaseRecordStore(db: SupabaseClient): RecordSyncStore {
   };
 }
 
-/** The organisation's agents on our runner, for its record's hook (recordProvision.ts). */
+/** The organisation's agents on our runner, the main agent among them whatever its runner, for its record's hook (recordProvision.ts). */
 export async function recordAgentsOf(db: SupabaseClient, orgId: string): Promise<RecordAgent[]> {
   const { data, error } = await db
     .from('agents')
     .select('id, slug, is_main')
     .eq('org_id', orgId)
-    .eq('runner', 'ghostaff')
+    .or('runner.eq.ghostaff,is_main.eq.true')
     .not('slug', 'is', null)
     .returns<{ id: string; slug: string; is_main: boolean }[]>();
   if (error) throw error;

@@ -21,7 +21,7 @@
 
 import { DIGESTS_READ, heardBlock } from './generalDigest';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { AGENT_SCHEDULE_TIMEZONE, type ChatMessage } from '@ghostaff/shared';
+import { AGENT_SCHEDULE_TIMEZONE, type ChatMessage, MAIN_AGENT_NAME } from '@ghostaff/shared';
 import { agentInstructionsPath, type AgentRepo, type AgentSecrets, isSecretEnv, isSecretName, photoGuide, repoDirs } from '@ghostaff/shared/record';
 import { Cron } from 'croner';
 import type { ChatAgent, ChatDeps, ChatThreadHead } from './chat';
@@ -59,6 +59,8 @@ export interface RunnerAgent {
   lastScheduledAt: string | null;
   /** Whether its runs may read the runs of its organisation's other agents (transcripts.ts); its own, always. */
   readsOrgRuns: boolean;
+  /** The organisation's main agent (agents.is_main): it runs here whatever its `runner`, with every repo of its team (direccion-main-agent.md). */
+  isMain: boolean;
   /** How long one run may take: the execution's timeout in Cloud Run. */
   timeoutSeconds: number;
   /** Which job it runs on (jobFor): Cloud Run cannot change CPU or memory per execution. */
@@ -68,6 +70,23 @@ export interface RunnerAgent {
   /** Its `ritmo`: a fire of its timetable is skipped while this repo's CI has more than `maxQueued` runs queued. */
   ci: { repo: string; maxQueued: number } | null;
 }
+
+/**
+ * How the main agent runs here when its row has no runner fields of its own (every organisation's, which
+ * only answered in chat until direccion-main-agent.md): the tools Órdago's Dirección had in
+ * ghostaff-ai/agents, and a task for when its record has no `agentes/<slug>/AGENTS.md`.
+ */
+export const MAIN_AGENT_RUN = {
+  model: 'claude-opus-5-5',
+  tools: ['Bash', 'Read', 'Edit', 'Write', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'Skill', 'TodoWrite'],
+  maxTurns: 120,
+  task: [
+    'Eres quien lleva el equipo de agentes de la organización y le rinde cuentas a sus personas propietarias.',
+    'Aquí tienes lo que en el chat no: el registro y los repos del equipo clonados, las ejecuciones de cada agente (`ghostaff ejecuciones <agente>`, `ghostaff leer <agente>`) y lo que te deje usar la organización.',
+    'Haz el encargo de verdad: lee, comprueba y consulta antes de afirmar, y cita de dónde sale cada dato (fichero, commit o ejecución). Si algo no está escrito, dilo; nunca inventes el porqué de otro agente.',
+    'Lo que tenga que decidir una persona, ábrelo como decisión. Lo que deba seguir siendo verdad mañana, déjalo escrito en el registro.',
+  ].join('\n'),
+} as const;
 
 /** The runner's jobs by size (scripts/deploy-runner.sh): `standard` 2 CPU and 4 GiB, `large` 4 CPU and 16 GiB. */
 export type RunnerSize = 'standard' | 'large';
@@ -96,6 +115,8 @@ export interface RunnerStore {
   routineAsk(routineId: string): Promise<{ title: string; instruction: string; from: string } | null>;
   /** Notes where the run's transcript is in the bucket (transcripts.ts). */
   setTranscript(runId: string, path: string): Promise<void>;
+  /** The repos the organisation's other agents use (agents.repos), for the main agent to read. */
+  teamRepos(orgId: string, exceptAgentId: string): Promise<AgentRepo[]>;
   /** An agent of this organisation by its slug, whatever it runs on; null when there is none. */
   agentBySlug(orgId: string, slug: string): Promise<{ id: string; slug: string } | null>;
   /** An agent's runs in this organisation, newest first. */
@@ -381,7 +402,7 @@ async function preflight(chat: ChatDeps, deps: RunnerDeps, orgId: string): Promi
  * the message that waits for it, or for a scheduled run in the chat of everyone
  * who can see the agent.
  */
-async function failRun(chat: ChatDeps, deps: JobDeps, run: Pick<RunRecord, 'id' | 'messageId' | 'threadId'>, agent: ChatAgent, said: string) {
+async function failRun(chat: ChatDeps, deps: JobDeps, run: Pick<RunRecord, 'id' | 'messageId' | 'threadId' | 'brief'>, agent: ChatAgent, said: string) {
   const took = await deps.jobs.finishRun(run.id, { state: 'failed', summary: said, noteworthy: true, decisionsOpened: 0 }).catch(() => false);
   if (!took) return;
   if (run.messageId) {
@@ -390,7 +411,9 @@ async function failRun(chat: ChatDeps, deps: JobDeps, run: Pick<RunRecord, 'id' 
     return;
   }
   try {
-    await deps.jobs.postToAgentChat(agent, said);
+    // Launched from a chat it left free (delegation.ts): why it failed goes there.
+    if (run.brief && run.threadId) await deps.jobs.postInThread(run.threadId, agent, said);
+    else await deps.jobs.postToAgentChat(agent, said);
   } catch (e) {
     console.error('notice not posted', e instanceof Error ? e.message : typeof e);
   }
@@ -411,7 +434,14 @@ export function jobFor(runner: RunnerDeps, size: RunnerSize): AgentJob {
 async function launch(
   deps: JobDeps & { runner: RunnerDeps },
   agent: RunnerAgent,
-  r: { origin: 'person' | 'schedule' | 'routine'; requestedBy: string | null; threadId: string | null; messageId: string | null; routineId?: string },
+  r: {
+    origin: 'person' | 'schedule' | 'routine';
+    requestedBy: string | null;
+    threadId: string | null;
+    messageId: string | null;
+    routineId?: string;
+    brief?: string;
+  },
 ): Promise<string> {
   const nonce = randomBytes(32).toString('base64url');
   const now = deps.runner.now ? deps.runner.now() : new Date();
@@ -443,6 +473,8 @@ export async function askRunner(
   userId: string,
   /** A routine started it (agent-routines.md): its instruction is the request, not the thread. */
   routineId?: string,
+  /** The main agent asked for it with this brief (delegation.ts): its own deep work, or another agent it brought in. */
+  brief?: string,
 ): Promise<void> {
   let runId: string | null = null;
   try {
@@ -458,6 +490,7 @@ export async function askRunner(
       threadId: thread.id,
       messageId: replyId,
       ...(routineId ? { routineId } : {}),
+      ...(brief ? { brief } : {}),
     });
     await chat.chat.updateReply(replyId, { steps: ['Trabajando en ello: tardo unos minutos'] });
   } catch (e) {
@@ -471,6 +504,39 @@ export async function askRunner(
     if (!(e instanceof RunnerFailure) && !(e instanceof RunBusy)) console.error('runner not started', e instanceof Error ? e.message : typeof e);
     if (runId) await deps.jobs.finishRun(runId, { state: 'failed', summary: said, noteworthy: false, decisionsOpened: 0 }).catch(() => false);
     await chat.chat.updateReply(replyId, { text: said, state: 'failed' }).catch(() => {});
+  }
+}
+
+/**
+ * The main agent launches a run from a chat (delegation.ts): its own deep work, or an agent on our runner it
+ * brings in, with a brief. It holds no message in the chat, so the chat stays free meanwhile; the answer
+ * arrives there as a new message when the run reports (jobs.ts). Never throws: why it could not start is
+ * returned, for the main agent to say.
+ */
+export async function delegateRun(
+  chat: ChatDeps,
+  deps: JobDeps,
+  thread: ChatThreadHead,
+  agent: ChatAgent,
+  userId: string,
+  brief: string,
+): Promise<{ started: true } | { started: false; said: string }> {
+  const runner = deps.runner;
+  if (!runner) return { started: false, said: 'Aquí no se puede trabajar a fondo: este entorno no tiene runner.' };
+  let runId: string | null = null;
+  try {
+    const why = await preflight(chat, runner, agent.orgId);
+    if (why) return { started: false, said: why };
+    const spec = await runner.store.runnerAgent(agent.id);
+    if (!spec) return { started: false, said: GONE };
+    runId = await launch({ ...deps, runner }, spec, { origin: 'person', requestedBy: userId, threadId: thread.id, messageId: null, brief });
+    return { started: true };
+  } catch (e) {
+    runId = runId ?? (e as { runId?: string }).runId ?? null;
+    const said = e instanceof RunBusy ? busyText(await runner.store.runningSince(agent.id).catch(() => null)) : NOT_STARTED;
+    if (!(e instanceof RunBusy)) console.error('delegated run not started', e instanceof Error ? e.message : typeof e);
+    if (runId) await deps.jobs.finishRun(runId, { state: 'failed', summary: said, noteworthy: false, decisionsOpened: 0 }).catch(() => false);
+    return { started: false, said };
   }
 }
 
@@ -591,6 +657,11 @@ export function composePrompt(p: {
   request: { text: string; from: string } | null;
   /** The routine that started it, instead of a person (agent-routines.md). */
   routine?: { title: string; instruction: string; from: string } | null;
+  /**
+   * What the main agent asked this run to do (delegation.ts), besides the conversation in `request`: `by` is
+   * the main agent's name when it brought this agent in, null when it is the main agent's own deep work.
+   */
+  brief?: { text: string; by: string | null } | null;
   /** The organisation's Google Cloud account, when the run has a token for it. */
   google?: { account: string; project: string | null } | null;
   /** The other repos it has, and the ones it should have and could not get. */
@@ -682,6 +753,21 @@ export function composePrompt(p: {
         `Si no hay nada que contar, tu último mensaje es exactamente \`${NOTHING_NEW}\`, sin nada más, y no le llega nada.\n` +
         `<indicacion>\n${p.routine.instruction.replace(/</g, '&lt;')}\n</indicacion>`,
     );
+  } else if (p.request && p.brief) {
+    const said = p.brief.text.replace(/</g, '&lt;');
+    parts.push(
+      (p.brief.by
+        ? `Esta ejecución la ha lanzado ${p.brief.by}, que lleva el equipo de ${orgName}, desde su chat en Ghostaff con ${p.request.from}: te encarga lo de abajo. ` +
+          `Tu tarea habitual (${usual}) es tu contexto; no la hagas entera salvo que el encargo lo pida.\n`
+        : `Esta ejecución te la has encargado tú desde tu chat en Ghostaff, hablando con ${p.request.from}, porque la respuesta necesitaba trabajo a fondo. ` +
+          'Haz el encargo de verdad: lee, consulta y comprueba antes de afirmar.\n') +
+        'La conversación de abajo es su contexto: lo que se ha hablado hasta el encargo.\n' +
+        'Antes de acabar, mira qué de lo hecho debe seguir siendo verdad mañana y escríbelo, con commit y push, donde te toca según el ' +
+        'AGENTS.md del registro. Si no sale nada duradero, no escribas nada.\n' +
+        `Tu último mensaje llega a ese chat, que lee ${p.request.from}: escríbelo para esa persona, corto, con las cifras que importen y de dónde sale cada una.\n` +
+        `<encargo>\n${said}\n</encargo>\n` +
+        `<indicacion>\n${p.request.text}\n</indicacion>`,
+    );
   } else if (p.request) {
     parts.push(
       `Esta ejecución la ha lanzado ${p.request.from} para hablar contigo desde Ghostaff. Atiende lo que pide: contesta, corrige o haz ` +
@@ -704,6 +790,25 @@ export function composePrompt(p: {
       : `Tu tarea:\n${agent.task}`,
   );
   return parts.join('\n\n');
+}
+
+/** The main agent's own repos, then every other repo its team uses, read-only, each once. */
+export function withTeamRepos(own: AgentRepo[], team: AgentRepo[]): AgentRepo[] {
+  const seen = new Set(own.map((r) => r.repo.toLowerCase()));
+  const read: AgentRepo[] = [];
+  for (const r of team) {
+    const key = r.repo.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    read.push({ repo: r.repo, write: false });
+  }
+  return [...own, ...read];
+}
+
+/** How the organisation's main agent is called, for a run it asked another agent for. */
+async function mainAgentName(chat: ChatDeps, orgId: string): Promise<string> {
+  const agents = await chat.chat.orgAgents(orgId).catch(() => []);
+  return agents.find((a) => a.isMain)?.name ?? MAIN_AGENT_NAME;
 }
 
 /** The conversation that started a run: the thread's messages before the run's own, and who asked. */
@@ -756,8 +861,10 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
     if (thread) request = requestOf(await chat.chat.recentMessages(thread.id, 40), thread, run);
   }
   const routine = run.origin === 'routine' && run.routineId ? await runner.store.routineAsk(run.routineId) : null;
+  const brief = run.brief && request ? { text: run.brief, by: agent.isMain ? null : await mainAgentName(chat, run.orgId) } : null;
   const access = await recordAccess(runner, record, agent.id, run.id);
-  const repos = await reposAccess(runner, record, agent.repos);
+  // The main agent reads every repo its team uses (direccion-main-agent.md).
+  const repos = await reposAccess(runner, record, agent.isMain ? withTeamRepos(agent.repos, await runner.store.teamRepos(run.orgId, agent.id)) : agent.repos);
   const cloud = await googleToken(runner, run.orgId);
   const google: RunGoogleAccess | null = cloud ? { ...cloud, project: await googleProject(chat, run.orgId) } : null;
   const secrets = await secretsAccess(runner, run.orgId, agent.secrets);
@@ -775,6 +882,7 @@ export async function runSpec(chat: ChatDeps, deps: JobDeps, caller: string | nu
       now: runner.now ? runner.now() : new Date(),
       request,
       routine,
+      brief,
       google,
       repos,
       secrets,

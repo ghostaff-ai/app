@@ -1,8 +1,8 @@
 appId: ${APP_ID}
-name: An owner gives Secretaría a routine from the clock on her chat
+name: An owner gives Dirección a routine from the clock on her chat
 ---
 # Routines (docs/plans/ongoing/agent-routines.md). A new owner opens
-# Secretaría's chat, taps the clock on top, finds no routines, makes one
+# Dirección's chat, taps the clock on top, finds no routines, makes one
 # («De lunes a viernes, 9:00», the form's default), sees it in the list, and the
 # clock on the chat now shows when it fires. No engine runs in e2e, so nothing fires.
 - evalScript: ${output.email = 'e2e-rut-' + Date.now() + '@ghostaff.test'}

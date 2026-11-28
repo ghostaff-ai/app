@@ -2,7 +2,7 @@
 -- the database keeps it that way, and nobody removes it. Órdago and the
 -- organisations that predate the role are brought in by ensure_main_agent.
 begin;
-select plan(24);
+select plan(25);
 
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000e1', 'olga@example.com');
@@ -17,17 +17,20 @@ select is((select count(*)::int from public.create_organization('Taller')), 1, '
 select results_eq(
   $$ select a.name, a.ghost, a.member_default::text from public.agents a
      join public.organizations o on o.id = a.org_id where o.name = 'Taller' and a.is_main $$,
-  $$ values ('Secretaría'::text, 'secretaria'::text, 'talk'::text) $$,
-  'the company has one main agent: Secretaría, whom members may talk to');
+  $$ values ('Dirección'::text, 'secretaria'::text, 'talk'::text) $$,
+  'the company has one main agent: Dirección, whom members may talk to');
 select is(
   (select count(*)::int from public.agents a join public.organizations o on o.id = a.org_id where o.name = 'Taller'),
   1, '... and no other agent');
+select is(
+  (select a.slug from public.agents a join public.organizations o on o.id = a.org_id where o.name = 'Taller' and a.is_main),
+  'direccion', '... with the slug its runs and its record folder use');
 
 create temp table mine on commit drop as select * from public.create_personal_space();
 grant select on mine to authenticated;
 select results_eq(
   $$ select a.name, a.ghost, a.member_default::text from public.agents a where a.org_id = (select id from mine) and a.is_main $$,
-  $$ values ('Secretaría'::text, 'secretaria'::text, 'talk'::text) $$,
+  $$ values ('Dirección'::text, 'secretaria'::text, 'talk'::text) $$,
   'the personal space has its main agent too');
 select is(
   (select count(*)::int from public.agents a where a.org_id = (select id from mine)),
@@ -85,7 +88,7 @@ create temp table ordago_main on commit drop as
   select public.ensure_main_agent('00000000-0000-0000-0000-0000000000f2') as id;
 select results_eq(
   $$ select a.name, a.runner from public.agents a where a.id = (select id from ordago_main) $$,
-  $$ values ('Secretaría'::text, 'chat'::text) $$,
+  $$ values ('Dirección'::text, 'chat'::text) $$,
   'an organisation whose only secretaria is a job gets a new chat main agent');
 select is(
   (select is_main from public.agents where id = '00000000-0000-0000-0000-0000000000a2'),
@@ -96,7 +99,7 @@ create temp table vacia_main on commit drop as
   select public.ensure_main_agent('00000000-0000-0000-0000-0000000000f3') as id;
 select is(
   (select name from public.agents where id = (select id from vacia_main) and is_main),
-  'Secretaría', 'an organisation with no agents gets a main agent');
+  'Dirección', 'an organisation with no agents gets a main agent');
 
 -- Calling it again returns the same agent and adds nothing.
 select is(

@@ -3,7 +3,7 @@ name: An owner answers the decisions her agent left in the record, and changes o
 ---
 # What the first version is for. The company was seeded before Maestro from
 # .maestro/fixtures/record by the real sync (scripts/e2e/seed.sh): two
-# decisions Secretaría asks, a rich one on top and a plain one. The owner opens
+# decisions Dirección asks, a rich one on top and a plain one. The owner opens
 # the rich one, answers with the agent's pick, answers the plain one from the
 # deck, finds both in Registro and changes the first to No. After the whole
 # suite, seed.sh verify writes the answers back into a copy of the record.

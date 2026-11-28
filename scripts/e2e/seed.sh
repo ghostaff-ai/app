@@ -4,7 +4,7 @@
 # the local Supabase only.
 #
 #   bash scripts/e2e/seed.sh seed          a new company from .maestro/fixtures/record, with
-#                                          Secretaría and two owners; prints SEED_SLUG,
+#                                          Dirección and two owners; prints SEED_SLUG,
 #                                          SEED_COMPANY, DECIDER_EMAIL and CHAT_EMAIL as KEY=value
 #   bash scripts/e2e/seed.sh verify <slug> after answer-decision.yaml: the app's answers
 #                                          are written back into a copy of the record

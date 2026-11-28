@@ -97,6 +97,9 @@ function setup(opts: { launchFails?: boolean } = {}) {
     postToAgentChat: async (a, text) => {
       notices.push(`${a.name}: ${text}`);
     },
+    postInThread: async (threadId, a, text) => {
+      notices.push(`${threadId} ${a.name}: ${text}`);
+    },
   };
   const app = createApp({
     store: {} as never,

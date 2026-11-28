@@ -30,6 +30,7 @@ const legalOnRunner: RunnerAgent = {
   schedule: null,
   lastScheduledAt: null,
   readsOrgRuns: false,
+  isMain: false,
   timeoutSeconds: 3600,
   size: 'standard',
   maxRunsPerDay: null,
@@ -131,6 +132,7 @@ function setup(opts: { routines?: Routine[]; says?: string; creator?: { name: st
     },
     staleRuns: async () => [],
     postToAgentChat: async () => {},
+    postInThread: async () => {},
   };
   const vault = new MemoryVault();
   void vault.put(aiSecretName(ORG, 'sub-1'), 'sk-ant-oat-1', {});

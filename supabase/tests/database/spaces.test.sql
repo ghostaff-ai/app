@@ -28,8 +28,8 @@ select is(
 select results_eq(
   $$ select a.name, a.ghost, a.department, a.member_default::text, a.is_main from public.agents a
      join public.organizations o on o.id = a.org_id where o.name = 'Taller Dani' $$,
-  $$ values ('Secretaría'::text, 'secretaria'::text, 'direccion'::text, 'talk'::text, true) $$,
-  '... Secretaría, in Dirección, whom members may talk to');
+  $$ values ('Dirección'::text, 'secretaria'::text, 'direccion'::text, 'talk'::text, true) $$,
+  '... Dirección, in Dirección, whom members may talk to');
 
 -- His personal space.
 create temp table mine on commit drop as select * from public.create_personal_space();
@@ -45,7 +45,7 @@ select is(
 select results_eq(
   $$ select a.ghost, a.is_main from public.agents a where a.org_id = (select id from mine) $$,
   $$ values ('secretaria'::text, true) $$,
-  '... and Secretaría hired');
+  '... and Dirección hired');
 select is(
   (select id from public.create_personal_space()),
   (select id from mine), 'a second call returns the same space');

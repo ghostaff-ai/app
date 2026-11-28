@@ -13,6 +13,8 @@ import type { MemoryDeps } from '../src/memory';
 import type { PhotoDeps } from '../src/photo';
 import type { RecordRepo } from '../src/recordSync';
 import { linkTools } from '../src/links';
+import type { JobDeps } from '../src/jobs';
+import { BRING_TOOL, DEEP_TOOL, RUNS_TOOL } from '../src/delegation';
 import { fakeSupabase } from './fixtures/fakeSupabase';
 import { guidedSecretName, MemoryVault } from '../src/vault';
 
@@ -68,6 +70,8 @@ function setup(
     memory?: MemoryDeps;
     photos?: PhotoDeps;
     links?: AgentTools;
+    /** Agents that run on a runner (jobs.ts): with it, the main agent leads with delegation.ts's tools. */
+    jobs?: JobDeps;
   } = {},
 ) {
   const threadAgent = opts.agent ?? finanzas;
@@ -170,6 +174,7 @@ function setup(
       photos: opts.photos,
       links: opts.links,
       general: opts.heard,
+      jobs: opts.jobs,
     },
     accounts: {} as never,
     actions: {} as never,
@@ -692,6 +697,60 @@ describe("an agent using its organisation's tools", () => {
   });
 });
 
+describe('Dirección leading the team from its chat (direccion-main-agent.md)', () => {
+  const direccion: ChatAgent = { id: AGENT, orgId: ORG, name: 'Dirección', ghost: 'secretaria', department: 'direccion', isMain: true, runner: 'chat' };
+  const jobs = {} as JobDeps;
+
+  it('gets what each agent did, its deep work and bringing others in, and is told when to use each', async () => {
+    const { call, asked } = setup({ agent: direccion, asPerson: () => fakeSupabase({}).client, jobs });
+    await call('ana', `/threads/${THREAD}/reply`);
+    const names = (asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name);
+    expect(names).toEqual(expect.arrayContaining([RUNS_TOOL, DEEP_TOOL, BRING_TOOL, 'settings_remove_agent']));
+    expect(asked[0]?.system).toContain('Llevas el equipo de agentes');
+    expect(asked[0]?.system).toContain(`usa ${DEEP_TOOL}: no lo supongas`);
+    expect(asked[0]?.system).toContain('Puedes proponer quitar un agente del equipo');
+  });
+
+  it('leads only in a turn a person asked for, with a runner to launch on, and never as another agent', async () => {
+    const noRunner = setup({ agent: direccion, asPerson: () => fakeSupabase({}).client });
+    await noRunner.call('ana', `/threads/${THREAD}/reply`);
+    expect((noRunner.asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name)).not.toContain(DEEP_TOOL);
+    expect(noRunner.asked[0]?.system).not.toContain('Llevas el equipo de agentes');
+
+    const other = setup({ asPerson: () => fakeSupabase({}).client, jobs });
+    await other.call('ana', `/threads/${THREAD}/reply`);
+    expect((other.asked[0] as unknown as { tools: AgentTools }).tools.specs.map((x) => x.name)).not.toContain(BRING_TOOL);
+  });
+
+  it('a chat agent it brings in answers right after its message, in the same chat, with the brief', async () => {
+    const { call, asked, updates } = setup({
+      agent: direccion,
+      asPerson: () => fakeSupabase({}).client,
+      jobs,
+      levels: { ana: 'talk', 'ana/redes': 'talk' },
+      write: async ({ system, tools, onText }) => {
+        if (system.includes('Llevas el equipo de agentes')) {
+          const r = await tools.run(BRING_TOOL, { agente: 'Redes', encargo: 'Propón tres posts para diciembre' });
+          expect(r.isError).toBe(false);
+          onText('Se lo he pedido a Redes: contesta aquí.');
+        } else {
+          onText('Tres posts: …');
+        }
+      },
+    });
+    await call('ana', `/threads/${THREAD}/reply`);
+    expect(asked).toHaveLength(2);
+    expect(asked[1]?.system).toContain('Eres Redes');
+    expect(asked[1]?.system).toContain('Dirección, que lleva el equipo, te ha traído a esta conversación');
+    expect(asked[1]?.system).toContain('Propón tres posts para diciembre');
+    const done = updates.filter((u) => u.state === 'done').map((u) => [u.id.replace(/-\d+$/, ''), u.text]);
+    expect(done).toEqual([
+      ['reply-Dirección', 'Se lo he pedido a Redes: contesta aquí.'],
+      ['reply-Redes', 'Tres posts: …'],
+    ]);
+  });
+});
+
 describe("the main agent changing the organisation's settings (agent-settings.md)", () => {
   const secretaria: ChatAgent = { id: AGENT, orgId: ORG, name: 'Secretaría', ghost: 'secretaria', department: 'direccion', isMain: true };
   const INVITATION = '60000000-0000-0000-0000-000000000001';
@@ -1168,7 +1227,7 @@ describe("the organisation's memory in the chat (business-brain.md)", () => {
     const names = toolNames(asked);
     expect(names).toEqual(expect.arrayContaining(['memory_view', 'memory_search']));
     expect(names).not.toContain('memory_create');
-    expect(asked[0]?.system).toContain('Solo Secretaría escribe en la memoria de la empresa');
+    expect(asked[0]?.system).toContain('Solo Dirección escribe en la memoria de la empresa');
   });
 
   it('reads a link a person pasted, never one that came from somewhere else', async () => {
@@ -1223,7 +1282,7 @@ describe("the organisation's memory in the chat (business-brain.md)", () => {
       expect(system).toContain('Tu memoria (memoria/agentes/finanzas/');
       expect(system).toContain('<fichero ruta="como-trabajo.md">\nAna quiere el informe en tres líneas.\n</fichero>');
       expect(system).toContain('deba seguir siendo verdad mañana');
-      expect(system).toContain('Solo Secretaría escribe en la memoria de la empresa');
+      expect(system).toContain('Solo Dirección escribe en la memoria de la empresa');
     });
 
     it('sends the same system prompt while its store stays the same, so it is cached', async () => {
