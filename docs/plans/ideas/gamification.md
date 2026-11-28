@@ -1,9 +1,10 @@
 # Gamification: agents that level up, tools they carry, company milestones, 3D characters
 
-**Priority:** low — not a necessity; valuable later, once the first version works
-**Gate:** decision:what each piece is measured by, defined as the agents and goals take shape
+**Priority:** medium — Jaime wants it (2026-11-28); it builds on the ghosts and the board that already ship
+**Gate:** decision:the open questions of «The career», above all whether a promotion grants autonomy (recheck 2026-12-05)
+**Next:** Jaime answers the open questions of «The career»; then a first slice: the points ledger and the level on the agent's page, no office yet
 
-Álvaro's ideas (2026-11-12), written down loosely on purpose. Much of this gets filled in over time; don't treat any detail here as decided.
+Álvaro's ideas (2026-11-12) and Jaime's career for the agents (2026-11-28), written down loosely on purpose. Much of this gets filled in over time; don't treat any detail here as decided.
 
 ## Goal
 
@@ -66,9 +67,79 @@ The six ghosts were made in Tripo from his pictures and cleaned up in Blender (t
 - **Next: a clean model by hand (2026-11-17).** Álvaro isn't happy with Tripo's heavy output, and Berto, a friend who does 3D, proposed baking. Asked of him: one base body retopologized from `2-tripo/base.glb` (5,000 to 15,000 triangles, loops round the eyes and the wavy hem, clean UVs), the eyes ready for the six expressions (shape keys, or a swappable texture), a simple rig with a bone in each hand to hold objects, each object apart (500 to 3,000 triangles), the Tripo detail baked into 2048 px colour, normal and AO maps, exported as .glb. First test: the base body plus Finanzas's objects (calculator, clipboard, pocket), to judge look and weight before the rest. He works from the full-detail Tripo originals, never the 60,000-triangle phone copies. Everything he needs is in the Ghostaff Drive, `ghosts/`, whose README explains the folders.
 - **Not yet seen on a phone:** the live ghosts since the switch to the phone copies (PR #12) were checked on web only.
 
+## The career: from becario up, like a company (Jaime, 2026-11-28)
+
+Jaime, 2026-11-28: «me molaría que se pareciera a algo visual a una organización visual, agentes en una oficina o lo que sea y luego lo quiero gamificar de tal manera que los agentes vayan pasando por varios niveles y vayan evolucionando conforme a cosas que van haciendo bien. Esto pueden empezar por ser becarios, y así subiendo como si fueran niveles de una empresa y vayan sumando puntos por feedback bueno del usuario o por decisiones bien tomadas o por herramientas etc».
+
+It gives idea 1 («each agent has a level») its shape: the level is a job title, and the agents climb a company's ladder. Everything below is a proposal to react to, not decided.
+
+### The office
+
+The organisation seen as an office, the ghosts at work in it. It is where Equipo is already going: Álvaro's «quitamos la lista de chats y ponemos a los fantasmas en una oficina» (2026-11-26) became the board of ghosts on stages ([team-board.md](../ongoing/team-board.md)). The next step is to turn the stages into one floor:
+
+- **Each department is a corner of the office** (Dirección, Finanzas, Marketing), with its light; the main agent at the front desk; an empty desk where a department has a vacancy, which is where «Contratar» lives.
+- **A ghost's desk grows with its rank:** a stool for the becario, a desk of its own, then an office with a door for a director. The rank shows without a number.
+- **The tag above each ghost stays** («Te espera», «Trabajando…», «Nuevo»), and a promotion gets its moment: a short celebration the first time you see the ghost after it.
+- Same rules as today: the phone gets the office, the desktop keeps its list (team-board.md, decision 6); one live 3D ghost at a time, the rest pictures.
+
+### The ladder
+
+| Level | Title (in the app) | Proposed meaning |
+|---|---|---|
+| 1 | Becario | Just hired. Asks before everything. |
+| 2 | Junior | Has a track record of OKs in at least one kind of decision. |
+| 3 | Senior | Has signed rules: some decisions it may now take alone. |
+| 4 | Responsable | Trusted across its department; may coordinate other agents of it. |
+| 5 | Director | The top. Few get here, and it takes months, not days. |
+
+Title by gender or neutral («Becario/a», «Responsable de Finanzas») is open. Names are the founders' to pick.
+
+### What earns points
+
+Only what a person does or what really happened counts, **never the number of runs or messages**, so an agent can't farm points by talking more. Every source below already exists in the database:
+
+| Source | Where it is today | Points (first guess) |
+|---|---|---|
+| A decision answered OK: the person took the agent's pick | `decisions.answer = 'ok'` | +3 |
+| A rule the agent proposed, signed by the owner | `decisions.kind = 'regla'`, answered OK | +10 |
+| Good feedback from a person on an agent's message (👍 ❤️ 🙌) | `message_reactions` | +1 |
+| An action with a tool that went through | `agent_actions.status = 'done'` | +1 |
+| A new tool connected to the agent («equipping an item», idea 2) | `connections` | +2, once per tool |
+| A decision answered No | `decisions.answer = 'no'` | 0, or −1 |
+| Bad feedback (👎) or an action that failed or was rejected | `message_reactions`, `agent_actions` | −1 |
+
+Caps keep it honest: a person's reactions count once per message and a few per day per agent; a decision counts once, whoever answers it.
+
+### Promotion is a decision, not a counter
+
+This joins Jaime's earlier proposal (2026-11-15, product plan, [El aprendizaje](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#el-aprendizaje-lo-que-nos-diferencia)): the level is the autonomy the agent has earned. Points say an agent is ready; a person promotes it.
+
+- When an agent reaches a level's points, it **asks for the promotion in Decisiones**, like any decision: «Finanzas lleva 40 OKs sin corrección en conciliaciones. ¿La asciendes a Junior?», with what it would be allowed to do from then on. OK promotes it; No keeps it where it is.
+- A promotion **never widens what the agent may do by itself without that OK**: same line as the settings rule (AGENTS.md rule 6) and the signed rules per decision type.
+- **Going down:** no demotions to start. An owner can always take back a rule, and the ladder follows what it was granted.
+
+### On the agent's page
+
+Below the ghost: its title, a bar to the next level, and the last things that earned or cost it points, each with its reason («+3 · Jaime aprobó "pagar a Iberdrola"»). The points are there to explain the level, not to be the point.
+
+### Data (first sketch)
+
+- An `agent_points` ledger: `org_id`, `agent_id`, `source` (decision, rule, reaction, action, tool), `ref` (the row it came from, unique with `source` so nothing counts twice), `points`, `created_at`. Written only by triggers or `security definer` functions on the rows above, never by the app. RLS and a pgTAP test like every org table (AGENTS.md rule 2).
+- `agents.level` holds the granted level, changed only by answering the promotion decision. Points to the next level are a sum, not a stored field.
+- **Ghostaff uses Ghostaff:** its own agents (the ones that build it) are the first to climb, and the first test of whether the points mean anything.
+
+### Open questions for the career
+
+1. **Does a promotion grant autonomy**, or is the level only a picture of trust already granted by signed rules? (Proposal above: it asks, and with the OK comes a defined set of permissions.)
+2. **Level per agent or per kind of decision?** Autonomy is earned per `kind` today; one agent may be Senior in invoices and Becario in social media. Proposal: one title per agent (the shape people read), with autonomy still kept per kind underneath.
+3. The titles and how many levels (five above).
+4. Which reactions count as good or bad, and whether a No should cost anything (punishing a No could make agents ask less).
+5. How the office looks: one floor drawn flat, a 3D room, or the current stages grouped by department as a first step.
+6. Whether a business user can hide the game (see below).
+
 ## Open questions
 
-- What raises a level, so it means something (not just the number of runs)? Jaime's proposal (2026-11-15): the level is the autonomy the agent has earned, raised by OKs without correction and signed rules per decision type, never by runs; written in the product plan, [El aprendizaje](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#el-aprendizaje-lo-que-nos-diferencia), waiting for Álvaro.
+- What raises a level, so it means something (not just the number of runs)? Answered in part by «The career» above (2026-11-28). Jaime's proposal (2026-11-15): the level is the autonomy the agent has earned, raised by OKs without correction and signed rules per decision type, never by runs; written in the product plan, [El aprendizaje](https://github.com/ordago-app/business/blob/main/docs/plans/ideas/ghostaff-producto.md#el-aprendizaje-lo-que-nos-diferencia), waiting for Álvaro.
 - How goals and milestones are defined, per organisation and per department.
 - Whether the tool "equipment" view is the same screen as connecting a tool.
 - Live 3D, rendered loops, or both. The spike says live 3D works; the look above assumes it.
