@@ -2,7 +2,8 @@
 
 **Priority:** high — Jaime (2026-11-27): «estamos apuntando a usuarios no técnicos»; today any tool without a sign-in button (a mailbox by IMAP, ElevenLabs, a Meta token) only reaches an agent through `org set-secret` in a terminal
 **Gate:** none
-**Next:** slice 1, branch `feat/app-keys`: build it test first (Tasks below), land it, backfill Órdago's four rows on beta
+**Landed:** slice 1 in ghostaff-ai/app#112 (2026-11-28), deployed to beta; Órdago's four rows backfilled
+**Next:** Jaime replaces `elevenlabs` from his phone (Empresa › Conexiones › Claves) and Productor's next run uses it — on an iPhone this waits for the iOS beta build, failing since before #112 (below); then slice 2
 
 Found moving Órdago's agents ([ordago-agents-in-ghostaff.md](../ongoing/ordago-agents-in-ghostaff.md)): Correo, Finanzas, Productor and Orgánico needed four secrets (`correo-info`, `correo-gmail`, `elevenlabs`, `meta-token`), and the only way in was a hidden prompt in `pnpm --filter @ghostaff/sync org set-secret`, run by someone with `gcloud` and the service-role key. The map of every manual step and its in-app equivalent is in [ordago-as-customer.md](../ongoing/ordago-as-customer.md#what-we-did-by-hand-for-órdago-and-how-a-customer-will-do-it-jaime-2026-11-27).
 
@@ -79,16 +80,16 @@ Invariants: the value goes app → engine → vault and nowhere else; the model 
 - [x] Engine routes and the runner's `noteSecrets`
 - [x] `org set-secret` writes the row; `org register-secrets`
 - [x] App, Jest first: the Claves section (stored, pending, missing, agents that use each) and the key's page (add, replace, approve/reject, remove naming the agents)
-- [ ] Local web check, `pnpm check`, PR, `pnpm pr:land`
-- [ ] Beta: `org register-secrets --org ordago` with labels for the four; Claves shows them with their agents
+- [x] Local web check, `pnpm check`, PR, `pnpm pr:land` (ghostaff-ai/app#112)
+- [x] Beta: `org register-secrets --org ordago` with labels for the four; Claves shows them with their agents
 - [ ] Jaime replaces `elevenlabs` from his phone; Productor's next run uses it
 
 ## Progress
 
 | Step | Local | Beta |
 |---|---|---|
-| Code merged and deployed | ⬜ | ⬜ |
-| Órdago's four rows backfilled | n/a | ⬜ |
-| A key replaced from the phone, next run uses it | ✅ add, replace, approve, remove on the local web (2026-11-27; no run locally) | ⬜ |
+| Code merged and deployed | ✅ | ✅ engine, runner and migration (CI run 46086667057, 2026-11-28); app update reached Android; ⚠️ iOS: the Beta workflow's `eas build` for fingerprint `ae4a6b0…` fails with no message, already on fe69c20 before #112, so iPhones keep the old app until it is fixed |
+| Órdago's four rows backfilled | n/a | ✅ `correo-info`, `correo-gmail`, `elevenlabs`, `meta-token`, stored by «Ghostaff» on the vault's dates; used by Correo, Finanzas, Productor and Orgánico (2026-11-28) |
+| A key replaced from the phone, next run uses it | ✅ add, replace, approve, remove on the local web (2026-11-27; no run locally) | ⬜ Jaime, from his phone (iPhone: after the iOS build) |
 
 Legend: ⬜ pending · ⏳ in progress · ✅ done · ⚠️ blocked (note inline)
