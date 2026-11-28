@@ -9,6 +9,9 @@ import type { OutgoingFile } from '@ghostaff/shared/services';
 import { type AttachKind, MAX_FILE_BYTES, pickToAttach } from '@/lib/attach';
 import type { RecordedNote } from './useVoiceNote';
 
+/** The camera was refused; the chat's error line offers «Abrir ajustes» beside it (ChatError). */
+export const CAMERA_DENIED = 'Ghostaff no tiene permiso para usar la cámara.';
+
 // What you do with the messages of a chat, as in WhatsApp (docs/plans/ready/
 // chat-like-whatsapp.md, phase 2), for General and every chat with an agent:
 // hold one for its menu (reactions, reply, copy, forward to an agent, pin,
@@ -126,7 +129,7 @@ export function useMessageActions(opts: {
             const picked = await pickToAttach(kind).catch(() => null);
             if (!picked) return;
             if ('denied' in picked) {
-              onError('Ghostaff no tiene permiso para usar la cámara. Actívalo en los ajustes.');
+              onError(CAMERA_DENIED);
               return;
             }
             const big = picked.files.find((f) => f.data.size > MAX_FILE_BYTES);
