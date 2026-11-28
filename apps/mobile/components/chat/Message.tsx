@@ -313,7 +313,7 @@ function QuoteBlock({ part, mine, onPress }: { part: QuotePart | ForwardPart; mi
       className="mb-1 flex-row overflow-hidden rounded-lg"
     >
       <View style={{ width: 3, backgroundColor: colour }} />
-      <View className="flex-1 px-2 py-1" style={{ backgroundColor: mine ? c.mineSunk : c.sunk }}>
+      <View className="shrink grow px-2 py-1" style={{ backgroundColor: mine ? c.mineSunk : c.sunk }}>
         <Text className="text-caption font-semibold" style={{ color: colour }} numberOfLines={1}>
           {part.authorName}
         </Text>

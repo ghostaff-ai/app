@@ -25,6 +25,16 @@ describe('Markdown', () => {
     expect(allText()).not.toContain('- ');
   });
 
+  it('sizes a list item by its text, not from a zero basis that collapses it in a bubble', async () => {
+    // flex-1 measured as nothing inside a bubble sized to its content: on iOS an
+    // agent's numbered reply came out a few letters wide, one word per line.
+    await render(<Markdown text={'1. Quedan 38.170 de crédito en ElevenLabs.'} names={[]} />);
+    const marker = screen.getByText('1.');
+    const item = marker.parent!.children.find((ch) => typeof ch !== 'string' && ch !== marker) as { props: { className?: string } };
+    expect(item.props.className).not.toMatch(/\bflex-1\b/);
+    expect(item.props.className).toMatch(/\bshrink\b/);
+  });
+
   it('keeps the numbers of an ordered list', async () => {
     await render(<Markdown text={'1. a\n2. b'} names={[]} />);
     expect(screen.getByText('1.')).toBeTruthy();
