@@ -13,7 +13,8 @@ import { GHOSTS } from '@/lib/team';
 import { usePalette } from '@/lib/theme';
 
 // Equipo's list (three-tabs.md, decisions 2 and 4): one row per agent, as in
-// WhatsApp, Secretaría first and then whoever spoke last, with its last word
+// WhatsApp, Secretaría first, then whoever is at work, then whoever spoke
+// last, with its last word
 // and an orange dot while it waits unread. A tap opens its chat, everyone's
 // with it (group-chat-per-agent.md). An owner adds agents from the last row
 // (decision 5). Above them all, once there are two people, General: the
@@ -28,7 +29,7 @@ export function TeamList() {
   const path = usePathname();
   const replace = useReplacesBeside();
   const c = usePalette();
-  const { active, agents, threads, members, noAi, owner, reload, reloadThreads } = useTeam();
+  const { active, agents, threads, members, working, noAi, owner, reload, reloadThreads } = useTeam({ withStatus: true });
   // Beside a chat the list stays mounted: read the last words and unread dots
   // again when another chat opens (reading one clears its dot).
   useEffect(() => {
@@ -36,7 +37,7 @@ export function TeamList() {
   }, [desktop, path, reloadThreads]);
   if (!active) return null;
   if (agents.loading && agents.items.length === 0) return <Loading />;
-  const rows = teamRows(agents.items, threads);
+  const rows = teamRows(agents.items, threads, working);
   const general = generalChat(threads, members.length);
   const section = desktopSection(path);
   const open = desktop && section.list === 'team' ? section.open : null;

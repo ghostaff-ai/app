@@ -111,10 +111,12 @@ export interface TeamRow {
 /**
  * Equipo's list (three-tabs.md, decision 4): one row per agent, as in WhatsApp,
  * each its one chat, shared by everyone who may see the agent
- * (group-chat-per-agent.md). The main agent first, then whatever moved last,
- * then the quiet agents in the team's order.
+ * (group-chat-per-agent.md). The main agent first, then the agents at work
+ * right now (`working`: a run or a reply under way, which a scheduled run never
+ * writes into the chat), then whatever moved last, then the quiet agents in
+ * the team's order.
  */
-export function teamRows(agents: Agent[], threads: ChatThread[]): TeamRow[] {
+export function teamRows(agents: Agent[], threads: ChatThread[], working: ReadonlySet<string> = new Set()): TeamRow[] {
   const rows: TeamRow[] = agents.map((agent) => {
     const last = threads.find((t) => t.agentId === agent.id && t.lastText !== null) ?? null;
     return { agent, last, unread: last?.unread ?? false };
@@ -123,6 +125,8 @@ export function teamRows(agents: Agent[], threads: ChatThread[]): TeamRow[] {
   return rows.sort((a, b) => {
     const main = Number(isMainAgent(b.agent)) - Number(isMainAgent(a.agent));
     if (main) return main;
+    const busy = Number(working.has(b.agent.id)) - Number(working.has(a.agent.id));
+    if (busy) return busy;
     if (a.last && b.last) return b.last.lastMessageAt.localeCompare(a.last.lastMessageAt);
     if (a.last || b.last) return a.last ? -1 : 1;
     return order(a) - order(b) || a.agent.name.localeCompare(b.agent.name);
