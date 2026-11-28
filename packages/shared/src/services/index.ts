@@ -16,6 +16,7 @@ import type {
   Answer,
   ConnectAiInput,
   Connection,
+  OrgSecret,
   Decision,
   DecisionAgent,
   DecisionOption,
@@ -756,6 +757,78 @@ export async function disconnectAi(engine: EngineAccess, orgId: string, connecti
   await callEngine(engine, 'DELETE', `/connections/ai/${encodeURIComponent(connectionId)}?org=${encodeURIComponent(orgId)}`);
 }
 
+// The organisation's keys (docs/plans/ongoing/secrets-from-the-app.md). Members read their rows from
+// the database; storing, replacing, approving and removing go to the engine, because the value must
+// reach the vault without ever touching the database or coming back to the app.
+
+interface OrgSecretRow {
+  id: string;
+  org_id: string;
+  name: string;
+  label: string;
+  maker: string | null;
+  stored_by_name: string | null;
+  stored_at: string | null;
+  last_used_at: string | null;
+  status: OrgSecret['status'];
+  pending_by_name: string | null;
+  pending_at: string | null;
+}
+
+export const ORG_SECRET_COLUMNS = 'id, org_id, name, label, maker, stored_by_name, stored_at, last_used_at, status, pending_by_name, pending_at';
+
+export function orgSecretFromRow(r: OrgSecretRow): OrgSecret {
+  return {
+    id: r.id,
+    orgId: r.org_id,
+    name: r.name,
+    label: r.label,
+    maker: r.maker,
+    storedByName: r.stored_by_name,
+    storedAt: r.stored_at,
+    lastUsedAt: r.last_used_at,
+    status: r.status,
+    pendingByName: r.pending_by_name,
+    pendingAt: r.pending_at,
+  };
+}
+
+/** The organisation's keys, without their values. Every member reads them. */
+export async function listOrgSecrets(client: SupabaseClient, orgId: string): Promise<OrgSecret[]> {
+  const { data, error } = await client.from('org_secrets').select(ORG_SECRET_COLUMNS).eq('org_id', orgId).order('label').returns<OrgSecretRow[]>();
+  if (error) throw error;
+  return (data ?? []).map(orgSecretFromRow);
+}
+
+/**
+ * Stores a new key: an owner's works from the next run; a member's waits for an owner's approval. `name` is
+ * the one an agent already asks for, when there is one; else the engine makes it from the label.
+ */
+export async function storeOrgSecret(
+  engine: EngineAccess,
+  input: { orgId: string; label: string; value: string; name?: string; maker?: string | null },
+): Promise<OrgSecret> {
+  const { orgId, ...body } = input;
+  const { secret } = await callEngine<{ secret: OrgSecretRow }>(engine, 'POST', `/orgs/${encodeURIComponent(orgId)}/secrets`, body);
+  return orgSecretFromRow(secret);
+}
+
+/** A new value for a stored key: an owner's replaces it at once; a member's waits for an owner. */
+export async function replaceOrgSecret(engine: EngineAccess, orgId: string, name: string, value: string): Promise<OrgSecret> {
+  const { secret } = await callEngine<{ secret: OrgSecretRow }>(engine, 'POST', `/orgs/${encodeURIComponent(orgId)}/secrets/${encodeURIComponent(name)}`, { value });
+  return orgSecretFromRow(secret);
+}
+
+/** An owner lets a member's value be used, or turns it down. Owners only. */
+export async function decideOrgSecret(engine: EngineAccess, orgId: string, name: string, decision: 'approve' | 'reject'): Promise<void> {
+  await callEngine(engine, 'POST', `/orgs/${encodeURIComponent(orgId)}/secrets/${encodeURIComponent(name)}/${decision}`);
+}
+
+/** Removes a key: its value leaves the vault and its row goes. Owners only. */
+export async function removeOrgSecret(engine: EngineAccess, orgId: string, name: string): Promise<void> {
+  await callEngine(engine, 'DELETE', `/orgs/${encodeURIComponent(orgId)}/secrets/${encodeURIComponent(name)}`);
+}
+
 /** A Claude subscription being connected: the code goes in, or the person gives up. */
 export interface ClaudeSignIn {
   /** The code Anthropic showed after signing in. `engine`: fresh access, if the token may have changed. */
@@ -1210,6 +1283,7 @@ interface AgentRow {
   description: string | null;
   schedule: string | null;
   accounts: string[] | null;
+  secrets?: Record<string, string> | null;
   created_at: string;
 }
 
@@ -1226,11 +1300,12 @@ export function agentFromRow(r: AgentRow): Agent {
     description: r.description ?? null,
     schedule: r.schedule ?? null,
     accounts: r.accounts ?? null,
+    secrets: r.secrets ?? {},
     createdAt: r.created_at,
   };
 }
 
-const AGENT_COLUMNS = 'id, org_id, name, ghost, is_main, department, member_default, runner, description, schedule, accounts, created_at';
+const AGENT_COLUMNS = 'id, org_id, name, ghost, is_main, department, member_default, runner, description, schedule, accounts, secrets, created_at';
 
 /** The organisation's agents, oldest first. */
 export async function listAgents(client: SupabaseClient, orgId: string): Promise<Agent[]> {

@@ -159,6 +159,31 @@ export type ConnectionKind = 'ai' | 'account' | 'guided';
 export type AiProvider = 'anthropic' | 'openai' | 'vertex' | 'claude';
 export type ConnectionMethod = 'api_key' | 'cloud_project' | 'oauth' | 'mcp' | 'subscription';
 
+/**
+ * One of the organisation's keys or passwords its agents get (org_secrets, docs/plans/ongoing/secrets-from-the-app.md):
+ * what a person reads about it. The value lives only in the vault.
+ */
+export interface OrgSecret {
+  id: string;
+  orgId: string;
+  /** Its name in the vault and in agents.secrets: `correo-info`. */
+  name: string;
+  /** What a person reads: «Contraseña de info@ordago.club». */
+  label: string;
+  /** The maker it is for, for its logo; null for a generic key. */
+  maker: string | null;
+  /** Who stored the live value and when; null while only a member's value waits. */
+  storedByName: string | null;
+  storedAt: string | null;
+  /** When a run last got it. */
+  lastUsedAt: string | null;
+  /** 'missing' when the last run that needed it did not find its value. */
+  status: 'ok' | 'missing';
+  /** A member's value waiting for an owner's approval. */
+  pendingByName: string | null;
+  pendingAt: string | null;
+}
+
 export interface Connection {
   id: string;
   orgId: string;
@@ -271,6 +296,8 @@ export interface Agent {
   schedule: string | null;
   /** The connected accounts (providers) it may use; null for every one the organisation connects. */
   accounts: string[] | null;
+  /** On our runner: the organisation's keys it gets, as variable → key name (agents.secrets). Names only, never a value. */
+  secrets: Record<string, string>;
   createdAt: string;
 }
 

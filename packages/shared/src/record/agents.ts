@@ -57,3 +57,11 @@ export const isSecretName = (name: string) => /^[a-z][a-z0-9-]{0,62}$/.test(name
 export function agentSecretName(orgId: string, name: string): string {
   return `org-${orgId}-secret-${name}`.replace(/[^A-Za-z0-9_-]/g, '-');
 }
+
+/**
+ * Where a member's value waits for an owner's approval (docs/plans/ongoing/secrets-from-the-app.md): a name no
+ * run reads. `pending` sits where `secret` does in the live name, so no key's name can reach another's.
+ */
+export function pendingSecretName(orgId: string, name: string): string {
+  return `org-${orgId}-pending-${name}`.replace(/[^A-Za-z0-9_-]/g, '-');
+}

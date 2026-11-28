@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { AskForConnector } from '@/components/connections/AskForConnector';
-import { ConnectorLogo } from '@/components/connections/ConnectorLogo';
+import { ConnectorLogo, KeyLogo } from '@/components/connections/ConnectorLogo';
 import { Group } from '@/components/connections/Group';
 import { Chip, ListRow, ScreenTitle, SearchField } from '@/components/ui';
 import { AI_ORDER, connectorSections, connectorWhat, PROVIDERS } from '@/lib/connections';
@@ -15,8 +15,9 @@ import { supabase } from '@/lib/supabase';
 
 // Everything an organisation can connect, opened from «Añadir conexión» on
 // Conexiones (Álvaro, 2026-11-22: the tab shows only what is connected). The AI
-// accounts first, since without one the agents cannot answer, then every
-// outside service by area, searchable; one already connected says so. A row
+// accounts first, since without one the agents cannot answer, then a key or a
+// password for a service with no sign-in button (secrets-from-the-app.md), then
+// every outside service by area, searchable; one already connected says so. A row
 // opens its page (conexiones/[id], conexiones/ia/[provider]), where it is connected.
 
 type Filter = 'all' | 'ai' | ConnectorArea;
@@ -105,6 +106,22 @@ export default function AddConnection() {
                 onPress={() => router.push(`/empresa/conexiones/ia/${p}`)}
               />
             ))}
+          </Group>
+        ) : null}
+
+        {!search && filter === 'all' ? (
+          <Group desktop={desktop} header="Claves" footer="Para un servicio sin botón para entrar: un correo por IMAP, ElevenLabs, un token de Meta…">
+            {[
+              <ListRow
+                key="key"
+                testID="add-key"
+                leading={<KeyLogo maker={null} name="Clave" size={36} />}
+                title="Una clave o contraseña"
+                subtitle="Se guarda cifrada y nadie vuelve a verla."
+                chevron
+                onPress={() => router.push('/empresa/conexiones/clave')}
+              />,
+            ]}
           </Group>
         ) : null}
 

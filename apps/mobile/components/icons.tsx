@@ -32,6 +32,7 @@ export { FolderSimpleIcon as FolderSimple } from 'phosphor-react-native/src/icon
 export { HandshakeIcon as Handshake } from 'phosphor-react-native/src/icons/Handshake';
 export { ImageSquareIcon as ImageSquare } from 'phosphor-react-native/src/icons/ImageSquare';
 export { LinkSimpleIcon as LinkSimple } from 'phosphor-react-native/src/icons/LinkSimple';
+export { KeyIcon as Key } from 'phosphor-react-native/src/icons/Key';
 export { LockSimpleIcon as LockSimple } from 'phosphor-react-native/src/icons/LockSimple';
 export { MagnifyingGlassIcon as MagnifyingGlass } from 'phosphor-react-native/src/icons/MagnifyingGlass';
 export { MicrophoneIcon as Microphone } from 'phosphor-react-native/src/icons/Microphone';

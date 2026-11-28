@@ -97,6 +97,7 @@ function setup(
   const launched: Array<{ job: AgentJob; env: Record<string, string>; opts?: { timeoutSeconds?: number } }> = [];
   const runs = new Map<string, RunRecord & { summary?: string | null; specFetchedAt?: string; deadlineAt?: string; startedAt?: string; turns?: number | null; ending?: string | null }>();
   const skipped: Array<{ agentId: string; reason: SkipReason }> = [];
+  const notedSecrets: Array<{ orgId: string; used: string[]; missing: string[] }> = [];
   const ciAsked: Array<[number, string]> = [];
   const notices: string[] = [];
   const deleted: string[] = [];
@@ -241,6 +242,9 @@ function setup(
     skipFire: async (x) => {
       skipped.push({ agentId: x.agentId, reason: x.reason });
     },
+    noteSecrets: async (orgId, used, missing) => {
+      notedSecrets.push({ orgId, used, missing });
+    },
   };
   // The bucket, the runs' lists and the posted messages, in memory (agentAudio.ts).
   const bucket = new Map<string, { bytes: number; mediaType: string }>();
@@ -340,7 +344,7 @@ function setup(
   const report = (body: unknown, as = RUNNER) => post('/runs/report', as, body);
   return {
     ask, fetchSpec, report, post, stored, app, updates, launched, runs, notices, agents, vault, chatDeps, jobDeps, used, subscriptionOf, deleted, thread, tokenAccess,
-    skipped, ciAsked,
+    skipped, ciAsked, notedSecrets,
     bucket, runAudio, posted,
     setNow: (d: Date) => {
       now = d;
@@ -684,6 +688,31 @@ describe('the organisation’s secrets in a run', () => {
     const s = await specOf(t);
     expect(s.secrets).toEqual([]);
     expect(s.prompt).toContain('No he podido darte `ELEVENLABS_API_KEY` (el secreto «elevenlabs»)');
+  });
+
+  it('notes on the keys’ rows which it got and which it did not find, for Conexiones › Claves', async () => {
+    const t = setup();
+    t.agents.get(LEGAL)!.secrets = { CORREO_GMAIL_PASSWORD: 'correo-gmail', CORREO_INFO_PASSWORD: 'correo-info', GMAIL: 'correo-gmail' };
+    await store(t, ORG, 'correo-gmail', 'abcd efgh ijkl mnop');
+    await specOf(t);
+    expect(t.notedSecrets).toEqual([{ orgId: ORG, used: ['correo-gmail'], missing: ['correo-info'] }]);
+  });
+
+  it('a run whose row names no key notes nothing', async () => {
+    const t = setup();
+    await specOf(t);
+    expect(t.notedSecrets).toEqual([]);
+  });
+
+  it('a failure to note it never stops the run', async () => {
+    const t = setup();
+    t.agents.get(LEGAL)!.secrets = { ELEVENLABS_API_KEY: 'elevenlabs' };
+    await store(t, ORG, 'elevenlabs', 'sk_eleven_ordago_1234');
+    t.jobDeps.runner!.store.noteSecrets = async () => {
+      throw new Error('db down');
+    };
+    const s = await specOf(t);
+    expect(s.secrets).toEqual([{ env: 'ELEVENLABS_API_KEY', value: 'sk_eleven_ordago_1234' }]);
   });
 
   it('never reads a secret for a variable the runner would refuse, whatever the row holds', async () => {

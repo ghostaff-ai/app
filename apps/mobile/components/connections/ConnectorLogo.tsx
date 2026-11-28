@@ -1,6 +1,8 @@
 import { Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { Icon, Key } from '@/components/icons';
 import { BRAND_LOGOS } from '@/lib/brandLogos';
+import { usePalette } from '@/lib/theme';
 
 // A connector's logo on a rounded tile in its brand colour, the way the phone's
 // settings draw an app: the mark in white, or in black on a light brand colour.
@@ -39,6 +41,17 @@ export function ConnectorLogo({ id, name, size = 40 }: { id: string; name: strin
       <Svg width={glyph} height={glyph} viewBox="0 0 24 24">
         <Path d={logo.path} fill={mark} />
       </Svg>
+    </View>
+  );
+}
+
+/** One of the organisation's keys (Conexiones › Claves): its maker's logo when we have it, else a key on a quiet tile. */
+export function KeyLogo({ maker, name, size = 40 }: { maker: string | null; name: string; size?: number }) {
+  const c = usePalette();
+  if (maker && BRAND_LOGOS[maker]) return <ConnectorLogo id={maker} name={name} size={size} />;
+  return (
+    <View accessible={false} style={{ width: size, height: size, borderRadius: Math.round(size * 0.24) }} className="items-center justify-center bg-sunk">
+      <Icon icon={Key} size={Math.round(size * 0.5)} color={c.ink} weight="regular" />
     </View>
   );
 }
