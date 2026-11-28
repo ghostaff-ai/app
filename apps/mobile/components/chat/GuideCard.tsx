@@ -99,7 +99,7 @@ export function GuideCard({ guide, controls, writing = false }: { guide: GuidePa
     <View className="mt-2 rounded-xl border border-line bg-card p-3" accessibilityLabel={`${title}. ${guide.why}`}>
       <View className="flex-row items-center">
         <ConnectorLogo id={handedTo?.id ?? ''} name={handedTo?.name ?? guide.app} size={28} />
-        <Text className="ml-2.5 flex-1 text-footnote font-semibold text-ink">{title}</Text>
+        <Text className="ml-2.5 shrink text-footnote font-semibold text-ink">{title}</Text>
       </View>
       {guide.why ? <Text className="mt-1.5 text-caption text-muted">{guide.why}</Text> : null}
       {status ? (

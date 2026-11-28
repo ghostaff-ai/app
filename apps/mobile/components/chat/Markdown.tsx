@@ -153,7 +153,9 @@ function List({ list, names, tone }: { list: Tokens.List; names: string[]; tone:
         return (
           <View key={i} className={`flex-row ${i > 0 ? 'mt-1' : ''}`}>
             <Text className={`min-w-6 pr-1 ${BODY} ${toneClass(tone)}`}>{marker}</Text>
-            <View className="flex-1">
+            {/* Not flex-1: its zero basis measures as nothing in a bubble that sizes to its content, and on iOS
+                the bubble shrank to the agent's name with the item one word per line. */}
+            <View className="shrink">
               <Blocks tokens={tokens} names={names} tone={tone} tight />
             </View>
           </View>

@@ -80,7 +80,7 @@ export function AccountAskCard({ ask, controls, writing = false }: { ask: Accoun
     <View className="mt-2 rounded-xl border border-line bg-card p-3" accessibilityLabel={`${titleOf(ask)}. ${ask.why}`}>
       <View className="flex-row items-center">
         <ConnectorLogo id={ask.connector ?? ''} name={ask.name} size={28} />
-        <Text className="ml-2.5 flex-1 text-footnote font-semibold text-ink">{titleOf(ask)}</Text>
+        <Text className="ml-2.5 shrink text-footnote font-semibold text-ink">{titleOf(ask)}</Text>
       </View>
       {ask.why ? <Text className="mt-1.5 text-caption text-muted">{ask.why}</Text> : null}
       {connector?.before && ask.need === 'connect' && !done && cannot === null ? <Text className="mt-1 text-caption text-muted">{connector.before}</Text> : null}
