@@ -47,3 +47,10 @@ name: An owner writes to Secretaría and sees her answer arrive
 - extendedWaitUntil:
     visible: ${output.reply}
     timeout: 30000
+# Her ghost beside the answer opens her page, as it does in any chat.
+- tapOn:
+    id: "message-agent-face"
+- extendedWaitUntil:
+    visible:
+      id: "agent-write"
+    timeout: 20000
