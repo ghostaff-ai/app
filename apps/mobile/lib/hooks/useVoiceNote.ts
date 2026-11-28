@@ -1,7 +1,7 @@
 import { AudioQuality, IOSOutputFormat, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, type RecordingOptions } from 'expo-audio';
 import { File } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { foldLevels } from '@ghostaff/shared';
 
 // Voice notes (voice.md), as in WhatsApp (chat-like-whatsapp.md): hold the
@@ -62,7 +62,15 @@ export function levelOf(db: number | undefined): number | null {
 /** How many of the latest levels the recording bar draws. */
 const LIVE_BARS = 32;
 
-export const DENIED = 'Ghostaff no tiene permiso para usar el micrófono. Actívalo en los ajustes.';
+/**
+ * The microphone was refused. On a phone the composer puts «Abrir ajustes» next
+ * to it (Android stops asking after the second «No permitir», iOS after the
+ * first), so the way back is one tap; a browser has no settings page to open.
+ */
+export const DENIED =
+  Platform.OS === 'web'
+    ? 'Ghostaff no tiene permiso para usar el micrófono. Permítelo desde el candado de la barra de direcciones.'
+    : 'Ghostaff no tiene permiso para usar el micrófono.';
 const NOT_RECORDED = 'No he podido grabar. Inténtalo otra vez.';
 const TOO_SHORT = 'La nota es demasiado corta.';
 const NOT_SENT = 'No se ha enviado la nota.';

@@ -181,7 +181,10 @@ const config: ExpoConfig = {
         // A guide asks for a photo of the person's screen when they're lost (guided-access.md). Photos only, never video.
         cameraPermission: 'Ghostaff usa la cámara para que hagas una foto de tu pantalla cuando una guía te pida verla.',
         photosPermission: 'Ghostaff abre tus fotos para que elijas una captura de pantalla cuando una guía te pida verla.',
-        microphonePermission: false,
+        // Never `false`: on Android that strips RECORD_AUDIO from the manifest for
+        // every library, voice notes included, and the system then has no
+        // microphone switch to turn on. The same words as expo-audio's, for iOS.
+        microphonePermission: 'Ghostaff usa el micrófono para que puedas dictar tus mensajes.',
       },
     ],
     ...(googleIosUrlScheme ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleIosUrlScheme }] as [string, object]] : []),

@@ -1,6 +1,6 @@
 import { completeMention, mentionQuery, mentionSuggestions, onlyMentions } from '@ghostaff/shared';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Modal, PanResponder, Platform, Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
+import { ActivityIndicator, Animated, Linking, Modal, PanResponder, Platform, Pressable, Text, TextInput, type TextInputInstance, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EmojiPicker } from '@/components/chat/EmojiPicker';
 import { clock } from '@/components/chat/RecordingBar';
@@ -8,7 +8,7 @@ import { ArrowUp, Camera, CaretLeft, CaretUp, Eye, FileText, Icon, ImageSquare, 
 import type { AttachKind } from '@/lib/attach';
 import { tap } from '@/lib/haptics';
 import { holdMove, holdRelease } from '@/lib/hold';
-import { type RecordedNote, useVoiceNote } from '@/lib/hooks/useVoiceNote';
+import { DENIED, type RecordedNote, useVoiceNote } from '@/lib/hooks/useVoiceNote';
 import { loadDraft, peekDraft, saveDraft } from '@/lib/drafts';
 import { useColorVars, usePalette } from '@/lib/theme';
 
@@ -267,6 +267,11 @@ export function Composer({
       {voice.error ? (
         <View className="mb-1 ml-3 flex-row flex-wrap items-center gap-x-3">
           <Text className="text-footnote text-no">{voice.error}</Text>
+          {voice.error === DENIED && Platform.OS !== 'web' ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Abrir ajustes" onPress={() => void Linking.openSettings()} hitSlop={8} className="active:opacity-70">
+              <Text className="text-footnote text-ink underline">Abrir ajustes</Text>
+            </Pressable>
+          ) : null}
           {voice.held && !recording ? (
             <>
               <Pressable accessibilityRole="button" accessibilityLabel="Enviar la nota" onPress={() => void voice.resend()} hitSlop={8} className="active:opacity-70">

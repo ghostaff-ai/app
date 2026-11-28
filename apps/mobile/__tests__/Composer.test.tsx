@@ -1,4 +1,4 @@
-import { AppState, Platform } from 'react-native';
+import { AppState, Linking, Platform } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Composer, ReadOnlyComposer } from '@/components/chat/Composer';
@@ -311,8 +311,11 @@ describe('Composer voice notes', () => {
     mockPermission.mockResolvedValue({ granted: false });
     await setup(jest.fn());
     await record();
-    expect(screen.getByText('Ghostaff no tiene permiso para usar el micrófono. Actívalo en los ajustes.')).toBeTruthy();
+    expect(screen.getByText('Ghostaff no tiene permiso para usar el micrófono.')).toBeTruthy();
     expect(mockRecorder.record).not.toHaveBeenCalled();
+    const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue();
+    await press('Abrir ajustes');
+    expect(openSettings).toHaveBeenCalled();
   });
 
   it('going to the background stops the note and keeps it unsent', async () => {
