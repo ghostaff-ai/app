@@ -1,4 +1,5 @@
 import { type ActionPart, type ChatMessage, type EditableField, type ForwardPart, isAccountAskPart, isActionPart, isAudioPart, isDecisionPart, isDecisionQuotePart, isDocumentPart, isForwardPart, isGuidePart, isQuotePart, isVoicePart, messageText, type QuotePart, type Reaction, reactionChips, splitMentions } from '@ghostaff/shared';
+import { router } from 'expo-router';
 import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, PanResponder, Platform, Pressable, Text, View } from 'react-native';
 import { AccountAskCard } from '@/components/chat/AccountAskCard';
@@ -555,7 +556,23 @@ export function MessageView({
 
   if (message.authorKind === 'agent') {
     const said = text || audio.map((a) => `audio «${a.title}»`).join(', ');
-    const face = <Image source={GHOSTS[ghost ?? 'base'].picture} style={{ width: 28, height: 28 }} resizeMode="contain" />;
+    const picture = <Image source={GHOSTS[ghost ?? 'base'].picture} style={{ width: 28, height: 28 }} resizeMode="contain" />;
+    // Its ghost opens its page, from any chat (as its name on top of its own chat does).
+    const agentId = message.authorAgentId;
+    const face = agentId ? (
+      <Pressable
+        testID="message-agent-face"
+        accessibilityRole="button"
+        accessibilityLabel={`Ver la ficha de ${message.authorName}`}
+        onPress={() => router.push(`/agente/${agentId}`)}
+        hitSlop={8}
+        className="active:opacity-60"
+      >
+        {picture}
+      </Pressable>
+    ) : (
+      picture
+    );
     return (
       <Bubble
         mine={false}
