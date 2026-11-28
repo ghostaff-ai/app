@@ -2,7 +2,7 @@ appId: ${APP_ID}
 name: An owner and a teammate write in the same chat with an agent
 ---
 # One chat per agent, shared like a WhatsApp group (docs/plans/ongoing/group-chat-per-agent.md).
-# A new owner writes to Secretaría; a teammate writes in the same chat
+# A new owner writes to Dirección; a teammate writes in the same chat
 # (scripts/teammate-writes.js, as a second phone would); the owner sees the
 # teammate's message signed with her name, in Equipo and in the chat. No engine
 # runs in e2e, so the agent stays quiet.
@@ -44,13 +44,13 @@ name: An owner and a teammate write in the same chat with an agent
     visible:
       id: "agent-secretaria"
     timeout: 60000
-# Olga writes to Secretaría, in the chat everyone with access to her reads.
+# Olga writes to Dirección, in the chat everyone with access to her reads.
 - tapOn:
     id: "agent-secretaria"
 - extendedWaitUntil:
-    visible: "Escribe a Secretaría"
+    visible: "Escribe a Dirección"
     timeout: 20000
-- tapOn: "Escribe a Secretaría"
+- tapOn: "Escribe a Dirección"
 - inputText: "¿Quién cierra hoy la caja?"
 - tapOn: "Enviar"
 - extendedWaitUntil:
@@ -72,7 +72,7 @@ name: An owner and a teammate write in the same chat with an agent
 - assertVisible: "Bea E2E"
 - assertVisible: "¿Quién cierra hoy la caja?"
 # Equipo, after a cold start (no back: on Android it may close the keyboard or leave the app),
-# shows Secretaría's chat with Bea's word.
+# shows Dirección's chat with Bea's word.
 - stopApp
 - launchApp
 - extendedWaitUntil:

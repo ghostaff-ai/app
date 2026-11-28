@@ -1,8 +1,8 @@
 appId: ${APP_ID}
-name: An owner writes to Secretaría and sees her answer arrive
+name: An owner writes to Dirección and sees her answer arrive
 ---
 # The team chat, the other half of the first version. The seeded company
-# (scripts/e2e/seed.sh) has Secretaría; its second owner writes to her from
+# (scripts/e2e/seed.sh) has Dirección; its second owner writes to her from
 # Equipo. No engine runs in e2e, so the answer is written by
 # scripts/agent-reply.js the way the engine leaves a finished one, and the app
 # has to show it live. Only what the person sees is relied on here: not how
@@ -28,9 +28,9 @@ name: An owner writes to Secretaría and sees her answer arrive
 - tapOn:
     id: "agent-secretaria"
 - extendedWaitUntil:
-    visible: "Escribe a Secretaría"
+    visible: "Escribe a Dirección"
     timeout: 20000
-- tapOn: "Escribe a Secretaría"
+- tapOn: "Escribe a Dirección"
 - inputText: ${output.message}
 - tapOn: "Enviar"
 - extendedWaitUntil:

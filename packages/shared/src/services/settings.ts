@@ -27,12 +27,14 @@ import {
   type ExternalParty,
   type ExternalPartyInput,
   MAIN_AGENT_JOB,
+  MAIN_AGENT_NAME,
 } from '../models';
 import { ALL_WEEKDAYS, describeWhen, invalidWhen, MAX_ROUTINES_PER_PERSON, type Routine, type Weekday } from '../routines';
 import { cleanExternalParty, getExternalParty, invalidExternalParty, listExternalParties, removeExternalParty, saveExternalParty } from './externalParties';
 import {
   createAgent,
   createRoutine,
+  deleteAgent,
   listRoutines,
   setRoutinePaused,
   updateRoutine,
@@ -124,6 +126,13 @@ async function agentOf(ctx: SettingsContext, id: string) {
   const a = (await listAgents(ctx.client, ctx.orgId)).find((x) => x.id === id);
   if (!a) throw new SettingError('No hay ningún agente con ese id en esta organización.');
   return a;
+}
+
+/** An agent that may be removed: another one than the proposer, and never the main agent (delete_agent refuses it too). */
+async function removable(ctx: SettingsContext, input: Record<string, unknown>) {
+  const agent = await agentOf(ctx, uuid(input, 'agent_id'));
+  if (agent.id === ctx.agentId || isMainAgent(agent)) throw new SettingError('El agente principal no se puede quitar del equipo.');
+  return agent;
 }
 
 async function memberOf(ctx: SettingsContext, id: string) {
@@ -228,6 +237,27 @@ export const SETTING_TOOLS: SettingTool[] = [
         department: oneOf<Department>(input, 'department', DEPARTMENTS),
       });
       return `${a.name} ya está en el equipo.`;
+    },
+  },
+  {
+    name: 'settings_remove_agent',
+    description:
+      "Propose removing another agent from the team: it goes with its chat and its history, and it cannot be undone. An owner approves it before it happens. Never the main agent (you). Say why in the conversation before proposing it.",
+    input_schema: {
+      type: 'object',
+      properties: { agent_id: { type: 'string', description: 'From settings_read.' } },
+      required: ['agent_id'],
+    },
+    writes: true,
+    step: 'Preparando quitar un agente',
+    async describe(ctx, input) {
+      const agent = await removable(ctx, input);
+      return { label: `Quitar a ${agent.name} del equipo`, preview: 'Se borra con su chat y su historial. No se puede deshacer.' };
+    },
+    async run(ctx, input) {
+      const agent = await removable(ctx, input);
+      await deleteAgent(ctx.client, agent.id);
+      return `${agent.name} ya no está en el equipo.`;
     },
   },
   {
@@ -657,7 +687,7 @@ function routineFields(input: Record<string, unknown>): RoutineInput {
 
 async function newRoutine(ctx: SettingsContext, input: Record<string, unknown>) {
   const agent = await agentOf(ctx, uuid(input, 'agent_id'));
-  if (ctx.onlySelf && agent.id !== ctx.agentId) throw new SettingError('Solo puedes proponer tareas programadas tuyas; las de otro agente se piden a Secretaría.');
+  if (ctx.onlySelf && agent.id !== ctx.agentId) throw new SettingError(`Solo puedes proponer tareas programadas tuyas; las de otro agente se piden a ${MAIN_AGENT_NAME}.`);
   if (agent.runner === 'ordago_job') throw new SettingError(`${agent.name} todavía no admite tareas programadas.`);
   const routine = routineFields(input);
   const mine = ctx.userId ? (await listRoutines(ctx.client, ctx.orgId)).filter((r) => r.createdBy === ctx.userId).length : 0;
@@ -750,7 +780,8 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   save_external_party: { reach: 'agent', tool: 'settings_save_external_party' },
   remove_external_party: { reach: 'agent', tool: 'settings_remove_external_party' },
 
-  delete_agent: { reach: 'never', why: "it deletes the agent's conversations: the organisation's data" },
+  // Jaime, 2026-11-28 (direccion-main-agent.md decision 2): the main agent leads the team, removing agents too, with an owner's OK.
+  delete_agent: { reach: 'agent', tool: 'settings_remove_agent' },
   delete_routine: { reach: 'never', why: 'an agent pauses a routine; deleting it is the person\'s, in the app' },
   answer_decision: { reach: 'never', why: "a decision is the person's to take" },
   unanswer_decision: { reach: 'never', why: "a decision is the person's to take" },
@@ -803,6 +834,7 @@ export const DATABASE_FUNCTIONS: Record<string, FunctionReach> = {
   save_conversation_summary: { reach: 'not_a_setting' },
   search_thread_messages: { reach: 'not_a_setting' },
   post_to_agent_chat: { reach: 'not_a_setting' },
+  post_in_thread: { reach: 'not_a_setting' },
   release_refresh_lease: { reach: 'not_a_setting' },
   request_connector: { reach: 'not_a_setting' },
   slug_for: { reach: 'not_a_setting' },

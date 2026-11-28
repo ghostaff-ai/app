@@ -46,11 +46,11 @@ name: A new person creates a company, connects its AI, walks its three tabs and 
 # The app reads the connections again on launch and lets the owner in.
 - stopApp
 - launchApp
-# Equipo first: Secretaría comes hired with the company. «Añadir agente»
+# Equipo first: Dirección comes hired with the company. «Añadir agente»
 # fills a vacancy, which opens the chat with it (no engine runs in e2e, so it
 # stays quiet).
 - extendedWaitUntil:
-    visible: "Secretaría"
+    visible: "Dirección"
     timeout: 60000
 - tapOn:
     id: "add-agent"
@@ -135,5 +135,5 @@ name: A new person creates a company, connects its AI, walks its three tabs and 
 - stopApp
 - launchApp
 - extendedWaitUntil:
-    visible: "Secretaría"
+    visible: "Dirección"
     timeout: 60000

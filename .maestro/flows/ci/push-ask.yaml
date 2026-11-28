@@ -3,7 +3,7 @@ name: After her first message the chat offers to tell her when the agent answers
 ---
 # Notifications are asked for in the chat, once, after the person's first
 # message and before the phone's own dialog (docs/plans/ongoing/decision-notifications.md).
-# A new owner writes to Secretaría, sees «¿Te aviso cuando te conteste?» and
+# A new owner writes to Dirección, sees «¿Te aviso cuando te conteste?» and
 # taps «Ahora no», which never opens the phone's dialog. No engine runs in e2e,
 # so the agent stays quiet: the line doesn't wait for her answer.
 - evalScript: ${output.email = 'e2e-push-' + Date.now() + '@ghostaff.test'}
@@ -47,15 +47,15 @@ name: After her first message the chat offers to tell her when the agent answers
     visible:
       id: "agent-secretaria"
     timeout: 60000
-# Secretaría's chat.
+# Dirección's chat.
 - tapOn:
     id: "agent-secretaria"
 - extendedWaitUntil:
-    visible: "Escribe a Secretaría"
+    visible: "Escribe a Dirección"
     timeout: 20000
 # Nothing is asked before she has written.
 - assertNotVisible: "¿Te aviso cuando te conteste?"
-- tapOn: "Escribe a Secretaría"
+- tapOn: "Escribe a Dirección"
 - inputText: "Hola desde el taller"
 - tapOn: "Enviar"
 - extendedWaitUntil:

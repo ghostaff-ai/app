@@ -1,3 +1,4 @@
+import { MAIN_AGENT_NAME } from '@ghostaff/shared';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -21,7 +22,7 @@ import { usePalette } from '@/lib/theme';
 // personal space, which is otherwise the same page (spaces.ts): the organisation
 // itself. Its name on top opens the switcher; then Conexiones, first and one
 // tap away; the people in it and inviting more; who it works with outside
-// (external-parties.md, decision 5); its memory, what Secretaría filed
+// (external-parties.md, decision 5); its memory, what the main agent filed
 // (business-brain.md); Registro, what it decided;
 // and at the end, switching and signing out.
 
@@ -169,7 +170,7 @@ export default function Empresa() {
           testID="open-memory"
           leading={<RowIcon icon={Brain} />}
           title="Memoria de la empresa"
-          subtitle="Lo que Secretaría ha guardado"
+          subtitle={`Lo que ${MAIN_AGENT_NAME} ha guardado`}
           chevron
           onPress={() => router.push('/empresa/memoria')}
         />

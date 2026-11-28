@@ -24,12 +24,12 @@ never touches another app's emulator or your phone.
   `scripts/connect-ai.js`, with the local service-role key), landing on Hoy, filling a
   vacancy in Equipo, opening Registro and Conexiones, moving the key below the
   subscription there, opening «Añadir conexión», and coming back to the company after a cold relaunch;
-  an owner giving Secretaría a routine from the clock on her chat; an owner adding someone
+  an owner giving Dirección a routine from the clock on her chat; an owner adding someone
   the company works with outside in Empresa («Con quién trabajáis») and adding a department to them;
   an owner answering the decisions her agent left in the record and changing one
-  (`answer-decision.yaml`) and an owner writing to Secretaría and seeing her answer arrive live
+  (`answer-decision.yaml`) and an owner writing to Dirección and seeing her answer arrive live
   (`team-chat.yaml`), both in the seeded company (below); an owner and a teammate writing in
-  Secretaría's one chat (`group-chat.yaml`; the teammate's message is written straight into the
+  Dirección's one chat (`group-chat.yaml`; the teammate's message is written straight into the
   local database by `scripts/teammate-writes.js`); and General, the people's chat, appearing first
   in Equipo once a teammate joins and writes there, and the owner answering (`general-chat.yaml`).
 
@@ -39,7 +39,7 @@ never touches another app's emulator or your phone.
   Release builds only: R8 (code shrinking) can break what Metro never shows; the first
   catch was the 3D ghost on Hoy crashing every launch (2026-11-17).
 - **The seeded company.** Before Maestro, `android.sh test` runs `scripts/e2e/seed.sh seed`:
-  a company of the run's own («Gestoría E2E …», with Secretaría and two owners, one per flow,
+  a company of the run's own («Gestoría E2E …», with Dirección and two owners, one per flow,
   since `mailpit-code.js` reads the last code mailed to an address), made by the real sync
   (`apps/sync`) from the record in `fixtures/record/`, so the decisions travel record →
   database → app as in production. Its name and the owners' emails reach the flows as

@@ -2,7 +2,7 @@ appId: ${APP_ID}
 name: A new person wants Ghostaff for themselves, gets their personal space and connects its AI
 ---
 # «Para mí» (welcome-and-spaces.md): no form, the personal space is made on
-# «Seguir», Secretaría comes hired, and the owner is asked for the AI before
+# «Seguir», Dirección comes hired, and the owner is asked for the AI before
 # anything else (a stand-in subscription is written into the local database,
 # scripts/connect-ai.js, found by the owner's name: every personal space is
 # called «Personal»).
@@ -37,10 +37,10 @@ name: A new person wants Ghostaff for themselves, gets their personal space and 
       SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
 - stopApp
 - launchApp
-# Equipo, the first tab, with Secretaría; the space's name is on its own page,
+# Equipo, the first tab, with Dirección; the space's name is on its own page,
 # called Perfil in a personal space (spaces.ts).
 - extendedWaitUntil:
-    visible: "Secretaría"
+    visible: "Dirección"
     timeout: 60000
 - tapOn: "Perfil"
 - extendedWaitUntil:
@@ -48,5 +48,5 @@ name: A new person wants Ghostaff for themselves, gets their personal space and 
     timeout: 20000
 - tapOn: "Equipo"
 - extendedWaitUntil:
-    visible: "Secretaría"
+    visible: "Dirección"
     timeout: 20000

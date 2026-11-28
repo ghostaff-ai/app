@@ -2,7 +2,7 @@
 
 **Priority:** high — Jaime (2026-11-28): «no puedo visualizar la diferencia entre Secretaría y Dirección»; the agent that leads must have the power over everything
 **Gate:** none
-**Next:** land PR 1 (below); then, on the beta, the Órdago fusion (step «Órdago» below, with Jaime's OK) and ask Dirección something that needs BigQuery
+**Next:** PR 1 (below) is landing; once it is on the beta, the Órdago fusion (step «Órdago» below, with Jaime's OK) and ask Dirección something that needs BigQuery
 
 **Goal:** Every organisation has one agent that leads its team and reports to its owners: **Dirección**. It knows the whole organisation (the record, every repo the team uses, what each agent did), talks to the other agents, creates and removes them (with an owner's OK), and proposes. It answers in chat in seconds, and when the answer needs real work (code, BigQuery, a transcript, changing the record) it launches itself on our runner and reports in the same chat.
 
@@ -45,7 +45,7 @@ The system prompt's lines for the main agent (`DIRECTION_LINES`) say it leads th
 - **The main agent can run on our runner whatever its `runner`** (`chat` for every new organisation): `runnerAgent`, `scheduledAgents`, `claimSchedule` and the record hook's agents read `runner = 'ghostaff' or is_main`. Its missing runner fields take defaults (`MAIN_AGENT_RUN`: model `claude-opus-5-5`, the tools of Órdago's Dirección, 120 turns); with no instructions in the record (`agentes/<slug>/AGENTS.md`), its task is `MAIN_AGENT_TASK`.
 - **It reads every run of its organisation** (`readsOrgRuns` is true for the main agent: `ghostaff ejecuciones <agente>`).
 - **It has every repo its team uses**: its own `repos`, plus every other agent's, read-only.
-- **It needs a slug** (its record user and folder): `direccion` for the main agent, when free in its organisation.
+- **Its slug stays** (its own memory lives under it); a new main agent gets `direccion` from its name.
 
 ### Removing an agent
 
@@ -53,15 +53,15 @@ The system prompt's lines for the main agent (`DIRECTION_LINES`) say it leads th
 
 ### The rename
 
-- `MAIN_AGENT_NAME = 'Dirección'`; `hire_main_agent` hires «Dirección» with slug `direccion`. Every string a person or an agent reads that said «Secretaría» for the main agent reads the constant. The ghost `secretaria` keeps its label: it is a drawing and the mail job's costume.
+- `MAIN_AGENT_NAME = 'Dirección'`; `hire_main_agent` hires «Dirección». Every string a person or an agent reads that said «Secretaría» for the main agent reads the constant. The ghost `secretaria` keeps its label: it is a drawing and the mail job's costume.
 - **Migration:** every main agent still called «Secretaría» becomes «Dirección», unless its organisation already has an agent with that name (Órdago) — that one waits for the fusion below.
 
 ## PR 1 (this branch, `feat/direccion-main-agent`)
 
-- [ ] Migration: `agent_runs.brief`; the rename and the slug; `hire_main_agent`.
-- [ ] Shared: `MAIN_AGENT_NAME`; the strings; `settings_remove_agent` and the catalogue.
-- [ ] Engine: `delegation.ts` (three tools), follow-ups after the reply, `DIRECTION_LINES`; runner: the main agent runs, defaults, brief in the prompt, every repo read-only, reads the org's runs; record hook includes it.
-- [ ] Tests: engine unit tests for the tools, the follow-up and the runner's spec; pgTAP for the rename; e2e flows read «Dirección».
+- [x] Migration: `agent_runs.brief`; the rename; `hire_main_agent`; `post_in_thread`.
+- [x] Shared: `MAIN_AGENT_NAME`; the strings; `settings_remove_agent` and the catalogue.
+- [x] Engine: `delegation.ts` (three tools), follow-ups after the reply, `DIRECTION_LINES`; runner: the main agent runs, defaults, brief in the prompt, every repo read-only, reads the org's runs; record hook includes it.
+- [x] Tests: engine unit tests for the tools, the chat agent brought in, the runner's spec and report; pgTAP for the hired name; e2e flows read «Dirección». pgTAP and e2e not run locally (no Docker on the Mac that day): CI runs them.
 
 ## Órdago (after PR 1, on the beta, with Jaime's OK)
 
