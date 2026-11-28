@@ -1,6 +1,7 @@
 import type { ChatMessage } from '@ghostaff/shared';
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type NativeScrollEvent, type NativeSyntheticEvent, Platform, Pressable, Text, View } from 'react-native';
 import type { Ticks } from '@/components/chat/Bubble';
 import { CaretDoubleDown, Icon } from '@/components/icons';
@@ -11,7 +12,8 @@ import { usePalette } from '@/lib/theme';
 // for General and every chat with an agent: a pill where each day starts,
 // «N mensajes sin leer» where the person left off, the messages in runs, and,
 // when they have scrolled up, a round button down to the newest with how many
-// arrived meanwhile.
+// arrived meanwhile. Another screen opened over it (Archivos) and closed, it is
+// where the person left it: at the newest, or where they were reading back.
 
 /** Further than this from the bottom, the person is reading back. */
 const AWAY = 160;
@@ -62,9 +64,53 @@ export function ChatList({
     if (!away) setMissed(0);
   }, [messages.length, away]);
 
+  // Where the person was when another screen covered the chat (Archivos), to
+  // put them back there. Hidden, the list still re-renders (read ticks, the
+  // screen's own state) and on an iPhone it measures its rows again, which can
+  // leave it higher up than they left it. Kept as the message at the top and how
+  // far into it, not as pixels: rows not measured yet change the list's height.
+  const focused = useRef(true);
+  const left = useRef<{ atEnd: boolean; offset: number; anchor?: { key: string; offset: number } }>({ atEnd: true, offset: 0 });
+  const dragged = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      // By now the screen may be hidden already: where it was comes from onScroll.
+      const leave = () => {
+        focused.current = false;
+      };
+      // The first time it is shown, the list starts at the newest by itself.
+      if (focused.current) return leave;
+      focused.current = true;
+      dragged.current = false;
+      // Taken now: the list may still move by itself once it is shown.
+      const target = left.current;
+      const back = () => {
+        const l = list.current;
+        if (dragged.current || !l) return;
+        if (target.atEnd) void l.scrollToEnd({ animated: false });
+        else if (target.anchor) void l.scrollToKey({ key: target.anchor.key, viewOffset: -target.anchor.offset, animated: false });
+        else void l.scrollToOffset({ offset: target.offset, animated: false });
+      };
+      // Once it is drawn again, and once more after its rows have been measured.
+      let frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(back);
+      });
+      const later = setTimeout(back, 300);
+      return () => {
+        cancelAnimationFrame(frame);
+        clearTimeout(later);
+        leave();
+      };
+    }, []),
+  );
+
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    // Hidden, what the list reports isn't where the person is.
+    if (!focused.current) return;
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    setAway(contentSize.height - (contentOffset.y + layoutMeasurement.height) > AWAY);
+    const isAway = contentSize.height - (contentOffset.y + layoutMeasurement.height) > AWAY;
+    left.current = { atEnd: !isAway, offset: contentOffset.y, anchor: list.current?.anchorVisibleContent({ hold: false }) };
+    setAway(isAway);
   };
 
   const ticksOf = (m: ChatMessage): Ticks | null => {
@@ -104,6 +150,9 @@ export function ChatList({
         maintainScrollAtEnd
         maintainVisibleContentPosition
         onScroll={onScroll}
+        onScrollBeginDrag={() => {
+          dragged.current = true;
+        }}
         scrollEventThrottle={64}
         // The web's list is a plain element that would print these as attributes.
         {...(Platform.OS === 'web' ? {} : { keyboardDismissMode: 'interactive' as const, keyboardShouldPersistTaps: 'handled' as const })}

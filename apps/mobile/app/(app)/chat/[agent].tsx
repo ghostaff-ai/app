@@ -20,6 +20,7 @@ import { useMessageActions } from '@/lib/hooks/useMessageActions';
 import { useEngine } from '@/lib/hooks/useConnections';
 import { useAgentChat, useMembers, useMyLevels, useTyping } from '@/lib/hooks/useChat';
 import { useRoutines } from '@/lib/hooks/useRoutines';
+import { draftKey } from '@/lib/drafts';
 import { KeyboardColumn } from '@/lib/keyboard';
 import { useActiveOrg } from '@/lib/org/ActiveOrgContext';
 import { usePush } from '@/lib/push/PushProvider';
@@ -307,6 +308,7 @@ export default function Chat() {
             onAttach={ma.attach ? (k) => void ma.attach!(k) : undefined}
             attaching={ma.sendingFiles}
             onTyping={typing.say}
+            draftKey={me && orgId && agentId ? draftKey(me, orgId, `agent:${agentId}`) : null}
           />
         ) : (
           <ReadOnlyComposer note={owner ? `Pide acceso a ${owner}` : null} />
