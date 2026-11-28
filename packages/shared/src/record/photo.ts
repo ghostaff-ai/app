@@ -170,22 +170,30 @@ export function readPhoto(raw: string): ReadPhoto {
   return { blocks, skipped, updatedAt };
 }
 
+/** How a photo is written, for any agent: its format and its blocks. Spanish, as every prompt the agents read. */
+export function photoFormat(): string[] {
+  return [
+    'Formato (YAML): `actualizado` (fecha y hora) y `bloques`, una lista. Tipos:',
+    '- `meta`: titulo, unidad, base, desde, objetivo, fecha (cuándo alcanzarlo) y serie [[AAAA-MM-DD, valor], …]. Ghostaff calcula si vas por encima o por debajo del camino.',
+    '- `cifra`: titulo, valor, unidad, cambio (fracción frente al periodo anterior: 0.06 es +6 %) y periodo.',
+    '- `serie`: titulo, unidad, forma (lineas o barras) y puntos [[fecha o etiqueta, valor], …].',
+    '- `titulares`: hizo, encontro y cambia, una frase cada uno, de lo último que has hecho.',
+    '- `lista`: titulo y elementos, cada uno con titulo, detalle y estado (espera, hecho, previsto o fallo).',
+    `Hasta ${PHOTO_LIMITS.blocks} bloques.`,
+    'Nunca inventes una cifra: si no la tienes, no la pongas. Cambia qué bloques hay solo cuando te lo pidan o lo hayan aceptado.',
+  ];
+}
+
 /**
  * What an agent on our runner is told about its photo: where it is, how it is written, and what to
- * do when it has none (agent-photo.md, decision 5). Spanish, as every prompt the agents read.
+ * do when it has none (agent-photo.md, decision 5).
  */
 export function photoGuide(slug: string): string {
   const path = agentPhotoPath(slug);
   return [
     `Tu foto: \`${path}\` en el registro. Es lo que la gente ve de ti en tu ficha de Ghostaff: bloques que eliges tú y Ghostaff dibuja. Solo tú la escribes.`,
-    'Formato (YAML): `actualizado` (fecha y hora) y `bloques`, una lista. Tipos:',
-    '- `meta`: titulo, unidad, base, desde, objetivo, fecha (cuándo alcanzarlo) y serie [[AAAA-MM-DD, valor], …]. Ghostaff calcula si vas por encima o por debajo del camino.',
-    '- `cifra`: titulo, valor, unidad, cambio (fracción frente al periodo anterior: 0.06 es +6 %) y periodo.',
-    '- `serie`: titulo, unidad, forma (lineas o barras) y puntos [[fecha o etiqueta, valor], …].',
-    '- `titulares`: hizo, encontro y cambia, una frase cada uno, de tu última ejecución.',
-    '- `lista`: titulo y elementos, cada uno con titulo, detalle y estado (espera, hecho, previsto o fallo).',
-    `Hasta ${PHOTO_LIMITS.blocks} bloques. Un bloque mal escrito no se ve; el resto sí.`,
-    'Actualiza sus datos en cada ejecución con lo que te dan tus conexiones. Nunca inventes una cifra: si no la tienes, no la pongas. Cambia qué bloques hay solo cuando te lo pidan o lo hayan aceptado.',
+    ...photoFormat(),
+    'Un bloque mal escrito no se ve; el resto sí. Actualiza sus datos en cada ejecución con lo que te dan tus conexiones.',
     'Si aún no tienes foto (el fichero no existe), no la crees por tu cuenta: al final de esta ejecución propón en tu último mensaje las dos o tres cosas que mostrarías en ella y de dónde sacarías cada dato, y pregunta si las pones.',
   ].join('\n');
 }
