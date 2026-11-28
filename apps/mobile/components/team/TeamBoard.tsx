@@ -14,8 +14,8 @@ import { agentTag, waitingByAgent } from '@/lib/team/status';
 import { usePalette } from '@/lib/theme';
 
 // Equipo on a phone (team-board.md, decision 2): General first, then the main
-// agent wide, then the others large, two to a row, each with what it is doing
-// above its head, and «Contratar» last for an owner. On a desktop Equipo is
+// agent wide, then the others large, two to a row (whoever is at work first),
+// each with what it is doing above its head, and «Contratar» last for an owner. On a desktop Equipo is
 // the list beside the open chat instead (TeamList).
 
 type Cell = { kind: 'agent'; agent: Agent } | { kind: 'hire' };
@@ -35,7 +35,7 @@ export function TeamBoard() {
   if (!active) return null;
   if (agents.loading && agents.items.length === 0) return <Loading />;
 
-  const rows = teamRows(agents.items, threads);
+  const rows = teamRows(agents.items, threads, working);
   const general = generalChat(threads, members.length);
   const waiting = waitingByAgent(decisions);
   const tagOf = (a: Agent, unread: boolean) => agentTag({ waiting: waiting[a.id] ?? 0, working: working.has(a.id), unread });

@@ -89,6 +89,17 @@ describe('the chat rules', () => {
     expect(rows.map((r) => r.unread)).toEqual([false, true, true, false]);
   });
 
+  it('puts the agents at work right after the main agent, even when their chat is quiet', () => {
+    const team = [agent('fin', 'finanzas'), agent('red', 'redes'), agent('sec', 'secretaria'), agent('inc', 'incorporacion')];
+    const t = (id: string, agentId: string, at: string): ChatThread => ({
+      id, kind: 'agent', agentId, title: id, createdAt: at, lastMessageAt: at, lastAuthor: 'Ana', lastText: 'hola', lastVoiceMs: null, unread: false, following: true,
+    });
+    const threads = [t('fin-chat', 'fin', '2026-11-20T10:00:00Z'), t('red-chat', 'red', '2026-11-22T10:00:00Z')];
+    // A scheduled run writes nothing in the chat: Incorporación has none, Finanzas an old one.
+    expect(teamRows(team, threads, new Set(['inc', 'fin', 'sec'])).map((r) => r.agent.id)).toEqual(['sec', 'fin', 'inc', 'red']);
+    expect(teamRows(team, threads).map((r) => r.agent.id)).toEqual(['sec', 'red', 'fin', 'inc']);
+  });
+
   it('puts the main agent first by its role, even when it is not drawn as secretaria', () => {
     const team = [agent('fin', 'finanzas'), agent('main', 'base', true), agent('sec', 'secretaria', false)];
     expect(teamRows(team, []).map((r) => r.agent.id)).toEqual(['main', 'sec', 'fin']);
