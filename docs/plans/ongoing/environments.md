@@ -11,6 +11,8 @@ Jaime (2026-11-22): one Google Cloud project and one Supabase per environment, s
 - Supabase: `ghostaff-beta` (ref `rggvcvnstbitbdptiwtk`, Frankfurt), where Órdago is created with Álvaro as owner; `ghostaff-prod` created later that day (Progress).
 - Google Cloud: `ghostaff-prod` runs the `engine` service and the `agent-runner` job, **against the beta Supabase** (`SUPABASE_SERVICE_ROLE_KEY_BETA`). `ghostaff-beta` exists, empty.
 - CI: `ci.yml` (checks and end-to-end) and `beta.yml` (on green CI on `develop`, publishes the beta app over the air or starts a beta build). Migrations, engine and runner are deployed by hand by Álvaro (`scripts/deploy-engine.sh`, `deploy-runner.sh`): the agents' classifier blocks Google Cloud tokens.
+- **Beta builds on EAS's free plan** (Álvaro, 2026-11-27: keep it). A change that touches the native side (a new module, a permission) needs a new build: when the monthly iOS builds run out, `beta.yml`'s iOS build fails and iPhones stay on the last build until the month resets (the 1st); Android goes on. Android's beta is an APK installed by hand (`beta-apk`), so a new Android build must be installed from its EAS page once; only then do over-the-air updates reach it again.
+- **A new iOS capability needs one interactive build.** CI's builds can't change Apple settings: when the app gains one (push notifications, #75), every iOS build fails with «Provisioning profile … doesn't include the … capability» until Álvaro runs `APP_ENV=beta npx eas-cli build --platform ios --profile beta --auto-submit` in a terminal of its own (not `!`, it asks questions), logs in to Apple, and reuses the profile it offers. Done for push on 2026-11-27; answer «No» to Expo's own push setup (the engine sends to APNs itself).
 
 ## Target
 
